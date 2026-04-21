@@ -1,6 +1,8 @@
 # lurker
 
-![lurker logo](lurker.png)
+<p align="center">
+  <img src="lurker.png" alt="lurker logo" width="220">
+</p>
 
 Encryption made easy for Linux, with LUKS and VeraCrypt.
 
