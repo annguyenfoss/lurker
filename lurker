@@ -17,12 +17,15 @@ file_size=""
 umount_target=""
 source_kind=""
 mapper_tag=""
+volume_type="auto"
+volume_type_explicit=0
 force_overwrite=0
 cleanup_mapper=""
 sudo_ready=0
 color_mode="auto"
 use_color_stdout=0
 use_color_stderr=0
+veracrypt_fallback_noticed=0
 
 PARSED_ARGS=()
 action_args=()
@@ -60,15 +63,19 @@ show_help() {
     cat <<EOF
 
 ${header}Usage:${reset}
-  ${accent}$SCRIPT_NAME create <luks-file> <size-gb> [-F|--force]${reset}
-  ${accent}$SCRIPT_NAME create <block-device> [-F|--force]${reset}
-  ${accent}$SCRIPT_NAME mount [-t TAG] <luks-source> <mountpoint>${reset}
-  ${accent}$SCRIPT_NAME umount [-t TAG] <target>${reset}
+  ${accent}$SCRIPT_NAME create [--type TYPE] <file> <size-gb> [-F|--force]${reset}
+  ${accent}$SCRIPT_NAME create [--type TYPE] <block-device> [-F|--force]${reset}
+  ${accent}$SCRIPT_NAME createvc <file> <size-gb> [-F|--force]${reset}
+  ${accent}$SCRIPT_NAME createvc <block-device> [-F|--force]${reset}
+  ${accent}$SCRIPT_NAME mount [--type TYPE] [-t TAG] <source> <mountpoint>${reset}
+  ${accent}$SCRIPT_NAME umount [--type TYPE] [-t TAG] <target>${reset}
   ${accent}$SCRIPT_NAME help${reset}
 
 ${header}Examples:${reset}
   ${accent}$SCRIPT_NAME create ./vault.img 4${reset}
+  ${accent}$SCRIPT_NAME create --type veracrypt ./vault.hc 4${reset}
   ${accent}$SCRIPT_NAME create /dev/sda2 --force${reset}
+  ${accent}$SCRIPT_NAME createvc /dev/sdb2 --force${reset}
   ${accent}$SCRIPT_NAME mount ./vault.img /mnt/vault${reset}
   ${accent}$SCRIPT_NAME mount -t work /dev/sda2 /mnt/work${reset}
   ${accent}$SCRIPT_NAME umount /mnt/work${reset}
@@ -77,6 +84,7 @@ ${header}Examples:${reset}
 ${header}Options:${reset}
   ${accent}-F, --force${reset}       Overwrite an existing file or allow destructive block-device create
   ${accent}-t TAG${reset}            Use /dev/mapper/lurker_TAG for mount or umount
+  ${accent}--type TYPE${reset}       Container type: create uses luks|veracrypt; mount/umount use auto|luks|veracrypt
   ${accent}--color=WHEN${reset}      Color output: auto, always, never
   ${accent}-h, --help${reset}        Show this help text
 EOF
@@ -138,6 +146,16 @@ validate_color_mode() {
     esac
 }
 
+validate_volume_type() {
+    case "$volume_type" in
+        auto | luks | veracrypt)
+            ;;
+        *)
+            die "Invalid --type value: $volume_type. Use auto, luks, or veracrypt."
+            ;;
+    esac
+}
+
 setup_color() {
     use_color_stdout=0
     use_color_stderr=0
@@ -154,6 +172,8 @@ setup_color() {
         never)
             ;;
     esac
+
+    return 0
 }
 
 have_command() {
@@ -167,7 +187,7 @@ cleanup_on_exit() {
     if [[ $exit_code -ne 0 && -n ${cleanup_mapper:-} ]]; then
         if [[ -e "$(mapper_device_path "$cleanup_mapper")" ]]; then
             warn "Closing mapper ${cleanup_mapper} after failed action."
-            if ! try_run_privileged cryptsetup luksClose "$cleanup_mapper" >/dev/null 2>&1; then
+            if ! try_run_privileged cryptsetup close "$cleanup_mapper" >/dev/null 2>&1; then
                 warn "Failed to close mapper ${cleanup_mapper} during cleanup."
             fi
         fi
@@ -248,6 +268,17 @@ parse_long_options() {
             --color)
                 [[ $# -ge 2 ]] || die "Option --color requires an argument."
                 color_mode=$2
+                shift 2
+                ;;
+            --type=*)
+                volume_type=${arg#*=}
+                volume_type_explicit=1
+                shift
+                ;;
+            --type)
+                [[ $# -ge 2 ]] || die "Option --type requires an argument."
+                volume_type=$2
+                volume_type_explicit=1
                 shift 2
                 ;;
             --help)
@@ -359,6 +390,31 @@ canonical_device_path() {
     printf '%s\n' "$device_path"
 }
 
+sysfs_block_path_for_device() {
+    local canonical_device=$1
+    local block_name=""
+
+    canonical_device=$(canonical_device_path "$canonical_device")
+    block_name=$(basename -- "$canonical_device")
+    [[ -e /sys/class/block/$block_name ]] || return 1
+
+    printf '/sys/class/block/%s\n' "$block_name"
+}
+
+device_identity_for_sysfs_block_path() {
+    local sysfs_block_path=$1
+
+    [[ -r $sysfs_block_path/dev ]] || return 1
+    cat "$sysfs_block_path/dev"
+}
+
+device_identity_for_path() {
+    local sysfs_block_path=""
+
+    sysfs_block_path=$(sysfs_block_path_for_device "$1") || return 1
+    device_identity_for_sysfs_block_path "$sysfs_block_path"
+}
+
 is_block_device_target() {
     [[ -b $1 ]]
 }
@@ -442,6 +498,57 @@ warn_ignored_umount_tag() {
     esac
 }
 
+is_luks_source() {
+    cryptsetup isLuks "$1" >/dev/null 2>&1
+}
+
+is_veracrypt_source() {
+    cryptsetup tcryptDump --type tcrypt --veracrypt "$1" >/dev/null 2>&1
+}
+
+have_veracrypt() {
+    have_command veracrypt
+}
+
+notice_veracrypt_fallback() {
+    if [[ $veracrypt_fallback_noticed -eq 0 ]]; then
+        msg2 "veracrypt not found; falling back to cryptsetup for veracrypt container"
+        veracrypt_fallback_noticed=1
+    fi
+}
+
+require_supported_veracrypt_tag() {
+    [[ -z ${1:-} ]] || die "tag not yet supporter for veracrypt container"
+}
+
+resolve_volume_type() {
+    local requested_type=${1:-auto}
+    local actual_type=${2:-}
+    local subject=$3
+    local subject_kind=${4:-source}
+    local allow_unknown_explicit=${5:-0}
+
+    if [[ -n $actual_type ]]; then
+        if [[ $requested_type != auto && $requested_type != "$actual_type" ]]; then
+            die "Requested --type $requested_type but detected $actual_type container for $subject_kind: $subject"
+        fi
+
+        printf '%s\n' "$actual_type"
+        return
+    fi
+
+    if [[ $requested_type != auto ]]; then
+        if [[ $allow_unknown_explicit -eq 1 ]]; then
+            printf '%s\n' "$requested_type"
+            return
+        fi
+
+        die "Requested --type $requested_type but could not verify that $subject_kind as a $requested_type container: $subject"
+    fi
+
+    die "Unsupported or unrecognized encrypted $subject_kind: $subject"
+}
+
 mapper_name_from_device_path() {
     local device_path=$1
     local canonical_device=""
@@ -465,11 +572,213 @@ mapper_name_from_device_path() {
     return 1
 }
 
+active_mapper_volume_type() {
+    local mapper_name=$1
+    local status_output=""
+    local type_name=""
+
+    status_output=$(run_privileged cryptsetup status "$mapper_name" 2>/dev/null || true)
+    type_name=$(printf '%s\n' "$status_output" | sed -n 's/^[[:space:]]*type:[[:space:]]*//p' | head -n 1)
+    type_name=${type_name,,}
+
+    case "$type_name" in
+        luks* )
+            printf 'luks\n'
+            ;;
+        tcrypt* | veracrypt* )
+            printf 'veracrypt\n'
+            ;;
+    esac
+}
+
+mapper_name_from_dm_sysfs_path() {
+    local dm_sysfs_path=$1
+
+    [[ -r $dm_sysfs_path/dm/name ]] || return 1
+    cat "$dm_sysfs_path/dm/name"
+}
+
+# Reverse-lookup active lurker mappers by their direct backing block device.
+active_lurker_mappers_for_block_device() {
+    local target_path=$1
+    local target_device_identity=""
+    local candidate_sysfs=""
+    local candidate_name=""
+    local candidate_slave=""
+    local candidate_slave_identity=""
+
+    target_device_identity=$(device_identity_for_path "$target_path") || return 1
+
+    for candidate_sysfs in /sys/class/block/dm-*; do
+        [[ -e $candidate_sysfs ]] || continue
+
+        candidate_name=$(mapper_name_from_dm_sysfs_path "$candidate_sysfs") || continue
+        [[ $candidate_name == lurker_* ]] || continue
+
+        for candidate_slave in "$candidate_sysfs"/slaves/*; do
+            [[ -e $candidate_slave ]] || continue
+
+            candidate_slave_identity=$(device_identity_for_sysfs_block_path "$candidate_slave" 2>/dev/null || true)
+            if [[ -n $candidate_slave_identity && $candidate_slave_identity == "$target_device_identity" ]]; then
+                printf '%s\n' "$candidate_name"
+                break
+            fi
+        done
+    done
+}
+
+probe_source_volume_type() {
+    local source_path=$1
+    local canonical_source=""
+
+    if is_block_device_target "$source_path"; then
+        canonical_source=$(canonical_device_path "$source_path")
+    else
+        canonical_source=$(absolute_path "$source_path")
+    fi
+
+    if is_luks_source "$canonical_source"; then
+        printf 'luks\n'
+        return
+    fi
+
+    if is_veracrypt_source "$canonical_source"; then
+        printf 'veracrypt\n'
+    fi
+}
+
+detect_source_volume_type() {
+    local source_path=$1
+    local requested_type=${2:-auto}
+    local actual_type=""
+
+    actual_type=$(probe_source_volume_type "$source_path")
+    resolve_volume_type "$requested_type" "$actual_type" "$source_path" "source"
+}
+
+detect_umount_volume_type() {
+    local target=$1
+    local requested_type=${2:-auto}
+    local canonical_target=""
+    local source=""
+    local mapper_name=""
+    local mapper_type=""
+    local actual_type=""
+    local allow_unknown_explicit=0
+    local mountpoint=""
+
+    if [[ $target == /dev/mapper/* ]]; then
+        mapper_name=$(normalize_mapper_name "$target")
+        mapper_type=$(active_mapper_volume_type "$mapper_name")
+        if [[ -n $mapper_type ]]; then
+            actual_type=$mapper_type
+        elif have_veracrypt; then
+            mountpoint=$(find_mountpoint_for_source "$target")
+            if [[ -n $mountpoint ]] && veracrypt_target_is_mounted "$mountpoint"; then
+                actual_type="veracrypt"
+            fi
+        fi
+
+        allow_unknown_explicit=1
+        if [[ $requested_type == auto && -z $actual_type ]]; then
+            printf 'luks\n'
+            return
+        fi
+
+        resolve_volume_type "$requested_type" "$actual_type" "$target" "target" "$allow_unknown_explicit"
+        return
+    fi
+
+    if [[ -d $target ]]; then
+        canonical_target=$(absolute_path "$target")
+        source=$(find_mount_source_for_mountpoint "$canonical_target")
+        if have_veracrypt && veracrypt_target_is_mounted "$canonical_target"; then
+            actual_type="veracrypt"
+        elif [[ $source == /dev/mapper/* ]]; then
+            mapper_name=$(normalize_mapper_name "$source")
+            mapper_type=$(active_mapper_volume_type "$mapper_name")
+            if [[ -n $mapper_type ]]; then
+                actual_type=$mapper_type
+            fi
+        fi
+
+        allow_unknown_explicit=1
+        if [[ $requested_type == auto && -z $actual_type ]]; then
+            printf 'luks\n'
+            return
+        fi
+
+        resolve_volume_type "$requested_type" "$actual_type" "$target" "target" "$allow_unknown_explicit"
+        return
+    fi
+
+    actual_type=$(probe_source_volume_type "$target")
+    resolve_volume_type "$requested_type" "$actual_type" "$target" "target"
+}
+
+veracrypt_target_is_mounted() {
+    local identifier=$1
+
+    run_privileged veracrypt -t -l "$identifier" >/dev/null 2>&1
+}
+
+resolve_veracrypt_umount_identifier() {
+    local target=$1
+    local canonical_target=""
+    local mountpoint=""
+
+    if [[ $target == /dev/mapper/* ]]; then
+        mountpoint=$(find_mountpoint_for_source "$target")
+        [[ -n $mountpoint ]] || die "VeraCrypt mapper is not mounted: $target"
+        veracrypt_target_is_mounted "$mountpoint" || die "VeraCrypt mapper is not mounted: $target"
+        printf '%s\n' "$mountpoint"
+        return
+    fi
+
+    if [[ -d $target ]]; then
+        canonical_target=$(absolute_path "$target")
+        veracrypt_target_is_mounted "$canonical_target" || die "Not a mounted VeraCrypt path: $target"
+        printf '%s\n' "$canonical_target"
+        return
+    fi
+
+    if is_block_device_target "$target"; then
+        if veracrypt_target_is_mounted "$target"; then
+            printf '%s\n' "$target"
+            return
+        fi
+
+        canonical_target=$(canonical_device_path "$target")
+        if [[ $canonical_target != "$target" ]] && veracrypt_target_is_mounted "$canonical_target"; then
+            printf '%s\n' "$canonical_target"
+            return
+        fi
+
+        die "VeraCrypt source is not mounted: $target"
+    fi
+
+    require_existing_file "$target"
+
+    if veracrypt_target_is_mounted "$target"; then
+        printf '%s\n' "$target"
+        return
+    fi
+
+    canonical_target=$(absolute_path "$target")
+    if [[ $canonical_target != "$target" ]] && veracrypt_target_is_mounted "$canonical_target"; then
+        printf '%s\n' "$canonical_target"
+        return
+    fi
+
+    die "VeraCrypt source is not mounted: $target"
+}
+
 resolve_umount_target() {
     local target=$1
     local tag_override=${2:-}
     local canonical_target=""
     local source=""
+    local matching_mappers=()
 
     resolved_target_kind=""
     resolved_mapper_name=""
@@ -503,12 +812,32 @@ resolve_umount_target() {
 
     if is_block_device_target "$target"; then
         canonical_target=$(canonical_device_path "$target")
-        resolved_mapper_name=$(mapper_name_for_source "$canonical_target" "$tag_override")
+
+        if [[ -n $tag_override ]]; then
+            resolved_mapper_name=$(mapper_name_for_source "$canonical_target" "$tag_override")
+        else
+            mapfile -t matching_mappers < <(active_lurker_mappers_for_block_device "$canonical_target" || true)
+
+            if [[ ${#matching_mappers[@]} -eq 0 ]]; then
+                die "Block device is not open via an active lurker mapper: $target"
+            fi
+
+            if [[ ${#matching_mappers[@]} -gt 1 ]]; then
+                die "Block device matches multiple active lurker mappers: ${matching_mappers[*]}. Use a mountpoint or explicit /dev/mapper path."
+            fi
+
+            resolved_mapper_name=${matching_mappers[0]}
+        fi
+
         resolved_mapper_path=$(mapper_device_path "$resolved_mapper_name")
         resolved_mountpoint=$(find_mountpoint_for_source "$resolved_mapper_path")
 
         if [[ -z $resolved_mountpoint && ! -e $resolved_mapper_path ]]; then
-            die "Block device is not open: $target"
+            if [[ -n $tag_override ]]; then
+                die "Block device is not open: $target"
+            fi
+
+            die "Block device is not open via an active lurker mapper: $target"
         fi
 
         resolved_target_kind="block"
@@ -547,7 +876,7 @@ size_gb_to_mb() {
 }
 
 require_passphrase_tty() {
-    [[ -t 0 ]] || die "This action requires an interactive TTY for the LUKS passphrase prompt."
+    [[ -t 0 ]] || die "This action requires an interactive TTY for the passphrase prompt."
 }
 
 require_existing_file() {
@@ -645,10 +974,10 @@ assert_create_target() {
 reject_removed_operand_flag() {
     case "$action" in
         create)
-            die "Operand flags are no longer supported. Use: $SCRIPT_NAME create <luks-file> <size-gb> [-F|--force] or $SCRIPT_NAME create <block-device> [-F|--force]"
+            die "Operand flags are no longer supported. Use: $SCRIPT_NAME create [--type TYPE] <file> <size-gb> [-F|--force], $SCRIPT_NAME create [--type TYPE] <block-device> [-F|--force], or $SCRIPT_NAME createvc ..."
             ;;
         mount)
-            die "Operand flags are no longer supported. Use: $SCRIPT_NAME mount <luks-source> <mountpoint>"
+            die "Operand flags are no longer supported. Use: $SCRIPT_NAME mount <source> <mountpoint>"
             ;;
         umount)
             die "Operand flags are no longer supported. Use: $SCRIPT_NAME umount <target>"
@@ -673,9 +1002,21 @@ validate_args() {
         die "Option -t is only valid with mount or umount."
     fi
 
+    if [[ $action != "create" && $action != "mount" && $action != "umount" && $volume_type_explicit -eq 1 ]]; then
+        die "Option --type is only valid with create, mount, or umount."
+    fi
+
     case "$action" in
         create)
-            [[ ${#action_args[@]} -ge 1 && ${#action_args[@]} -le 2 ]] || die "Usage: $SCRIPT_NAME create <luks-file> <size-gb> [-F|--force] or $SCRIPT_NAME create <block-device> [-F|--force]"
+            if [[ $volume_type == "auto" ]]; then
+                if [[ $volume_type_explicit -eq 1 ]]; then
+                    die "Option --type auto is not valid with create. Use luks or veracrypt."
+                fi
+
+                volume_type="luks"
+            fi
+
+            [[ ${#action_args[@]} -ge 1 && ${#action_args[@]} -le 2 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] <file> <size-gb> [-F|--force] or $SCRIPT_NAME create [--type TYPE] <block-device> [-F|--force]"
             file_path=${action_args[0]}
 
             if [[ -e $file_path && ! -f $file_path && ! -b $file_path ]]; then
@@ -684,29 +1025,29 @@ validate_args() {
 
             if is_block_device_target "$file_path"; then
                 source_kind="block"
-                [[ ${#action_args[@]} -eq 1 ]] || die "Usage: $SCRIPT_NAME create <block-device> [-F|--force]"
+                [[ ${#action_args[@]} -eq 1 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] <block-device> [-F|--force]"
                 file_size=""
             else
                 source_kind="file"
-                [[ ${#action_args[@]} -eq 2 ]] || die "Usage: $SCRIPT_NAME create <luks-file> <size-gb> [-F|--force]"
+                [[ ${#action_args[@]} -eq 2 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] <file> <size-gb> [-F|--force]"
                 file_size=${action_args[1]}
             fi
 
             assert_create_target
             ;;
         mount)
-            [[ ${#action_args[@]} -eq 2 ]] || die "Usage: $SCRIPT_NAME mount [-t tag] <luks-source> <mountpoint>"
+            [[ ${#action_args[@]} -eq 2 ]] || die "Usage: $SCRIPT_NAME mount [--type TYPE] [-t tag] <source> <mountpoint>"
             file_path=${action_args[0]}
             mount_path=${action_args[1]}
             require_existing_source "$file_path"
             require_existing_directory "$mount_path"
             ;;
         umount)
-            [[ ${#action_args[@]} -eq 1 ]] || die "Usage: $SCRIPT_NAME umount [-t tag] <target>"
+            [[ ${#action_args[@]} -eq 1 ]] || die "Usage: $SCRIPT_NAME umount [--type TYPE] [-t tag] <target>"
             umount_target=${action_args[0]}
             ;;
         *)
-            die "Action $action not recognized."
+            die "Action $action not recognized. Use: create, createvc, mount, or umount."
             ;;
     esac
 }
@@ -718,9 +1059,15 @@ require_commands_for_action() {
         create)
             require_command mkfs.btrfs
             require_command sha256sum
+            if [[ $volume_type == "veracrypt" ]]; then
+                require_command veracrypt
+            fi
+
             if [[ $source_kind == "file" ]]; then
-                require_command dd
                 require_command bc
+                if [[ $volume_type == "luks" ]]; then
+                    require_command dd
+                fi
             fi
             ;;
         mount)
@@ -767,8 +1114,53 @@ luks_open() {
     run_privileged cryptsetup luksOpen "$1" "$2"
 }
 
-luks_close() {
-    run_privileged cryptsetup luksClose "$1"
+crypt_close() {
+    run_privileged cryptsetup close "$1"
+}
+
+tcrypt_open() {
+    run_privileged cryptsetup open --type tcrypt --veracrypt "$1" "$2"
+}
+
+veracrypt_create() {
+    local source_path=$1
+    local target_kind=$2
+    local filesize_in_mb=${3:-}
+    local -a cmd=(
+        veracrypt
+        -t
+        --create
+        --force
+        --volume-type=normal
+        --encryption=AES
+        --hash=SHA-512
+        --filesystem=none
+        --random-source=/dev/urandom
+        --pim=0
+        -k
+        ""
+    )
+
+    case "$target_kind" in
+        file)
+            cmd+=("--size=${filesize_in_mb}M")
+            ;;
+        block)
+            cmd+=("--size=max" "--quick")
+            ;;
+        *)
+            die "Unsupported VeraCrypt create target kind: $target_kind"
+            ;;
+    esac
+
+    cmd+=("$source_path")
+
+    if [[ $target_kind == "block" ]]; then
+        run_privileged "${cmd[@]}"
+        return
+    fi
+
+    "${cmd[@]}"
 }
 
 detect_filesystem_type() {
@@ -846,10 +1238,48 @@ luks_create_device() {
     run_privileged mkfs.btrfs -q "$(mapper_device_path "$mapper_name")"
 
     msg2 "Closing mapper $(mapper_device_path "$mapper_name")"
-    luks_close "$mapper_name"
+    crypt_close "$mapper_name"
     cleanup_mapper=""
 
     success "Created LUKS+Btrfs volume on $source_path"
+    msg2 "Mapper name: $mapper_name"
+}
+
+veracrypt_create_device() {
+    local source_path=$1
+    local target_kind=$2
+    local filesize_in_gb=${3:-}
+    local filesize_in_mb=""
+    local mapper_name
+
+    require_passphrase_tty
+    mapper_name=$(mapper_name_for_source "$source_path")
+
+    if [[ $target_kind == "file" ]]; then
+        filesize_in_mb=$(size_gb_to_mb "$filesize_in_gb")
+        msg "Creating VeraCrypt container at $source_path"
+        msg2 "Target size: ${filesize_in_gb} GB (${filesize_in_mb} MiB)"
+    else
+        msg "Creating VeraCrypt volume on block device $source_path"
+        msg2 "Destructive mode enabled by --force"
+        msg2 "Using VeraCrypt quick format for device-hosted creation"
+    fi
+
+    msg2 "Creating VeraCrypt header (normal, password-only, AES, SHA-512, filesystem=none)"
+    veracrypt_create "$source_path" "$target_kind" "$filesize_in_mb"
+
+    cleanup_mapper=$mapper_name
+    msg2 "Opening mapper $(mapper_device_path "$mapper_name") with cryptsetup"
+    tcrypt_open "$source_path" "$mapper_name"
+
+    msg2 "Creating Btrfs filesystem"
+    run_privileged mkfs.btrfs -q "$(mapper_device_path "$mapper_name")"
+
+    msg2 "Closing mapper $(mapper_device_path "$mapper_name")"
+    crypt_close "$mapper_name"
+    cleanup_mapper=""
+
+    success "Created VeraCrypt+Btrfs volume on $source_path"
     msg2 "Mapper name: $mapper_name"
 }
 
@@ -874,7 +1304,7 @@ luks_mount_device() {
     msg2 "Mapper name: $mapper_name"
 }
 
-luks_umount_device() {
+dmcrypt_umount_device() {
     local target=$1
     local tag_override=${2:-}
 
@@ -889,15 +1319,114 @@ luks_umount_device() {
     fi
 
     msg2 "Closing mapper ${resolved_mapper_path}"
-    luks_close "$resolved_mapper_name"
+    crypt_close "$resolved_mapper_name"
     success "Closed mapper ${resolved_mapper_name}"
     msg2 "Resolved input kind: ${resolved_target_kind}"
+}
+
+tcrypt_mount_device() {
+    local source_path=$1
+    local mountpoint=$2
+    local mapper_name
+
+    require_passphrase_tty
+    mapper_name=$(mapper_name_for_source "$source_path")
+    cleanup_mapper=$mapper_name
+
+    msg "Mounting VeraCrypt source $source_path"
+    msg2 "Opening mapper $(mapper_device_path "$mapper_name") with cryptsetup fallback"
+    tcrypt_open "$source_path" "$mapper_name"
+
+    mount_open_mapper "$mapper_name" "$mountpoint"
+    cleanup_mapper=""
+
+    success "Mounted $source_path at $mountpoint"
+    msg2 "Mapper name: $mapper_name"
+}
+
+veracrypt_mount_device() {
+    local source_path=$1
+    local mountpoint=$2
+
+    require_passphrase_tty
+
+    msg "Mounting VeraCrypt source $source_path"
+    run_privileged veracrypt -t --mount -k "" --pim=0 --protect-hidden=no "$source_path" "$mountpoint"
+    success "Mounted $source_path at $mountpoint"
+}
+
+veracrypt_umount_device() {
+    local target=$1
+    local identifier=""
+
+    identifier=$(resolve_veracrypt_umount_identifier "$target")
+    msg "Unmounting VeraCrypt target ${identifier}"
+    run_privileged veracrypt -t -u "$identifier"
+    success "Unmounted VeraCrypt target ${identifier}"
+}
+
+mount_device() {
+    local source_path=$1
+    local mountpoint=$2
+    local tag_override=${3:-}
+    local detected_type=""
+
+    if [[ $volume_type == "veracrypt" ]]; then
+        require_supported_veracrypt_tag "$tag_override"
+    fi
+
+    detected_type=$(detect_source_volume_type "$source_path" "$volume_type")
+
+    case "$detected_type" in
+        veracrypt)
+            require_supported_veracrypt_tag "$tag_override"
+            if have_veracrypt; then
+                veracrypt_mount_device "$source_path" "$mountpoint"
+                return
+            fi
+
+            notice_veracrypt_fallback
+            tcrypt_mount_device "$source_path" "$mountpoint"
+            ;;
+        *)
+            luks_mount_device "$source_path" "$mountpoint" "$tag_override"
+            ;;
+    esac
+}
+
+umount_device() {
+    local target=$1
+    local tag_override=${2:-}
+    local detected_type=""
+
+    if [[ $volume_type == "veracrypt" ]]; then
+        require_supported_veracrypt_tag "$tag_override"
+    fi
+
+    detected_type=$(detect_umount_volume_type "$target" "$volume_type")
+
+    case "$detected_type" in
+        veracrypt)
+            require_supported_veracrypt_tag "$tag_override"
+            if have_veracrypt; then
+                veracrypt_umount_device "$target"
+                return
+            fi
+
+            notice_veracrypt_fallback
+            dmcrypt_umount_device "$target" ""
+            ;;
+        *)
+            dmcrypt_umount_device "$target" "$tag_override"
+            ;;
+    esac
 }
 
 parse_long_options "$@"
 set -- "${PARSED_ARGS[@]}"
 
 validate_color_mode
+validate_volume_type
 setup_color
 
 if [[ $# -eq 0 ]]; then
@@ -916,11 +1445,20 @@ fi
 
 if [[ $1 == -* ]]; then
     show_help >&2
-    die "Action is required. Use: create, mount, or umount."
+    die "Action is required. Use: create, createvc, mount, or umount."
 fi
 
 action=$1
 shift
+
+if [[ $action == "createvc" ]]; then
+    if [[ $volume_type_explicit -eq 1 && $volume_type != "veracrypt" ]]; then
+        die "Action createvc only supports --type veracrypt."
+    fi
+
+    volume_type="veracrypt"
+    action="create"
+fi
 
 action_args=()
 while [[ $# -gt 0 ]]; do
@@ -966,13 +1504,20 @@ require_commands_for_action
 
 case "$action" in
     create)
-        luks_create_device "$file_path" "$source_kind" "$file_size"
+        case "$volume_type" in
+            veracrypt)
+                veracrypt_create_device "$file_path" "$source_kind" "$file_size"
+                ;;
+            *)
+                luks_create_device "$file_path" "$source_kind" "$file_size"
+                ;;
+        esac
         ;;
     mount)
-        luks_mount_device "$file_path" "$mount_path" "$mapper_tag"
+        mount_device "$file_path" "$mount_path" "$mapper_tag"
         ;;
     umount)
-        luks_umount_device "$umount_target" "$mapper_tag"
+        umount_device "$umount_target" "$mapper_tag"
         ;;
 esac
 
