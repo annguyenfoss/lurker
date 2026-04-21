@@ -1,1 +1,19 @@
 .codex
+
+# Rust CLI build output
+cli/target/
+
+# Hidden temp files created during interrupted `lurker create` runs
+*.lurker-tmp-*
+
+# Local CLI scratch artifacts
+cli/*.log
+cli/*.tmp
+cli/*.temp
+cli/.cache/
+cli/cache/
+cli/tmp/
+cli/temp/
+cli/build/
+cli/dist/
+cli/out/
