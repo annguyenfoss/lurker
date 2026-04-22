@@ -26,6 +26,7 @@ color_mode="auto"
 use_color_stdout=0
 use_color_stderr=0
 veracrypt_fallback_noticed=0
+create_cipher_explicit=0
 
 PARSED_ARGS=()
 action_args=()
@@ -34,6 +35,65 @@ resolved_mapper_name=""
 resolved_mapper_path=""
 resolved_mountpoint=""
 resolved_origin=""
+
+readonly CREATE_CIPHER_DEFAULT="aes"
+readonly -a LUKS_FORMAT_ARGS_AES=(
+    --type luks2
+    -c aes-xts-plain64
+    -s 512
+    --pbkdf argon2id
+    --pbkdf-memory 1048576
+    -i 5000
+    --use-urandom
+)
+readonly -a LUKS_FORMAT_ARGS_SERPENT=(
+    --type luks2
+    -c serpent-xts-plain64
+    -s 512
+    --pbkdf argon2id
+    --pbkdf-memory 2097152
+    --pbkdf-parallel 4
+    -i 10000
+    --use-urandom
+)
+readonly -a LUKS_FORMAT_ARGS_TWOFISH=(
+    --type luks2
+    -c twofish-xts-plain64
+    -s 512
+    --pbkdf argon2id
+    --pbkdf-memory 1048576
+    --pbkdf-parallel 4
+    -i 5000
+    --sector-size 4096
+    --use-urandom
+)
+readonly -a LUKS_OPEN_ARGS_AES=()
+readonly -a LUKS_OPEN_ARGS_SERPENT=()
+readonly -a LUKS_OPEN_ARGS_TWOFISH=(
+    --perf-no_read_workqueue
+    --perf-no_write_workqueue
+    --perf-submit_from_crypt_cpus
+)
+readonly -a VERACRYPT_CREATE_ARGS_COMMON=(
+    -t
+    --create
+    --force
+    --volume-type=normal
+    --hash=SHA-512
+    --filesystem=none
+    --random-source=/dev/urandom
+    --pim=0
+)
+readonly -a VERACRYPT_CREATE_ARGS_NO_KEYFILES=(
+    -k
+    ""
+)
+readonly -a VERACRYPT_CREATE_ARGS_BLOCK=(
+    --size=max
+    --quick
+)
+
+create_cipher=$CREATE_CIPHER_DEFAULT
 
 show_help() {
     local help_color=0
@@ -63,19 +123,20 @@ show_help() {
     cat <<EOF
 
 ${header}Usage:${reset}
-  ${accent}$SCRIPT_NAME create [--type TYPE] <file> <size-gb> [-F|--force]${reset}
-  ${accent}$SCRIPT_NAME create [--type TYPE] <block-device> [-F|--force]${reset}
-  ${accent}$SCRIPT_NAME createvc <file> <size-gb> [-F|--force]${reset}
-  ${accent}$SCRIPT_NAME createvc <block-device> [-F|--force]${reset}
+  ${accent}$SCRIPT_NAME create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]${reset}
+  ${accent}$SCRIPT_NAME create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]${reset}
+  ${accent}$SCRIPT_NAME createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]${reset}
+  ${accent}$SCRIPT_NAME createvc [--cipher CIPHER] <block-device> [-F|--force]${reset}
   ${accent}$SCRIPT_NAME mount [--type TYPE] [-t TAG] <source> <mountpoint>${reset}
   ${accent}$SCRIPT_NAME umount [--type TYPE] [-t TAG] <target>${reset}
   ${accent}$SCRIPT_NAME help${reset}
 
 ${header}Examples:${reset}
   ${accent}$SCRIPT_NAME create ./vault.img 4${reset}
-  ${accent}$SCRIPT_NAME create --type veracrypt ./vault.hc 4${reset}
-  ${accent}$SCRIPT_NAME create /dev/sda2 --force${reset}
-  ${accent}$SCRIPT_NAME createvc /dev/sdb2 --force${reset}
+  ${accent}$SCRIPT_NAME create --cipher serpent ./vault-serpent.img 4${reset}
+  ${accent}$SCRIPT_NAME create --cipher twofish /dev/sda2 --force${reset}
+  ${accent}$SCRIPT_NAME create --type veracrypt --cipher serpent ./vault.hc 4${reset}
+  ${accent}$SCRIPT_NAME createvc --cipher twofish /dev/sdb2 --force${reset}
   ${accent}$SCRIPT_NAME mount ./vault.img /mnt/vault${reset}
   ${accent}$SCRIPT_NAME mount -t work /dev/sda2 /mnt/work${reset}
   ${accent}$SCRIPT_NAME umount /mnt/work${reset}
@@ -85,6 +146,7 @@ ${header}Options:${reset}
   ${accent}-F, --force${reset}       Overwrite an existing file or allow destructive block-device create
   ${accent}-t TAG${reset}            Use /dev/mapper/lurker_TAG for mount or umount
   ${accent}--type TYPE${reset}       Container type: create uses luks|veracrypt; mount/umount use auto|luks|veracrypt
+  ${accent}--cipher CIPHER${reset}   Create cipher: aes, serpent, or twofish
   ${accent}--color=WHEN${reset}      Color output: auto, always, never
   ${accent}-h, --help${reset}        Show this help text
 EOF
@@ -152,6 +214,73 @@ validate_volume_type() {
             ;;
         *)
             die "Invalid --type value: $volume_type. Use auto, luks, or veracrypt."
+            ;;
+    esac
+}
+
+validate_create_cipher() {
+    case "$create_cipher" in
+        aes | serpent | twofish)
+            ;;
+        *)
+            die "Invalid --cipher value: $create_cipher. Use aes, serpent, or twofish."
+            ;;
+    esac
+}
+
+cipher_label() {
+    case "$1" in
+        aes)
+            printf 'AES\n'
+            ;;
+        serpent)
+            printf 'Serpent\n'
+            ;;
+        twofish)
+            printf 'Twofish\n'
+            ;;
+        *)
+            die "Unsupported LUKS cipher profile: $1"
+            ;;
+    esac
+}
+
+select_luks_format_args() {
+    local cipher=$1
+    local -n out_ref=$2
+
+    case "$cipher" in
+        aes)
+            out_ref=("${LUKS_FORMAT_ARGS_AES[@]}")
+            ;;
+        serpent)
+            out_ref=("${LUKS_FORMAT_ARGS_SERPENT[@]}")
+            ;;
+        twofish)
+            out_ref=("${LUKS_FORMAT_ARGS_TWOFISH[@]}")
+            ;;
+        *)
+            die "Unsupported LUKS cipher profile: $cipher"
+            ;;
+    esac
+}
+
+select_luks_open_args() {
+    local cipher=$1
+    local -n out_ref=$2
+
+    case "$cipher" in
+        aes)
+            out_ref=("${LUKS_OPEN_ARGS_AES[@]}")
+            ;;
+        serpent)
+            out_ref=("${LUKS_OPEN_ARGS_SERPENT[@]}")
+            ;;
+        twofish)
+            out_ref=("${LUKS_OPEN_ARGS_TWOFISH[@]}")
+            ;;
+        *)
+            die "Unsupported LUKS cipher profile: $cipher"
             ;;
     esac
 }
@@ -279,6 +408,17 @@ parse_long_options() {
                 [[ $# -ge 2 ]] || die "Option --type requires an argument."
                 volume_type=$2
                 volume_type_explicit=1
+                shift 2
+                ;;
+            --cipher=*)
+                create_cipher=${arg#*=}
+                create_cipher_explicit=1
+                shift
+                ;;
+            --cipher)
+                [[ $# -ge 2 ]] || die "Option --cipher requires an argument."
+                create_cipher=$2
+                create_cipher_explicit=1
                 shift 2
                 ;;
             --help)
@@ -519,6 +659,44 @@ notice_veracrypt_fallback() {
 
 require_supported_veracrypt_tag() {
     [[ -z ${1:-} ]] || die "tag not yet supporter for veracrypt container"
+}
+
+luks_cipher_for_source() {
+    local source_path=$1
+    local output=""
+    local line=""
+    local trimmed=""
+    local cipher_name=""
+
+    output=$(run_privileged cryptsetup luksDump "$source_path" 2>/dev/null || true)
+    [[ -n $output ]] || return 1
+
+    while IFS= read -r line; do
+        trimmed=${line#"${line%%[![:space:]]*}"}
+        case "$trimmed" in
+            Cipher:* | cipher:*)
+                cipher_name=${trimmed#*:}
+                cipher_name=${cipher_name#"${cipher_name%%[![:space:]]*}"}
+                cipher_name=${cipher_name,,}
+                case "$cipher_name" in
+                    aes*)
+                        printf 'aes\n'
+                        return 0
+                        ;;
+                    serpent*)
+                        printf 'serpent\n'
+                        return 0
+                        ;;
+                    twofish*)
+                        printf 'twofish\n'
+                        return 0
+                        ;;
+                esac
+                ;;
+        esac
+    done <<< "$output"
+
+    return 1
 }
 
 resolve_volume_type() {
@@ -1006,6 +1184,10 @@ validate_args() {
         die "Option --type is only valid with create, mount, or umount."
     fi
 
+    if [[ $action != "create" && $create_cipher_explicit -eq 1 ]]; then
+        die "Option --cipher is only valid with create."
+    fi
+
     case "$action" in
         create)
             if [[ $volume_type == "auto" ]]; then
@@ -1016,7 +1198,7 @@ validate_args() {
                 volume_type="luks"
             fi
 
-            [[ ${#action_args[@]} -ge 1 && ${#action_args[@]} -le 2 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] <file> <size-gb> [-F|--force] or $SCRIPT_NAME create [--type TYPE] <block-device> [-F|--force]"
+            [[ ${#action_args[@]} -ge 1 && ${#action_args[@]} -le 2 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force] or $SCRIPT_NAME create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]"
             file_path=${action_args[0]}
 
             if [[ -e $file_path && ! -f $file_path && ! -b $file_path ]]; then
@@ -1025,11 +1207,11 @@ validate_args() {
 
             if is_block_device_target "$file_path"; then
                 source_kind="block"
-                [[ ${#action_args[@]} -eq 1 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] <block-device> [-F|--force]"
+                [[ ${#action_args[@]} -eq 1 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]"
                 file_size=""
             else
                 source_kind="file"
-                [[ ${#action_args[@]} -eq 2 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] <file> <size-gb> [-F|--force]"
+                [[ ${#action_args[@]} -eq 2 ]] || die "Usage: $SCRIPT_NAME create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]"
                 file_size=${action_args[1]}
             fi
 
@@ -1102,16 +1284,43 @@ write_container_file() {
 }
 
 luks_format() {
-    if is_block_device_target "$1"; then
-        run_privileged cryptsetup -v --type luks2 -c aes-xts-plain64 -h sha512 -s 512 -i 2000 --use-urandom -y -q luksFormat "$1" >/dev/null
+    local target=$1
+    local cipher=${2:-$CREATE_CIPHER_DEFAULT}
+    local -a format_args=()
+    local -a cmd=(cryptsetup -v)
+
+    select_luks_format_args "$cipher" format_args
+    cmd+=("${format_args[@]}" -y luksFormat "$target")
+
+    if is_block_device_target "$target"; then
+        run_privileged "${cmd[@]}" >/dev/null
         return
     fi
 
-    cryptsetup -v --type luks2 -c aes-xts-plain64 -h sha512 -s 512 -i 2000 --use-urandom -y -q luksFormat "$1" >/dev/null
+    "${cmd[@]}" >/dev/null
 }
 
 luks_open() {
-    run_privileged cryptsetup luksOpen "$1" "$2"
+    local source_path=$1
+    local mapper_name=$2
+    local cipher=${3:-}
+    local -a open_args=()
+    local -a cmd=(cryptsetup open --type luks)
+
+    if [[ -z $cipher ]]; then
+        cipher=$(luks_cipher_for_source "$source_path" || true)
+    fi
+
+    if [[ -n $cipher ]]; then
+        select_luks_open_args "$cipher" open_args
+        if [[ ${#open_args[@]} -gt 0 ]]; then
+            msg2 "Applying $(cipher_label "$cipher") open performance flags"
+            cmd+=("${open_args[@]}")
+        fi
+    fi
+
+    cmd+=("$source_path" "$mapper_name")
+    run_privileged "${cmd[@]}"
 }
 
 crypt_close() {
@@ -1126,27 +1335,33 @@ veracrypt_create() {
     local source_path=$1
     local target_kind=$2
     local filesize_in_mb=${3:-}
-    local -a cmd=(
-        veracrypt
-        -t
-        --create
-        --force
-        --volume-type=normal
-        --encryption=AES
-        --hash=SHA-512
-        --filesystem=none
-        --random-source=/dev/urandom
-        --pim=0
-        -k
-        ""
-    )
+    local cipher=${4:-$CREATE_CIPHER_DEFAULT}
+    local encryption=""
+    local -a cmd=(veracrypt)
+
+    case "$cipher" in
+        aes)
+            encryption="AES"
+            ;;
+        serpent)
+            encryption="Serpent"
+            ;;
+        twofish)
+            encryption="Twofish"
+            ;;
+        *)
+            die "Unsupported create cipher for VeraCrypt: $cipher"
+            ;;
+    esac
+
+    cmd+=("${VERACRYPT_CREATE_ARGS_COMMON[@]}" "--encryption=${encryption}" "${VERACRYPT_CREATE_ARGS_NO_KEYFILES[@]}")
 
     case "$target_kind" in
         file)
             cmd+=("--size=${filesize_in_mb}M")
             ;;
         block)
-            cmd+=("--size=max" "--quick")
+            cmd+=("${VERACRYPT_CREATE_ARGS_BLOCK[@]}")
             ;;
         *)
             die "Unsupported VeraCrypt create target kind: $target_kind"
@@ -1211,6 +1426,7 @@ luks_create_device() {
     local source_path=$1
     local target_kind=$2
     local filesize_in_gb=${3:-}
+    local cipher=${4:-$CREATE_CIPHER_DEFAULT}
     local filesize_in_mb=""
     local mapper_name
 
@@ -1220,19 +1436,21 @@ luks_create_device() {
     if [[ $target_kind == "file" ]]; then
         filesize_in_mb=$(size_gb_to_mb "$filesize_in_gb")
         msg "Creating LUKS container at $source_path"
+        msg2 "LUKS profile: $(cipher_label "$cipher")"
         msg2 "Target size: ${filesize_in_gb} GB (${filesize_in_mb} MiB)"
         write_container_file "$source_path" "$filesize_in_mb"
     else
         msg "Creating LUKS volume on block device $source_path"
+        msg2 "LUKS profile: $(cipher_label "$cipher")"
         msg2 "Destructive mode enabled by --force"
     fi
 
     msg2 "Formatting LUKS2 header"
-    luks_format "$source_path"
+    luks_format "$source_path" "$cipher"
 
     cleanup_mapper=$mapper_name
     msg2 "Opening mapper $(mapper_device_path "$mapper_name")"
-    luks_open "$source_path" "$mapper_name"
+    luks_open "$source_path" "$mapper_name" "$cipher"
 
     msg2 "Creating Btrfs filesystem"
     run_privileged mkfs.btrfs -q "$(mapper_device_path "$mapper_name")"
@@ -1243,12 +1461,14 @@ luks_create_device() {
 
     success "Created LUKS+Btrfs volume on $source_path"
     msg2 "Mapper name: $mapper_name"
+    msg2 "LUKS cipher: $(cipher_label "$cipher")"
 }
 
 veracrypt_create_device() {
     local source_path=$1
     local target_kind=$2
     local filesize_in_gb=${3:-}
+    local cipher=${4:-$LUKS_CIPHER_DEFAULT}
     local filesize_in_mb=""
     local mapper_name
 
@@ -1258,15 +1478,17 @@ veracrypt_create_device() {
     if [[ $target_kind == "file" ]]; then
         filesize_in_mb=$(size_gb_to_mb "$filesize_in_gb")
         msg "Creating VeraCrypt container at $source_path"
+        msg2 "VeraCrypt profile: $(cipher_label "$cipher")"
         msg2 "Target size: ${filesize_in_gb} GB (${filesize_in_mb} MiB)"
     else
         msg "Creating VeraCrypt volume on block device $source_path"
+        msg2 "VeraCrypt profile: $(cipher_label "$cipher")"
         msg2 "Destructive mode enabled by --force"
         msg2 "Using VeraCrypt quick format for device-hosted creation"
     fi
 
-    msg2 "Creating VeraCrypt header (normal, password-only, AES, SHA-512, filesystem=none)"
-    veracrypt_create "$source_path" "$target_kind" "$filesize_in_mb"
+    msg2 "Creating VeraCrypt header (normal, password-only, $(cipher_label "$cipher"), SHA-512, filesystem=none)"
+    veracrypt_create "$source_path" "$target_kind" "$filesize_in_mb" "$cipher"
 
     cleanup_mapper=$mapper_name
     msg2 "Opening mapper $(mapper_device_path "$mapper_name") with cryptsetup"
@@ -1281,6 +1503,7 @@ veracrypt_create_device() {
 
     success "Created VeraCrypt+Btrfs volume on $source_path"
     msg2 "Mapper name: $mapper_name"
+    msg2 "VeraCrypt cipher: $(cipher_label "$cipher")"
 }
 
 luks_mount_device() {
@@ -1427,6 +1650,7 @@ set -- "${PARSED_ARGS[@]}"
 
 validate_color_mode
 validate_volume_type
+validate_create_cipher
 setup_color
 
 if [[ $# -eq 0 ]]; then
@@ -1506,10 +1730,10 @@ case "$action" in
     create)
         case "$volume_type" in
             veracrypt)
-                veracrypt_create_device "$file_path" "$source_kind" "$file_size"
+                veracrypt_create_device "$file_path" "$source_kind" "$file_size" "$create_cipher"
                 ;;
             *)
-                luks_create_device "$file_path" "$source_kind" "$file_size"
+                luks_create_device "$file_path" "$source_kind" "$file_size" "$create_cipher"
                 ;;
         esac
         ;;

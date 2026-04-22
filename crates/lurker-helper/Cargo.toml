@@ -1,0 +1,10 @@
+[package]
+name = "lurker-helper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+lurker-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true

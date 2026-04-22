@@ -1,0 +1,12 @@
+[package]
+name = "lurker-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "lurker"
+path = "src/main.rs"
+
+[dependencies]
+lurker-core.workspace = true

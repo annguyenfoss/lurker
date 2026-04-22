@@ -1,84 +1,140 @@
 # lurker
 
 <p align="center">
-  <img src="extras/assets/lurker.png" alt="lurker logo" width="480">
+  <img src="extras/assets/lurker.png" alt="lurker logo" width="320">
 </p>
 
-Encryption made easy for Linux, with LUKS and VeraCrypt.
+Encryption made easy for Linux, with a shared Rust core, a CLI, and a Tauri desktop app.
 
-The active implementation now lives in [`cli/`](cli/). The original Bash version remains in [`bash-cli/`](bash-cli/) as the legacy reference.
-
-## What You Can Do
+## Repository Layout
 
 ```text
-lurker create [--type TYPE] <file> <size-gb> [-F|--force]
-lurker create [--type TYPE] <block-device> [-F|--force]
+lurker/
+├── crates/
+│   ├── lurker-core/    # shared Rust domain + Linux integration
+│   ├── lurker-cli/     # `lurker` terminal binary
+│   └── lurker-helper/  # internal privileged helper used by the desktop app
+├── apps/
+│   └── lurker-app/     # Tauri 2 + SvelteKit desktop app
+├── legacy/
+│   ├── bash-cli/               # archived Bash implementation
+│   └── rust-cli-monolith/      # archived single-crate Rust layout
+└── extras/
+```
+
+## Current Products
+
+### CLI
+
+```text
+lurker create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]
+lurker create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]
 lurker mount [--type TYPE] [-t TAG] <source> <mountpoint>
 lurker unmount [--type TYPE] [-t TAG] <target>
 ```
 
+Build it:
+
 ```bash
-# LUKS file
-lurker create ./vault.img 4
-lurker mount ./vault.img /mnt/vault
-lurker unmount /mnt/vault
-
-# VeraCrypt file
-lurker create --type veracrypt ./vault.hc 4
-lurker mount ./vault.hc /mnt/vault
-lurker unmount /mnt/vault
-
-# Block device
-lurker create /dev/sda2 --force
-lurker create --type veracrypt /dev/sdb2 --force
-lurker mount -t work /dev/sda2 /mnt/work
-lurker unmount /mnt/work
+cargo build --release -p lurker-cli
 ```
 
-## VeraCrypt
+Run it:
 
-- `create` defaults to `luks`. Use `--type veracrypt` for VeraCrypt creation.
-- `mount` and `unmount` auto-detect `luks` vs `veracrypt` unless `--type luks` or `--type veracrypt` is provided.
-- VeraCrypt create is pinned to: `normal`, password-only, default `PIM`, no keyfiles, no hidden, `AES`, `SHA-512`, `--filesystem none`.
-- After creating the VeraCrypt header, `lurker` opens it with `cryptsetup`, runs `mkfs.btrfs`, then closes it.
-- Block-device VeraCrypt create always uses VeraCrypt quick format.
-- VeraCrypt mount/unmount prefers `veracrypt -t`. If `veracrypt` is not installed, `lurker` falls back to `cryptsetup` and prints a notice to stdout.
-- `-t TAG` is not yet supported for VeraCrypt containers, even when the `cryptsetup` fallback path is used.
-- Hidden VeraCrypt volumes are not supported.
+```bash
+./target/release/lurker help
+```
+
+Install it:
+
+```bash
+install -m 755 ./target/release/lurker /usr/local/bin/lurker
+```
+
+Examples:
+
+```bash
+./target/release/lurker create ./vault.img 4
+./target/release/lurker create --cipher serpent ./vault-serpent.img 4
+./target/release/lurker create --cipher twofish /dev/sdb1 --force
+./target/release/lurker create --type veracrypt --cipher serpent ./vault.hc 4
+./target/release/lurker createvc --cipher twofish /dev/sdc1 --force
+./target/release/lurker mount ./vault.img /mnt/vault
+./target/release/lurker unmount /mnt/vault
+```
+
+### Linux Desktop App
+
+The desktop app is intentionally simple for now:
+
+- one main window
+- create / mount / unmount workflows
+- active `lurker_*` volume list
+- system tool status
+- buffered operation logs
+
+It uses:
+
+- `lurker-core` for all shared logic
+- `lurker-helper` for privileged desktop operations
+- Tauri 2 + SvelteKit + TypeScript for the GUI shell
+
+Install frontend dependencies:
+
+```bash
+npm install
+```
+
+Run the desktop app in development:
+
+```bash
+npm run app:dev
+```
+
+Build the desktop app:
+
+```bash
+npm run app:build
+```
+
+The app build pipeline stages `lurker-helper` into `apps/lurker-app/src-tauri/binaries/` before Tauri starts.
+
+## Runtime Requirements
+
+- `cryptsetup`
+- `mkfs.btrfs`
+- `mount`
+- `umount`
+- `lsblk`
+- `pkexec` for desktop privilege escalation
+- optional `blkid`
+- optional `veracrypt`
 
 ## Notes
 
-- `--type auto` is not valid with `create`.
-- `unmount` accepts a mountpoint, `/dev/mapper/...`, the original file, or the original block device. `umount` remains available as a compatibility alias.
-- If `unmount` gets a block device without `-t`, `lurker` reverse-resolves the active `lurker_*` mapper from system state.
-- `-t TAG` works for LUKS source-path mount/unmount.
+- `create` defaults to `luks`. Use `--type veracrypt` or `createvc` for VeraCrypt creation.
+- `create` defaults to `--cipher aes`. The only supported single-cipher create profiles are `aes`, `serpent`, and `twofish`.
+- The create profiles are intentionally hardcoded and opinionated. They are defined in the code, not in an external config file.
+- AES uses the updated LUKS2 + Argon2id profile from `CIPHER.md`.
+- Serpent uses the heavier Argon2id profile from `CIPHER.md`.
+- Twofish uses the `CIPHER.md` sector-size tuning and automatically applies the documented open-time perf flags when a Twofish LUKS header is detected.
+- VeraCrypt create supports the same three single-cipher choices and keeps `SHA-512` fixed.
+- `mount` and `unmount` auto-detect `luks` vs `veracrypt` unless `--type` is pinned.
+- `-t TAG` is supported for LUKS source-path mount/unmount.
+- VeraCrypt tags are still unsupported.
 - Btrfs volumes are mounted with `compress=zstd`.
-- Passphrase entry requires an interactive TTY.
-- `create` on a block device is destructive and requires `--force`.
-- `create` refuses to run on mounted block devices and active mapper devices.
-- `create` on a file refuses to overwrite an existing regular file unless `--force` is used.
-- File-backed `create` uses same-directory temporary files and atomic rename on success.
+- File-backed create uses same-directory temporary files and atomic rename.
+- The desktop app uses passphrase entry inside the app; the CLI still supports interactive terminal prompting.
+- The archived Bash implementation in `legacy/bash-cli/` was updated to match the same three create cipher profiles.
 
-## Requirements
+## Verification
 
-- Required runtime: `cryptsetup`
-- Create: `mkfs.btrfs`
-- Mount: `mount`
-- Unmount: `umount`
-- Block-device create and filesystem probing: `lsblk`
-- Optional filesystem probing: `blkid`
-- VeraCrypt create and preferred native mount/umount: `veracrypt`
-
-## Build
+Current verification target:
 
 ```bash
-cargo build --release --manifest-path cli/Cargo.toml
-```
-
-## Install
-
-```bash
-install -m 755 cli/target/release/lurker /usr/local/bin/lurker
+cargo check --workspace
+cargo test --workspace
+npm run app:check
 ```
 
 ## License

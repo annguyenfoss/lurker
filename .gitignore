@@ -1,19 +1,16 @@
 .codex
+.claude
+.cursor
+.opencode
+.antigravity
+.idea
+*.iml
 
-# Rust CLI build output
-cli/target/
+target/
+node_modules/
 
-# Hidden temp files created during interrupted `lurker create` runs
+apps/lurker-app/.svelte-kit/
+apps/lurker-app/build/
+apps/lurker-app/src-tauri/binaries/
+
 *.lurker-tmp-*
-
-# Local CLI scratch artifacts
-cli/*.log
-cli/*.tmp
-cli/*.temp
-cli/.cache/
-cli/cache/
-cli/tmp/
-cli/temp/
-cli/build/
-cli/dist/
-cli/out/
