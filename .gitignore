@@ -6,11 +6,7 @@
 .idea
 *.iml
 
-target/
-node_modules/
-
-apps/lurker-app/.svelte-kit/
-apps/lurker-app/build/
-apps/lurker-app/src-tauri/binaries/
+/target/
+/legacy/rust-cli-monolith/target/
 
 *.lurker-tmp-*

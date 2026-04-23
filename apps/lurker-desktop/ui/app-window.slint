@@ -1,0 +1,340 @@
+import {
+    Button,
+    CheckBox,
+    ComboBox,
+    HorizontalBox,
+    LineEdit,
+    StandardListView,
+    TabWidget,
+    VerticalBox
+} from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "Lurker";
+    preferred-width: 1120px;
+    preferred-height: 760px;
+    min-width: 980px;
+    min-height: 680px;
+
+    in-out property <string> create-target: "";
+    in-out property <string> create-size-gb: "4";
+    in-out property <bool> create-force: false;
+    in-out property <string> create-source-kind: "file";
+    in-out property <string> create-volume-type: "luks";
+    in-out property <string> create-cipher: "aes";
+    in-out property <string> create-passphrase: "";
+    in-out property <string> create-passphrase-confirm: "";
+
+    in-out property <string> mount-source: "";
+    in-out property <string> mount-mountpoint: "";
+    in-out property <string> mount-tag: "";
+    in-out property <string> mount-volume-type: "auto";
+    in-out property <string> mount-passphrase: "";
+
+    in-out property <string> unmount-target: "";
+    in-out property <string> unmount-tag: "";
+    in-out property <string> unmount-volume-type: "auto";
+
+    in-out property <bool> busy: false;
+    in-out property <string> busy-label: "";
+    in-out property <string> status-message: "";
+    in-out property <string> error-message: "";
+
+    in property <[StandardListViewItem]> active-volume-items: [];
+
+    callback submit-create();
+    callback submit-mount();
+    callback submit-unmount();
+    callback refresh-volumes();
+    callback active-volume-picked(int);
+
+    Rectangle {
+        background: #f4f6fa;
+
+        VerticalBox {
+            padding: 18px;
+            spacing: 14px;
+
+            Rectangle {
+                min-height: 72px;
+                background: #ffffff;
+                border-width: 1px;
+                border-color: #d5dbe6;
+
+                HorizontalBox {
+                    padding: 16px;
+                    spacing: 16px;
+
+                    VerticalBox {
+                        spacing: 6px;
+
+                        Text {
+                            text: "Lurker";
+                            font-size: 26px;
+                            color: #111827;
+                        }
+
+                        Text {
+                            text: root.busy ? root.busy-label : root.status-message;
+                            color: root.busy ? #1d4ed8 : #1f2937;
+                            visible: root.busy || root.status-message != "";
+                        }
+
+                        Text {
+                            text: root.error-message;
+                            color: #b42318;
+                            visible: root.error-message != "";
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: transparent;
+                    }
+
+                    Button {
+                        text: "Refresh";
+                        enabled: !root.busy;
+                        clicked => {
+                            root.refresh-volumes();
+                        }
+                    }
+                }
+            }
+
+            HorizontalBox {
+                spacing: 14px;
+
+                Rectangle {
+                    horizontal-stretch: 3;
+                    background: #ffffff;
+                    border-width: 1px;
+                    border-color: #d5dbe6;
+
+                    TabWidget {
+                        Tab {
+                            title: "Create";
+
+                            VerticalBox {
+                                padding: 18px;
+                                spacing: 12px;
+
+                                Text { text: "Create a file container or destructive block device."; }
+
+                                Text { text: "Target path"; }
+                                LineEdit {
+                                    text <=> root.create-target;
+                                    placeholder-text: "/path/to/vault.img or /dev/sdb1";
+                                }
+
+                                HorizontalBox {
+                                    spacing: 12px;
+
+                                    VerticalBox {
+                                        spacing: 6px;
+                                        Text { text: "Target kind"; }
+                                        ComboBox {
+                                            model: ["file", "block"];
+                                            current-value <=> root.create-source-kind;
+                                            enabled: !root.busy;
+                                        }
+                                    }
+
+                                    VerticalBox {
+                                        spacing: 6px;
+                                        Text { text: "Volume type"; }
+                                        ComboBox {
+                                            model: ["luks", "veracrypt"];
+                                            current-value <=> root.create-volume-type;
+                                            enabled: !root.busy;
+                                        }
+                                    }
+                                }
+
+                                Text { text: "Cipher"; }
+                                ComboBox {
+                                    model: ["aes", "serpent", "twofish"];
+                                    current-value <=> root.create-cipher;
+                                    enabled: !root.busy;
+                                }
+
+                                Text {
+                                    text: "Size in GB";
+                                    color: root.create-source-kind == "block" ? #9ca3af : #111827;
+                                }
+                                LineEdit {
+                                    text <=> root.create-size-gb;
+                                    input-type: number;
+                                    placeholder-text: "4";
+                                    enabled: root.create-source-kind == "file" && !root.busy;
+                                }
+
+                                Text { text: "Passphrase"; }
+                                LineEdit {
+                                    text <=> root.create-passphrase;
+                                    input-type: password;
+                                    placeholder-text: "Required";
+                                }
+
+                                Text { text: "Confirm passphrase"; }
+                                LineEdit {
+                                    text <=> root.create-passphrase-confirm;
+                                    input-type: password;
+                                    placeholder-text: "Required";
+                                }
+
+                                CheckBox {
+                                    text: root.create-source-kind == "block"
+                                        ? "I understand block-device create is destructive."
+                                        : "Overwrite the target file if it already exists.";
+                                    checked <=> root.create-force;
+                                    enabled: !root.busy;
+                                }
+
+                                Button {
+                                    text: "Create volume";
+                                    primary: true;
+                                    enabled: !root.busy;
+                                    clicked => {
+                                        root.submit-create();
+                                    }
+                                }
+                            }
+                        }
+
+                        Tab {
+                            title: "Mount";
+
+                            VerticalBox {
+                                padding: 18px;
+                                spacing: 12px;
+
+                                Text { text: "Mount a LUKS or VeraCrypt volume."; }
+
+                                Text { text: "Source path"; }
+                                LineEdit {
+                                    text <=> root.mount-source;
+                                    placeholder-text: "/path/to/vault.img or /dev/sdb1";
+                                }
+
+                                Text { text: "Mountpoint"; }
+                                LineEdit {
+                                    text <=> root.mount-mountpoint;
+                                    placeholder-text: "/mnt/lurker";
+                                }
+
+                                Text { text: "Type"; }
+                                ComboBox {
+                                    model: ["auto", "luks", "veracrypt"];
+                                    current-value <=> root.mount-volume-type;
+                                    enabled: !root.busy;
+                                }
+
+                                Text {
+                                    text: "Tag";
+                                    visible: root.mount-volume-type != "veracrypt";
+                                }
+                                LineEdit {
+                                    text <=> root.mount-tag;
+                                    placeholder-text: "Optional LUKS tag";
+                                    visible: root.mount-volume-type != "veracrypt";
+                                    enabled: root.mount-volume-type != "veracrypt" && !root.busy;
+                                }
+
+                                Text { text: "Passphrase"; }
+                                LineEdit {
+                                    text <=> root.mount-passphrase;
+                                    input-type: password;
+                                    placeholder-text: "Required";
+                                }
+
+                                Button {
+                                    text: "Mount volume";
+                                    primary: true;
+                                    enabled: !root.busy;
+                                    clicked => {
+                                        root.submit-mount();
+                                    }
+                                }
+                            }
+                        }
+
+                        Tab {
+                            title: "Unmount";
+
+                            VerticalBox {
+                                padding: 18px;
+                                spacing: 12px;
+
+                                Text { text: "Unmount by mountpoint, mapper, or original source path."; }
+
+                                Text { text: "Target"; }
+                                LineEdit {
+                                    text <=> root.unmount-target;
+                                    placeholder-text: "/mnt/lurker or /dev/mapper/lurker_x";
+                                }
+
+                                Text { text: "Type"; }
+                                ComboBox {
+                                    model: ["auto", "luks", "veracrypt"];
+                                    current-value <=> root.unmount-volume-type;
+                                    enabled: !root.busy;
+                                }
+
+                                Text {
+                                    text: "Tag";
+                                    visible: root.unmount-volume-type != "veracrypt";
+                                }
+                                LineEdit {
+                                    text <=> root.unmount-tag;
+                                    placeholder-text: "Optional LUKS tag";
+                                    visible: root.unmount-volume-type != "veracrypt";
+                                    enabled: root.unmount-volume-type != "veracrypt" && !root.busy;
+                                }
+
+                                Button {
+                                    text: "Unmount volume";
+                                    primary: true;
+                                    enabled: !root.busy;
+                                    clicked => {
+                                        root.submit-unmount();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 2;
+                    background: #ffffff;
+                    border-width: 1px;
+                    border-color: #d5dbe6;
+
+                    VerticalBox {
+                        padding: 18px;
+                        spacing: 12px;
+
+                        Text {
+                            text: "Active Volumes";
+                            font-size: 20px;
+                            color: #111827;
+                        }
+
+                        Text {
+                            text: "Select an item to prefill the unmount target.";
+                            color: #4b5563;
+                        }
+
+                        StandardListView {
+                            model: root.active-volume-items;
+                            current-item-changed(index) => {
+                                root.active-volume-picked(index);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

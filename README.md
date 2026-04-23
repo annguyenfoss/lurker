@@ -4,7 +4,7 @@
   <img src="extras/assets/lurker.png" alt="lurker logo" width="320">
 </p>
 
-Encryption made easy for Linux, with a shared Rust core, a CLI, and a Tauri desktop app.
+Encryption made easy for Linux, with a shared Rust core, a CLI, and a Slint desktop app.
 
 ## Repository Layout
 
@@ -15,7 +15,7 @@ lurker/
 │   ├── lurker-cli/     # `lurker` terminal binary
 │   └── lurker-helper/  # internal privileged helper used by the desktop app
 ├── apps/
-│   └── lurker-app/     # Tauri 2 + SvelteKit desktop app
+│   └── lurker-desktop/ # Slint Linux desktop app
 ├── legacy/
 │   ├── bash-cli/               # archived Bash implementation
 │   └── rust-cli-monolith/      # archived single-crate Rust layout
@@ -68,36 +68,37 @@ Examples:
 The desktop app is intentionally simple for now:
 
 - one main window
-- create / mount / unmount workflows
+- create / mount / unmount tabs
 - active `lurker_*` volume list
-- system tool status
-- buffered operation logs
+- inline status and errors only
 
 It uses:
 
 - `lurker-core` for all shared logic
 - `lurker-helper` for privileged desktop operations
-- Tauri 2 + SvelteKit + TypeScript for the GUI shell
-
-Install frontend dependencies:
-
-```bash
-npm install
-```
+- Slint + winit + software renderer for the GUI shell
 
 Run the desktop app in development:
 
 ```bash
-npm run app:dev
+cargo build -p lurker-helper
+cargo run -p lurker-desktop
 ```
 
 Build the desktop app:
 
 ```bash
-npm run app:build
+cargo build --release -p lurker-helper -p lurker-desktop
 ```
 
-The app build pipeline stages `lurker-helper` into `apps/lurker-app/src-tauri/binaries/` before Tauri starts.
+Install the desktop binaries:
+
+```bash
+install -m 755 ./target/release/lurker-desktop /usr/local/bin/lurker-desktop
+install -m 755 ./target/release/lurker-helper /usr/local/bin/lurker-helper
+```
+
+For system packaging, keep `lurker-desktop` and `lurker-helper` together.
 
 ## Runtime Requirements
 
@@ -106,7 +107,8 @@ The app build pipeline stages `lurker-helper` into `apps/lurker-app/src-tauri/bi
 - `mount`
 - `umount`
 - `lsblk`
-- `pkexec` for desktop privilege escalation
+- `pkexec` for preferred desktop privilege escalation
+- `sudo` for desktop fallback when launched from a terminal
 - optional `blkid`
 - optional `veracrypt`
 
@@ -124,7 +126,9 @@ The app build pipeline stages `lurker-helper` into `apps/lurker-app/src-tauri/bi
 - VeraCrypt tags are still unsupported.
 - Btrfs volumes are mounted with `compress=zstd`.
 - File-backed create uses same-directory temporary files and atomic rename.
-- The desktop app uses passphrase entry inside the app; the CLI still supports interactive terminal prompting.
+- The desktop app uses passphrase entry inside the app. Create passphrase confirmation is enforced by the UI.
+- The desktop app does not call the CLI binary. It talks to `lurker-helper` over a local stdin/stdout JSON contract.
+- The CLI still supports interactive terminal prompting.
 - The archived Bash implementation in `legacy/bash-cli/` was updated to match the same three create cipher profiles.
 
 ## Verification
@@ -134,7 +138,6 @@ Current verification target:
 ```bash
 cargo check --workspace
 cargo test --workspace
-npm run app:check
 ```
 
 ## License

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lurker
+Comment=Create, mount, and unmount encrypted Linux volumes
+Exec=lurker-desktop
+Icon=lurker
+Terminal=false
+Categories=Utility;Security;
+Keywords=encryption;luks;veracrypt;cryptsetup;
