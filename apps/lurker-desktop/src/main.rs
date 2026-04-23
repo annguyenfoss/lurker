@@ -15,6 +15,11 @@ use std::thread;
 
 slint::include_modules!();
 
+const DEFAULT_UI_SCALE: f32 = 1.0;
+const MIN_UI_SCALE: f32 = 0.8;
+const MAX_UI_SCALE: f32 = 2.0;
+const UI_SCALE_STEP: f32 = 0.1;
+
 #[derive(Clone)]
 struct AppState {
     window: Weak<MainWindow>,
@@ -38,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         active_volumes: Arc::new(Mutex::new(Vec::new())),
     };
 
+    apply_zoom(&window, DEFAULT_UI_SCALE);
     bind_callbacks(&window, &state);
     state.refresh_active_volumes(false);
     window.run()?;
@@ -45,6 +51,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn bind_callbacks(window: &MainWindow, state: &AppState) {
+    let zoom_in_window = window.as_weak();
+    window.on_zoom_in(move || {
+        with_zoom(&zoom_in_window, |scale| {
+            (scale + UI_SCALE_STEP).min(MAX_UI_SCALE)
+        })
+    });
+
+    let zoom_out_window = window.as_weak();
+    window.on_zoom_out(move || {
+        with_zoom(&zoom_out_window, |scale| {
+            (scale - UI_SCALE_STEP).max(MIN_UI_SCALE)
+        })
+    });
+
+    let zoom_reset_window = window.as_weak();
+    window.on_zoom_reset(move || {
+        if let Some(window) = zoom_reset_window.upgrade() {
+            apply_zoom(&window, DEFAULT_UI_SCALE);
+        }
+    });
+
     let refresh_state = state.clone();
     window.on_refresh_volumes(move || refresh_state.refresh_active_volumes(true));
 
@@ -294,4 +321,371 @@ fn clear_create_secrets(window: &MainWindow) {
 
 fn clear_mount_secrets(window: &MainWindow) {
     window.set_mount_passphrase("".into());
+}
+
+fn with_zoom(window: &Weak<MainWindow>, adjust: impl FnOnce(f32) -> f32) {
+    let Some(window) = window.upgrade() else {
+        return;
+    };
+    let next = adjust(window.get_ui_scale());
+    apply_zoom(&window, next);
+}
+
+fn apply_zoom(window: &MainWindow, scale: f32) {
+    let scale = scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE);
+    window.set_ui_scale(scale);
+    window.set_zoom_label(format!("{}%", (scale * 100.0).round() as i32).into());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ZoomMetricsWindow, DEFAULT_UI_SCALE, MAX_UI_SCALE, MIN_UI_SCALE, UI_SCALE_STEP};
+    use slint::platform::software_renderer::{
+        MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel,
+    };
+    use slint::platform::{Platform, PlatformError, WindowAdapter};
+    use slint::ComponentHandle;
+    use slint::PhysicalSize;
+    use std::rc::Rc;
+    use std::sync::Mutex;
+
+    slint::slint! {
+        export component InlineZoomProbe inherits Window {
+            in-out property <length> size: 16px;
+            out property <length> text_width: label.preferred-width;
+            out property <length> text_ascent: label.font-metrics.ascent;
+
+            label := Text {
+                text: "Hello";
+                font-size: root.size;
+            }
+        }
+    }
+
+    thread_local! {
+        static TEST_WINDOW: Rc<MinimalSoftwareWindow> =
+            MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
+    }
+
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    struct TestPlatform;
+
+    impl Platform for TestPlatform {
+        fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
+            Ok(TEST_WINDOW.with(|window| window.clone()))
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct ZoomSnapshot {
+        title_ascent: f32,
+        body_ascent: f32,
+        title_font_size: f32,
+        body_font_size: f32,
+        title_width: f32,
+        body_width: f32,
+        button_ascent: f32,
+        select_ascent: f32,
+        checkbox_ascent: f32,
+        row_ascent: f32,
+        line_edit_font_size: f32,
+        line_edit_height: f32,
+    }
+
+    fn setup_test_window() -> Rc<MinimalSoftwareWindow> {
+        slint::platform::set_platform(Box::new(TestPlatform)).ok();
+        let window = TEST_WINDOW.with(|test_window| test_window.clone());
+        window.set_size(PhysicalSize::new(1280, 900));
+        window
+    }
+
+    fn render(window: &Rc<MinimalSoftwareWindow>) {
+        window.request_redraw();
+        let _ = window.draw_if_needed(|renderer| {
+            let mut buffer = vec![Rgb565Pixel::default(); 1280 * 900];
+            renderer.render(buffer.as_mut_slice(), 1280);
+        });
+    }
+
+    fn capture(ui: &ZoomMetricsWindow) -> ZoomSnapshot {
+        ZoomSnapshot {
+            title_ascent: ui.get_title_ascent(),
+            body_ascent: ui.get_body_ascent(),
+            title_font_size: ui.get_title_font_size_debug(),
+            body_font_size: ui.get_body_font_size_debug(),
+            title_width: ui.get_title_width(),
+            body_width: ui.get_body_width(),
+            button_ascent: ui.get_button_ascent(),
+            select_ascent: ui.get_select_ascent(),
+            checkbox_ascent: ui.get_checkbox_ascent(),
+            row_ascent: ui.get_row_ascent(),
+            line_edit_font_size: ui.get_line_edit_font_size(),
+            line_edit_height: ui.get_line_edit_height(),
+        }
+    }
+
+    #[test]
+    fn zoom_constants_are_ordered() {
+        assert!(MIN_UI_SCALE < DEFAULT_UI_SCALE);
+        assert!(DEFAULT_UI_SCALE < MAX_UI_SCALE);
+        assert!(UI_SCALE_STEP > 0.0);
+    }
+
+    #[test]
+    fn zoom_increases_text_metrics_across_controls() {
+        let _guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = setup_test_window();
+        let ui = ZoomMetricsWindow::new().unwrap();
+        ui.show().unwrap();
+        render(&window);
+
+        let before = capture(&ui);
+        ui.set_ui_scale(1.5);
+        render(&window);
+        let after = capture(&ui);
+
+        assert!(
+            after.title_ascent > before.title_ascent,
+            "title ascent did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.body_ascent > before.body_ascent,
+            "body ascent did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.title_font_size > before.title_font_size,
+            "title font size did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.body_font_size > before.body_font_size,
+            "body font size did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.title_width > before.title_width,
+            "title width did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.body_width > before.body_width,
+            "body width did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.button_ascent > before.button_ascent,
+            "button ascent did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.select_ascent > before.select_ascent,
+            "select ascent did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.checkbox_ascent > before.checkbox_ascent,
+            "checkbox ascent did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.row_ascent > before.row_ascent,
+            "row ascent did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.line_edit_font_size > before.line_edit_font_size,
+            "line edit font size did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+        assert!(
+            after.line_edit_height > before.line_edit_height,
+            "line edit height did not increase: before={:?} after={:?}",
+            before,
+            after
+        );
+    }
+
+    #[test]
+    fn zoom_keeps_window_geometry_stable() {
+        let _guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = setup_test_window();
+        let ui = ZoomMetricsWindow::new().unwrap();
+        ui.show().unwrap();
+        render(&window);
+
+        let before_size = window.size();
+        ui.set_ui_scale(2.0);
+        render(&window);
+        let after_size = window.size();
+
+        assert_eq!(after_size, before_size);
+    }
+
+    #[test]
+    fn zoom_out_reduces_text_metrics() {
+        let _guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = setup_test_window();
+        let ui = ZoomMetricsWindow::new().unwrap();
+        ui.show().unwrap();
+        ui.set_ui_scale(1.5);
+        render(&window);
+        let enlarged = capture(&ui);
+
+        ui.set_ui_scale(0.9);
+        render(&window);
+        let reduced = capture(&ui);
+
+        assert!(
+            reduced.title_ascent < enlarged.title_ascent,
+            "title ascent did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.body_ascent < enlarged.body_ascent,
+            "body ascent did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.title_font_size < enlarged.title_font_size,
+            "title font size did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.body_font_size < enlarged.body_font_size,
+            "body font size did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.title_width < enlarged.title_width,
+            "title width did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.body_width < enlarged.body_width,
+            "body width did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.button_ascent < enlarged.button_ascent,
+            "button ascent did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.select_ascent < enlarged.select_ascent,
+            "select ascent did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.checkbox_ascent < enlarged.checkbox_ascent,
+            "checkbox ascent did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.row_ascent < enlarged.row_ascent,
+            "row ascent did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.line_edit_font_size < enlarged.line_edit_font_size,
+            "line edit font size did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+        assert!(
+            reduced.line_edit_height < enlarged.line_edit_height,
+            "line edit height did not decrease: enlarged={:?} reduced={:?}",
+            enlarged,
+            reduced
+        );
+    }
+
+    #[test]
+    fn initial_scale_affects_text_layout() {
+        let _guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = setup_test_window();
+        let ui = ZoomMetricsWindow::new().unwrap();
+        ui.set_ui_scale(1.5);
+        ui.show().unwrap();
+        render(&window);
+
+        let scaled = capture(&ui);
+
+        assert!(
+            scaled.title_font_size > 30.0,
+            "title font size did not initialize larger: {scaled:?}"
+        );
+        assert!(
+            scaled.body_font_size > 16.0,
+            "body font size did not initialize larger: {scaled:?}"
+        );
+        assert!(
+            scaled.title_width > 77.0,
+            "title width did not initialize larger: {scaled:?}"
+        );
+        assert!(
+            scaled.body_width > 52.0,
+            "body width did not initialize larger: {scaled:?}"
+        );
+    }
+
+    #[test]
+    fn inline_probe_font_size_updates_text_layout() {
+        let _guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = setup_test_window();
+        let ui = InlineZoomProbe::new().unwrap();
+        ui.show().unwrap();
+        render(&window);
+
+        let before_width = ui.get_text_width();
+        let before_ascent = ui.get_text_ascent();
+
+        ui.set_size(24.0);
+        render(&window);
+
+        let after_width = ui.get_text_width();
+        let after_ascent = ui.get_text_ascent();
+
+        assert!(
+            after_width > before_width,
+            "inline probe width did not grow: before={before_width} after={after_width}"
+        );
+        assert!(
+            after_ascent > before_ascent,
+            "inline probe ascent did not grow: before={before_ascent} after={after_ascent}"
+        );
+    }
 }

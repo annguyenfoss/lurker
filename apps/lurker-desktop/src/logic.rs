@@ -2,7 +2,7 @@ use lurker_core::{
     ActiveVolume, CreateCipher, CreateCommand, MountCommand, OperationResponse, SourceKind,
     UnmountCommand, VolumeType,
 };
-use slint::StandardListViewItem;
+use slint::SharedString;
 use std::path::PathBuf;
 
 pub fn build_create_command(
@@ -88,7 +88,7 @@ pub fn build_unmount_command(
     })
 }
 
-pub fn active_volume_items(volumes: &[ActiveVolume]) -> Vec<StandardListViewItem> {
+pub fn active_volume_items(volumes: &[ActiveVolume]) -> Vec<SharedString> {
     volumes
         .iter()
         .map(|volume| {
@@ -97,9 +97,7 @@ pub fn active_volume_items(volumes: &[ActiveVolume]) -> Vec<StandardListViewItem
                 .as_ref()
                 .map(|mountpoint| mountpoint.display().to_string())
                 .unwrap_or_else(|| "not mounted".into());
-            format!("{}    {}", volume.mapper_name, detail)
-                .as_str()
-                .into()
+            SharedString::from(format!("{}    {}", volume.mapper_name, detail))
         })
         .collect()
 }

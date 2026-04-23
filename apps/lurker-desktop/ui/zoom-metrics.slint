@@ -1,0 +1,82 @@
+import { HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { ActionButton, LurkerCheckBox, SelectField } from "controls.slint";
+import { UiTheme } from "theme.slint";
+
+export component ZoomMetricsWindow inherits Window {
+    preferred-width: 640px;
+    preferred-height: 360px;
+    min-width: 640px;
+    min-height: 360px;
+
+    in-out property <float> ui_scale: 1.0;
+    private property <length> body_font_size: 16px * root.ui_scale;
+    private property <length> title_font_size: 30px * root.ui_scale;
+
+    out property <length> title_ascent: title.font-metrics.ascent;
+    out property <length> body_ascent: body.font-metrics.ascent;
+    out property <length> title_font_size_debug: title.font-size;
+    out property <length> body_font_size_debug: body.font-size;
+    out property <length> title_width: title.preferred-width;
+    out property <length> body_width: body.preferred-width;
+    out property <length> button_ascent: button.label_ascent;
+    out property <length> select_ascent: select.label_ascent;
+    out property <length> checkbox_ascent: checkbox.label_ascent;
+    out property <length> row_ascent: row.label_ascent;
+    out property <length> line_edit_font_size <=> input.font-size;
+    out property <length> line_edit_height: input.preferred-height;
+
+    Rectangle {
+        background: #f4f6fa;
+
+        VerticalBox {
+            padding: UiTheme.panel-padding;
+            spacing: UiTheme.section-gap;
+
+            title := Text {
+                text: "Zoom Metrics";
+                font-size: root.title_font_size;
+                font-weight: 700;
+                color: #111827;
+            }
+
+            body := Text {
+                text: "Body text";
+                font-size: root.body_font_size;
+                color: #111827;
+            }
+
+            HorizontalBox {
+                spacing: UiTheme.section-gap;
+
+                button := ActionButton {
+                    text: "Button";
+                    text_size: root.body_font_size;
+                }
+
+                select := SelectField {
+                    model: ["aes", "serpent", "twofish"];
+                    value: "aes";
+                    text_size: root.body_font_size;
+                }
+            }
+
+            checkbox := LurkerCheckBox {
+                text: "Checkbox label";
+                text_size: root.body_font_size;
+            }
+
+            input := LineEdit {
+                text: "Input text";
+                font-size: root.body_font_size;
+                min-height: max(UiTheme.control-min-height, root.body_font_size + 18px);
+            }
+
+            row := ActionButton {
+                text: "lurker_test    /mnt/test";
+                text_size: root.body_font_size;
+                left-aligned: true;
+                fill-width: true;
+            }
+        }
+    }
+}

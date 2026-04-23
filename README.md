@@ -71,6 +71,7 @@ The desktop app is intentionally simple for now:
 - create / mount / unmount tabs
 - active `lurker_*` volume list
 - inline status and errors only
+- built-in zoom controls for larger displays
 
 It uses:
 
