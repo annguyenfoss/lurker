@@ -209,26 +209,29 @@ export component Drop inherits Rectangle {
     }
 }
 
-// ── KeyFilePicker ── Drop when empty, ThemedLineEdit with Key prefix when set.
+// ── KeyFilePicker ── Drop when empty, ThemedLineEdit with Key prefix when
+// the user has entered a path (either by typing or via drop). No OS dialog
+// — clicking the Drop zone transitions to inline text entry to keep the
+// app trace-free (native pickers leak to recently-used.xbel etc).
 export component KeyFilePicker inherits Rectangle {
     in-out property <string> value;
-    callback browse;
+    private property <bool> typing: false;
 
     min-height: 110px;
-    preferred-height: value == "" ? 110px : 34px;
+    preferred-height: (value == "" && !typing) ? 110px : 34px;
 
-    if value == "": Drop {
+    if value == "" && !typing: Drop {
         width: parent.width;
         height: parent.height;
         icon: @image-url("../icons/key.svg");
         title: "Select a key file";
-        subtitle: "drop a file here or click to browse";
+        subtitle: "drop a file here or click to type a path";
         pad-v: 18px;
-        clicked => { root.browse(); }
+        clicked => { root.typing = true; }
         dropped(p) => { root.value = p; }
     }
 
-    if value != "": Rectangle {
+    if value != "" || typing: Rectangle {
         width: parent.width;
         height: 34px;
 
@@ -238,6 +241,7 @@ export component KeyFilePicker inherits Rectangle {
             text <=> root.value;
             has-prefix: true;
             prefix-icon: @image-url("../icons/key.svg");
+            placeholder-text: "~/.lurker/keys/archive.key";
             suffix-reserved: 30px;
         }
         HorizontalLayout {
@@ -249,7 +253,10 @@ export component KeyFilePicker inherits Rectangle {
                 icon: @image-url("../icons/x.svg");
                 tooltip: "Clear";
                 tint: UiTheme.fg-2;
-                clicked => { root.value = ""; }
+                clicked => {
+                    root.value = "";
+                    root.typing = false;
+                }
             }
         }
     }

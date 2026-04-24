@@ -1,15 +1,13 @@
 mod helper;
 mod logic;
-mod preferences;
 
 use crate::helper::{resolve_helper_path, run_helper};
 use crate::logic::{
     build_create_command, build_mount_command, build_unmount_command_for_volume, response_error,
     volume_rows,
 };
-use crate::preferences::{load_preferences, save_preferences, ThemeMode, UiPreferences, ViewMode};
 use lurker_core::{list_active_volumes, ActiveVolume, CommandAction};
-use slint::{BackendSelector, ComponentHandle, ModelRc, SharedString, Timer, VecModel, Weak};
+use slint::{BackendSelector, ComponentHandle, ModelRc, Timer, VecModel, Weak};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -19,12 +17,7 @@ use std::time::Duration;
 
 slint::include_modules!();
 
-const DEFAULT_UI_SCALE: f32 = 1.0;
-const MIN_UI_SCALE: f32 = 0.8;
-const MAX_UI_SCALE: f32 = 2.0;
-const UI_SCALE_STEP: f32 = 0.1;
 const TOAST_DWELL_MS: u64 = 2800;
-
 static TOAST_ID: AtomicI32 = AtomicI32::new(1);
 
 #[derive(Clone)]
@@ -33,7 +26,6 @@ struct AppState {
     helper_path: Option<PathBuf>,
     helper_error: Option<String>,
     active_volumes: Arc<Mutex<Vec<ActiveVolume>>>,
-    preferences: Arc<Mutex<UiPreferences>>,
     toasts: Arc<Mutex<Vec<ToastData>>>,
 }
 
@@ -45,17 +37,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let window = MainWindow::new()?;
     let helper_path = resolve_helper_path();
-    let preferences = load_preferences();
     let state = AppState {
         window: window.as_weak(),
         helper_path: helper_path.as_ref().ok().cloned(),
         helper_error: helper_path.err(),
         active_volumes: Arc::new(Mutex::new(Vec::new())),
-        preferences: Arc::new(Mutex::new(preferences.clone())),
         toasts: Arc::new(Mutex::new(Vec::new())),
     };
 
-    apply_preferences(&window, &preferences);
     bind_callbacks(&window, &state);
     state.refresh_active_volumes(false);
     window.run()?;
@@ -63,34 +52,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn bind_callbacks(window: &MainWindow, state: &AppState) {
-    // ── Zoom ─────────────────────────────────────────────────────────
-    let zw = window.as_weak();
-    let zs = state.clone();
-    window.on_zoom_in(move || {
-        with_zoom(&zw, |s| (s + UI_SCALE_STEP).min(MAX_UI_SCALE));
-        zs.sync_preferences_from_window();
-    });
-    let zw = window.as_weak();
-    let zs = state.clone();
-    window.on_zoom_out(move || {
-        with_zoom(&zw, |s| (s - UI_SCALE_STEP).max(MIN_UI_SCALE));
-        zs.sync_preferences_from_window();
-    });
-    let zw = window.as_weak();
-    let zs = state.clone();
-    window.on_zoom_reset(move || {
-        if let Some(w) = zw.upgrade() {
-            apply_zoom(&w, DEFAULT_UI_SCALE);
-        }
-        zs.sync_preferences_from_window();
-    });
-
-    // ── Theme/view mode change persistence ──
-    let ts = state.clone();
-    window.on_theme_mode_changed(move |_| ts.sync_preferences_from_window());
-    let vs = state.clone();
-    window.on_view_mode_changed(move |_| vs.sync_preferences_from_window());
-
     // ── Volumes refresh ──
     let rs = state.clone();
     window.on_refresh_volumes(move || rs.refresh_active_volumes(true));
@@ -112,7 +73,6 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             &w.get_create_confirm(),
         ) {
             Ok(command) => cs.run_operation(
-                "Creating volume…",
                 "Container created",
                 CommandAction::Create(command),
                 ResetKind::CreateSecrets,
@@ -138,7 +98,6 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             &w.get_mount_source_kind(),
         ) {
             Ok(command) => ms.run_operation(
-                "Mounting volume…",
                 "Volume mounted",
                 CommandAction::Mount(command),
                 ResetKind::MountSecrets,
@@ -166,48 +125,9 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
     // ── Unmount (from volume row index) ──
     let us = state.clone();
     window.on_unmount_volume(move |index| us.unmount_volume(index));
-
-    // ── File pickers (rfd) ──
-    let pcw = window.as_weak();
-    window.on_browse_container(move || {
-        if let Some(path) = rfd::FileDialog::new()
-            .set_title("Pick a container file")
-            .pick_file()
-        {
-            if let Some(w) = pcw.upgrade() {
-                w.set_mount_source(path.to_string_lossy().into_owned().into());
-            }
-        }
-    });
-    let pkw = window.as_weak();
-    window.on_browse_key_file(move || {
-        if let Some(path) = rfd::FileDialog::new()
-            .set_title("Pick a key file")
-            .pick_file()
-        {
-            if let Some(w) = pkw.upgrade() {
-                w.set_mount_key_file(path.to_string_lossy().into_owned().into());
-            }
-        }
-    });
 }
 
 impl AppState {
-    fn sync_preferences_from_window(&self) {
-        let Some(window) = self.window.upgrade() else { return };
-        let preferences = UiPreferences {
-            ui_scale: window.get_ui_scale(),
-            theme_mode: ThemeMode::parse_ui_value(&window.get_theme_mode()).unwrap_or_default(),
-            last_view: ViewMode::parse_ui_value(&window.get_current_view()).unwrap_or_default(),
-        }
-        .normalized();
-
-        if let Ok(mut guard) = self.preferences.lock() {
-            *guard = preferences.clone();
-        }
-        let _ = save_preferences(&preferences);
-    }
-
     fn refresh_active_volumes(&self, announce: bool) {
         let window = self.window.clone();
         let store = Arc::clone(&self.active_volumes);
@@ -236,19 +156,15 @@ impl AppState {
         let Some(volume) = guard.get(index as usize).cloned() else { return };
         drop(guard);
         let command = build_unmount_command_for_volume(&volume);
-        let name = volume.mapper_name.clone();
         self.run_operation(
-            "Unmounting…",
             "Volume unmounted",
             CommandAction::Unmount(command),
             ResetKind::None,
         );
-        let _ = name; // name shown via toast title already
     }
 
     fn run_operation(
         &self,
-        _busy_label: &'static str,
         success_message: &'static str,
         command: CommandAction,
         reset: ResetKind,
@@ -309,15 +225,12 @@ impl AppState {
         }
         self.publish_toasts();
 
-        // Single-shot removal after dwell — runs on the Slint event loop thread.
         let state = self.clone();
-        let weak = self.window.clone();
         let _ = slint::invoke_from_event_loop(move || {
             let state = state.clone();
             Timer::single_shot(Duration::from_millis(TOAST_DWELL_MS), move || {
                 state.remove_toast(id);
             });
-            let _ = weak; // keep weak alive inside closure
         });
     }
 
@@ -375,7 +288,6 @@ fn replace_active_volumes(
     }
 
     window.set_volumes(ModelRc::from(model));
-    // Keep the window title static ("Lurker"); OS titlebar shows it.
 }
 
 fn apply_reset(window: &MainWindow, reset: ResetKind) {
@@ -396,29 +308,8 @@ fn clear_mount_secrets(window: &MainWindow) {
     window.set_mount_key_file("".into());
 }
 
-fn with_zoom(window: &Weak<MainWindow>, adjust: impl FnOnce(f32) -> f32) {
-    let Some(window) = window.upgrade() else { return };
-    let next = adjust(window.get_ui_scale());
-    apply_zoom(&window, next);
-}
-
-fn apply_zoom(window: &MainWindow, scale: f32) {
-    let scale = scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE);
-    window.set_ui_scale(scale);
-    window.set_zoom_label(SharedString::from(
-        format!("{}%", (scale * 100.0).round() as i32),
-    ));
-}
-
-fn apply_preferences(window: &MainWindow, preferences: &UiPreferences) {
-    window.set_theme_mode(preferences.theme_mode.as_ui_value().into());
-    window.set_current_view(preferences.last_view.as_ui_value().into());
-    apply_zoom(window, preferences.ui_scale);
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{ZoomMetricsWindow, DEFAULT_UI_SCALE, MAX_UI_SCALE, MIN_UI_SCALE, UI_SCALE_STEP};
     use slint::platform::software_renderer::{
         MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel,
     };
@@ -472,13 +363,6 @@ mod tests {
     }
 
     #[test]
-    fn zoom_constants_are_ordered() {
-        assert!(MIN_UI_SCALE < DEFAULT_UI_SCALE);
-        assert!(DEFAULT_UI_SCALE < MAX_UI_SCALE);
-        assert!(UI_SCALE_STEP > 0.0);
-    }
-
-    #[test]
     fn inline_probe_font_size_updates_text_layout() {
         let _guard = TEST_LOCK
             .lock()
@@ -505,17 +389,5 @@ mod tests {
             after_ascent > before_ascent,
             "inline probe ascent did not grow: before={before_ascent} after={after_ascent}"
         );
-    }
-
-    #[test]
-    fn zoom_metrics_window_builds() {
-        // Just verifies the ZoomMetricsWindow type still compiles against the
-        // new ThemedLineEdit / ActionButton API. The detailed zoom-regression
-        // tests now live in logic.rs / preferences.rs unit tests.
-        let _guard = TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let _window = setup_test_window();
-        let _ui = ZoomMetricsWindow::new().unwrap();
     }
 }

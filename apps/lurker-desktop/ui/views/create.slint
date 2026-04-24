@@ -23,7 +23,6 @@ export component CreateView inherits Card {
     in-out property <string> confirm: "";
 
     callback submit;
-    callback browse-folder;
 
     private property <bool> pass-match: root.passphrase.character-count > 0 && root.passphrase == root.confirm;
     private property <bool> can-submit:

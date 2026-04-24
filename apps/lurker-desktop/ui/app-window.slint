@@ -69,19 +69,12 @@ export component MainWindow inherits Window {
     in property <[ToastData]> toasts: [];
     in property <string> backend-label: "LINUX";
 
-    // ── Callbacks ─────────────────────────────────────────────────────
+    // ── Callbacks (only ones with Rust side) ──────────────────────────
     callback submit-create();
     callback submit-mount();
     callback reset-mount();
-    callback browse-container();
-    callback browse-key-file();
     callback unmount-volume(int);
     callback refresh-volumes();
-    callback theme-mode-changed(string);
-    callback view-mode-changed(string);
-    callback zoom-in();
-    callback zoom-out();
-    callback zoom-reset();
 
     init => {
         UiTheme.mode = root.theme-mode;
@@ -95,17 +88,15 @@ export component MainWindow inherits Window {
     focus-scope := FocusScope {
         width: 100%;
         height: 100%;
-
+        // Zoom / view-switch are pure Slint state (no disk persistence).
         key-pressed(event) => {
             if (event.modifiers.control) {
                 if (event.text == "1") {
                     root.current-view = "create";
-                    root.view-mode-changed("create");
                     return accept;
                 }
                 if (event.text == "2") {
                     root.current-view = "manage";
-                    root.view-mode-changed("manage");
                     return accept;
                 }
                 if (event.text == Key.Return) {
@@ -117,15 +108,15 @@ export component MainWindow inherits Window {
                     return accept;
                 }
                 if (event.text == "=" || event.text == "+") {
-                    root.zoom-in();
+                    root.ui_scale = min(2.0, root.ui_scale + 0.1);
                     return accept;
                 }
                 if (event.text == "-") {
-                    root.zoom-out();
+                    root.ui_scale = max(0.8, root.ui_scale - 0.1);
                     return accept;
                 }
                 if (event.text == "0") {
-                    root.zoom-reset();
+                    root.ui_scale = 1.0;
                     return accept;
                 }
             }
@@ -154,10 +145,7 @@ export component MainWindow inherits Window {
                         icon: @image-url("icons/plus.svg");
                         kbd: "⌘1";
                         active: root.current-view == "create";
-                        clicked => {
-                            root.current-view = "create";
-                            root.view-mode-changed("create");
-                        }
+                        clicked => { root.current-view = "create"; }
                     }
 
                     NavItem {
@@ -165,10 +153,7 @@ export component MainWindow inherits Window {
                         icon: @image-url("icons/lock-open.svg");
                         kbd: "⌘2";
                         active: root.current-view == "manage";
-                        clicked => {
-                            root.current-view = "manage";
-                            root.view-mode-changed("manage");
-                        }
+                        clicked => { root.current-view = "manage"; }
                     }
                 }
 
@@ -204,7 +189,6 @@ export component MainWindow inherits Window {
                         tooltip: UiTheme.dark ? "Switch to light mode" : "Switch to dark mode";
                         clicked => {
                             root.theme-mode = UiTheme.dark ? "light" : "dark";
-                            root.theme-mode-changed(root.theme-mode);
                         }
                     }
                 }
@@ -222,11 +206,17 @@ export component MainWindow inherits Window {
                             y: -240px;
                         }
 
-                        VerticalLayout {
-                            padding-left: UiTheme.s6;
-                            padding-right: UiTheme.s6;
+                        // .work-wrap — 720px centered column.
+                        // Three-child layout with flex spacers avoids the
+                        // `width: min(720px, parent.width - …)` binding loop.
+                        HorizontalLayout {
                             padding-top: UiTheme.s5;
                             padding-bottom: UiTheme.s6;
+
+                            Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                            wrap := VerticalLayout {
+                                width: 720px;
 
                             if root.current-view == "create": CreateView {
                                 target-kind <=> root.create-target-kind;
@@ -240,7 +230,6 @@ export component MainWindow inherits Window {
                                 passphrase <=> root.create-passphrase;
                                 confirm <=> root.create-confirm;
                                 submit => { root.submit-create(); }
-                                browse-folder => { root.browse-container(); }
                             }
 
                             if root.current-view == "manage": ManageView {
@@ -256,9 +245,10 @@ export component MainWindow inherits Window {
                                 unmount(i) => { root.unmount-volume(i); }
                                 submit-mount => { root.submit-mount(); }
                                 reset-mount => { root.reset-mount(); }
-                                browse-container => { root.browse-container(); }
-                                browse-key-file => { root.browse-key-file(); }
                             }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; background: transparent; }
                         }
                     }
                 }

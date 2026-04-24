@@ -262,9 +262,10 @@ export component SideFoot inherits Rectangle {
     }
 }
 
-// ── MainHeader ── (Lurker.html:163-173) title + subtitle + actions slot
-// Caller passes action icons via @children; this component handles the
-// title/subtitle stack on the left.
+// ── MainHeader ── (Lurker.html:163-173) title + subtitle + actions slot.
+// New design centers the content at max-width 720px via .work-wrap so the
+// header aligns with the form cards below it. Caller passes action icons
+// via @children.
 export component MainHeader inherits Rectangle {
     in property <string> title;
     in property <string> subtitle;
@@ -280,41 +281,55 @@ export component MainHeader inherits Rectangle {
         background: UiTheme.line;
     }
 
+    // Centered 720px column: three-child horizontal layout with flex spacers
+    // on the outside. This avoids the `width: min(720px, parent.width-...)`
+    // binding loop that the more direct max-width approach triggers.
     HorizontalLayout {
-        padding-left: UiTheme.s6;
-        padding-right: UiTheme.s6;
         padding-top: UiTheme.s5;
         padding-bottom: UiTheme.s4;
-        spacing: UiTheme.s4;
-        alignment: space-between;
+        spacing: 0;
 
-        VerticalLayout {
-            spacing: 6px;
-            alignment: end;
-            horizontal-stretch: 1;
+        Rectangle { horizontal-stretch: 1; background: transparent; }
 
-            Text {
-                text: root.title;
-                font-size: 22px;
-                font-weight: 600;
-                font-family: "Inter Tight";
-                letter-spacing: -0.44px;   // -0.02em on 22px
-                color: UiTheme.fg-0;
-            }
+        Rectangle {
+            width: 720px;
+            background: transparent;
 
-            Text {
-                text: root.subtitle;
-                font-size: 13px;
-                font-family: "Inter Tight";
-                color: UiTheme.fg-2;
-                wrap: word-wrap;
+            HorizontalLayout {
+                spacing: UiTheme.s4;
+                alignment: space-between;
+
+                VerticalLayout {
+                    spacing: 6px;
+                    alignment: end;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: root.title;
+                        font-size: 22px;
+                        font-weight: 600;
+                        font-family: "Inter Tight";
+                        letter-spacing: -0.44px;
+                        color: UiTheme.fg-0;
+                    }
+
+                    Text {
+                        text: root.subtitle;
+                        font-size: 13px;
+                        font-family: "Inter Tight";
+                        color: UiTheme.fg-2;
+                        wrap: word-wrap;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: end;
+                    @children
+                }
             }
         }
 
-        HorizontalLayout {
-            spacing: 6px;
-            alignment: end;
-            @children
-        }
+        Rectangle { horizontal-stretch: 1; background: transparent; }
     }
 }

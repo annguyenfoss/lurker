@@ -2,6 +2,8 @@
 // Three card sections: Source, Unlock with, Mount. Foot: Reset + Unlock button.
 // NOTE: key-file auth is scaffolded UI only — the Unlock button disables in
 // that mode and the submit callback is suppressed (Rust emits a toast).
+// Zero-trace: no OS file-picker dialog. Users type paths directly (click on
+// the Drop zone reveals an inline text input). Drag-drop future-work.
 
 import { UiTheme } from "../theme.slint";
 import {
@@ -24,8 +26,10 @@ export component MountView inherits Card {
 
     callback submit;
     callback reset;
-    callback browse-container;
-    callback browse-key-file;
+
+    // When the user clicks the Drop zone, switch to an inline text input so
+    // they can type a path. No OS dialog => no recently-used traces on disk.
+    private property <bool> typing-source: false;
 
     private property <bool> has-auth:
         root.auth-method == "pass"
@@ -61,15 +65,15 @@ export component MountView inherits Card {
 
         Rectangle { height: UiTheme.s3; }
 
-        if root.source-kind == "file" && root.source == "": Drop {
+        if root.source-kind == "file" && root.source == "" && !root.typing-source: Drop {
             icon: @image-url("../icons/file.svg");
             title: "Drop a container file here";
-            subtitle: "or click to browse · LUKS, VeraCrypt";
-            clicked => { root.browse-container(); }
+            subtitle: "or click to type a path · LUKS, VeraCrypt";
+            clicked => { root.typing-source = true; }
             dropped(path) => { root.source = path; }
         }
 
-        if root.source-kind == "file" && root.source != "": Rectangle {
+        if root.source-kind == "file" && (root.source != "" || root.typing-source): Rectangle {
             min-height: 34px;
             preferred-height: 34px;
             ThemedLineEdit {
@@ -78,6 +82,7 @@ export component MountView inherits Card {
                 text <=> root.source;
                 has-prefix: true;
                 prefix-icon: @image-url("../icons/file.svg");
+                placeholder-text: "~/vaults/archive.luks";
                 suffix-reserved: 30px;
             }
             Rectangle {
@@ -94,7 +99,10 @@ export component MountView inherits Card {
                     colorize: UiTheme.fg-2;
                 }
                 TouchArea {
-                    clicked => { root.source = ""; }
+                    clicked => {
+                        root.source = "";
+                        root.typing-source = false;
+                    }
                 }
             }
         }
@@ -136,7 +144,6 @@ export component MountView inherits Card {
 
             if root.auth-method == "key": KeyFilePicker {
                 value <=> root.key-file;
-                browse => { root.browse-key-file(); }
             }
 
             if root.auth-method == "key": Rectangle {
