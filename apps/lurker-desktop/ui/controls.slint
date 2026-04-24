@@ -1,30 +1,54 @@
 import { HorizontalBox, VerticalBox } from "std-widgets.slint";
-import { UiTheme } from "theme.slint";
+import { UiTheme, AppTheme } from "theme.slint";
 
 export component ActionButton inherits Rectangle {
     in property <string> text;
-    in property <length> text_size: 16px;
+    in property <length> text_size: 15px;
     in property <bool> enabled: true;
     in property <bool> primary: false;
     in property <bool> active: false;
+    in property <bool> destructive: false;
+    in property <bool> ghost: false;
     in property <bool> left-aligned: false;
     in property <bool> fill-width: false;
+    in property <bool> mono: false;
     out property <length> label_ascent: label.font-metrics.ascent;
 
     callback clicked;
 
     private property <length> label_height: label.font-metrics.ascent - label.font-metrics.descent;
+
     private property <brush> fill: !root.enabled
-        ? #e5e7eb
-        : touch.pressed
-            ? (root.primary || root.active ? #1d4ed8 : #e5e7eb)
-            : touch.has-hover
-                ? (root.primary || root.active ? #2563eb : #f3f4f6)
-                : (root.primary || root.active ? #1f6feb : #ffffff);
-    private property <brush> stroke: root.active ? #2563eb : #d5dbe6;
+        ? (root.primary ? AppTheme.bg-sunken : transparent)
+        : root.primary
+            ? (touch.pressed ? AppTheme.accent-press
+                : touch.has-hover ? AppTheme.accent-hover
+                : AppTheme.accent)
+            : root.active
+                ? AppTheme.accent-soft
+                : root.ghost
+                    ? (touch.pressed ? AppTheme.bg-active
+                        : touch.has-hover ? AppTheme.bg-hover
+                        : transparent)
+                    : (touch.pressed ? AppTheme.bg-active
+                        : touch.has-hover ? AppTheme.bg-hover
+                        : AppTheme.bg-panel);
+
+    private property <brush> stroke: root.primary || root.ghost
+        ? transparent
+        : root.active
+            ? AppTheme.accent
+            : AppTheme.border;
+
     private property <brush> foreground: !root.enabled
-        ? #9ca3af
-        : (root.primary || root.active ? #ffffff : #111827);
+        ? AppTheme.text-muted
+        : root.primary
+            ? AppTheme.accent-fg
+            : root.destructive
+                ? AppTheme.danger
+                : root.active
+                    ? AppTheme.accent
+                    : AppTheme.text-primary;
 
     horizontal-stretch: root.fill-width ? 1 : 0;
     preferred-width: label.preferred-width + 2 * UiTheme.control-padding-x;
@@ -35,8 +59,9 @@ export component ActionButton inherits Rectangle {
     min-height: self.preferred-height;
     border-width: 1px;
     border-color: root.stroke;
-    border-radius: 8px;
+    border-radius: UiTheme.control-radius;
     background: root.fill;
+    animate background { duration: AppTheme.transition-fast; }
 
     HorizontalBox {
         padding-left: UiTheme.control-padding-x;
@@ -46,8 +71,9 @@ export component ActionButton inherits Rectangle {
 
         label := Text {
             text: root.text;
+            font-family: root.mono ? AppTheme.font-mono : "";
             font-size: root.text_size;
-            font-weight: root.primary || root.active ? 600 : 500;
+            font-weight: root.primary ? 600 : root.active ? 600 : 500;
             color: root.foreground;
             horizontal-stretch: 1;
             horizontal-alignment: root.left-aligned ? left : center;
@@ -64,10 +90,199 @@ export component ActionButton inherits Rectangle {
     }
 }
 
+// Icon-only square button for headers. The glyph is passed as `text`
+// (uses Unicode symbols — no SVG dependency).
+export component IconButton inherits Rectangle {
+    in property <string> text;
+    in property <length> text_size: 16px;
+    in property <bool> enabled: true;
+    in property <bool> active: false;
+    out property <length> label_ascent: label.font-metrics.ascent;
+    callback clicked;
+
+    private property <length> box: max(UiTheme.control-min-height - 4px, root.text_size + 18px);
+
+    preferred-width: root.box;
+    preferred-height: root.box;
+    min-width: self.preferred-width;
+    min-height: self.preferred-height;
+    border-radius: UiTheme.control-radius;
+    background: !root.enabled ? transparent
+        : touch.pressed ? AppTheme.bg-active
+        : touch.has-hover ? AppTheme.bg-hover
+        : root.active ? AppTheme.accent-soft
+        : transparent;
+    animate background { duration: AppTheme.transition-fast; }
+
+    label := Text {
+        text: root.text;
+        
+        font-size: root.text_size;
+        color: !root.enabled ? AppTheme.text-muted
+            : root.active ? AppTheme.accent
+            : AppTheme.text-primary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width;
+        height: parent.height;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Underline-style tab button (replaces pill tabs).
+export component TabButton inherits Rectangle {
+    in property <string> text;
+    in property <length> text_size: 15px;
+    in property <bool> enabled: true;
+    in property <bool> active: false;
+    out property <length> label_ascent: label.font-metrics.ascent;
+    callback clicked;
+
+    private property <length> label_height: label.font-metrics.ascent - label.font-metrics.descent;
+
+    preferred-width: label.preferred-width + 2 * UiTheme.control-padding-x;
+    preferred-height: max(
+        UiTheme.control-min-height,
+        label_height + 2 * UiTheme.control-padding-y,
+    );
+    min-height: self.preferred-height;
+    background: touch.has-hover && !root.active ? AppTheme.bg-hover : transparent;
+    animate background { duration: AppTheme.transition-fast; }
+
+    label := Text {
+        text: root.text;
+        
+        font-size: root.text_size;
+        font-weight: root.active ? 600 : 500;
+        color: !root.enabled ? AppTheme.text-muted
+            : root.active ? AppTheme.text-primary
+            : AppTheme.text-secondary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width;
+        height: parent.height;
+    }
+
+    // underline
+    Rectangle {
+        x: 0;
+        y: parent.height - 2px;
+        width: parent.width;
+        height: 2px;
+        background: root.active ? AppTheme.accent : transparent;
+        animate background { duration: AppTheme.transition-mid; }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Two-to-three option segmented control. Exclusive selection.
+export component SegmentedControl inherits Rectangle {
+    in property <[string]> model;
+    in property <string> value;
+    in property <length> text_size: 15px;
+    in property <bool> enabled: true;
+    out property <length> label_ascent: probe.font-metrics.ascent;
+    callback selected(string);
+
+    private property <length> seg_height: max(
+        UiTheme.control-min-height,
+        probe.font-metrics.ascent - probe.font-metrics.descent + 2 * UiTheme.control-padding-y,
+    );
+
+    horizontal-stretch: 1;
+    min-height: seg_height;
+    preferred-height: seg_height;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    border-radius: UiTheme.control-radius;
+    background: AppTheme.bg-input;
+
+    // Hidden probe for font metrics (kept off-screen).
+    probe := Text {
+        text: "Ag";
+        
+        font-size: root.text_size;
+        visible: false;
+    }
+
+    HorizontalLayout {
+        padding: 3px;
+        spacing: 0px;
+
+        for option[index] in root.model : Rectangle {
+            horizontal-stretch: 1;
+            border-radius: UiTheme.control-radius - 2px;
+            background: option == root.value
+                ? AppTheme.bg-panel
+                : seg_touch.has-hover ? AppTheme.bg-hover : transparent;
+            animate background { duration: AppTheme.transition-fast; }
+            border-width: option == root.value ? 1px : 0px;
+            border-color: AppTheme.border;
+
+            Text {
+                text: option;
+                
+                font-size: root.text_size;
+                font-weight: option == root.value ? 600 : 500;
+                color: !root.enabled ? AppTheme.text-muted
+                    : option == root.value ? AppTheme.text-primary
+                    : AppTheme.text-secondary;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            seg_touch := TouchArea {
+                enabled: root.enabled;
+                clicked => {
+                    root.selected(option);
+                }
+            }
+        }
+    }
+}
+
+// Small rounded tag, mono-font by default (type labels, cipher chips, etc.).
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in property <length> text_size: 12px;
+    in property <bool> mono: true;
+    in property <color> accent-fill: AppTheme.bg-sunken;
+    in property <color> accent-text: AppTheme.text-secondary;
+    in property <color> accent-border: AppTheme.border;
+
+    preferred-width: label.preferred-width + 16px;
+    preferred-height: label.preferred-height + 6px;
+    min-height: self.preferred-height;
+    border-width: 1px;
+    border-color: root.accent-border;
+    border-radius: UiTheme.pill-radius;
+    background: root.accent-fill;
+
+    label := Text {
+        text: root.text;
+        font-family: root.mono ? AppTheme.font-mono : "";
+        font-size: root.text_size;
+        font-weight: 500;
+        color: root.accent-text;
+        x: 8px;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
 export component LurkerCheckBox inherits Rectangle {
     in property <string> text;
     in-out property <bool> checked;
-    in property <length> text_size: 16px;
+    in property <length> text_size: 15px;
     in property <bool> enabled: true;
     out property <length> label_ascent: label.font-metrics.ascent;
 
@@ -93,17 +308,24 @@ export component LurkerCheckBox inherits Rectangle {
             width: root.box_size;
             height: root.box_size;
             y: max(0px, (parent.height - self.height) / 2);
-            border-width: 1px;
-            border-color: !root.enabled ? #c7ccd6 : (root.checked ? #1d4ed8 : #94a3b8);
+            border-width: 1.5px;
+            border-color: !root.enabled ? AppTheme.border
+                : root.checked ? AppTheme.accent
+                : AppTheme.border-strong;
             border-radius: 4px;
-            background: !root.enabled ? #f3f4f6 : (root.checked ? #1d4ed8 : #ffffff);
+            background: !root.enabled ? AppTheme.bg-sunken
+                : root.checked ? AppTheme.accent
+                : AppTheme.bg-input;
+            animate background, border-color { duration: AppTheme.transition-fast; }
 
             Text {
                 width: parent.width;
                 height: parent.height;
                 text: root.checked ? "✓" : "";
+                
                 font-size: root.text_size * 0.9;
-                color: #ffffff;
+                font-weight: 700;
+                color: AppTheme.accent-fg;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
@@ -111,8 +333,9 @@ export component LurkerCheckBox inherits Rectangle {
 
         label := Text {
             text: root.text;
+            
             font-size: root.text_size;
-            color: root.enabled ? #111827 : #9ca3af;
+            color: root.enabled ? AppTheme.text-primary : AppTheme.text-muted;
             horizontal-stretch: 1;
             wrap: word-wrap;
             vertical-alignment: center;
@@ -130,8 +353,9 @@ export component LurkerCheckBox inherits Rectangle {
 export component SelectField inherits Rectangle {
     in property <[string]> model;
     in property <string> value;
-    in property <length> text_size: 16px;
+    in property <length> text_size: 15px;
     in property <bool> enabled: true;
+    in property <bool> mono: false;
     out property <length> label_ascent: current-label.font-metrics.ascent;
 
     callback selected(string);
@@ -164,9 +388,10 @@ export component SelectField inherits Rectangle {
     preferred-height: root.collapsed_height + (root.expanded ? root.dropdown_height : 0px);
     min-height: self.preferred-height;
     border-width: 1px;
-    border-color: root.expanded ? #60a5fa : #d5dbe6;
-    border-radius: 8px;
-    background: #ffffff;
+    border-color: root.expanded ? AppTheme.focus-ring : AppTheme.border;
+    border-radius: UiTheme.control-radius;
+    background: AppTheme.bg-input;
+    animate border-color { duration: AppTheme.transition-fast; }
 
     VerticalBox {
         spacing: 0px;
@@ -184,17 +409,19 @@ export component SelectField inherits Rectangle {
 
                 current-label := Text {
                     text: root.display_value;
+                    font-family: root.mono ? AppTheme.font-mono : "";
                     font-size: root.text_size;
-                    color: root.enabled ? #111827 : #9ca3af;
+                    color: root.enabled ? AppTheme.text-primary : AppTheme.text-muted;
                     horizontal-stretch: 1;
                     vertical-alignment: center;
                     overflow: elide;
                 }
 
                 Text {
-                    text: root.expanded ? "▴" : "▾";
-                    font-size: root.text_size * 0.95;
-                    color: root.enabled ? #4b5563 : #9ca3af;
+                    text: root.expanded ? "⌃" : "⌄";
+                    
+                    font-size: root.text_size * 1.1;
+                    color: root.enabled ? AppTheme.text-secondary : AppTheme.text-muted;
                     vertical-alignment: center;
                 }
             }
@@ -213,7 +440,7 @@ export component SelectField inherits Rectangle {
 
             Rectangle {
                 height: 1px;
-                background: #dbe3ef;
+                background: AppTheme.divider;
             }
 
             for option[index] in root.model : ActionButton {
@@ -223,11 +450,180 @@ export component SelectField inherits Rectangle {
                 active: option == root.value;
                 left-aligned: true;
                 fill-width: true;
+                ghost: option != root.value;
+                mono: root.mono;
                 clicked => {
                     root.expanded = false;
                     root.selected(option);
                 }
             }
         }
+    }
+}
+
+// Themed text input that respects AppTheme across dark/light modes.
+// Built on TextInput directly instead of std-widgets LineEdit so text color,
+// caret, and focus ring track the theme.
+export component ThemedInput inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder-text;
+    in property <length> text_size: 15px;
+    in property <bool> enabled: true;
+    in property <bool> mono: false;
+    in property <InputType> input-type: InputType.text;
+    out property <bool> has-focus: inner.has-focus;
+
+    callback edited;
+
+    private property <length> min_h: max(UiTheme.control-min-height, text_size + 18px);
+    preferred-height: min_h;
+    min-height: min_h;
+    horizontal-stretch: 1;
+    border-width: 1px;
+    border-color: inner.has-focus ? AppTheme.focus-ring : AppTheme.border;
+    border-radius: UiTheme.control-radius;
+    background: root.enabled ? AppTheme.bg-input : AppTheme.bg-sunken;
+    animate border-color { duration: AppTheme.transition-fast; }
+
+    // Subtle glow when focused
+    Rectangle {
+        x: -2px; y: -2px;
+        width: parent.width + 4px; height: parent.height + 4px;
+        border-radius: UiTheme.control-radius + 2px;
+        border-width: inner.has-focus ? 2px : 0px;
+        border-color: AppTheme.focus-ring.with-alpha(0.25);
+    }
+
+    HorizontalLayout {
+        padding-left: UiTheme.control-padding-x;
+        padding-right: UiTheme.control-padding-x;
+        padding-top: UiTheme.control-padding-y;
+        padding-bottom: UiTheme.control-padding-y;
+
+        Rectangle {
+            horizontal-stretch: 1;
+
+            // Placeholder overlay
+            if root.text == "" && !inner.has-focus : Text {
+                text: root.placeholder-text;
+                font-family: root.mono ? AppTheme.font-mono : "";
+                font-size: root.text_size;
+                color: AppTheme.text-muted;
+                vertical-alignment: center;
+                width: parent.width;
+                height: parent.height;
+                overflow: elide;
+            }
+
+            inner := TextInput {
+                text <=> root.text;
+                font-family: root.mono ? AppTheme.font-mono : "";
+                font-size: root.text_size;
+                color: root.enabled ? AppTheme.text-primary : AppTheme.text-muted;
+                selection-background-color: AppTheme.accent-soft;
+                selection-foreground-color: AppTheme.text-primary;
+                single-line: true;
+                read-only: !root.enabled;
+                input-type: root.input-type;
+                vertical-alignment: center;
+                width: parent.width;
+                height: parent.height;
+                edited => { root.edited(); }
+            }
+        }
+    }
+}
+
+// Sidebar row for an active volume. Two-line mono layout + hover bar.
+export component VolumeRow inherits Rectangle {
+    in property <string> tag;
+    in property <string> path;
+    in property <string> kind;
+    in property <length> text_size: 14px;
+    in property <bool> enabled: true;
+    out property <length> label_ascent: tag_text.font-metrics.ascent;
+    callback clicked;
+
+    private property <length> row_height: max(
+        UiTheme.control-min-height + 16px,
+        tag_text.font-metrics.ascent + path_text.font-metrics.ascent
+            - tag_text.font-metrics.descent - path_text.font-metrics.descent
+            + 20px,
+    );
+
+    preferred-height: row_height;
+    min-height: row_height;
+    horizontal-stretch: 1;
+    border-radius: UiTheme.control-radius;
+    background: touch.pressed ? AppTheme.bg-active
+        : touch.has-hover ? AppTheme.bg-hover
+        : transparent;
+    animate background { duration: AppTheme.transition-fast; }
+
+    // Accent left bar on hover
+    Rectangle {
+        x: 0;
+        y: 8px;
+        width: touch.has-hover ? 3px : 0px;
+        height: parent.height - 16px;
+        background: AppTheme.accent;
+        border-radius: 2px;
+        animate width { duration: AppTheme.transition-fast; }
+    }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 12px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 10px;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 3px;
+
+            tag_text := Text {
+                text: root.tag;
+                font-family: AppTheme.font-mono;
+                font-size: root.text_size;
+                font-weight: 500;
+                color: AppTheme.text-primary;
+                overflow: elide;
+            }
+
+            path_text := Text {
+                text: root.path;
+                font-family: AppTheme.font-mono;
+                font-size: root.text_size * 0.9;
+                color: AppTheme.text-secondary;
+                overflow: elide;
+            }
+        }
+
+        if root.kind != "" : Rectangle {
+            vertical-stretch: 0;
+            y: (parent.height - self.height) / 2;
+            width: kind_label.preferred-width + 14px;
+            height: kind_label.preferred-height + 6px;
+            border-width: 1px;
+            border-color: AppTheme.border;
+            border-radius: UiTheme.pill-radius;
+            background: AppTheme.bg-sunken;
+
+            kind_label := Text {
+                text: root.kind;
+                font-family: AppTheme.font-mono;
+                font-size: root.text_size * 0.8;
+                font-weight: 600;
+                color: AppTheme.text-secondary;
+                x: 7px;
+                y: (parent.height - self.height) / 2;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
     }
 }

@@ -1,6 +1,6 @@
 import { HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
 import { ActionButton, LurkerCheckBox, SelectField } from "controls.slint";
-import { UiTheme } from "theme.slint";
+import { UiTheme, AppTheme } from "theme.slint";
 
 export component ZoomMetricsWindow inherits Window {
     preferred-width: 640px;
@@ -9,8 +9,8 @@ export component ZoomMetricsWindow inherits Window {
     min-height: 360px;
 
     in-out property <float> ui_scale: 1.0;
-    private property <length> body_font_size: 16px * root.ui_scale;
-    private property <length> title_font_size: 30px * root.ui_scale;
+    private property <length> body_font_size: 15px * root.ui_scale;
+    private property <length> title_font_size: 28px * root.ui_scale;
 
     out property <length> title_ascent: title.font-metrics.ascent;
     out property <length> body_ascent: body.font-metrics.ascent;
@@ -26,7 +26,7 @@ export component ZoomMetricsWindow inherits Window {
     out property <length> line_edit_height: input.preferred-height;
 
     Rectangle {
-        background: #f4f6fa;
+        background: AppTheme.bg-base;
 
         VerticalBox {
             padding: UiTheme.panel-padding;
@@ -34,15 +34,17 @@ export component ZoomMetricsWindow inherits Window {
 
             title := Text {
                 text: "Zoom Metrics";
+                
                 font-size: root.title_font_size;
                 font-weight: 700;
-                color: #111827;
+                color: AppTheme.text-primary;
             }
 
             body := Text {
                 text: "Body text";
+                
                 font-size: root.body_font_size;
-                color: #111827;
+                color: AppTheme.text-primary;
             }
 
             HorizontalBox {

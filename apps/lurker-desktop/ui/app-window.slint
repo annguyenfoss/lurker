@@ -1,41 +1,173 @@
-import { HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
-import { ActionButton, LurkerCheckBox, SelectField } from "controls.slint";
-import { UiTheme } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+import { ActionButton, IconButton, TabButton, SegmentedControl, Chip, LurkerCheckBox, SelectField, ThemedInput, VolumeRow } from "controls.slint";
+import { UiTheme, AppTheme } from "theme.slint";
 
 export { ZoomMetricsWindow } from "zoom-metrics.slint";
 
-component TitleText inherits Text {
-    in property <length> text_size: 30px;
-    font-size: root.text_size;
-    font-weight: 700;
-    color: #111827;
+export struct VolumeItem {
+    tag: string,
+    path: string,
+    kind: string,
 }
 
-component SectionTitle inherits Text {
-    in property <length> text_size: 22px;
+component Label inherits Text {
+    in property <length> text_size: 13px;
+    
     font-size: root.text_size;
-    font-weight: 700;
-    color: #111827;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    color: AppTheme.text-secondary;
 }
 
-component BodyText inherits Text {
-    in property <length> text_size: 16px;
+component Subtle inherits Text {
+    in property <length> text_size: 14px;
+    
     font-size: root.text_size;
-    color: #111827;
-}
-
-component SecondaryText inherits Text {
-    in property <length> text_size: 16px;
-    font-size: root.text_size;
-    color: #4b5563;
+    color: AppTheme.text-secondary;
     wrap: word-wrap;
 }
 
-component ThemedLineEdit inherits LineEdit {
-    in property <length> text_size: 16px;
+component BodyText inherits Text {
+    in property <length> text_size: 15px;
+    
     font-size: root.text_size;
-    min-height: max(UiTheme.control-min-height, root.text_size + 18px);
-    horizontal-stretch: 1;
+    color: AppTheme.text-primary;
+}
+
+component Wordmark inherits Rectangle {
+    in property <length> text_size: 18px;
+    preferred-width: mark_dot.width + wordmark.preferred-width + 10px;
+    min-height: wordmark.preferred-height;
+
+    HorizontalLayout {
+        spacing: 10px;
+        alignment: start;
+
+        mark_dot := Rectangle {
+            width: root.text_size + 2px;
+            height: root.text_size + 2px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 6px;
+            background: AppTheme.accent;
+
+            Text {
+                text: "L";
+                
+                font-size: root.text_size * 0.85;
+                font-weight: 700;
+                color: AppTheme.accent-fg;
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        wordmark := Text {
+            text: "lurker";
+            
+            font-size: root.text_size;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: AppTheme.text-primary;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Hairline horizontal rule.
+component Hairline inherits Rectangle {
+    height: 1px;
+    background: AppTheme.divider;
+}
+
+// Inline field label + text input pair, with optional mono styling.
+component Field inherits VerticalLayout {
+    in property <string> label;
+    in property <string> placeholder;
+    in property <string> input-type: "";
+    in property <length> text_size: 15px;
+    in-out property <string> value;
+    in property <bool> enabled: true;
+    in property <bool> mono: false;
+    spacing: 6px;
+
+    Label {
+        text: root.label;
+        text_size: root.text_size - 2px;
+    }
+
+    if root.input-type == "password" : ThemedInput {
+        text <=> root.value;
+        text_size: root.text_size;
+        input-type: password;
+        placeholder-text: root.placeholder;
+        enabled: root.enabled;
+    }
+
+    if root.input-type == "number" : ThemedInput {
+        text <=> root.value;
+        text_size: root.text_size;
+        input-type: number;
+        placeholder-text: root.placeholder;
+        enabled: root.enabled;
+    }
+
+    if root.input-type == "" : ThemedInput {
+        text <=> root.value;
+        text_size: root.text_size;
+        placeholder-text: root.placeholder;
+        enabled: root.enabled;
+        mono: root.mono;
+    }
+}
+
+component SegmentedField inherits VerticalLayout {
+    in property <string> label;
+    in property <[string]> model;
+    in property <string> value;
+    in property <length> text_size: 15px;
+    in property <bool> enabled: true;
+    callback selected(string);
+    spacing: 6px;
+
+    Label {
+        text: root.label;
+        text_size: root.text_size - 2px;
+    }
+
+    SegmentedControl {
+        model: root.model;
+        value: root.value;
+        text_size: root.text_size;
+        enabled: root.enabled;
+        selected(v) => { root.selected(v); }
+    }
+}
+
+component SelectFieldLabeled inherits VerticalLayout {
+    in property <string> label;
+    in property <[string]> model;
+    in property <string> value;
+    in property <length> text_size: 15px;
+    in property <bool> enabled: true;
+    in property <bool> mono: false;
+    callback selected(string);
+    spacing: 6px;
+
+    Label {
+        text: root.label;
+        text_size: root.text_size - 2px;
+    }
+
+    SelectField {
+        model: root.model;
+        value: root.value;
+        text_size: root.text_size;
+        enabled: root.enabled;
+        mono: root.mono;
+        selected(v) => { root.selected(v); }
+    }
 }
 
 export component MainWindow inherits Window {
@@ -44,14 +176,19 @@ export component MainWindow inherits Window {
     preferred-height: 760px;
     min-width: 980px;
     min-height: 680px;
+    default-font-family: AppTheme.font-sans;
+    background: AppTheme.bg-base;
 
     in-out property <float> ui_scale: 1.0;
     in-out property <string> zoom_label: "100%";
-    private property <length> body_font_size: 16px * root.ui_scale;
-    private property <length> title_font_size: 30px * root.ui_scale;
-    private property <length> section_font_size: 22px * root.ui_scale;
-    private property <length> tab_font_size: 16px * root.ui_scale;
+    private property <length> body_font_size: 15px * root.ui_scale;
+    private property <length> label_font_size: 13px * root.ui_scale;
+    private property <length> title_font_size: 18px * root.ui_scale;
+    private property <length> section_font_size: 15px * root.ui_scale;
+    private property <length> tab_font_size: 15px * root.ui_scale;
     private property <string> current-tab: "create";
+
+    in-out property <bool> dark-mode <=> AppTheme.dark-mode;
 
     in-out property <string> create-target: "";
     in-out property <string> create-size-gb: "4";
@@ -77,7 +214,7 @@ export component MainWindow inherits Window {
     in-out property <string> status-message: "";
     in-out property <string> error-message: "";
 
-    in property <[string]> active-volume-items: [];
+    in property <[VolumeItem]> active-volume-items: [];
 
     callback submit-create();
     callback submit-mount();
@@ -87,460 +224,568 @@ export component MainWindow inherits Window {
     callback zoom-in();
     callback zoom-out();
     callback zoom-reset();
+    callback toggle-theme();
 
-    Rectangle {
-        background: #f4f6fa;
+    VerticalLayout {
+        spacing: 0;
 
-        VerticalBox {
-            padding: UiTheme.outer-padding;
-            spacing: UiTheme.panel-gap;
+        // ─── Header ────────────────────────────────────────────────────
+        Rectangle {
+            background: AppTheme.bg-base;
+            min-height: 56px;
 
-            Rectangle {
-                min-height: 82px;
-                background: #ffffff;
-                border-width: 1px;
-                border-color: #d5dbe6;
-                border-radius: UiTheme.panel-radius;
+            HorizontalLayout {
+                padding-left: UiTheme.outer-padding;
+                padding-right: UiTheme.outer-padding;
+                padding-top: 12px;
+                padding-bottom: 12px;
+                spacing: 14px;
+                alignment: center;
 
-                HorizontalBox {
-                    padding: UiTheme.panel-padding;
-                    spacing: UiTheme.panel-gap;
+                Wordmark {
+                    text_size: root.title_font_size;
+                    vertical-stretch: 0;
+                }
 
-                    VerticalBox {
-                        spacing: 6px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: transparent;
+                }
 
-                        TitleText {
-                            text: "Lurker";
-                            text_size: root.title_font_size;
-                        }
+                // Zoom cluster
+                Rectangle {
+                    preferred-width: zoom_row.preferred-width + 8px;
+                    preferred-height: UiTheme.control-min-height;
+                    min-height: UiTheme.control-min-height;
+                    border-width: 1px;
+                    border-color: AppTheme.border;
+                    border-radius: UiTheme.control-radius;
+                    background: AppTheme.bg-panel;
 
-                        BodyText {
-                            text: root.busy ? root.busy-label : root.status-message;
-                            text_size: root.body_font_size;
-                            color: root.busy ? #1d4ed8 : #1f2937;
-                            visible: root.busy || root.status-message != "";
-                            wrap: word-wrap;
-                        }
+                    zoom_row := HorizontalLayout {
+                        padding: 2px;
+                        spacing: 0;
 
-                        BodyText {
-                            text: root.error-message;
-                            text_size: root.body_font_size;
-                            color: #b42318;
-                            visible: root.error-message != "";
-                            wrap: word-wrap;
-                        }
-                    }
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        background: transparent;
-                    }
-
-                    HorizontalBox {
-                        spacing: 6px;
-
-                        ActionButton {
-                            text: "A-";
-                            text_size: root.body_font_size;
+                        IconButton {
+                            text: "A−";
+                            text_size: root.body_font_size * 0.9;
                             enabled: !root.busy;
-                            clicked => {
-                                root.zoom-out();
+                            clicked => { root.zoom-out(); }
+                        }
+
+                        Rectangle {
+                            width: 64px;
+                            TouchArea {
+                                enabled: !root.busy;
+                                clicked => { root.zoom-reset(); }
+                            }
+                            Text {
+                                text: root.zoom_label;
+                                font-family: AppTheme.font-mono;
+                                font-size: root.body_font_size * 0.9;
+                                color: AppTheme.text-secondary;
+                                width: parent.width;
+                                height: parent.height;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
                             }
                         }
 
-                        ActionButton {
-                            text: root.zoom_label;
-                            text_size: root.body_font_size;
-                            enabled: !root.busy;
-                            clicked => {
-                                root.zoom-reset();
-                            }
-                        }
-
-                        ActionButton {
+                        IconButton {
                             text: "A+";
-                            text_size: root.body_font_size;
+                            text_size: root.body_font_size * 0.9;
                             enabled: !root.busy;
-                            clicked => {
-                                root.zoom-in();
-                            }
-                        }
-                    }
-
-                    ActionButton {
-                        text: "Refresh";
-                        text_size: root.body_font_size;
-                        enabled: !root.busy;
-                        clicked => {
-                            root.refresh-volumes();
+                            clicked => { root.zoom-in(); }
                         }
                     }
                 }
+
+                IconButton {
+                    text: AppTheme.dark-mode ? "◑" : "◐";
+                    text_size: root.body_font_size * 1.1;
+                    enabled: !root.busy;
+                    clicked => { root.toggle-theme(); }
+                }
+
+                IconButton {
+                    text: "⟳";
+                    text_size: root.body_font_size * 1.15;
+                    enabled: !root.busy;
+                    clicked => { root.refresh-volumes(); }
+                }
             }
+        }
 
-            HorizontalBox {
-                spacing: UiTheme.panel-gap;
+        Hairline { }
 
-                Rectangle {
-                    horizontal-stretch: 3;
-                    background: #ffffff;
-                    border-width: 1px;
-                    border-color: #d5dbe6;
-                    border-radius: UiTheme.panel-radius;
+        // ─── Status banner (only when content exists) ─────────────────
+        if root.busy || root.status-message != "" || root.error-message != "" : Rectangle {
+            background: root.error-message != ""
+                ? AppTheme.danger-soft
+                : root.busy
+                    ? AppTheme.accent-soft
+                    : AppTheme.bg-sunken;
 
-                    VerticalBox {
-                        padding: UiTheme.panel-padding;
-                        spacing: UiTheme.panel-gap;
+            HorizontalLayout {
+                padding-left: UiTheme.outer-padding;
+                padding-right: UiTheme.outer-padding;
+                padding-top: 10px;
+                padding-bottom: 10px;
+                spacing: 10px;
 
-                        HorizontalBox {
-                            spacing: UiTheme.item-gap;
+                Text {
+                    text: root.error-message != "" ? "⚠"
+                        : root.busy ? "◐"
+                        : "✓";
+                    
+                    font-size: root.body_font_size;
+                    color: root.error-message != "" ? AppTheme.danger
+                        : root.busy ? AppTheme.accent
+                        : AppTheme.success;
+                    vertical-alignment: center;
+                }
 
-                            ActionButton {
+                Text {
+                    text: root.error-message != "" ? root.error-message
+                        : root.busy ? root.busy-label
+                        : root.status-message;
+                    
+                    font-size: root.body_font_size;
+                    color: root.error-message != "" ? AppTheme.danger
+                        : AppTheme.text-primary;
+                    horizontal-stretch: 1;
+                    wrap: word-wrap;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // ─── Main content ─────────────────────────────────────────────
+        HorizontalLayout {
+            padding-left: UiTheme.outer-padding;
+            padding-right: UiTheme.outer-padding;
+            padding-top: UiTheme.panel-gap;
+            padding-bottom: UiTheme.outer-padding;
+            spacing: UiTheme.panel-gap;
+
+            // Left: form panel
+            Rectangle {
+                horizontal-stretch: 3;
+                background: AppTheme.bg-panel;
+                border-width: 1px;
+                border-color: AppTheme.border;
+                border-radius: UiTheme.panel-radius;
+
+                VerticalLayout {
+                    padding: 0;
+                    spacing: 0;
+
+                    // Tab strip
+                    Rectangle {
+                        background: transparent;
+
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 14px;
+                            padding-top: 10px;
+                            padding-bottom: 0;
+                            spacing: 4px;
+                            alignment: start;
+
+                            TabButton {
                                 text: "Create";
                                 text_size: root.tab_font_size;
                                 active: root.current-tab == "create";
                                 enabled: !root.busy;
-                                clicked => {
-                                    root.current-tab = "create";
-                                }
+                                clicked => { root.current-tab = "create"; }
                             }
 
-                            ActionButton {
+                            TabButton {
                                 text: "Mount";
                                 text_size: root.tab_font_size;
                                 active: root.current-tab == "mount";
                                 enabled: !root.busy;
-                                clicked => {
-                                    root.current-tab = "mount";
-                                }
+                                clicked => { root.current-tab = "mount"; }
                             }
 
-                            ActionButton {
+                            TabButton {
                                 text: "Unmount";
                                 text_size: root.tab_font_size;
                                 active: root.current-tab == "unmount";
                                 enabled: !root.busy;
-                                clicked => {
-                                    root.current-tab = "unmount";
-                                }
+                                clicked => { root.current-tab = "unmount"; }
                             }
                         }
+                    }
 
-                        ScrollView {
-                            if root.current-tab == "create" : VerticalBox {
-                                padding-bottom: UiTheme.section-gap;
+                    Rectangle {
+                        height: 1px;
+                        background: AppTheme.divider;
+                    }
+
+                    ScrollView {
+                        vertical-stretch: 1;
+
+                        VerticalLayout {
+                            padding: UiTheme.panel-padding;
+                            spacing: UiTheme.section-gap;
+
+                            if root.current-tab == "create" : VerticalLayout {
                                 spacing: UiTheme.section-gap;
 
-                                SecondaryText {
-                                    text: "Create a file container or destructive block device.";
-                                    text_size: root.body_font_size;
+                                Subtle {
+                                    text: "Create a file container or initialize a block device.";
+                                    text_size: root.label_font_size;
                                 }
 
-                                BodyText {
-                                    text: "Target path";
+                                Field {
+                                    label: "TARGET PATH";
+                                    placeholder: "/path/to/vault.img or /dev/sdb1";
+                                    value <=> root.create-target;
                                     text_size: root.body_font_size;
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.create-target;
-                                    text_size: root.body_font_size;
-                                    placeholder-text: "/path/to/vault.img or /dev/sdb1";
                                     enabled: !root.busy;
+                                    mono: true;
                                 }
 
-                                HorizontalBox {
+                                HorizontalLayout {
                                     spacing: UiTheme.section-gap;
 
-                                    VerticalBox {
-                                        spacing: 6px;
+                                    SegmentedField {
+                                        horizontal-stretch: 1;
+                                        label: "KIND";
+                                        model: ["file", "block"];
+                                        value: root.create-source-kind;
+                                        text_size: root.body_font_size;
+                                        enabled: !root.busy;
+                                        selected(v) => { root.create-source-kind = v; }
+                                    }
 
-                                        BodyText {
-                                            text: "Target kind";
-                                            text_size: root.body_font_size;
+                                    SegmentedField {
+                                        horizontal-stretch: 1;
+                                        label: "VOLUME TYPE";
+                                        model: ["luks", "veracrypt"];
+                                        value: root.create-volume-type;
+                                        text_size: root.body_font_size;
+                                        enabled: !root.busy;
+                                        selected(v) => { root.create-volume-type = v; }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: UiTheme.section-gap;
+
+                                    SelectFieldLabeled {
+                                        horizontal-stretch: 1;
+                                        label: "CIPHER";
+                                        model: ["aes", "serpent", "twofish"];
+                                        value: root.create-cipher;
+                                        text_size: root.body_font_size;
+                                        enabled: !root.busy;
+                                        mono: true;
+                                        selected(v) => { root.create-cipher = v; }
+                                    }
+
+                                    Field {
+                                        horizontal-stretch: 1;
+                                        label: "SIZE (GB)";
+                                        placeholder: "4";
+                                        input-type: "number";
+                                        value <=> root.create-size-gb;
+                                        text_size: root.body_font_size;
+                                        enabled: root.create-source-kind == "file" && !root.busy;
+                                    }
+                                }
+
+                                // Destructive warning for block device
+                                if root.create-source-kind == "block" : Rectangle {
+                                    background: AppTheme.warning-soft;
+                                    border-width: 1px;
+                                    border-color: AppTheme.warning;
+                                    border-radius: UiTheme.control-radius;
+
+                                    HorizontalLayout {
+                                        padding: 12px;
+                                        spacing: 10px;
+
+                                        Text {
+                                            text: "⚠";
+                                            font-size: root.body_font_size * 1.1;
+                                            color: AppTheme.warning;
+                                            vertical-alignment: top;
                                         }
-                                        SelectField {
-                                            model: ["file", "block"];
-                                            value: root.create-source-kind;
-                                            text_size: root.body_font_size;
-                                            enabled: !root.busy;
-                                            selected(value) => {
-                                                root.create-source-kind = value;
+
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            spacing: 4px;
+
+                                            Text {
+                                                text: "Block device — all existing data will be destroyed.";
+                                                
+                                                font-size: root.body_font_size * 0.95;
+                                                font-weight: 600;
+                                                color: AppTheme.text-primary;
+                                                wrap: word-wrap;
+                                            }
+
+                                            LurkerCheckBox {
+                                                text: "I understand block-device create is destructive.";
+                                                checked <=> root.create-force;
+                                                text_size: root.body_font_size * 0.95;
+                                                enabled: !root.busy;
                                             }
                                         }
                                     }
-
-                                    VerticalBox {
-                                        spacing: 6px;
-
-                                        BodyText {
-                                            text: "Volume type";
-                                            text_size: root.body_font_size;
-                                        }
-                                        SelectField {
-                                            model: ["luks", "veracrypt"];
-                                            value: root.create-volume-type;
-                                            text_size: root.body_font_size;
-                                            enabled: !root.busy;
-                                            selected(value) => {
-                                                root.create-volume-type = value;
-                                            }
-                                        }
-                                    }
                                 }
 
-                                BodyText {
-                                    text: "Cipher";
-                                    text_size: root.body_font_size;
-                                }
-                                SelectField {
-                                    model: ["aes", "serpent", "twofish"];
-                                    value: root.create-cipher;
-                                    text_size: root.body_font_size;
-                                    enabled: !root.busy;
-                                    selected(value) => {
-                                        root.create-cipher = value;
-                                    }
-                                }
-
-                                BodyText {
-                                    text: "Size in GB";
-                                    text_size: root.body_font_size;
-                                    color: root.create-source-kind == "block" ? #9ca3af : #111827;
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.create-size-gb;
-                                    text_size: root.body_font_size;
-                                    input-type: number;
-                                    placeholder-text: "4";
-                                    enabled: root.create-source-kind == "file" && !root.busy;
-                                }
-
-                                BodyText {
-                                    text: "Passphrase";
-                                    text_size: root.body_font_size;
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.create-passphrase;
-                                    text_size: root.body_font_size;
-                                    input-type: password;
-                                    placeholder-text: "Required";
-                                    enabled: !root.busy;
-                                }
-
-                                BodyText {
-                                    text: "Confirm passphrase";
-                                    text_size: root.body_font_size;
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.create-passphrase-confirm;
-                                    text_size: root.body_font_size;
-                                    input-type: password;
-                                    placeholder-text: "Required";
-                                    enabled: !root.busy;
-                                }
-
-                                LurkerCheckBox {
-                                    text: root.create-source-kind == "block"
-                                        ? "I understand block-device create is destructive."
-                                        : "Overwrite the target file if it already exists.";
+                                if root.create-source-kind == "file" : LurkerCheckBox {
+                                    text: "Overwrite the target file if it already exists.";
                                     checked <=> root.create-force;
                                     text_size: root.body_font_size;
                                     enabled: !root.busy;
                                 }
 
-                                ActionButton {
-                                    text: "Create volume";
+                                Rectangle { height: 4px; }
+
+                                Field {
+                                    label: "PASSPHRASE";
+                                    placeholder: "Required";
+                                    input-type: "password";
+                                    value <=> root.create-passphrase;
                                     text_size: root.body_font_size;
-                                    primary: true;
                                     enabled: !root.busy;
-                                    clicked => {
-                                        root.submit-create();
-                                    }
+                                }
+
+                                Field {
+                                    label: "CONFIRM PASSPHRASE";
+                                    placeholder: "Required";
+                                    input-type: "password";
+                                    value <=> root.create-passphrase-confirm;
+                                    text_size: root.body_font_size;
+                                    enabled: !root.busy;
                                 }
                             }
 
-                            if root.current-tab == "mount" : VerticalBox {
-                                padding-bottom: UiTheme.section-gap;
+                            if root.current-tab == "mount" : VerticalLayout {
                                 spacing: UiTheme.section-gap;
 
-                                SecondaryText {
+                                Subtle {
                                     text: "Mount a LUKS or VeraCrypt volume.";
-                                    text_size: root.body_font_size;
+                                    text_size: root.label_font_size;
                                 }
 
-                                BodyText {
-                                    text: "Source path";
+                                Field {
+                                    label: "SOURCE PATH";
+                                    placeholder: "/path/to/vault.img or /dev/sdb1";
+                                    value <=> root.mount-source;
                                     text_size: root.body_font_size;
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.mount-source;
-                                    text_size: root.body_font_size;
-                                    placeholder-text: "/path/to/vault.img or /dev/sdb1";
                                     enabled: !root.busy;
+                                    mono: true;
                                 }
 
-                                BodyText {
-                                    text: "Mountpoint";
+                                Field {
+                                    label: "MOUNTPOINT";
+                                    placeholder: "/mnt/lurker";
+                                    value <=> root.mount-mountpoint;
                                     text_size: root.body_font_size;
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.mount-mountpoint;
-                                    text_size: root.body_font_size;
-                                    placeholder-text: "/mnt/lurker";
                                     enabled: !root.busy;
+                                    mono: true;
                                 }
 
-                                BodyText {
-                                    text: "Type";
-                                    text_size: root.body_font_size;
-                                }
-                                SelectField {
+                                SegmentedField {
+                                    label: "TYPE";
                                     model: ["auto", "luks", "veracrypt"];
                                     value: root.mount-volume-type;
                                     text_size: root.body_font_size;
                                     enabled: !root.busy;
-                                    selected(value) => {
-                                        root.mount-volume-type = value;
-                                    }
+                                    selected(v) => { root.mount-volume-type = v; }
                                 }
 
-                                BodyText {
-                                    text: "Tag";
+                                if root.mount-volume-type != "veracrypt" : Field {
+                                    label: "TAG (OPTIONAL)";
+                                    placeholder: "LUKS tag";
+                                    value <=> root.mount-tag;
                                     text_size: root.body_font_size;
-                                    visible: root.mount-volume-type != "veracrypt";
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.mount-tag;
-                                    text_size: root.body_font_size;
-                                    placeholder-text: "Optional LUKS tag";
-                                    visible: root.mount-volume-type != "veracrypt";
-                                    enabled: root.mount-volume-type != "veracrypt" && !root.busy;
-                                }
-
-                                BodyText {
-                                    text: "Passphrase";
-                                    text_size: root.body_font_size;
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.mount-passphrase;
-                                    text_size: root.body_font_size;
-                                    input-type: password;
-                                    placeholder-text: "Required";
                                     enabled: !root.busy;
+                                    mono: true;
                                 }
 
-                                ActionButton {
-                                    text: "Mount volume";
+                                Field {
+                                    label: "PASSPHRASE";
+                                    placeholder: "Required";
+                                    input-type: "password";
+                                    value <=> root.mount-passphrase;
                                     text_size: root.body_font_size;
-                                    primary: true;
                                     enabled: !root.busy;
-                                    clicked => {
-                                        root.submit-mount();
-                                    }
                                 }
                             }
 
-                            if root.current-tab == "unmount" : VerticalBox {
-                                padding-bottom: UiTheme.section-gap;
+                            if root.current-tab == "unmount" : VerticalLayout {
                                 spacing: UiTheme.section-gap;
 
-                                SecondaryText {
+                                Subtle {
                                     text: "Unmount by mountpoint, mapper, or original source path.";
-                                    text_size: root.body_font_size;
+                                    text_size: root.label_font_size;
                                 }
 
-                                BodyText {
-                                    text: "Target";
+                                Field {
+                                    label: "TARGET";
+                                    placeholder: "/mnt/lurker or /dev/mapper/lurker_x";
+                                    value <=> root.unmount-target;
                                     text_size: root.body_font_size;
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.unmount-target;
-                                    text_size: root.body_font_size;
-                                    placeholder-text: "/mnt/lurker or /dev/mapper/lurker_x";
                                     enabled: !root.busy;
+                                    mono: true;
                                 }
 
-                                BodyText {
-                                    text: "Type";
-                                    text_size: root.body_font_size;
-                                }
-                                SelectField {
+                                SegmentedField {
+                                    label: "TYPE";
                                     model: ["auto", "luks", "veracrypt"];
                                     value: root.unmount-volume-type;
                                     text_size: root.body_font_size;
                                     enabled: !root.busy;
-                                    selected(value) => {
-                                        root.unmount-volume-type = value;
-                                    }
+                                    selected(v) => { root.unmount-volume-type = v; }
                                 }
 
-                                BodyText {
-                                    text: "Tag";
+                                if root.unmount-volume-type != "veracrypt" : Field {
+                                    label: "TAG (OPTIONAL)";
+                                    placeholder: "LUKS tag";
+                                    value <=> root.unmount-tag;
                                     text_size: root.body_font_size;
-                                    visible: root.unmount-volume-type != "veracrypt";
-                                }
-                                ThemedLineEdit {
-                                    text <=> root.unmount-tag;
-                                    text_size: root.body_font_size;
-                                    placeholder-text: "Optional LUKS tag";
-                                    visible: root.unmount-volume-type != "veracrypt";
-                                    enabled: root.unmount-volume-type != "veracrypt" && !root.busy;
-                                }
-
-                                ActionButton {
-                                    text: "Unmount volume";
-                                    text_size: root.body_font_size;
-                                    primary: true;
                                     enabled: !root.busy;
-                                    clicked => {
-                                        root.submit-unmount();
-                                    }
+                                    mono: true;
                                 }
                             }
                         }
                     }
+
+                    Rectangle {
+                        height: 1px;
+                        background: AppTheme.divider;
+                    }
+
+                    // Sticky action bar
+                    Rectangle {
+                        background: AppTheme.bg-sunken;
+                        border-bottom-left-radius: UiTheme.panel-radius;
+                        border-bottom-right-radius: UiTheme.panel-radius;
+
+                        HorizontalLayout {
+                            padding-left: UiTheme.panel-padding;
+                            padding-right: UiTheme.panel-padding;
+                            padding-top: 12px;
+                            padding-bottom: 12px;
+                            spacing: 10px;
+
+                            Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                            if root.current-tab == "create" : ActionButton {
+                                text: "Create volume";
+                                text_size: root.body_font_size;
+                                primary: true;
+                                enabled: !root.busy;
+                                clicked => { root.submit-create(); }
+                            }
+
+                            if root.current-tab == "mount" : ActionButton {
+                                text: "Mount volume";
+                                text_size: root.body_font_size;
+                                primary: true;
+                                enabled: !root.busy;
+                                clicked => { root.submit-mount(); }
+                            }
+
+                            if root.current-tab == "unmount" : ActionButton {
+                                text: "Unmount volume";
+                                text_size: root.body_font_size;
+                                primary: true;
+                                enabled: !root.busy;
+                                clicked => { root.submit-unmount(); }
+                            }
+                        }
+                    }
                 }
+            }
 
-                Rectangle {
-                    horizontal-stretch: 2;
-                    background: #ffffff;
-                    border-width: 1px;
-                    border-color: #d5dbe6;
-                    border-radius: UiTheme.panel-radius;
+            // Right: active volumes
+            Rectangle {
+                horizontal-stretch: 2;
+                background: AppTheme.bg-panel;
+                border-width: 1px;
+                border-color: AppTheme.border;
+                border-radius: UiTheme.panel-radius;
 
-                    VerticalBox {
-                        padding: UiTheme.panel-padding;
-                        spacing: UiTheme.section-gap;
+                VerticalLayout {
+                    padding: UiTheme.panel-padding;
+                    spacing: 6px;
 
-                        SectionTitle {
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+
+                        BodyText {
                             text: "Active Volumes";
                             text_size: root.section_font_size;
+                            font-weight: 600;
+                            vertical-alignment: center;
                         }
 
-                        SecondaryText {
-                            text: "Select an item to prefill the unmount target.";
-                            text_size: root.body_font_size;
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                        Chip {
+                            text: root.active-volume-items.length;
+                            mono: true;
+                            text_size: root.label_font_size;
                         }
+                    }
 
-                        if root.active-volume-items.length == 0 : SecondaryText {
-                            text: "No active volumes detected.";
-                            text_size: root.body_font_size;
-                            color: #6b7280;
+                    Subtle {
+                        text: "Select a volume to prefill the unmount target.";
+                        text_size: root.label_font_size;
+                    }
+
+                    Rectangle { height: 6px; }
+
+                    if root.active-volume-items.length == 0 : Rectangle {
+                        vertical-stretch: 1;
+                        background: AppTheme.bg-sunken;
+                        border-radius: UiTheme.control-radius;
+
+                        VerticalLayout {
+                            padding: 20px;
+                            alignment: center;
+                            spacing: 6px;
+
+                            Text {
+                                text: "○";
+                                font-size: root.body_font_size * 2;
+                                color: AppTheme.text-muted;
+                                horizontal-alignment: center;
+                            }
+
+                            Text {
+                                text: "No active volumes.";
+                                
+                                font-size: root.body_font_size;
+                                color: AppTheme.text-secondary;
+                                horizontal-alignment: center;
+                            }
                         }
+                    }
 
-                        if root.active-volume-items.length > 0 : ScrollView {
-                            VerticalBox {
-                                padding-bottom: UiTheme.section-gap;
-                                spacing: UiTheme.item-gap;
+                    if root.active-volume-items.length > 0 : ScrollView {
+                        vertical-stretch: 1;
 
-                                for volume[index] in root.active-volume-items : ActionButton {
-                                    text: volume;
-                                    text_size: root.body_font_size;
-                                    enabled: !root.busy;
-                                    left-aligned: true;
-                                    fill-width: true;
-                                    clicked => {
-                                        root.active-volume-picked(index);
-                                    }
+                        VerticalLayout {
+                            padding-bottom: UiTheme.section-gap;
+                            spacing: 2px;
+
+                            for volume[index] in root.active-volume-items : VolumeRow {
+                                tag: volume.tag;
+                                path: volume.path;
+                                kind: volume.kind;
+                                text_size: root.body_font_size * 0.95;
+                                enabled: !root.busy;
+                                clicked => {
+                                    root.active-volume-picked(index);
                                 }
                             }
                         }

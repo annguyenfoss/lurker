@@ -1,3 +1,4 @@
+use crate::VolumeItem;
 use lurker_core::{
     ActiveVolume, CreateCipher, CreateCommand, MountCommand, OperationResponse, SourceKind,
     UnmountCommand, VolumeType,
@@ -88,18 +89,38 @@ pub fn build_unmount_command(
     })
 }
 
-pub fn active_volume_items(volumes: &[ActiveVolume]) -> Vec<SharedString> {
+pub fn active_volume_items(volumes: &[ActiveVolume]) -> Vec<VolumeItem> {
     volumes
         .iter()
         .map(|volume| {
-            let detail = volume
+            let path = volume
                 .mountpoint
                 .as_ref()
                 .map(|mountpoint| mountpoint.display().to_string())
-                .unwrap_or_else(|| "not mounted".into());
-            SharedString::from(format!("{}    {}", volume.mapper_name, detail))
+                .unwrap_or_else(|| volume.mapper_path.display().to_string());
+            let kind = volume_kind_label(volume);
+            VolumeItem {
+                tag: SharedString::from(volume.mapper_name.clone()),
+                path: SharedString::from(path),
+                kind: SharedString::from(kind),
+            }
         })
         .collect()
+}
+
+fn volume_kind_label(volume: &ActiveVolume) -> String {
+    let name = volume.mapper_name.to_ascii_lowercase();
+    if name.contains("veracrypt") || name.contains(".vc_") || name.contains(".tc_") {
+        "VERACRYPT".into()
+    } else if name.contains(".luks_") || name.starts_with("luks-") {
+        "LUKS".into()
+    } else {
+        volume
+            .filesystem_type
+            .clone()
+            .unwrap_or_default()
+            .to_uppercase()
+    }
 }
 
 pub fn suggested_unmount_target(volume: &ActiveVolume) -> String {

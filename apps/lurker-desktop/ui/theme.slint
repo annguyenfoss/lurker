@@ -1,13 +1,66 @@
+// Spacing, sizing, and radius tokens. Kept separate from colors so
+// components can query geometry without pulling in the theme state.
 export global UiTheme {
     out property <length> outer-padding: 18px;
-    out property <length> panel-padding: 18px;
+    out property <length> panel-padding: 20px;
     out property <length> panel-gap: 14px;
-    out property <length> section-gap: 12px;
+    out property <length> section-gap: 14px;
     out property <length> item-gap: 8px;
     out property <length> control-gap: 10px;
 
     out property <length> control-padding-x: 14px;
     out property <length> control-padding-y: 10px;
-    out property <length> control-min-height: 42px;
-    out property <length> panel-radius: 10px;
+    out property <length> control-min-height: 40px;
+    out property <length> panel-radius: 12px;
+    out property <length> control-radius: 8px;
+    out property <length> pill-radius: 999px;
+}
+
+// All runtime-switchable color and typography tokens. Every component
+// reads from here so toggling `dark-mode` reskins the entire app.
+export global AppTheme {
+    in-out property <bool> dark-mode: false;
+
+    // Surfaces
+    out property <color> bg-base:    dark-mode ? #0c0e12 : #f6f3ec;
+    out property <color> bg-panel:   dark-mode ? #15181f : #ffffff;
+    out property <color> bg-sunken:  dark-mode ? #0a0c10 : #efece3;
+    out property <color> bg-input:   dark-mode ? #1a1e26 : #faf8f1;
+    out property <color> bg-hover:   dark-mode ? #1f242d : #eee9dd;
+    out property <color> bg-active:  dark-mode ? #262c37 : #e5dfcf;
+    out property <color> bg-overlay: dark-mode ? #000000.with-alpha(0.4) : #000000.with-alpha(0.08);
+
+    // Lines
+    out property <color> border:        dark-mode ? #242a33 : #e2dcc9;
+    out property <color> border-strong: dark-mode ? #313843 : #cfc8b2;
+    out property <color> divider:       dark-mode ? #1b1f27 : #ebe4d2;
+
+    // Text
+    out property <color> text-primary:   dark-mode ? #e7ebf2 : #1a1d24;
+    out property <color> text-secondary: dark-mode ? #9aa3b2 : #5a6170;
+    out property <color> text-muted:     dark-mode ? #606878 : #8c8775;
+    out property <color> text-inverse:   dark-mode ? #0c0e12 : #ffffff;
+
+    // Accent + state
+    out property <color> accent:         dark-mode ? #7aa9f7 : #2c5fc9;
+    out property <color> accent-hover:   dark-mode ? #9ac0fb : #1f4ba8;
+    out property <color> accent-press:   dark-mode ? #5b93ec : #173d91;
+    out property <color> accent-soft:    dark-mode ? #1c2a42 : #e5edfb;
+    out property <color> accent-fg:      #ffffff;
+    out property <color> focus-ring:     dark-mode ? #7aa9f7 : #2c5fc9;
+
+    // Semantic
+    out property <color> success:      dark-mode ? #6fc490 : #2f8f5c;
+    out property <color> warning:      dark-mode ? #e0b468 : #a97a23;
+    out property <color> warning-soft: dark-mode ? #2a2216 : #fbf3de;
+    out property <color> danger:       dark-mode ? #e8857a : #b42318;
+    out property <color> danger-soft:  dark-mode ? #2a1817 : #fbe9e7;
+
+    // Typography
+    out property <string> font-sans: "Fira Sans";
+    out property <string> font-mono: "Fira Mono";
+
+    // Motion
+    out property <duration> transition-fast: 120ms;
+    out property <duration> transition-mid:  200ms;
 }

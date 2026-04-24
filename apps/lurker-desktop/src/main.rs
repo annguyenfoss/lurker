@@ -44,6 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     apply_zoom(&window, DEFAULT_UI_SCALE);
+    window.set_dark_mode(initial_dark_mode());
     bind_callbacks(&window, &state);
     state.refresh_active_volumes(false);
     window.run()?;
@@ -69,6 +70,15 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
     window.on_zoom_reset(move || {
         if let Some(window) = zoom_reset_window.upgrade() {
             apply_zoom(&window, DEFAULT_UI_SCALE);
+        }
+    });
+
+    let theme_window = window.as_weak();
+    window.on_toggle_theme(move || {
+        if let Some(window) = theme_window.upgrade() {
+            let next = !window.get_dark_mode();
+            window.set_dark_mode(next);
+            save_theme_preference(next);
         }
     });
 
@@ -335,6 +345,71 @@ fn apply_zoom(window: &MainWindow, scale: f32) {
     let scale = scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE);
     window.set_ui_scale(scale);
     window.set_zoom_label(format!("{}%", (scale * 100.0).round() as i32).into());
+}
+
+fn config_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    Some(base.join("lurker"))
+}
+
+fn theme_config_path() -> Option<PathBuf> {
+    Some(config_dir()?.join("ui.toml"))
+}
+
+fn save_theme_preference(dark: bool) {
+    let Some(path) = theme_config_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, format!("dark = {dark}\n"));
+}
+
+fn load_theme_preference() -> Option<bool> {
+    let contents = std::fs::read_to_string(theme_config_path()?).ok()?;
+    for line in contents.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("dark") {
+            let value = rest
+                .trim_start_matches(|c: char| c.is_whitespace() || c == '=')
+                .trim();
+            return value.parse().ok();
+        }
+    }
+    None
+}
+
+fn detect_kde_dark() -> Option<bool> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    let contents = std::fs::read_to_string(base.join("kdeglobals")).ok()?;
+    let mut in_general = false;
+    for line in contents.lines() {
+        let line = line.trim();
+        if let Some(section) = line.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            in_general = section.eq_ignore_ascii_case("General");
+            continue;
+        }
+        if in_general {
+            if let Some(rest) = line.strip_prefix("ColorScheme") {
+                let value = rest
+                    .trim_start_matches(|c: char| c.is_whitespace() || c == '=')
+                    .to_ascii_lowercase();
+                return Some(value.contains("dark"));
+            }
+        }
+    }
+    None
+}
+
+fn initial_dark_mode() -> bool {
+    load_theme_preference()
+        .or_else(detect_kde_dark)
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
