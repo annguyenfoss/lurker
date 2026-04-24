@@ -30,6 +30,8 @@ pub struct MountCommand {
     pub tag: Option<String>,
     pub volume_type: VolumeType,
     pub passphrase: Option<String>,
+    #[serde(default)]
+    pub readonly: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

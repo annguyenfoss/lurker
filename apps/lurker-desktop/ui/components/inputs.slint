@@ -1,0 +1,466 @@
+// Input primitives: text inputs, passphrase, key-file picker, select, buttons.
+// Maps to Lurker.html .inp / .inp-wrap / .drop / .sel / .btn sections.
+
+import { UiTheme } from "../theme.slint";
+import { IconAction, Segmented, SegmentOption, Field } from "primitives.slint";
+// Re-export so app-window.slint can pull them from a single inputs module.
+export { IconAction, Segmented, SegmentOption, Field } from "primitives.slint";
+
+// ── ThemedLineEdit ── (.inp) mono-font bg-0 field with accent focus ring.
+// Supports prefix icon and a reserved suffix area for overlaid icon buttons.
+export component ThemedLineEdit inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder-text: "";
+    in property <length> text_size: 13px;
+    in property <InputType> input-type: InputType.text;
+    in property <bool> enabled: true;
+    in property <bool> read-only: false;
+    in property <bool> mono: true;
+    in property <image> prefix-icon;
+    in property <bool> has-prefix: false;
+    in property <length> suffix-reserved: 0px;
+    out property <bool> has-focus <=> input.has-focus;
+
+    callback accepted(string);
+    callback edited(string);
+
+    accessible-role: text-input;
+    accessible-enabled: root.enabled;
+    accessible-value <=> text;
+    accessible-placeholder-text: placeholder-text;
+    accessible-read-only: root.read-only;
+    accessible-action-set-value(v) => { text = v; }
+
+    private property <length> prefix-reserved: has-prefix ? 30px : 12px;
+    private property <length> left-pad: has-prefix ? 10px : 12px;
+
+    horizontal-stretch: 1;
+    min-height: 34px;
+    preferred-height: max(34px, root.text_size + 14px);
+    border-width: 0.5px;
+    border-color: input.has-focus ? UiTheme.accent : UiTheme.line-strong;
+    border-radius: UiTheme.radius-sm;
+    background: input.has-focus ? UiTheme.bg-1 : UiTheme.bg-0;
+    forward-focus: input;
+
+    // focus-ring outer glow (accent-soft halo)
+    if input.has-focus: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: UiTheme.radius-sm + 3px;
+        border-width: 3px;
+        border-color: UiTheme.accent-soft;
+        background: transparent;
+    }
+
+    if root.has-prefix: Image {
+        source: root.prefix-icon;
+        x: 10px;
+        y: (parent.height - self.height) / 2;
+        width: 14px;
+        height: 14px;
+        colorize: UiTheme.fg-3;
+    }
+
+    placeholder := Text {
+        x: root.prefix-reserved;
+        y: 0;
+        width: parent.width - root.prefix-reserved - root.suffix-reserved - 12px;
+        height: parent.height;
+        text: root.placeholder-text;
+        font-size: root.text_size;
+        font-family: root.mono ? "JetBrains Mono" : "Inter Tight";
+        color: UiTheme.fg-3;
+        vertical-alignment: center;
+        visible: root.text == "";
+        overflow: elide;
+    }
+
+    input := TextInput {
+        x: root.prefix-reserved;
+        y: 0;
+        width: parent.width - root.prefix-reserved - root.suffix-reserved - 12px;
+        height: parent.height;
+        font-size: root.text_size;
+        font-family: root.mono ? "JetBrains Mono" : "Inter Tight";
+        color: root.enabled ? UiTheme.fg-0 : UiTheme.fg-3;
+        selection-foreground-color: UiTheme.accent-fg;
+        selection-background-color: UiTheme.accent;
+        vertical-alignment: center;
+        single-line: true;
+        input-type: root.input-type;
+        enabled: root.enabled;
+        read-only: root.read-only;
+        accessible-role: none;
+        accepted => { root.accepted(self.text); }
+        edited => { root.edited(self.text); }
+    }
+}
+
+// ── PassphraseInput ── .inp with suffix eye + dice actions
+export component PassphraseInput inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder-text: "enter a strong passphrase";
+    in property <bool> show-strength-button: true;
+    in property <bool> enabled: true;
+
+    callback generate-requested;
+
+    private property <bool> show-text: false;
+
+    min-height: 34px;
+    preferred-height: 34px;
+    horizontal-stretch: 1;
+
+    field := ThemedLineEdit {
+        width: parent.width;
+        height: parent.height;
+        text <=> root.text;
+        enabled: root.enabled;
+        placeholder-text: root.placeholder-text;
+        input-type: root.show-text ? InputType.text : InputType.password;
+        suffix-reserved: root.show-strength-button ? 58px : 30px;
+    }
+
+    // Suffix area overlays on the right
+    HorizontalLayout {
+        x: parent.width - (root.show-strength-button ? 58px : 30px) - 6px;
+        y: (parent.height - 26px) / 2;
+        width: root.show-strength-button ? 58px : 30px;
+        height: 26px;
+        spacing: 2px;
+
+        IconAction {
+            icon: @image-url("../icons/eye.svg");
+            tooltip: root.show-text ? "Hide" : "Show";
+            tint: UiTheme.fg-2;
+            clicked => { root.show-text = !root.show-text; }
+        }
+
+        if root.show-strength-button: IconAction {
+            icon: @image-url("../icons/dice.svg");
+            tooltip: "Generate diceware";
+            tint: UiTheme.fg-2;
+            clicked => { root.generate-requested(); }
+        }
+    }
+}
+
+// ── Drop ── file-drop zone with a hover accent border.
+// NOTE: Slint 1.16's Path has no stroke-dasharray; the dashed look from the
+// prototype is approximated with a solid line that brightens to accent on
+// hover/drag-over. DropArea provides real DnD via winit.
+export component Drop inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <image> icon;
+    in property <length> pad-v: UiTheme.s5;
+    in property <length> pad-h: UiTheme.s4;
+
+    callback clicked;
+    callback dropped(string);
+
+    private property <bool> drag-over: false;
+
+    border-radius: UiTheme.radius;
+    border-width: 1px;
+    border-color: drag-over ? UiTheme.accent : (touch.has-hover ? UiTheme.accent : UiTheme.line-strong);
+    background: drag-over ? UiTheme.bg-1 : (touch.has-hover ? UiTheme.bg-1 : UiTheme.bg-0);
+    min-height: 110px;
+
+    VerticalLayout {
+        padding-left: root.pad-h;
+        padding-right: root.pad-h;
+        padding-top: root.pad-v;
+        padding-bottom: root.pad-v;
+        spacing: UiTheme.s2;
+        alignment: center;
+
+        Image {
+            source: root.icon;
+            width: 22px;
+            height: 22px;
+            colorize: UiTheme.fg-2;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: root.title;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: "Inter Tight";
+            color: UiTheme.fg-1;
+            horizontal-alignment: center;
+        }
+
+        if root.subtitle != "": Text {
+            text: root.subtitle;
+            font-size: 11.5px;
+            font-family: "JetBrains Mono";
+            color: UiTheme.fg-3;
+            horizontal-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── KeyFilePicker ── Drop when empty, ThemedLineEdit with Key prefix when set.
+export component KeyFilePicker inherits Rectangle {
+    in-out property <string> value;
+    callback browse;
+
+    min-height: 110px;
+    preferred-height: value == "" ? 110px : 34px;
+
+    if value == "": Drop {
+        width: parent.width;
+        height: parent.height;
+        icon: @image-url("../icons/key.svg");
+        title: "Select a key file";
+        subtitle: "drop a file here or click to browse";
+        pad-v: 18px;
+        clicked => { root.browse(); }
+        dropped(p) => { root.value = p; }
+    }
+
+    if value != "": Rectangle {
+        width: parent.width;
+        height: 34px;
+
+        field := ThemedLineEdit {
+            width: parent.width;
+            height: parent.height;
+            text <=> root.value;
+            has-prefix: true;
+            prefix-icon: @image-url("../icons/key.svg");
+            suffix-reserved: 30px;
+        }
+        HorizontalLayout {
+            x: parent.width - 30px;
+            y: (parent.height - 26px) / 2;
+            width: 30px;
+            height: 26px;
+            IconAction {
+                icon: @image-url("../icons/x.svg");
+                tooltip: "Clear";
+                tint: UiTheme.fg-2;
+                clicked => { root.value = ""; }
+            }
+        }
+    }
+}
+
+// ── SelectField ── dropdown, inline expansion style.
+export component SelectField inherits Rectangle {
+    in property <[string]> model;
+    in-out property <string> value;
+    in property <length> text_size: 13px;
+    in property <bool> enabled: true;
+
+    callback selected(string);
+
+    private property <bool> expanded: false;
+    private property <length> collapsed_height: 34px;
+    private property <length> option_height: 32px;
+    private property <string> display_value: root.value != ""
+        ? root.value
+        : (root.model.length > 0 ? root.model[0] : "");
+
+    horizontal-stretch: 1;
+    min-width: 90px;
+    preferred-height: root.collapsed_height + (root.expanded ? (root.option_height * root.model.length + 8px) : 0px);
+    min-height: self.preferred-height;
+    border-width: 0.5px;
+    border-color: root.expanded ? UiTheme.accent : UiTheme.line-strong;
+    border-radius: UiTheme.radius-sm;
+    background: UiTheme.bg-0;
+    clip: true;
+
+    VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            min-height: root.collapsed_height;
+            background: transparent;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 8px;
+                spacing: 6px;
+
+                Text {
+                    text: root.display_value;
+                    font-size: root.text_size;
+                    font-family: "JetBrains Mono";
+                    color: root.enabled ? UiTheme.fg-0 : UiTheme.fg-3;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                Image {
+                    source: root.expanded
+                        ? @image-url("../icons/chevron-up.svg")
+                        : @image-url("../icons/chevron-down.svg");
+                    width: 12px;
+                    height: 12px;
+                    y: (parent.height - self.height) / 2;
+                    colorize: UiTheme.fg-3;
+                    vertical-alignment: center;
+                }
+            }
+
+            TouchArea {
+                enabled: root.enabled;
+                clicked => { root.expanded = !root.expanded; }
+            }
+        }
+
+        if root.expanded: VerticalLayout {
+            padding: 4px;
+            spacing: 2px;
+
+            for opt in root.model: Rectangle {
+                private property <bool> on: opt == root.value;
+                min-height: root.option_height;
+                border-radius: 4px;
+                background: on ? UiTheme.accent-soft : (t.has-hover ? UiTheme.bg-2 : transparent);
+
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    Text {
+                        text: opt;
+                        font-size: root.text_size;
+                        font-family: "JetBrains Mono";
+                        color: on ? UiTheme.fg-0 : UiTheme.fg-1;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    if on: Image {
+                        source: @image-url("../icons/check.svg");
+                        width: 13px;
+                        height: 13px;
+                        y: (parent.height - self.height) / 2;
+                        colorize: UiTheme.accent;
+                    }
+                }
+                t := TouchArea {
+                    clicked => {
+                        root.value = opt;
+                        root.expanded = false;
+                        root.selected(opt);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── ActionButton ── multi-tone button with optional leading icon + kbd label.
+// tone: "primary" | "secondary" | "ghost" | "danger"
+export component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <string> tone: "secondary";
+    in property <length> text_size: 12.5px;
+    in property <bool> enabled: true;
+    in property <bool> fill-width: false;
+    in property <bool> left-aligned: false;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <string> kbd: "";
+    in property <length> height-override: 0px;
+
+    callback clicked;
+
+    private property <bool> hover: touch.has-hover;
+    private property <bool> pressed: touch.pressed;
+
+    // Fill per tone
+    private property <brush> fill:
+        !root.enabled ? UiTheme.bg-2
+        : tone == "primary"
+            ? (pressed
+                ? @linear-gradient(180deg, oklch(58%, 50%, 25deg) 0%, oklch(48%, 50%, 25deg) 100%)
+                : @linear-gradient(180deg, UiTheme.accent-2 0%, UiTheme.accent 100%))
+        : tone == "secondary"
+            ? (pressed ? UiTheme.bg-3 : (hover ? UiTheme.bg-3 : UiTheme.bg-2))
+        : tone == "ghost"
+            ? (pressed ? UiTheme.bg-3 : (hover ? UiTheme.bg-2 : transparent))
+        : tone == "danger"
+            ? (hover ? UiTheme.danger-soft : transparent)
+        : transparent;
+
+    private property <bool> has-stroke:
+        tone == "secondary" || tone == "danger";
+    private property <brush> stroke:
+        !root.enabled ? UiTheme.line
+        : tone == "secondary" ? UiTheme.line-strong
+        : tone == "danger"    ? UiTheme.danger
+        : UiTheme.line-strong;
+
+    private property <brush> fg:
+        !root.enabled ? UiTheme.fg-3
+        : tone == "primary" ? UiTheme.accent-fg
+        : tone == "danger"  ? UiTheme.danger
+        : tone == "ghost"   ? UiTheme.fg-1
+        : UiTheme.fg-0;
+
+    horizontal-stretch: root.fill-width ? 1 : 0;
+    preferred-width: label.preferred-width + (has-icon ? 22px : 0) + (kbd != "" ? 40px : 0) + 28px;
+    preferred-height: max(height-override == 0px ? 32px : height-override, root.text_size + 18px);
+    min-height: self.preferred-height;
+    border-width: has-stroke ? 0.5px : 0px;
+    border-color: stroke;
+    border-radius: 8px;
+    background: fill;
+    drop-shadow-blur: tone == "primary" && root.enabled ? 16px : 0px;
+    drop-shadow-offset-y: tone == "primary" && root.enabled ? 4px : 0px;
+    drop-shadow-color: #d84d2859;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 8px;
+        alignment: root.left-aligned ? start : center;
+
+        if root.has-icon: Image {
+            source: root.icon;
+            width: 13px;
+            height: 13px;
+            y: (parent.height - self.height) / 2;
+            colorize: fg;
+        }
+
+        label := Text {
+            text: root.text;
+            font-size: root.text_size;
+            font-weight: tone == "primary" ? 600 : 500;
+            font-family: "Inter Tight";
+            color: fg;
+            horizontal-stretch: 1;
+            horizontal-alignment: root.left-aligned ? left : center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        if root.kbd != "": Text {
+            text: "│ " + root.kbd;
+            font-size: 10px;
+            font-family: "JetBrains Mono";
+            color: fg;
+            opacity: 0.7;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}

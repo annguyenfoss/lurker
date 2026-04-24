@@ -1,0 +1,215 @@
+// MountView — (themes/views.jsx:303-423)
+// Three card sections: Source, Unlock with, Mount. Foot: Reset + Unlock button.
+// NOTE: key-file auth is scaffolded UI only — the Unlock button disables in
+// that mode and the submit callback is suppressed (Rust emits a toast).
+
+import { UiTheme } from "../theme.slint";
+import {
+    Card, CardSection, CardFoot, SectionHead, Segmented, SegmentOption,
+    Field, Toggle
+} from "../components/primitives.slint";
+import {
+    ThemedLineEdit, SelectField, ActionButton, PassphraseInput, KeyFilePicker,
+    Drop
+} from "../components/inputs.slint";
+
+export component MountView inherits Card {
+    in-out property <string> source-kind: "file";   // "file" | "partition"
+    in-out property <string> source: "";
+    in-out property <string> mount-point: "/mnt/";
+    in-out property <string> auth-method: "pass";   // "pass" | "key"
+    in-out property <string> passphrase: "";
+    in-out property <string> key-file: "";
+    in-out property <bool>   readonly: false;
+
+    callback submit;
+    callback reset;
+    callback browse-container;
+    callback browse-key-file;
+
+    private property <bool> has-auth:
+        root.auth-method == "pass"
+            ? root.passphrase.character-count > 0
+            : root.key-file != "";
+    private property <bool> can-submit:
+        root.source != ""
+        && root.has-auth
+        && root.auth-method == "pass"   // key-file is scaffolded only
+        && root.mount-point != "/mnt/"
+        && root.mount-point != "/mnt"
+        && root.mount-point != "/Volumes/"
+        && root.mount-point != "/Volumes";
+
+    // ── Source section ────────────────────────────────────────────────
+    CardSection {
+        top-divider: false;
+        SectionHead { title: "SOURCE"; hint: "encrypted file or partition to unlock"; }
+
+        Rectangle { height: UiTheme.s3; }
+
+        Segmented {
+            value: root.source-kind;
+            options: [
+                { value: "file",      label: "File container" },
+                { value: "partition", label: "Partition / disk" },
+            ];
+            selected(v) => {
+                root.source-kind = v;
+                root.source = "";
+            }
+        }
+
+        Rectangle { height: UiTheme.s3; }
+
+        if root.source-kind == "file" && root.source == "": Drop {
+            icon: @image-url("../icons/file.svg");
+            title: "Drop a container file here";
+            subtitle: "or click to browse · LUKS, VeraCrypt";
+            clicked => { root.browse-container(); }
+            dropped(path) => { root.source = path; }
+        }
+
+        if root.source-kind == "file" && root.source != "": Rectangle {
+            min-height: 34px;
+            preferred-height: 34px;
+            ThemedLineEdit {
+                width: parent.width;
+                height: parent.height;
+                text <=> root.source;
+                has-prefix: true;
+                prefix-icon: @image-url("../icons/file.svg");
+                suffix-reserved: 30px;
+            }
+            Rectangle {
+                x: parent.width - 30px;
+                y: (parent.height - 26px) / 2;
+                width: 26px;
+                height: 26px;
+                Image {
+                    source: @image-url("../icons/x.svg");
+                    width: 13px;
+                    height: 13px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: UiTheme.fg-2;
+                }
+                TouchArea {
+                    clicked => { root.source = ""; }
+                }
+            }
+        }
+
+        if root.source-kind == "partition": Rectangle {
+            min-height: 34px;
+            preferred-height: 34px;
+            ThemedLineEdit {
+                width: parent.width;
+                height: parent.height;
+                text <=> root.source;
+                has-prefix: true;
+                prefix-icon: @image-url("../icons/drive.svg");
+                placeholder-text: "/dev/sdb1";
+                suffix-reserved: 30px;
+            }
+        }
+    }
+
+    // ── Unlock with section ───────────────────────────────────────────
+    CardSection {
+        SectionHead { title: "UNLOCK WITH"; hint: "passphrase or key file"; }
+
+        VerticalLayout {
+            spacing: UiTheme.s3;
+
+            Segmented {
+                value <=> root.auth-method;
+                options: [
+                    { value: "pass", label: "Passphrase" },
+                    { value: "key",  label: "Key file" },
+                ];
+            }
+
+            if root.auth-method == "pass": PassphraseInput {
+                text <=> root.passphrase;
+                show-strength-button: false;
+            }
+
+            if root.auth-method == "key": KeyFilePicker {
+                value <=> root.key-file;
+                browse => { root.browse-key-file(); }
+            }
+
+            if root.auth-method == "key": Rectangle {
+                min-height: 32px;
+                border-radius: UiTheme.radius-sm;
+                border-width: 0.5px;
+                border-color: UiTheme.line-strong;
+                background: UiTheme.bg-0;
+                HorizontalLayout {
+                    padding: 10px;
+                    spacing: 8px;
+                    Image {
+                        source: @image-url("../icons/info.svg");
+                        width: 13px;
+                        height: 13px;
+                        y: (parent.height - self.height) / 2;
+                        colorize: UiTheme.fg-3;
+                    }
+                    Text {
+                        text: "Key-file unlock is scaffolded — backend support is coming soon.";
+                        font-size: 11.5px;
+                        font-family: "JetBrains Mono";
+                        color: UiTheme.fg-2;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Mount section ────────────────────────────────────────────────
+    CardSection {
+        SectionHead { title: "MOUNT"; hint: ""; }
+
+        VerticalLayout {
+            spacing: UiTheme.s3;
+
+            Field {
+                label: "Mount point";
+                hint: "/mnt/…";
+                required: true;
+                ThemedLineEdit {
+                    text <=> root.mount-point;
+                    mono: true;
+                }
+            }
+
+            Toggle {
+                label: "Mount read-only";
+                hint: "safe for inspection · prevents writes";
+                checked <=> root.readonly;
+            }
+        }
+    }
+
+    // ── Card foot ────────────────────────────────────────────────────
+    CardFoot {
+        Rectangle { horizontal-stretch: 1; }  // spacer
+
+        ActionButton {
+            text: "Reset";
+            tone: "ghost";
+            clicked => { root.reset(); }
+        }
+
+        ActionButton {
+            text: "Unlock & mount";
+            tone: "primary";
+            icon: @image-url("../icons/lock-open.svg");
+            has-icon: true;
+            kbd: "⌘⏎";
+            enabled: root.can-submit;
+            clicked => { root.submit(); }
+        }
+    }
+}

@@ -1,0 +1,162 @@
+// ManageView — (themes/views.jsx:534-658)
+// Top card: mounted-volumes list with inline expandable unmount.
+// Below: "Mount a volume" rule + inlined MountView.
+
+import { UiTheme } from "../theme.slint";
+import {
+    Card, CardSection, CardFoot, SectionHead
+} from "../components/primitives.slint";
+import { VolumeRow, VolumeRowData } from "../components/volume-row.slint";
+import { MountView } from "mount.slint";
+
+export component ManageView inherits Rectangle {
+    in property <[VolumeRowData]> volumes;
+    in-out property <int> selected-index: -1;
+
+    // Mount form state — forwarded 1:1 from MainWindow
+    in-out property <string> mount-source-kind: "file";
+    in-out property <string> mount-source: "";
+    in-out property <string> mount-point: "/mnt/";
+    in-out property <string> mount-auth-method: "pass";
+    in-out property <string> mount-passphrase: "";
+    in-out property <string> mount-key-file: "";
+    in-out property <bool>   mount-readonly: false;
+
+    callback unmount(int);
+    callback submit-mount();
+    callback reset-mount();
+    callback browse-container();
+    callback browse-key-file();
+
+    VerticalLayout {
+        spacing: UiTheme.s5;
+
+        // ── Mounted volumes card ──────────────────────────────────────
+        Card {
+            CardSection {
+                top-divider: false;
+                SectionHead {
+                    title: "MOUNTED VOLUMES";
+                    hint: root.volumes.length == 1
+                        ? "1 volume · click to manage"
+                        : root.volumes.length + " volumes · click to manage";
+                }
+
+                if root.volumes.length == 0: Rectangle {
+                    min-height: 110px;
+                    border-radius: UiTheme.radius;
+                    border-width: 0.5px;
+                    border-color: UiTheme.line-strong;
+                    background: UiTheme.bg-0;
+
+                    VerticalLayout {
+                        padding-top: UiTheme.s5;
+                        padding-bottom: UiTheme.s5;
+                        padding-left: UiTheme.s4;
+                        padding-right: UiTheme.s4;
+                        spacing: UiTheme.s3;
+                        alignment: center;
+
+                        Rectangle {
+                            width: 40px;
+                            height: 40px;
+                            horizontal-stretch: 0;
+                            x: (parent.width - self.width) / 2;
+                            border-radius: 10px;
+                            background: UiTheme.bg-2;
+                            Image {
+                                source: @image-url("../icons/lock.svg");
+                                width: 18px;
+                                height: 18px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                colorize: UiTheme.fg-3;
+                            }
+                        }
+
+                        Text {
+                            text: "Nothing mounted yet";
+                            font-size: 13px;
+                            font-weight: 600;
+                            font-family: "Inter Tight";
+                            color: UiTheme.fg-1;
+                            horizontal-alignment: center;
+                        }
+
+                        Text {
+                            text: "Unlock a container below to mount it here.";
+                            font-size: 11.5px;
+                            font-family: "Inter Tight";
+                            color: UiTheme.fg-3;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                if root.volumes.length > 0: VerticalLayout {
+                    spacing: 8px;
+
+                    for data[i] in root.volumes: VolumeRow {
+                        data: data;
+                        expanded: root.selected-index == i;
+                        clicked => {
+                            if (root.selected-index == i) {
+                                root.selected-index = -1;
+                            } else {
+                                root.selected-index = i;
+                            }
+                        }
+                        unmount-clicked => {
+                            root.unmount(i);
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── "Mount a volume" divider label ────────────────────────────
+        HorizontalLayout {
+            spacing: UiTheme.s3;
+            alignment: center;
+
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 0.5px;
+                y: 10px;
+                background: UiTheme.line;
+            }
+
+            Text {
+                text: "MOUNT A VOLUME";
+                font-size: 11px;
+                font-weight: 600;
+                font-family: "Inter Tight";
+                letter-spacing: 1.32px;
+                color: UiTheme.fg-2;
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 0.5px;
+                y: 10px;
+                background: UiTheme.line;
+            }
+        }
+
+        // ── Inlined MountView ────────────────────────────────────────
+        MountView {
+            source-kind <=> root.mount-source-kind;
+            source <=> root.mount-source;
+            mount-point <=> root.mount-point;
+            auth-method <=> root.mount-auth-method;
+            passphrase <=> root.mount-passphrase;
+            key-file <=> root.mount-key-file;
+            readonly <=> root.mount-readonly;
+            submit => { root.submit-mount(); }
+            reset => { root.reset-mount(); }
+            browse-container => { root.browse-container(); }
+            browse-key-file => { root.browse-key-file(); }
+        }
+    }
+}

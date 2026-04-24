@@ -37,31 +37,44 @@ impl ThemeMode {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum TaskMode {
+// New design has two views. Legacy JSON values "mount"/"unmount" migrate to Manage.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ViewMode {
     #[default]
     Create,
-    Mount,
-    Unmount,
+    Manage,
 }
 
-impl TaskMode {
+impl ViewMode {
     pub fn as_ui_value(self) -> &'static str {
         match self {
             Self::Create => "create",
-            Self::Mount => "mount",
-            Self::Unmount => "unmount",
+            Self::Manage => "manage",
         }
     }
 
     pub fn parse_ui_value(value: &str) -> Option<Self> {
         match value {
             "create" => Some(Self::Create),
-            "mount" => Some(Self::Mount),
-            "unmount" => Some(Self::Unmount),
+            "manage" | "mount" | "unmount" => Some(Self::Manage),
             _ => None,
         }
+    }
+}
+
+// Custom serde so legacy kebab-case "mount"/"unmount" values round-trip to Manage.
+impl Serialize for ViewMode {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_ui_value())
+    }
+}
+
+impl<'de> Deserialize<'de> for ViewMode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        ViewMode::parse_ui_value(&raw).ok_or_else(|| {
+            serde::de::Error::custom(format!("unknown view mode: {raw}"))
+        })
     }
 }
 
@@ -71,8 +84,8 @@ pub struct UiPreferences {
     pub ui_scale: f32,
     #[serde(default)]
     pub theme_mode: ThemeMode,
-    #[serde(default)]
-    pub last_task: TaskMode,
+    #[serde(default, alias = "last_task")]
+    pub last_view: ViewMode,
 }
 
 impl Default for UiPreferences {
@@ -80,7 +93,7 @@ impl Default for UiPreferences {
         Self {
             ui_scale: DEFAULT_UI_SCALE,
             theme_mode: ThemeMode::System,
-            last_task: TaskMode::Create,
+            last_view: ViewMode::Create,
         }
     }
 }
@@ -146,7 +159,7 @@ fn write_preferences(path: &Path, preferences: &UiPreferences) -> io::Result<()>
 
 #[cfg(test)]
 mod tests {
-    use super::{read_preferences, resolve_preferences_path, write_preferences, TaskMode, ThemeMode, UiPreferences};
+    use super::{read_preferences, resolve_preferences_path, write_preferences, ViewMode, ThemeMode, UiPreferences};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -182,7 +195,7 @@ mod tests {
         let preferences = UiPreferences {
             ui_scale: 2.8,
             theme_mode: ThemeMode::Dark,
-            last_task: TaskMode::Unmount,
+            last_view: ViewMode::Manage,
         };
 
         write_preferences(&file_path, &preferences).unwrap();
@@ -190,16 +203,22 @@ mod tests {
 
         assert_eq!(restored.ui_scale, 2.0);
         assert_eq!(restored.theme_mode, ThemeMode::Dark);
-        assert_eq!(restored.last_task, TaskMode::Unmount);
+        assert_eq!(restored.last_view, ViewMode::Manage);
 
         fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
-    fn theme_and_task_modes_match_ui_values() {
+    fn theme_and_view_modes_match_ui_values() {
         assert_eq!(ThemeMode::parse_ui_value(ThemeMode::Light.as_ui_value()), Some(ThemeMode::Light));
-        assert_eq!(TaskMode::parse_ui_value(TaskMode::Mount.as_ui_value()), Some(TaskMode::Mount));
+        assert_eq!(ViewMode::parse_ui_value(ViewMode::Manage.as_ui_value()), Some(ViewMode::Manage));
         assert_eq!(ThemeMode::parse_ui_value("unknown"), None);
-        assert_eq!(TaskMode::parse_ui_value("other"), None);
+        assert_eq!(ViewMode::parse_ui_value("other"), None);
+    }
+
+    #[test]
+    fn legacy_mount_and_unmount_migrate_to_manage() {
+        assert_eq!(ViewMode::parse_ui_value("mount"), Some(ViewMode::Manage));
+        assert_eq!(ViewMode::parse_ui_value("unmount"), Some(ViewMode::Manage));
     }
 }

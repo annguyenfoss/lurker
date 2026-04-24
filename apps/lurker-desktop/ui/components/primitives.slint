@@ -1,0 +1,453 @@
+// Visual primitives: dividers, pills, icons, toggles, segments, cards, toasts.
+// Maps 1:1 to CSS classes in themes/Lurker.html (sections labeled below).
+
+import { UiTheme } from "../theme.slint";
+
+// ── Divider ── (.card-section top-border, .side-foot top-border)
+export component Divider inherits Rectangle {
+    height: 0.5px;
+    background: UiTheme.line;
+}
+
+// ── Glow ── (Lurker.html:411-413) radial decorative glow pinned top-left of
+// the main scroll area. Not a drop shadow — an absolutely-positioned radial
+// gradient on a big offset rectangle.
+export component Glow inherits Rectangle {
+    width: 540px;
+    height: 540px;
+    opacity: 0.35;
+    background: @radial-gradient(circle, UiTheme.glow-stop 0%, transparent 65%);
+}
+
+// ── PillSurface ── consolidated pill for .chip, .vol-state, status badges.
+// tone: "accent" | "ok" | "warn" | "danger" | "neutral"
+export component PillSurface inherits Rectangle {
+    in property <string> text;
+    in property <string> tone: "neutral";
+    in property <length> font-size: 11.5px;
+    in property <bool> uppercase: false;
+    in property <bool> mono: false;
+    in property <length> letter-spacing: 0px;
+    in property <bool> dot-leading: false;
+
+    private property <brush> tone-fg:
+        tone == "accent"  ? UiTheme.accent
+        : tone == "ok"    ? UiTheme.ok
+        : tone == "warn"  ? UiTheme.warn
+        : tone == "danger" ? UiTheme.danger
+        : UiTheme.fg-1;
+    private property <brush> tone-bg:
+        tone == "accent"  ? UiTheme.accent-soft
+        : tone == "ok"    ? UiTheme.success-soft
+        : tone == "warn"  ? UiTheme.warning-soft
+        : tone == "danger" ? UiTheme.danger-soft
+        : UiTheme.bg-2;
+
+    min-height: 22px;
+    preferred-height: 26px;
+    border-radius: 999px;
+    border-width: 0.5px;
+    border-color: UiTheme.line-strong;
+    background: tone-bg;
+    horizontal-stretch: 0;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 6px;
+        alignment: center;
+
+        if dot-leading: Rectangle {
+            width: 5px;
+            height: 5px;
+            border-radius: 999px;
+            background: tone-fg;
+            y: (parent.height - self.height) / 2;
+        }
+
+        Text {
+            text: uppercase ? root.text.to-uppercase() : root.text;
+            font-size: root.font-size;
+            font-weight: 500;
+            font-family: mono ? "JetBrains Mono" : "Inter Tight";
+            letter-spacing: root.letter-spacing;
+            color: tone-fg;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// ── IconAction ── wraps .icon-btn (26×26 r=5 ghost) and .icon-round (34×34 pill)
+// variant: "ghost" | "round" | "subtle"
+export component IconAction inherits Rectangle {
+    in property <image> icon;
+    in property <length> size: 26px;
+    in property <length> icon-size: 13px;
+    in property <string> variant: "ghost";
+    in property <bool> enabled: true;
+    in property <brush> tint: UiTheme.fg-2;
+    in property <string> tooltip: "";
+
+    callback clicked;
+
+    private property <brush> fill:
+        touch.pressed ? UiTheme.bg-3
+        : (touch.has-hover
+            ? (variant == "round" ? UiTheme.bg-3 : UiTheme.bg-3)
+            : (variant == "round" ? UiTheme.bg-2 : transparent));
+
+    width: size;
+    height: size;
+    accessible-role: button;
+    accessible-label: tooltip;
+    accessible-action-default => { root.clicked(); }
+    border-radius: variant == "round" ? 999px : 5px;
+    border-width: variant == "round" ? 0.5px : 0px;
+    border-color: UiTheme.line-strong;
+    background: fill;
+
+    Image {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        colorize: touch.has-hover ? UiTheme.fg-0 : root.tint;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: MouseCursor.default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Toggle ── iOS-style switch (views.jsx:29-52). 32×18 track, 13 thumb.
+export component Toggle inherits Rectangle {
+    in-out property <bool> checked: false;
+    in property <bool> enabled: true;
+    in property <string> label;
+    in property <string> hint;
+
+    callback toggled;
+
+    min-height: 20px;
+    preferred-height: max(32px, label-text.preferred-height + 4px);
+    horizontal-stretch: 1;
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 12px;
+
+        track := Rectangle {
+            width: 32px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 999px;
+            border-width: 0.5px;
+            border-color: UiTheme.line-strong;
+            background: root.checked ? UiTheme.accent : UiTheme.bg-3;
+
+            animate background { duration: 150ms; easing: ease-out; }
+
+            thumb := Rectangle {
+                width: 13px;
+                height: 13px;
+                y: 1.5px;
+                x: root.checked ? 15px : 1.5px;
+                border-radius: 999px;
+                background: UiTheme.bg-0;
+                drop-shadow-blur: 3px;
+                drop-shadow-offset-y: 1px;
+                drop-shadow-color: #00000080;
+
+                animate x { duration: 150ms; easing: ease-out; }
+            }
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+
+            label-text := Text {
+                text: root.label;
+                font-size: 12.5px;
+                font-weight: 500;
+                font-family: "Inter Tight";
+                color: UiTheme.fg-1;
+                vertical-alignment: center;
+            }
+
+            if root.hint != "": Text {
+                text: root.hint;
+                font-size: 11px;
+                font-family: "JetBrains Mono";
+                color: UiTheme.fg-3;
+            }
+        }
+    }
+
+    TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled();
+        }
+    }
+}
+
+// ── SegmentOption struct for Segmented's model
+export struct SegmentOption {
+    value: string,
+    label: string,
+}
+
+// ── Segmented ── (views.jsx:19-27 + Lurker.html:254-264)
+export component Segmented inherits Rectangle {
+    in property <[SegmentOption]> options;
+    in-out property <string> value;
+    in property <bool> enabled: true;
+
+    callback selected(string);
+
+    private property <length> inner-padding: 3px;
+
+    min-height: 34px;
+    preferred-height: 34px;
+    horizontal-stretch: 0;
+    border-radius: 8px;
+    border-width: 0.5px;
+    border-color: UiTheme.line-strong;
+    background: UiTheme.bg-0;
+
+    HorizontalLayout {
+        padding: root.inner-padding;
+        spacing: 2px;
+
+        for opt[i] in root.options: Rectangle {
+            private property <bool> on: root.value == opt.value;
+
+            horizontal-stretch: 0;
+            min-width: 80px;
+            border-radius: 6px;
+            background: on ? UiTheme.bg-2 : transparent;
+            border-width: on ? 0.5px : 0px;
+            border-color: UiTheme.line-strong;
+
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                alignment: center;
+                lbl := Text {
+                    text: opt.label;
+                    font-size: 12px;
+                    font-weight: 500;
+                    font-family: "Inter Tight";
+                    color: on ? UiTheme.fg-0 : (t.has-hover ? UiTheme.fg-0 : UiTheme.fg-2);
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+            }
+
+            t := TouchArea {
+                enabled: root.enabled;
+                clicked => {
+                    root.value = opt.value;
+                    root.selected(opt.value);
+                }
+            }
+        }
+    }
+}
+
+// ── Field ── label + optional hint + child slot.
+// Caller passes the input as @children.
+export component Field {
+    in property <string> label;
+    in property <string> hint;
+    in property <bool> required: false;
+
+    VerticalLayout {
+        spacing: 6px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            spacing: 8px;
+
+            HorizontalLayout {
+                alignment: start;
+                spacing: 6px;
+
+                Text {
+                    text: root.label;
+                    font-size: 12px;
+                    font-weight: 500;
+                    font-family: "Inter Tight";
+                    color: UiTheme.fg-1;
+                    vertical-alignment: center;
+                }
+
+                if root.required: Text {
+                    text: "required";
+                    font-size: 10px;
+                    font-family: "JetBrains Mono";
+                    color: UiTheme.accent;
+                    vertical-alignment: center;
+                }
+            }
+
+            if root.hint != "": Text {
+                text: root.hint;
+                font-size: 11px;
+                font-family: "JetBrains Mono";
+                color: UiTheme.fg-3;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        @children
+    }
+}
+
+// ── Card ── (Lurker.html:194-198) rounded bg-1 container.
+// Background is drawn by the first CardSection and the overall rounded
+// border comes from the outer Rectangle that wraps the Card at the use
+// site (see views). This keeps Card purely a vertical stacker.
+export component Card inherits VerticalLayout {
+    @children
+}
+
+// ── CardSection ── (Lurker.html:199-203) padded row, top-divider when not first
+export component CardSection inherits VerticalLayout {
+    in property <bool> top-divider: true;
+
+    padding-left: UiTheme.s5;
+    padding-right: UiTheme.s5;
+    padding-top: UiTheme.s4;
+    padding-bottom: UiTheme.s4;
+    spacing: 0;
+
+    if top-divider: Rectangle {
+        height: 0.5px;
+        background: UiTheme.line;
+    }
+
+    @children
+}
+
+// ── CardFoot ── (Lurker.html:310-316) bottom strip: bg-0, top-border, flex-between
+export component CardFoot inherits HorizontalLayout {
+    // Top border drawn as a thin Rectangle child occupying 0 width (sibling strip)
+    // not feasible inside HorizontalLayout, so callers get a divider via the
+    // preceding CardSection. The visible separation is fine given the bg-0 fill.
+    padding-left: UiTheme.s5;
+    padding-right: UiTheme.s5;
+    padding-top: UiTheme.s3;
+    padding-bottom: UiTheme.s3;
+    alignment: space-between;
+    spacing: UiTheme.s4;
+
+    @children
+}
+
+// ── SectionHead ── (.sec-head .sec-title .sec-hint)
+export component SectionHead {
+    in property <string> title;
+    in property <string> hint;
+
+    HorizontalLayout {
+        padding-bottom: UiTheme.s3;
+        alignment: space-between;
+        spacing: UiTheme.s2;
+
+        Text {
+            text: root.title;
+            font-size: 11px;
+            font-weight: 600;
+            font-family: "Inter Tight";
+            letter-spacing: 1.32px;   // 0.12em on 11px ≈ 1.32px
+            color: UiTheme.fg-3;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            // uppercase performed at caller (Slint has no text-transform)
+        }
+
+        if root.hint != "": Text {
+            text: root.hint;
+            font-size: 11px;
+            font-family: "Inter Tight";
+            color: UiTheme.fg-3;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+        }
+    }
+}
+
+// ── Toast data struct — one row of the toasts queue
+export struct ToastData {
+    id: int,
+    kind: string,     // "ok" | "err" | "info"
+    title: string,
+    detail: string,
+    opacity: float,   // 0..1, animated by Rust-driven single-shot timers
+}
+
+// ── Toast ── (Lurker.html:368-383)
+export component Toast inherits Rectangle {
+    in property <ToastData> data;
+
+    private property <brush> dot-color:
+        data.kind == "err"  ? UiTheme.danger
+        : data.kind == "info" ? UiTheme.accent
+        : UiTheme.ok;
+
+    min-width: 260px;
+    preferred-height: 56px;
+    border-radius: 10px;
+    border-width: 0.5px;
+    border-color: UiTheme.line-strong;
+    background: UiTheme.bg-2;
+    drop-shadow-blur: 40px;
+    drop-shadow-offset-y: 12px;
+    drop-shadow-color: #00000066;
+    opacity: data.opacity;
+
+    animate opacity { duration: 200ms; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 10px;
+        alignment: start;
+
+        dot := Rectangle {
+            width: 8px;
+            height: 8px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 999px;
+            background: dot-color;
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+            horizontal-stretch: 1;
+
+            Text {
+                text: root.data.title;
+                font-size: 12.5px;
+                font-weight: 500;
+                font-family: "Inter Tight";
+                color: UiTheme.fg-0;
+            }
+
+            if root.data.detail != "": Text {
+                text: root.data.detail;
+                font-size: 11px;
+                font-family: "JetBrains Mono";
+                color: UiTheme.fg-3;
+            }
+        }
+    }
+}

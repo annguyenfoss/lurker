@@ -1,0 +1,198 @@
+// VolumeRow — mounted-volume card with inline unmount action (views.jsx:572-640)
+
+import { UiTheme } from "../theme.slint";
+import { PillSurface } from "primitives.slint";
+import { ActionButton } from "inputs.slint";
+
+export struct VolumeRowData {
+    name: string,
+    source: string,
+    mount: string,
+    readonly: bool,
+    cipher: string,
+    source-kind: string,
+}
+
+export component VolumeRow inherits Rectangle {
+    in property <VolumeRowData> data;
+    in-out property <bool> expanded: false;
+    in property <bool> enabled: true;
+
+    callback clicked;
+    callback unmount-clicked;
+
+    min-height: 54px;
+    border-width: 0.5px;
+    border-color: root.expanded ? UiTheme.accent : UiTheme.line-strong;
+    border-radius: UiTheme.radius;
+    background: root.expanded
+        ? UiTheme.accent-soft
+        : (t.has-hover ? UiTheme.bg-2 : UiTheme.bg-0);
+
+    VerticalLayout {
+        spacing: 0;
+
+        // ── Top row — always visible (54px tall)
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 14px;
+            alignment: start;
+
+            // Icon tile (accent-soft 32×32 with LockOpen)
+            icon-tile := Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 8px;
+                background: UiTheme.accent-soft;
+                Image {
+                    source: @image-url("../icons/lock-open.svg");
+                    width: 14px;
+                    height: 14px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: UiTheme.accent-2;
+                }
+            }
+
+            // Name + source→mount (stretches)
+            VerticalLayout {
+                spacing: 2px;
+                alignment: center;
+                horizontal-stretch: 1;
+
+                Text {
+                    text: root.data.name;
+                    font-size: 13px;
+                    font-weight: 600;
+                    font-family: "JetBrains Mono";
+                    color: UiTheme.fg-0;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: root.data.source + "  →  " + root.data.mount;
+                    font-size: 11px;
+                    font-family: "JetBrains Mono";
+                    color: UiTheme.fg-3;
+                    overflow: elide;
+                }
+            }
+
+            // RO/RW badge (dot + text)
+            HorizontalLayout {
+                spacing: 5px;
+                alignment: center;
+                Rectangle {
+                    width: 5px;
+                    height: 5px;
+                    border-radius: 999px;
+                    background: root.data.readonly ? UiTheme.warn : UiTheme.ok;
+                }
+                Text {
+                    text: root.data.readonly ? "RO" : "RW";
+                    font-size: 10.5px;
+                    font-weight: 500;
+                    font-family: "JetBrains Mono";
+                    letter-spacing: 0.84px;
+                    color: root.data.readonly ? UiTheme.warn : UiTheme.ok;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Chevron — source swap instead of rotation
+            Image {
+                source: root.expanded
+                    ? @image-url("../icons/chevron-down.svg")
+                    : @image-url("../icons/chevron.svg");
+                width: 12px;
+                height: 12px;
+                colorize: UiTheme.fg-3;
+                opacity: 0.6;
+            }
+        }
+
+        // ── Expanded detail section
+        if root.expanded: Rectangle {
+            height: 0.5px;
+            background: UiTheme.line;
+        }
+
+        if root.expanded: HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 16px;
+            alignment: space-between;
+
+            // KV column
+            VerticalLayout {
+                spacing: 4px;
+                horizontal-stretch: 1;
+
+                if root.data.cipher != "": HorizontalLayout {
+                    spacing: 14px;
+                    Text {
+                        text: "cipher";
+                        font-size: 11.5px;
+                        font-family: "JetBrains Mono";
+                        color: UiTheme.fg-3;
+                        min-width: 56px;
+                    }
+                    Text {
+                        text: root.data.cipher;
+                        font-size: 11.5px;
+                        font-family: "JetBrains Mono";
+                        color: UiTheme.fg-1;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 14px;
+                    Text {
+                        text: "mode";
+                        font-size: 11.5px;
+                        font-family: "JetBrains Mono";
+                        color: UiTheme.fg-3;
+                        min-width: 56px;
+                    }
+                    Text {
+                        text: root.data.readonly ? "read-only" : "read/write";
+                        font-size: 11.5px;
+                        font-family: "JetBrains Mono";
+                        color: UiTheme.fg-1;
+                    }
+                }
+            }
+
+            ActionButton {
+                text: "Unmount & lock";
+                tone: "primary";
+                icon: @image-url("../icons/eject.svg");
+                has-icon: true;
+                clicked => { root.unmount-clicked(); }
+            }
+        }
+    }
+
+    t := TouchArea {
+        enabled: root.enabled && !root.expanded;
+        clicked => {
+            root.expanded = !root.expanded;
+            root.clicked();
+        }
+    }
+
+    // When expanded, the touch-area over the top row to allow collapse
+    if root.expanded: TouchArea {
+        height: 54px;
+        y: 0;
+        clicked => {
+            root.expanded = false;
+            root.clicked();
+        }
+    }
+}

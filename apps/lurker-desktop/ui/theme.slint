@@ -1,8 +1,40 @@
+// Design tokens for the Lurker desktop reskin.
+//
+// Colors are authored in OKLCH via Slint's native oklch() macro — the design
+// reference (themes/Lurker.html) uses OKLCH so this preserves fidelity across
+// the accent red-orange hue 25° and the low-chroma neutrals.
+//
+// Slint's oklch argument convention: oklch(L%, C%, H-deg[, A%]) where chroma
+// % maps at 0.004-per-percent (CSS chroma 0.20 == Slint 50%, 0.14 == 35%,
+// 0.004 == 1%, etc).
+
 import { Palette } from "std-widgets.slint";
 
 export global UiTheme {
-    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    // Theme mode selector (driven from MainWindow.theme-mode)
+    in property <string> mode: "system";
+    out property <bool> dark:
+        root.mode == "dark"
+        || (root.mode == "system" && Palette.color-scheme == ColorScheme.dark);
 
+    // ── Geometry tokens (design: Lurker.html:25-34, 74-83) ────────────────
+    out property <length> radius: 10px;
+    out property <length> radius-sm: 6px;
+    out property <length> radius-lg: 14px;
+    out property <length> s1: 4px;
+    out property <length> s2: 8px;
+    out property <length> s3: 12px;
+    out property <length> s4: 16px;
+    out property <length> s5: 24px;
+    out property <length> s6: 32px;
+
+    // Layout tokens
+    out property <length> sidebar-width: 220px;
+    out property <length> main-min-width: 1180px;
+    out property <length> control-min-height: 32px;
+
+    // Legacy geometry aliases (keep so existing app-window.slint compiles
+    // during migration; removed in Step 8 after layout rewrite lands).
     out property <length> outer-padding: 24px;
     out property <length> shell-gap: 18px;
     out property <length> panel-padding: 22px;
@@ -11,45 +43,86 @@ export global UiTheme {
     out property <length> control-gap: 12px;
     out property <length> control-padding-x: 16px;
     out property <length> control-padding-y: 12px;
-    out property <length> control-min-height: 48px;
+    out property <length> rail-width: 178px;
+    out property <length> inspector-width: 360px;
+    out property <length> dock-height: 92px;
     out property <length> panel-radius: 28px;
     out property <length> surface-radius: 24px;
     out property <length> card-radius: 18px;
     out property <length> pill-radius: 999px;
-    out property <length> rail-width: 178px;
-    out property <length> inspector-width: 360px;
-    out property <length> dock-height: 92px;
 
-    out property <brush> window-background: dark ? #08121d : #eff5fa;
-    out property <brush> ambient-primary: transparent;
+    // ── Accent family (design: Lurker.html:13-19) ─────────────────────────
+    out property <brush> accent:      oklch(55%, 50%, 25deg);
+    out property <brush> accent-2:    oklch(65%, 50%, 25deg);
+    out property <brush> accent-dim:  oklch(38%, 30%, 25deg);
+    out property <brush> accent-soft: oklch(55%, 50%, 25deg, 12%);
+    out property <brush> accent-fg:   oklch(99%,  1%, 25deg);
+
+    // Status
+    out property <brush> danger: oklch(58%, 50%, 25deg);
+    out property <brush> warn:   oklch(70%, 35%, 75deg);
+    out property <brush> ok:     oklch(60%, 35%, 155deg);
+
+    // ── Dark theme (design: Lurker.html:41-55) ────────────────────────────
+    out property <brush> bg-0:
+        dark ? oklch(10%,  0%,   0deg)  : oklch(100%, 0%,   0deg);
+    out property <brush> bg-1:
+        dark ? oklch(14%,  1%,  25deg)  : oklch(98%,  0.5%, 25deg);
+    out property <brush> bg-2:
+        dark ? oklch(18%,  1.5%, 25deg) : oklch(95%,  1%,   25deg);
+    out property <brush> bg-3:
+        dark ? oklch(23%,  2%,  25deg)  : oklch(91%,  1.5%, 25deg);
+
+    out property <brush> line:
+        dark ? oklch(28%,  2%,  25deg, 60%) : oklch(82%, 1.5%, 25deg, 70%);
+    out property <brush> line-strong:
+        dark ? oklch(36%,  2.5%, 25deg)     : oklch(72%, 2%,   25deg);
+
+    out property <brush> fg-0:
+        dark ? oklch(98%,  0%,   0deg)  : oklch(12%, 0%,   0deg);
+    out property <brush> fg-1:
+        dark ? oklch(82%,  1%,  25deg)  : oklch(28%, 1.5%, 25deg);
+    out property <brush> fg-2:
+        dark ? oklch(62%,  1.5%, 25deg) : oklch(46%, 2%,   25deg);
+    out property <brush> fg-3:
+        dark ? oklch(46%,  2%,  25deg)  : oklch(62%, 2.5%, 25deg);
+
+    out property <brush> term-bg:
+        dark ? oklch(6%,   0%,   0deg)  : oklch(18%, 1.5%, 25deg);
+
+    // Glow (corner radial gradient — stays accent-tinted regardless of mode)
+    out property <brush> glow-stop: oklch(45%, 50%, 25deg, 22%);
+
+    // ── Legacy aliases (text / surface / border / status) ─────────────────
+    // Keep existing names pointing at equivalent new tokens so the old
+    // app-window.slint keeps rendering during migration.
+    out property <brush> text:        fg-0;
+    out property <brush> text-muted:  fg-2;
+    out property <brush> text-soft:   fg-3;
+
+    out property <brush> window-background: bg-0;
+    out property <brush> rail-surface:      bg-1;
+    out property <brush> surface:           bg-1;
+    out property <brush> surface-2:         bg-2;
+    out property <brush> surface-3:         bg-3;
+    out property <brush> field-fill:        bg-0;
+    out property <brush> field-fill-strong: bg-1;
+    out property <brush> dock-fill:         bg-1;
+
+    out property <brush> border:        line;
+    out property <brush> border-strong: line-strong;
+    out property <brush> divider:       line;
+
+    out property <brush> ambient-primary:   transparent;
     out property <brush> ambient-secondary: transparent;
 
-    out property <brush> rail-surface: dark ? #0b1623 : #fbfdff;
-    out property <brush> surface: dark ? #0e1927 : #ffffff;
-    out property <brush> surface-2: dark ? #132132 : #f6f9fc;
-    out property <brush> surface-3: dark ? #12253cff : #eff5fa;
-    out property <brush> field-fill: dark ? #0b1827 : #f4f8fb;
-    out property <brush> field-fill-strong: dark ? #0f2237 : #ffffff;
-    out property <brush> dock-fill: dark ? #0b1623 : #f7fafc;
+    out property <brush> accent-strong:     accent-2;
+    out property <brush> accent-border:     line-strong;
+    out property <brush> accent-foreground: accent-fg;
 
-    out property <brush> border: dark ? #19324b : #d5e1ea;
-    out property <brush> border-strong: dark ? #2b597d : #aacbe1;
-    out property <brush> divider: dark ? #13283d : #e5edf3;
-
-    out property <brush> text: dark ? #f3fbff : #0c1724;
-    out property <brush> text-muted: dark ? #9bb2c7 : #61788a;
-    out property <brush> text-soft: dark ? #7390a9 : #7d92a3;
-
-    out property <brush> accent: dark ? #53d7ff : #0f9ed8;
-    out property <brush> accent-strong: dark ? #90edff : #0a7fb1;
-    out property <brush> accent-soft: dark ? #163044 : #dff1fa;
-    out property <brush> accent-border: dark ? #2f6c8b : #8bd4f2;
-    out property <brush> accent-foreground: dark ? #02131a : #ffffff;
-
-    out property <brush> success: dark ? #35d5a2 : #0f9c71;
-    out property <brush> success-soft: dark ? #163428 : #def5ec;
-    out property <brush> warning: dark ? #ffc064 : #d97706;
-    out property <brush> warning-soft: dark ? #3b2a12 : #ffedd5;
-    out property <brush> danger: dark ? #ff7b7b : #c24141;
-    out property <brush> danger-soft: dark ? #3a1b22 : #fee2e2;
+    out property <brush> success:      ok;
+    out property <brush> success-soft: oklch(60%, 35%, 155deg, 15%);
+    out property <brush> warning:      warn;
+    out property <brush> warning-soft: oklch(70%, 35%,  75deg, 15%);
+    out property <brush> danger-soft:  oklch(58%, 50%,  25deg, 15%);
 }

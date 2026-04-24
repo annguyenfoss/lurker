@@ -157,6 +157,7 @@ fn mount_device(ctx: &mut AppContext, command: MountCommand) -> AppResult<()> {
                     &command.source,
                     &command.mountpoint,
                     command.passphrase.as_deref(),
+                    command.readonly,
                 )
             } else {
                 ctx.notice_veracrypt_fallback();
@@ -165,6 +166,7 @@ fn mount_device(ctx: &mut AppContext, command: MountCommand) -> AppResult<()> {
                     &command.source,
                     &command.mountpoint,
                     command.passphrase.as_deref(),
+                    command.readonly,
                 )
             }
         }
@@ -174,6 +176,7 @@ fn mount_device(ctx: &mut AppContext, command: MountCommand) -> AppResult<()> {
             &command.mountpoint,
             command.tag.as_deref(),
             command.passphrase.as_deref(),
+            command.readonly,
         ),
         VolumeType::Auto => Err(AppError::new("Unsupported volume type: auto")),
     }
@@ -553,6 +556,7 @@ fn luks_mount_device(
     mountpoint: &Path,
     tag_override: Option<&str>,
     passphrase: Option<&str>,
+    readonly: bool,
 ) -> AppResult<()> {
     require_passphrase(passphrase)?;
     let mapper_name = mapper_name_for_source(source_path, tag_override)?;
@@ -570,7 +574,7 @@ fn luks_mount_device(
         mapper_device_path(&mapper_name).display()
     ));
     luks_open(ctx, source_path, &mapper_name, passphrase, profile)?;
-    mount_open_mapper(ctx, &mapper_name, mountpoint)?;
+    mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
 
     ctx.output.success(&format!(
@@ -587,6 +591,7 @@ fn tcrypt_mount_device(
     source_path: &Path,
     mountpoint: &Path,
     passphrase: Option<&str>,
+    readonly: bool,
 ) -> AppResult<()> {
     require_passphrase(passphrase)?;
     let mapper_name = mapper_name_for_source(source_path, None)?;
@@ -601,7 +606,7 @@ fn tcrypt_mount_device(
         mapper_device_path(&mapper_name).display()
     ));
     tcrypt_open(ctx, source_path, &mapper_name, passphrase)?;
-    mount_open_mapper(ctx, &mapper_name, mountpoint)?;
+    mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
 
     ctx.output.success(&format!(
@@ -618,6 +623,7 @@ fn veracrypt_mount_device(
     source_path: &Path,
     mountpoint: &Path,
     passphrase: Option<&str>,
+    readonly: bool,
 ) -> AppResult<()> {
     require_passphrase(passphrase)?;
     ctx.output.msg(&format!(
@@ -635,6 +641,9 @@ fn veracrypt_mount_device(
         source_path.as_os_str().to_os_string(),
         mountpoint.as_os_str().to_os_string(),
     ];
+    if readonly {
+        args.insert(0, OsString::from("--mount-options=ro"));
+    }
     if let Some(passphrase) = passphrase {
         args.insert(6, OsString::from("--non-interactive"));
         args.insert(7, OsString::from("--stdin"));
@@ -1093,7 +1102,12 @@ fn detect_filesystem_type(ctx: &mut AppContext, device_path: &Path) -> AppResult
     Ok(None)
 }
 
-fn mount_open_mapper(ctx: &mut AppContext, mapper_name: &str, mountpoint: &Path) -> AppResult<()> {
+fn mount_open_mapper(
+    ctx: &mut AppContext,
+    mapper_name: &str,
+    mountpoint: &Path,
+    readonly: bool,
+) -> AppResult<()> {
     let mapper_path = mapper_device_path(mapper_name);
     let filesystem_type = detect_filesystem_type(ctx, &mapper_path)?;
     if let Some(filesystem_type) = &filesystem_type {
@@ -1108,13 +1122,20 @@ fn mount_open_mapper(ctx: &mut AppContext, mapper_name: &str, mountpoint: &Path)
     ctx.output
         .msg2(&format!("Mounting filesystem at {}", mountpoint.display()));
     let mut args = Vec::new();
+    let mut options: Vec<String> = Vec::new();
     if filesystem_type
         .as_deref()
         .map(|value| value.eq_ignore_ascii_case("btrfs"))
         .unwrap_or(false)
     {
+        options.push("compress=zstd".into());
+    }
+    if readonly {
+        options.push("ro".into());
+    }
+    if !options.is_empty() {
         args.push(OsString::from("-o"));
-        args.push(OsString::from("compress=zstd"));
+        args.push(OsString::from(options.join(",")));
     }
     args.push(mapper_path.as_os_str().to_os_string());
     args.push(mountpoint.as_os_str().to_os_string());

@@ -1,0 +1,320 @@
+// Window chrome: sidebar + nav + main header + brand glyph.
+// Maps to Lurker.html .side / .brand / .nav / .main-hd / .side-foot sections.
+
+import { UiTheme } from "../theme.slint";
+import { Divider, PillSurface, IconAction } from "primitives.slint";
+
+// ── BrandGlyph ── (Lurker.html:124-130) 28×28 radial-gradient accent tile
+// with inset 0.5px highlight + shield icon centered.
+export component BrandGlyph inherits Rectangle {
+    in property <length> tile-size: 28px;
+    width: tile-size;
+    height: tile-size;
+    border-radius: 8px;
+    background: @radial-gradient(circle, UiTheme.accent-2 0%, UiTheme.accent 100%);
+    drop-shadow-blur: 18px;
+    drop-shadow-offset-y: 6px;
+    drop-shadow-color: #a63d1f59;
+
+    // Inset highlight
+    Rectangle {
+        x: 0.5px;
+        y: 0.5px;
+        width: parent.width - 1px;
+        height: parent.height - 1px;
+        border-radius: 7.5px;
+        border-width: 0.5px;
+        border-color: oklch(92%, 12.5%, 25deg, 50%);
+        background: transparent;
+    }
+
+    Image {
+        source: @image-url("../icons/shield.svg");
+        width: 14px;
+        height: 14px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: UiTheme.accent-fg;
+    }
+}
+
+// ── NavItem ── (Lurker.html:138-155) sidebar navigation row
+export component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <string> kbd;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+
+    callback clicked;
+
+    min-height: 32px;
+    preferred-height: 32px;
+    border-radius: 8px;
+    border-width: 0.5px;
+    border-color: active ? UiTheme.line-strong : transparent;
+    background: active
+        ? UiTheme.accent-soft
+        : (t.has-hover ? UiTheme.bg-2 : transparent);
+
+    // Active left stripe (2px accent) — design: .nav-item[data-active="true"]::before
+    if active: Rectangle {
+        x: -1px;
+        y: 10px;
+        width: 2px;
+        height: parent.height - 20px;
+        border-radius: 2px;
+        background: UiTheme.accent;
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+        alignment: start;
+
+        Image {
+            source: root.icon;
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            colorize: active ? UiTheme.accent : UiTheme.fg-2;
+        }
+
+        Text {
+            text: root.label;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: "Inter Tight";
+            color: active ? UiTheme.fg-0 : UiTheme.fg-1;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        if root.kbd != "": Rectangle {
+            y: (parent.height - self.height) / 2;
+            width: kbd-text.preferred-width + 10px;
+            height: 18px;
+            border-radius: 4px;
+            border-width: active ? 0px : 0.5px;
+            border-color: UiTheme.line;
+            background: active ? transparent : UiTheme.bg-2;
+            kbd-text := Text {
+                text: root.kbd;
+                font-size: 10px;
+                font-family: "JetBrains Mono";
+                color: UiTheme.fg-3;
+                x: 5px;
+                y: (parent.height - self.height) / 2;
+            }
+        }
+    }
+
+    t := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Sidebar ── brand + nav + foot.
+// Content (nav items + foot) is composed by the caller via @children.
+export component Sidebar inherits Rectangle {
+    in property <string> brand-name: "Lurker";
+    in property <string> brand-tag: "LUKS · VERACRYPT";
+
+    background: UiTheme.bg-1;
+    width: UiTheme.sidebar-width;
+
+    // Right border .5px
+    Rectangle {
+        x: parent.width - 0.5px;
+        y: 0;
+        width: 0.5px;
+        height: parent.height;
+        background: UiTheme.line;
+    }
+
+    VerticalLayout {
+        padding-top: UiTheme.s5;
+        padding-bottom: 0;
+        padding-left: UiTheme.s2;
+        padding-right: UiTheme.s2;
+        spacing: 0;
+        alignment: start;
+
+        // Brand block
+        Rectangle {
+            min-height: 56px;
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                padding-left: UiTheme.s2;
+                padding-right: UiTheme.s2;
+                padding-bottom: UiTheme.s4;
+                spacing: 10px;
+                alignment: start;
+
+                BrandGlyph { y: (parent.height - self.height) / 2; }
+
+                VerticalLayout {
+                    spacing: 2px;
+                    alignment: center;
+                    Text {
+                        text: root.brand-name;
+                        font-size: 15px;
+                        font-weight: 600;
+                        font-family: "Inter Tight";
+                        letter-spacing: -0.15px;
+                        color: UiTheme.fg-0;
+                    }
+                    Text {
+                        text: root.brand-tag;
+                        font-size: 10px;
+                        font-family: "JetBrains Mono";
+                        letter-spacing: 0.4px;
+                        color: UiTheme.fg-3;
+                    }
+                }
+            }
+        }
+
+        @children
+    }
+}
+
+// ── NavLabel ── (Lurker.html:137) uppercase section header in sidebar.
+export component NavLabel inherits Rectangle {
+    in property <string> text;
+    min-height: 24px;
+    HorizontalLayout {
+        padding-left: UiTheme.s3;
+        padding-right: UiTheme.s3;
+        padding-top: UiTheme.s2;
+        padding-bottom: UiTheme.s1;
+        Text {
+            text: root.text;
+            font-size: 10px;
+            font-weight: 600;
+            font-family: "Inter Tight";
+            letter-spacing: 1.0px;    // 0.1em on 10px = 1px
+            color: UiTheme.fg-3;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// ── SideFoot ── (Lurker.html:157-159)
+export component SideFoot inherits Rectangle {
+    in property <int> mounted-count: 0;
+    in property <string> backend: "LINUX";
+
+    min-height: 56px;
+
+    // Top border 0.5px
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: 0.5px;
+        background: UiTheme.line;
+    }
+
+    VerticalLayout {
+        padding-left: UiTheme.s4;
+        padding-right: UiTheme.s4;
+        padding-top: UiTheme.s3;
+        padding-bottom: UiTheme.s3;
+        spacing: UiTheme.s1;
+        alignment: center;
+
+        HorizontalLayout {
+            alignment: space-between;
+            spacing: UiTheme.s2;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+
+                Rectangle {
+                    width: 6px;
+                    height: 6px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 999px;
+                    background: UiTheme.ok;
+                }
+
+                Text {
+                    text: root.mounted-count + (root.mounted-count == 1 ? " mounted" : " mounted");
+                    font-size: 11px;
+                    font-family: "JetBrains Mono";
+                    color: UiTheme.fg-2;
+                    vertical-alignment: center;
+                }
+            }
+
+            Text {
+                text: root.backend;
+                font-size: 11px;
+                font-family: "JetBrains Mono";
+                color: UiTheme.fg-3;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// ── MainHeader ── (Lurker.html:163-173) title + subtitle + actions slot
+// Caller passes action icons via @children; this component handles the
+// title/subtitle stack on the left.
+export component MainHeader inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+
+    min-height: 84px;
+
+    // Bottom border 0.5px
+    Rectangle {
+        x: 0;
+        y: parent.height - 0.5px;
+        width: parent.width;
+        height: 0.5px;
+        background: UiTheme.line;
+    }
+
+    HorizontalLayout {
+        padding-left: UiTheme.s6;
+        padding-right: UiTheme.s6;
+        padding-top: UiTheme.s5;
+        padding-bottom: UiTheme.s4;
+        spacing: UiTheme.s4;
+        alignment: space-between;
+
+        VerticalLayout {
+            spacing: 6px;
+            alignment: end;
+            horizontal-stretch: 1;
+
+            Text {
+                text: root.title;
+                font-size: 22px;
+                font-weight: 600;
+                font-family: "Inter Tight";
+                letter-spacing: -0.44px;   // -0.02em on 22px
+                color: UiTheme.fg-0;
+            }
+
+            Text {
+                text: root.subtitle;
+                font-size: 13px;
+                font-family: "Inter Tight";
+                color: UiTheme.fg-2;
+                wrap: word-wrap;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: end;
+            @children
+        }
+    }
+}

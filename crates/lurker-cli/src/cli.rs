@@ -454,6 +454,7 @@ where
                     tag,
                     volume_type,
                     passphrase: None,
+                    readonly: false,
                 }),
             }))
         }
