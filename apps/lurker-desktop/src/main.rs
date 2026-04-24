@@ -1,11 +1,13 @@
 mod helper;
 mod logic;
+mod preferences;
 
 use crate::helper::{resolve_helper_path, run_helper};
 use crate::logic::{
-    active_volume_items, build_create_command, build_mount_command, build_unmount_command,
+    active_volume_cards, build_create_command, build_mount_command, build_unmount_command,
     response_error, suggested_unmount_target,
 };
+use crate::preferences::{load_preferences, save_preferences, TaskMode, ThemeMode, UiPreferences};
 use lurker_core::{list_active_volumes, ActiveVolume, CommandAction};
 use slint::{BackendSelector, ComponentHandle, ModelRc, VecModel, Weak};
 use std::path::PathBuf;
@@ -26,6 +28,7 @@ struct AppState {
     helper_path: Option<PathBuf>,
     helper_error: Option<String>,
     active_volumes: Arc<Mutex<Vec<ActiveVolume>>>,
+    preferences: Arc<Mutex<UiPreferences>>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,14 +39,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let window = MainWindow::new()?;
     let helper_path = resolve_helper_path();
+    let preferences = load_preferences();
     let state = AppState {
         window: window.as_weak(),
         helper_path: helper_path.as_ref().ok().cloned(),
         helper_error: helper_path.err(),
         active_volumes: Arc::new(Mutex::new(Vec::new())),
+        preferences: Arc::new(Mutex::new(preferences.clone())),
     };
 
-    apply_zoom(&window, DEFAULT_UI_SCALE);
+    apply_preferences(&window, &preferences);
     bind_callbacks(&window, &state);
     state.refresh_active_volumes(false);
     window.run()?;
@@ -52,28 +57,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn bind_callbacks(window: &MainWindow, state: &AppState) {
     let zoom_in_window = window.as_weak();
+    let zoom_in_state = state.clone();
     window.on_zoom_in(move || {
         with_zoom(&zoom_in_window, |scale| {
             (scale + UI_SCALE_STEP).min(MAX_UI_SCALE)
-        })
+        });
+        zoom_in_state.sync_preferences_from_window();
     });
 
     let zoom_out_window = window.as_weak();
+    let zoom_out_state = state.clone();
     window.on_zoom_out(move || {
         with_zoom(&zoom_out_window, |scale| {
             (scale - UI_SCALE_STEP).max(MIN_UI_SCALE)
-        })
+        });
+        zoom_out_state.sync_preferences_from_window();
     });
 
     let zoom_reset_window = window.as_weak();
+    let zoom_reset_state = state.clone();
     window.on_zoom_reset(move || {
         if let Some(window) = zoom_reset_window.upgrade() {
             apply_zoom(&window, DEFAULT_UI_SCALE);
         }
+        zoom_reset_state.sync_preferences_from_window();
     });
 
     let refresh_state = state.clone();
     window.on_refresh_volumes(move || refresh_state.refresh_active_volumes(true));
+
+    let theme_state = state.clone();
+    window.on_theme_mode_changed(move |_| theme_state.sync_preferences_from_window());
+
+    let task_state = state.clone();
+    window.on_task_mode_changed(move |_| task_state.sync_preferences_from_window());
 
     let selection_state = state.clone();
     window.on_active_volume_picked(move |index| selection_state.prefill_unmount_target(index));
@@ -156,6 +173,25 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
 }
 
 impl AppState {
+    fn sync_preferences_from_window(&self) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+
+        let preferences = UiPreferences {
+            ui_scale: window.get_ui_scale(),
+            theme_mode: ThemeMode::parse_ui_value(&window.get_theme_mode()).unwrap_or_default(),
+            last_task: TaskMode::parse_ui_value(&window.get_current_mode()).unwrap_or_default(),
+        }
+        .normalized();
+
+        if let Ok(mut guard) = self.preferences.lock() {
+            *guard = preferences.clone();
+        }
+
+        let _ = save_preferences(&preferences);
+    }
+
     fn refresh_active_volumes(&self, announce: bool) {
         if let Some(window) = self.window.upgrade() {
             if announce {
@@ -206,8 +242,13 @@ impl AppState {
         let target = suggested_unmount_target(volume);
 
         if let Some(window) = self.window.upgrade() {
+            window.set_current_mode(TaskMode::Unmount.as_ui_value().into());
             window.set_unmount_target(target.into());
+            window.set_error_message("".into());
+            window.set_status_message("Unmount target loaded from active volumes.".into());
         }
+
+        self.sync_preferences_from_window();
     }
 
     fn run_operation(
@@ -282,14 +323,22 @@ fn replace_active_volumes(
     window: &MainWindow,
     volumes: Vec<ActiveVolume>,
 ) {
-    let items = active_volume_items(&volumes);
-    let model = Rc::new(VecModel::from(items));
+    let cards = active_volume_cards(&volumes)
+        .into_iter()
+        .map(|card| ActiveVolumeCardData {
+            title: card.title.into(),
+            detail: card.detail.into(),
+            meta: card.meta.into(),
+            badge: card.badge.into(),
+        })
+        .collect::<Vec<_>>();
+    let model = Rc::new(VecModel::from(cards));
 
     if let Ok(mut guard) = store.lock() {
         *guard = volumes;
     }
 
-    window.set_active_volume_items(ModelRc::from(model));
+    window.set_active_volumes(ModelRc::from(model));
 }
 
 fn set_busy(window: &MainWindow, message: &str) {
@@ -335,6 +384,12 @@ fn apply_zoom(window: &MainWindow, scale: f32) {
     let scale = scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE);
     window.set_ui_scale(scale);
     window.set_zoom_label(format!("{}%", (scale * 100.0).round() as i32).into());
+}
+
+fn apply_preferences(window: &MainWindow, preferences: &UiPreferences) {
+    window.set_theme_mode(preferences.theme_mode.as_ui_value().into());
+    window.set_current_mode(preferences.last_task.as_ui_value().into());
+    apply_zoom(window, preferences.ui_scale);
 }
 
 #[cfg(test)]

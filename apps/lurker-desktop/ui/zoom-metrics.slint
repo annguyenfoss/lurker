@@ -1,12 +1,12 @@
-import { HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
-import { ActionButton, LurkerCheckBox, SelectField } from "controls.slint";
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { ActionButton, LurkerCheckBox, SelectField, ThemedLineEdit } from "controls.slint";
 import { UiTheme } from "theme.slint";
 
 export component ZoomMetricsWindow inherits Window {
-    preferred-width: 640px;
-    preferred-height: 360px;
-    min-width: 640px;
-    min-height: 360px;
+    preferred-width: 760px;
+    preferred-height: 420px;
+    min-width: 760px;
+    min-height: 420px;
 
     in-out property <float> ui_scale: 1.0;
     private property <length> body_font_size: 16px * root.ui_scale;
@@ -22,11 +22,11 @@ export component ZoomMetricsWindow inherits Window {
     out property <length> select_ascent: select.label_ascent;
     out property <length> checkbox_ascent: checkbox.label_ascent;
     out property <length> row_ascent: row.label_ascent;
-    out property <length> line_edit_font_size <=> input.font-size;
-    out property <length> line_edit_height: input.preferred-height;
+    out property <length> line_edit_font_size: input.text_input_font_size;
+    out property <length> line_edit_height: input.field_height;
 
     Rectangle {
-        background: #f4f6fa;
+        background: UiTheme.window-background;
 
         VerticalBox {
             padding: UiTheme.panel-padding;
@@ -36,13 +36,13 @@ export component ZoomMetricsWindow inherits Window {
                 text: "Zoom Metrics";
                 font-size: root.title_font_size;
                 font-weight: 700;
-                color: #111827;
+                color: UiTheme.text;
             }
 
             body := Text {
                 text: "Body text";
                 font-size: root.body_font_size;
-                color: #111827;
+                color: UiTheme.text;
             }
 
             HorizontalBox {
@@ -65,10 +65,9 @@ export component ZoomMetricsWindow inherits Window {
                 text_size: root.body_font_size;
             }
 
-            input := LineEdit {
+            input := ThemedLineEdit {
                 text: "Input text";
-                font-size: root.body_font_size;
-                min-height: max(UiTheme.control-min-height, root.body_font_size + 18px);
+                text_size: root.body_font_size;
             }
 
             row := ActionButton {

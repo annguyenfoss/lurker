@@ -2,8 +2,15 @@ use lurker_core::{
     ActiveVolume, CreateCipher, CreateCommand, MountCommand, OperationResponse, SourceKind,
     UnmountCommand, VolumeType,
 };
-use slint::SharedString;
 use std::path::PathBuf;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActiveVolumeCardView {
+    pub title: String,
+    pub detail: String,
+    pub meta: String,
+    pub badge: String,
+}
 
 pub fn build_create_command(
     target: &str,
@@ -88,16 +95,33 @@ pub fn build_unmount_command(
     })
 }
 
-pub fn active_volume_items(volumes: &[ActiveVolume]) -> Vec<SharedString> {
+pub fn active_volume_cards(volumes: &[ActiveVolume]) -> Vec<ActiveVolumeCardView> {
     volumes
         .iter()
         .map(|volume| {
-            let detail = volume
+            let detail_path = volume
                 .mountpoint
                 .as_ref()
-                .map(|mountpoint| mountpoint.display().to_string())
-                .unwrap_or_else(|| "not mounted".into());
-            SharedString::from(format!("{}    {}", volume.mapper_name, detail))
+                .unwrap_or(&volume.mapper_path)
+                .display()
+                .to_string();
+            let meta = if volume.mountpoint.is_some() {
+                "Mounted volume".to_string()
+            } else {
+                "Mapper path".to_string()
+            };
+            let badge = volume
+                .filesystem_type
+                .as_deref()
+                .unwrap_or("open")
+                .to_ascii_uppercase();
+
+            ActiveVolumeCardView {
+                title: volume.mapper_name.clone(),
+                detail: detail_path,
+                meta,
+                badge,
+            }
         })
         .collect()
 }
@@ -151,7 +175,8 @@ fn parse_create_volume_type(value: &str) -> Result<VolumeType, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_create_command, build_mount_command, build_unmount_command, suggested_unmount_target,
+        active_volume_cards, build_create_command, build_mount_command, build_unmount_command,
+        suggested_unmount_target,
     };
     use lurker_core::{ActiveVolume, CreateCipher, SourceKind, VolumeType};
     use std::path::PathBuf;
@@ -225,5 +250,21 @@ mod tests {
         };
 
         assert_eq!(suggested_unmount_target(&volume), "/mnt/test");
+    }
+
+    #[test]
+    fn active_volume_cards_surface_mountpoint_and_badge() {
+        let cards = active_volume_cards(&[ActiveVolume {
+            mapper_name: "lurker_test".into(),
+            mapper_path: PathBuf::from("/dev/mapper/lurker_test"),
+            mountpoint: Some(PathBuf::from("/mnt/test")),
+            filesystem_type: Some("btrfs".into()),
+        }]);
+
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].title, "lurker_test");
+        assert_eq!(cards[0].detail, "/mnt/test");
+        assert_eq!(cards[0].meta, "Mounted volume");
+        assert_eq!(cards[0].badge, "BTRFS");
     }
 }

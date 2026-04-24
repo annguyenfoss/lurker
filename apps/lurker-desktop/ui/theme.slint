@@ -1,13 +1,55 @@
-export global UiTheme {
-    out property <length> outer-padding: 18px;
-    out property <length> panel-padding: 18px;
-    out property <length> panel-gap: 14px;
-    out property <length> section-gap: 12px;
-    out property <length> item-gap: 8px;
-    out property <length> control-gap: 10px;
+import { Palette } from "std-widgets.slint";
 
-    out property <length> control-padding-x: 14px;
-    out property <length> control-padding-y: 10px;
-    out property <length> control-min-height: 42px;
-    out property <length> panel-radius: 10px;
+export global UiTheme {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    out property <length> outer-padding: 24px;
+    out property <length> shell-gap: 18px;
+    out property <length> panel-padding: 22px;
+    out property <length> section-gap: 18px;
+    out property <length> item-gap: 10px;
+    out property <length> control-gap: 12px;
+    out property <length> control-padding-x: 16px;
+    out property <length> control-padding-y: 12px;
+    out property <length> control-min-height: 48px;
+    out property <length> panel-radius: 28px;
+    out property <length> surface-radius: 24px;
+    out property <length> card-radius: 18px;
+    out property <length> pill-radius: 999px;
+    out property <length> rail-width: 178px;
+    out property <length> inspector-width: 360px;
+    out property <length> dock-height: 92px;
+
+    out property <brush> window-background: dark ? #08121d : #eff5fa;
+    out property <brush> ambient-primary: transparent;
+    out property <brush> ambient-secondary: transparent;
+
+    out property <brush> rail-surface: dark ? #0b1623 : #fbfdff;
+    out property <brush> surface: dark ? #0e1927 : #ffffff;
+    out property <brush> surface-2: dark ? #132132 : #f6f9fc;
+    out property <brush> surface-3: dark ? #12253cff : #eff5fa;
+    out property <brush> field-fill: dark ? #0b1827 : #f4f8fb;
+    out property <brush> field-fill-strong: dark ? #0f2237 : #ffffff;
+    out property <brush> dock-fill: dark ? #0b1623 : #f7fafc;
+
+    out property <brush> border: dark ? #19324b : #d5e1ea;
+    out property <brush> border-strong: dark ? #2b597d : #aacbe1;
+    out property <brush> divider: dark ? #13283d : #e5edf3;
+
+    out property <brush> text: dark ? #f3fbff : #0c1724;
+    out property <brush> text-muted: dark ? #9bb2c7 : #61788a;
+    out property <brush> text-soft: dark ? #7390a9 : #7d92a3;
+
+    out property <brush> accent: dark ? #53d7ff : #0f9ed8;
+    out property <brush> accent-strong: dark ? #90edff : #0a7fb1;
+    out property <brush> accent-soft: dark ? #163044 : #dff1fa;
+    out property <brush> accent-border: dark ? #2f6c8b : #8bd4f2;
+    out property <brush> accent-foreground: dark ? #02131a : #ffffff;
+
+    out property <brush> success: dark ? #35d5a2 : #0f9c71;
+    out property <brush> success-soft: dark ? #163428 : #def5ec;
+    out property <brush> warning: dark ? #ffc064 : #d97706;
+    out property <brush> warning-soft: dark ? #3b2a12 : #ffedd5;
+    out property <brush> danger: dark ? #ff7b7b : #c24141;
+    out property <brush> danger-soft: dark ? #3a1b22 : #fee2e2;
 }

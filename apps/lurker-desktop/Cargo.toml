@@ -7,6 +7,7 @@ build = "build.rs"
 
 [dependencies]
 lurker-core.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 slint.workspace = true
 

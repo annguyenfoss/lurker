@@ -1,53 +1,138 @@
 import { HorizontalBox, VerticalBox } from "std-widgets.slint";
 import { UiTheme } from "theme.slint";
 
+export component ThemedLineEdit inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder-text: "";
+    in property <length> text_size: 16px;
+    in property <InputType> input-type: InputType.text;
+    in property <bool> enabled: true;
+    in property <bool> read-only: false;
+    out property <length> label_ascent: placeholder.font-metrics.ascent;
+    out property <length> text_input_font_size: input.font-size;
+    out property <length> field_height: max(UiTheme.control-min-height, root.text_size + 30px);
+
+    private property <length> inner_padding: 16px;
+
+    accessible-role: text-input;
+    accessible-enabled: root.enabled;
+    accessible-value <=> text;
+    accessible-placeholder-text: placeholder-text;
+    accessible-read-only: root.read-only;
+    accessible-action-set-value(v) => { text = v; }
+
+    horizontal-stretch: 1;
+    min-height: max(UiTheme.control-min-height, root.text_size + 30px);
+    border-width: 1px;
+    border-color: input.has-focus ? UiTheme.accent-border : UiTheme.border;
+    border-radius: UiTheme.card-radius;
+    background: root.enabled ? UiTheme.field-fill : UiTheme.surface-3;
+    forward-focus: input;
+
+    placeholder := Text {
+        x: root.inner_padding;
+        y: 0px;
+        width: parent.width - 2 * root.inner_padding;
+        height: parent.height;
+        text: root.placeholder-text;
+        font-size: root.text_size;
+        color: UiTheme.text-soft;
+        vertical-alignment: center;
+        visible: root.text == "";
+        overflow: elide;
+    }
+
+    input := TextInput {
+        x: root.inner_padding;
+        y: 0px;
+        width: parent.width - 2 * root.inner_padding;
+        height: parent.height;
+        font-size: root.text_size;
+        font-weight: 500;
+        color: root.enabled ? UiTheme.text : UiTheme.text-soft;
+        selection-foreground-color: UiTheme.accent-foreground;
+        selection-background-color: UiTheme.accent;
+        vertical-alignment: center;
+        single-line: true;
+        input-type: root.input-type;
+        enabled: root.enabled;
+        read-only: root.read-only;
+        accessible-role: none;
+    }
+
+}
+
 export component ActionButton inherits Rectangle {
     in property <string> text;
     in property <length> text_size: 16px;
     in property <bool> enabled: true;
     in property <bool> primary: false;
     in property <bool> active: false;
+    in property <bool> quiet: false;
+    in property <bool> compact: false;
+    in property <bool> capsule: false;
     in property <bool> left-aligned: false;
     in property <bool> fill-width: false;
     out property <length> label_ascent: label.font-metrics.ascent;
 
     callback clicked;
 
+    private property <bool> emphasized: root.primary || root.active;
+    private property <length> content_padding_x: root.compact ? 12px : UiTheme.control-padding-x;
+    private property <length> content_padding_y: root.compact ? 8px : UiTheme.control-padding-y;
     private property <length> label_height: label.font-metrics.ascent - label.font-metrics.descent;
     private property <brush> fill: !root.enabled
-        ? #e5e7eb
+        ? UiTheme.field-fill
         : touch.pressed
-            ? (root.primary || root.active ? #1d4ed8 : #e5e7eb)
+            ? (
+                root.emphasized
+                    ? UiTheme.accent-strong
+                    : (root.quiet ? UiTheme.accent-soft : UiTheme.surface-3)
+            )
             : touch.has-hover
-                ? (root.primary || root.active ? #2563eb : #f3f4f6)
-                : (root.primary || root.active ? #1f6feb : #ffffff);
-    private property <brush> stroke: root.active ? #2563eb : #d5dbe6;
+                ? (
+                    root.emphasized
+                        ? UiTheme.accent
+                        : (root.quiet ? UiTheme.accent-soft : UiTheme.surface-3)
+                )
+                : (
+                    root.emphasized
+                        ? UiTheme.accent
+                        : (root.quiet ? transparent : UiTheme.field-fill)
+                );
+    private property <brush> stroke: !root.enabled
+        ? UiTheme.border
+        : (
+            root.emphasized
+                ? UiTheme.accent-border
+                : (root.quiet ? transparent : UiTheme.border)
+        );
     private property <brush> foreground: !root.enabled
-        ? #9ca3af
-        : (root.primary || root.active ? #ffffff : #111827);
+        ? UiTheme.text-soft
+        : (root.emphasized ? UiTheme.accent-foreground : UiTheme.text);
 
     horizontal-stretch: root.fill-width ? 1 : 0;
-    preferred-width: label.preferred-width + 2 * UiTheme.control-padding-x;
+    preferred-width: label.preferred-width + 2 * root.content_padding_x;
     preferred-height: max(
-        UiTheme.control-min-height,
-        label_height + 2 * UiTheme.control-padding-y,
+        root.compact ? 38px : UiTheme.control-min-height,
+        label_height + 2 * root.content_padding_y,
     );
     min-height: self.preferred-height;
-    border-width: 1px;
+    border-width: root.quiet && !root.active ? 0px : 1px;
     border-color: root.stroke;
-    border-radius: 8px;
+    border-radius: root.capsule ? UiTheme.pill-radius : UiTheme.card-radius;
     background: root.fill;
 
     HorizontalBox {
-        padding-left: UiTheme.control-padding-x;
-        padding-right: UiTheme.control-padding-x;
-        padding-top: UiTheme.control-padding-y;
-        padding-bottom: UiTheme.control-padding-y;
+        padding-left: root.content_padding_x;
+        padding-right: root.content_padding_x;
+        padding-top: root.content_padding_y;
+        padding-bottom: root.content_padding_y;
 
         label := Text {
             text: root.text;
             font-size: root.text_size;
-            font-weight: root.primary || root.active ? 600 : 500;
+            font-weight: root.emphasized ? 700 : 600;
             color: root.foreground;
             horizontal-stretch: 1;
             horizontal-alignment: root.left-aligned ? left : center;
@@ -72,7 +157,7 @@ export component LurkerCheckBox inherits Rectangle {
     out property <length> label_ascent: label.font-metrics.ascent;
 
     private property <length> label_height: label.font-metrics.ascent - label.font-metrics.descent;
-    private property <length> box_size: max(18px, label_height);
+    private property <length> box_size: max(20px, label_height);
 
     preferred-width: label.preferred-width + box_size + UiTheme.control-gap + 2 * UiTheme.control-padding-x;
     preferred-height: max(
@@ -94,16 +179,21 @@ export component LurkerCheckBox inherits Rectangle {
             height: root.box_size;
             y: max(0px, (parent.height - self.height) / 2);
             border-width: 1px;
-            border-color: !root.enabled ? #c7ccd6 : (root.checked ? #1d4ed8 : #94a3b8);
-            border-radius: 4px;
-            background: !root.enabled ? #f3f4f6 : (root.checked ? #1d4ed8 : #ffffff);
+            border-color: !root.enabled
+                ? UiTheme.border
+                : (root.checked ? UiTheme.accent-border : UiTheme.border);
+            border-radius: 6px;
+            background: !root.enabled
+                ? UiTheme.field-fill
+                : (root.checked ? UiTheme.accent : UiTheme.field-fill-strong);
 
             Text {
                 width: parent.width;
                 height: parent.height;
-                text: root.checked ? "✓" : "";
-                font-size: root.text_size * 0.9;
-                color: #ffffff;
+                text: root.checked ? "x" : "";
+                font-size: root.text_size * 0.82;
+                font-weight: 700;
+                color: UiTheme.accent-foreground;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
@@ -112,7 +202,7 @@ export component LurkerCheckBox inherits Rectangle {
         label := Text {
             text: root.text;
             font-size: root.text_size;
-            color: root.enabled ? #111827 : #9ca3af;
+            color: root.enabled ? UiTheme.text : UiTheme.text-soft;
             horizontal-stretch: 1;
             wrap: word-wrap;
             vertical-alignment: center;
@@ -164,9 +254,10 @@ export component SelectField inherits Rectangle {
     preferred-height: root.collapsed_height + (root.expanded ? root.dropdown_height : 0px);
     min-height: self.preferred-height;
     border-width: 1px;
-    border-color: root.expanded ? #60a5fa : #d5dbe6;
-    border-radius: 8px;
-    background: #ffffff;
+    border-color: root.expanded ? UiTheme.accent-border : UiTheme.border;
+    border-radius: UiTheme.card-radius;
+    background: root.expanded ? UiTheme.surface-3 : UiTheme.field-fill;
+    clip: true;
 
     VerticalBox {
         spacing: 0px;
@@ -185,16 +276,17 @@ export component SelectField inherits Rectangle {
                 current-label := Text {
                     text: root.display_value;
                     font-size: root.text_size;
-                    color: root.enabled ? #111827 : #9ca3af;
+                    color: root.enabled ? UiTheme.text : UiTheme.text-soft;
                     horizontal-stretch: 1;
                     vertical-alignment: center;
                     overflow: elide;
                 }
 
                 Text {
-                    text: root.expanded ? "▴" : "▾";
-                    font-size: root.text_size * 0.95;
-                    color: root.enabled ? #4b5563 : #9ca3af;
+                    text: root.expanded ? "^" : "v";
+                    font-size: root.text_size * 0.8;
+                    font-weight: 700;
+                    color: root.enabled ? UiTheme.text-muted : UiTheme.text-soft;
                     vertical-alignment: center;
                 }
             }
@@ -213,7 +305,7 @@ export component SelectField inherits Rectangle {
 
             Rectangle {
                 height: 1px;
-                background: #dbe3ef;
+                background: UiTheme.divider;
             }
 
             for option[index] in root.model : ActionButton {
@@ -223,6 +315,7 @@ export component SelectField inherits Rectangle {
                 active: option == root.value;
                 left-aligned: true;
                 fill-width: true;
+                quiet: option != root.value;
                 clicked => {
                     root.expanded = false;
                     root.selected(option);
