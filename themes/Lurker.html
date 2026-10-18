@@ -71,47 +71,17 @@
     --titlebar-bot: oklch(93% 0.006 25);
   }
 
-    --radius: 10px;
-    --radius-sm: 6px;
-    --radius-lg: 14px;
-    --density: 1;
-    --s1: calc(4px * var(--density));
-    --s2: calc(8px * var(--density));
-    --s3: calc(12px * var(--density));
-    --s4: calc(16px * var(--density));
-    --s5: calc(24px * var(--density));
-    --s6: calc(32px * var(--density));
-
-    --ui: "Inter Tight", ui-sans-serif, system-ui, -apple-system, sans-serif;
-    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;height:100%;background:var(--bg-0);color:var(--fg-0);font-family:var(--ui);-webkit-font-smoothing:antialiased}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg-0);color:var(--fg-0);font-family:var(--ui);-webkit-font-smoothing:antialiased;overflow:hidden}
   button{font-family:inherit}
   input,textarea,select{font-family:inherit;color:inherit}
 
   /* ─── App shell ─────────────────────────────────────────────── */
-  .app{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg-0);overflow:auto;min-width:1180px}
+  .app{height:100%;display:flex;flex-direction:column;background:var(--bg-0);overflow:hidden;min-width:calc(720px * var(--zoom, 1));zoom:var(--zoom, 1)}
+  /* counter-scale height so visual fill stays 100% at all zooms */
+  @supports (zoom: 1){ .app{ height: calc(100% / var(--zoom, 1)); } }
 
-  .titlebar{
-    height:32px;flex:none;display:flex;align-items:center;justify-content:space-between;
-    padding:0 8px 0 12px;
-    background:linear-gradient(180deg, var(--titlebar-top), var(--titlebar-bot));
-    border-bottom:.5px solid var(--line);
-    -webkit-app-region:drag;user-select:none;
-    font-size:11.5px;color:var(--fg-2);letter-spacing:.02em;
-  }
-  .titlebar .tb-left{display:flex;align-items:center;gap:10px}
-  .titlebar .tb-dot{width:8px;height:8px;border-radius:999px;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-  .titlebar .tb-title{font-weight:500;color:var(--fg-1)}
-  .titlebar .tb-status{font-family:var(--mono);font-size:10.5px;color:var(--fg-3)}
-  .titlebar .tb-ctrls{display:flex;gap:4px;-webkit-app-region:no-drag}
-  .titlebar .tb-btn{width:26px;height:20px;border-radius:4px;border:0;background:transparent;color:var(--fg-2);display:grid;place-items:center;cursor:default}
-  .titlebar .tb-btn:hover{background:var(--bg-3);color:var(--fg-0)}
-  .titlebar .tb-btn.close:hover{background:var(--danger);color:white}
-
-  .body{flex:1;min-height:0;display:grid;grid-template-columns:220px 1fr;gap:0}
+  .body{flex:1;min-height:0;display:grid;grid-template-columns:220px minmax(0, 1fr);gap:0;max-width:1240px;width:100%;margin:0 auto;border-left:.5px solid var(--line);border-right:.5px solid var(--line)}
 
   /* ─── Sidebar ───────────────────────────────────────────────── */
   .side{
@@ -154,9 +124,12 @@
   .nav-kbd{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--fg-3);background:var(--bg-2);border:.5px solid var(--line);padding:1px 5px;border-radius:4px}
   .nav-item[data-active="true"] .nav-kbd{background:transparent}
 
-  .side-foot{margin-top:auto;padding:var(--s3) var(--s4);border-top:.5px solid var(--line);display:flex;flex-direction:column;gap:var(--s1)}
-  .foot-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--fg-2);font-family:var(--mono)}
-  .foot-row .dot{width:6px;height:6px;border-radius:999px;background:var(--ok);box-shadow:0 0 0 3px oklch(60% 0.14 155 / .18)}
+  .side-status{
+    margin-top:var(--s3);padding:0 var(--s4);
+    display:flex;align-items:center;gap:8px;
+    font-size:11px;color:var(--fg-2);font-family:var(--mono);letter-spacing:.02em;
+  }
+  .side-status-dot{width:6px;height:6px;border-radius:999px;background:var(--ok);box-shadow:0 0 0 3px oklch(60% 0.14 155 / .18);flex:none}
 
   /* ─── Main workspace ───────────────────────────────────────── */
   .main{display:flex;flex-direction:column;min-height:0;background:var(--bg-0);overflow:hidden}
@@ -188,10 +161,33 @@
   .icon-round:hover{background:var(--bg-3);color:var(--fg-0)}
   .icon-round svg{width:15px;height:15px}
 
+  /* Zoom pill stepper — Telegram-style, in the main header */
+  .zoom-pill{
+    display:inline-flex;align-items:center;height:34px;
+    background:var(--bg-2);border:.5px solid var(--line-strong);border-radius:999px;
+    padding:0 2px;gap:0;
+  }
+  .zoom-pill .zp-btn{
+    appearance:none;border:0;background:transparent;color:var(--fg-2);
+    width:30px;height:30px;border-radius:999px;display:grid;place-items:center;cursor:default;
+    transition:background .12s, color .12s;flex:none;
+  }
+  .zoom-pill .zp-btn:hover:not(:disabled){background:var(--bg-3);color:var(--fg-0)}
+  .zoom-pill .zp-btn:disabled{opacity:.35;cursor:not-allowed}
+  .zoom-pill .zp-btn svg{width:13px;height:13px}
+  .zoom-pill .zp-val{
+    appearance:none;border:0;background:transparent;color:var(--fg-1);
+    min-width:44px;height:30px;padding:0 2px;border-radius:6px;cursor:default;
+    font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.01em;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .zoom-pill .zp-val:hover{background:var(--bg-3);color:var(--fg-0)}
+  .zoom-pill .zp-val[data-reset="true"]{color:var(--accent)}
+
   .main-scroll{flex:1;min-height:0;overflow:auto;padding:var(--s5) var(--s6) var(--s6)}
 
-  /* Centered content column — keeps inputs readable on wide/4K displays */
-  .work-wrap{max-width:720px;margin:0 auto;width:100%}
+  /* Content column — naturally sized inside the capped body */
+  .work-wrap{max-width:820px;width:100%;margin:0 auto}
   .main-hd .work-wrap{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--s4)}
 
   /* ─── Form card ────────────────────────────────────────────── */
@@ -201,9 +197,9 @@
   }
   .card-section{padding:var(--s4) var(--s5)}
   .card-section + .card-section{border-top:.5px solid var(--line)}
-  .sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s3)}
-  .sec-title{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-3)}
-  .sec-hint{font-size:11px;color:var(--fg-3)}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s4);margin-bottom:var(--s3);flex-wrap:wrap}
+  .sec-title{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-3);white-space:nowrap}
+  .sec-hint{font-size:11px;color:var(--fg-3);text-align:right;white-space:nowrap}
 
   .field{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--s4);min-width:0;max-width:100%}
   .field > *{max-width:100%;box-sizing:border-box}
@@ -250,15 +246,15 @@
     cursor:default;transition:border-color .15s, background .15s;
   }
   .drop:hover,.drop[data-drag="true"]{border-color:var(--accent);background:var(--bg-1)}
-  .drop-t{font-size:13px;color:var(--fg-1);font-weight:500}
-  .drop-s{font-size:11.5px;color:var(--fg-3);font-family:var(--mono)}
+  .drop-t{font-size:13px;color:var(--fg-1);font-weight:500;white-space:nowrap}
+  .drop-s{font-size:11.5px;color:var(--fg-3);font-family:var(--mono);white-space:nowrap}
   .drop svg{width:22px;height:22px;color:var(--fg-2)}
 
   /* Segmented */
-  .seg{display:inline-flex;background:var(--bg-0);border:.5px solid var(--line-strong);border-radius:8px;padding:3px;gap:2px}
+  .seg{display:flex;background:var(--bg-0);border:.5px solid var(--line-strong);border-radius:8px;padding:3px;gap:2px;max-width:100%}
   .seg button{
     appearance:none;border:0;background:transparent;color:var(--fg-2);font-size:12px;font-weight:500;
-    padding:6px 14px;border-radius:6px;cursor:default;font-family:inherit;min-width:80px;
+    padding:8px 14px;border-radius:6px;cursor:default;font-family:inherit;flex:1;white-space:nowrap;min-width:0;
   }
   .seg button:hover{color:var(--fg-0)}
   .seg button[data-on="true"]{
@@ -287,10 +283,58 @@
   .meter i[data-on="3"]{background:var(--accent)}
   .meter i[data-on="4"]{background:var(--ok)}
 
+  /* Device picker (custom dropdown) */
+  .devpick{position:relative;width:100%}
+  .devpick-btn{
+    width:100%;display:flex;align-items:center;gap:10px;
+    background:var(--bg-0);border:.5px solid var(--line-strong);border-radius:var(--radius-sm);
+    padding:10px 12px;min-height:38px;cursor:default;text-align:left;color:var(--fg-1);
+    font-family:var(--mono);font-size:13px;
+  }
+  .devpick-btn:hover{border-color:var(--fg-3)}
+  .devpick-btn[data-open="true"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .devpick-btn .dev-glyph{color:var(--fg-3);display:inline-flex;flex:none}
+  .devpick-btn .dev-glyph svg{width:13px;height:13px}
+  .devpick-btn .dev-path{flex:1;min-width:0;color:var(--fg-0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .devpick-btn .dev-meta{font-family:var(--ui);font-size:11px;color:var(--fg-3);white-space:nowrap}
+  .devpick-btn .dev-caret{color:var(--fg-3);display:inline-flex;flex:none;transition:transform .15s}
+  .devpick-btn[data-open="true"] .dev-caret{transform:rotate(180deg)}
+  .devpick-btn .dev-caret svg{width:11px;height:11px}
+
+  .devpick-menu{
+    position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:50;
+    background:var(--bg-1);border:.5px solid var(--line-strong);border-radius:var(--radius-sm);
+    box-shadow:0 12px 32px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
+    overflow:hidden;max-height:280px;overflow-y:auto;
+    padding:4px;display:flex;flex-direction:column;gap:1px;
+  }
+  .devpick-item{
+    display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:5px;cursor:default;
+    background:transparent;border:0;width:100%;text-align:left;color:var(--fg-1);
+  }
+  .devpick-item:hover{background:var(--bg-2)}
+  .devpick-item[data-on="true"]{background:var(--bg-3);color:var(--fg-0)}
+  .devpick-item .dev-glyph{color:var(--fg-3);flex:none}
+  .devpick-item .dev-glyph svg{width:13px;height:13px}
+  .devpick-item .dev-path{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--fg-0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .devpick-item .dev-sub{font-family:var(--ui);font-size:11px;color:var(--fg-3);white-space:nowrap}
+  .devpick-item[data-on="true"] .dev-sub{color:var(--fg-2)}
+  .devpick-foot{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:8px 10px;border-top:.5px solid var(--line);
+    font-size:11px;color:var(--fg-3);font-family:var(--mono);
+  }
+  .devpick-foot button{
+    appearance:none;background:transparent;border:0;color:var(--fg-2);
+    font-family:var(--ui);font-size:11px;cursor:default;display:inline-flex;align-items:center;gap:4px;
+  }
+  .devpick-foot button:hover{color:var(--fg-0)}
+  .devpick-foot button svg{width:11px;height:11px}
+
   /* Buttons */
   .btn{
     appearance:none;border:0;font-family:inherit;font-size:12.5px;font-weight:500;
-    height:32px;padding:0 14px;border-radius:8px;cursor:default;
+    height:32px;padding:0 14px;border-radius:8px;cursor:default;white-space:nowrap;
     display:inline-flex;align-items:center;gap:8px;letter-spacing:.005em;
   }
   .btn svg{width:13px;height:13px}
@@ -938,6 +982,72 @@ function Toggle({ label, hint, value, onChange }) {
   );
 }
 
+/* Fake device inventory — mocked block devices the daemon would discover */
+const LINUX_DEVICES = [
+  { path: "/dev/sdb1", label: "TOSHIBA TransMemory",   sub: "USB · 32 GB · FAT32",       kind: "usb" },
+  { path: "/dev/sdc1", label: "Samsung T7 Shield",     sub: "USB · 1 TB · ext4",         kind: "usb" },
+  { path: "/dev/sdd",  label: "WD My Passport",        sub: "USB · 4 TB · unallocated",  kind: "usb" },
+  { path: "/dev/nvme0n1p3", label: "vault",            sub: "NVMe · 256 GB · LUKS",      kind: "ssd" },
+  { path: "/dev/mapper/cryptdata", label: "cryptdata", sub: "device-mapper · LUKS",      kind: "map" },
+];
+const MAC_DEVICES = [
+  { path: "/dev/disk2s1", label: "Untitled",          sub: "USB · 64 GB · ExFAT",        kind: "usb" },
+  { path: "/dev/disk3s1", label: "SanDisk Extreme",   sub: "USB-C · 2 TB · APFS",        kind: "usb" },
+  { path: "/dev/disk4",   label: "G-RAID",            sub: "Thunderbolt · 8 TB",         kind: "usb" },
+  { path: "/dev/disk5s2", label: "TimeMachine",       sub: "External · 4 TB · HFS+",     kind: "ssd" },
+];
+
+function DevicePicker({ value, onChange, devices, placeholder = "Select a device" }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const selected = devices.find(d => d.path === value);
+
+  return (
+    <div className="devpick" ref={wrapRef}>
+      <button type="button" className="devpick-btn" data-open={open} onClick={() => setOpen(o => !o)}>
+        <span className="dev-glyph"><Icon.Drive/></span>
+        <span className="dev-path">{selected ? selected.path : <span style={{color:"var(--fg-3)"}}>{placeholder}</span>}</span>
+        {selected && <span className="dev-meta">{selected.label}</span>}
+        <span className="dev-caret">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 6l4 4 4-4"/>
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <div className="devpick-menu">
+          {devices.map(d => (
+            <button key={d.path} type="button" className="devpick-item" data-on={d.path === value}
+                    onClick={() => { onChange(d.path); setOpen(false); }}>
+              <span className="dev-glyph">
+                {d.kind === "map" ? <Icon.Lock/> : <Icon.Drive/>}
+              </span>
+              <span className="dev-path">{d.path}</span>
+              <span className="dev-sub">{d.sub}</span>
+            </button>
+          ))}
+          <div className="devpick-foot">
+            <span>{devices.length} device{devices.length === 1 ? "" : "s"}</span>
+            <button type="button" onClick={(e) => { e.stopPropagation(); /* mock: re-scan */ }}>
+              <Icon.Refresh/> rescan
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PassphraseInput({ value, onChange, placeholder = "enter a strong passphrase", showStrength = true }) {
   const [show, setShow] = useState(false);
   const score = useMemo(() => {
@@ -1108,11 +1218,12 @@ function CreateView({ backend, onCreate }) {
         ) : (
           <>
             <Field label="Partition" required>
-              <div className="inp-wrap">
-                <span className="prefix"><Icon.Drive/></span>
-                <input className="inp has-prefix" style={{paddingLeft:30}} value={partition} onChange={e => setPartition(e.target.value)} spellCheck={false}/>
-                <div className="suffix"><button className="icon-btn" title="List devices"><Icon.Refresh/></button></div>
-              </div>
+              <DevicePicker
+                value={partition}
+                onChange={setPartition}
+                devices={isLinux ? LINUX_DEVICES : MAC_DEVICES}
+                placeholder={isLinux ? "Pick /dev/sdX…" : "Pick /dev/diskN…"}
+              />
             </Field>
             <div style={{
               display:"flex",gap:10,padding:"10px 12px",
@@ -1251,17 +1362,12 @@ function MountView({ backend, onMount }) {
             </div>
           )
         ) : (
-          <div className="inp-wrap">
-            <span className="prefix"><Icon.Drive/></span>
-            <input
-              className="inp has-prefix"
-              style={{paddingLeft:30}}
-              value={source}
-              placeholder={isLinux ? "/dev/sdb1" : "/dev/disk2s1"}
-              onChange={e => setSource(e.target.value)}
-            />
-            <div className="suffix"><button className="icon-btn" title="List devices"><Icon.Refresh/></button></div>
-          </div>
+          <DevicePicker
+            value={source}
+            onChange={setSource}
+            devices={isLinux ? LINUX_DEVICES : MAC_DEVICES}
+            placeholder={isLinux ? "Pick an encrypted partition" : "Pick an encrypted disk"}
+          />
         )}
       </div>
 
@@ -1535,7 +1641,7 @@ function ManageView({ backend, volumes, onMount, onUnmount }) {
         fontSize:11,textTransform:"uppercase",letterSpacing:".12em",fontWeight:600
       }}>
         <span style={{flex:1,height:1,background:"var(--line)"}}/>
-        <span>Mount a volume</span>
+        <span style={{whiteSpace:"nowrap"}}>Mount a volume</span>
         <span style={{flex:1,height:1,background:"var(--line)"}}/>
       </div>
 
@@ -1552,10 +1658,78 @@ Object.assign(window, { ManageView });
 
 // (useState/useEffect/useMemo already destructured above)
 
+/* Zoom stepper — Telegram-style pill. Steps through a discrete preset list.  */
+const ZOOM_STEPS = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+
+function ZoomPill({ value, onChange }) {
+  const v = value ?? 1;
+  // find nearest step index for current value
+  let idx = 0, best = Infinity;
+  ZOOM_STEPS.forEach((s, i) => { const d = Math.abs(s - v); if (d < best) { best = d; idx = i; } });
+
+  const atMin = idx <= 0;
+  const atMax = idx >= ZOOM_STEPS.length - 1;
+  const atDefault = Math.abs(v - 1) < 0.001;
+
+  const step = (dir) => {
+    const next = Math.max(0, Math.min(ZOOM_STEPS.length - 1, idx + dir));
+    onChange(ZOOM_STEPS[next]);
+  };
+  const reset = () => onChange(1);
+
+  // Keyboard: Cmd/Ctrl +, −, 0
+  useEffect(() => {
+    const onKey = (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      // Ignore when typing in an input/textarea
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "=" || e.key === "+") { e.preventDefault(); step(+1); }
+      else if (e.key === "-" || e.key === "_") { e.preventDefault(); step(-1); }
+      else if (e.key === "0") { e.preventDefault(); reset(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [idx]);
+
+  return (
+    <div className="zoom-pill" role="group" aria-label="UI zoom">
+      <button
+        className="zp-btn" type="button" disabled={atMin}
+        title="Zoom out (⌘−)" aria-label="Zoom out"
+        onClick={() => step(-1)}
+      >
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+          <path d="M4 8h8"/>
+        </svg>
+      </button>
+      <button
+        className="zp-val" type="button"
+        data-reset={!atDefault}
+        title={atDefault ? "100%" : "Reset to 100% (⌘0)"}
+        onClick={reset}
+      >
+        {Math.round(v * 100)}%
+      </button>
+      <button
+        className="zp-btn" type="button" disabled={atMax}
+        title="Zoom in (⌘+)" aria-label="Zoom in"
+        onClick={() => step(+1)}
+      >
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+          <path d="M4 8h8M8 4v8"/>
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "theme": "dark",
   "backend": "linux",
-  "density": "regular"
+  "density": "regular",
+  "zoom": 1
 }/*EDITMODE-END*/;
 
 // Seed: one volume already mounted, to demonstrate mount status
@@ -1632,23 +1806,11 @@ function App() {
 
   const rootStyle = {
     "--density": t.density === "compact" ? 0.88 : t.density === "comfy" ? 1.12 : 1,
+    "--zoom": t.zoom ?? 1,
   };
 
   return (
     <div className="app" style={rootStyle} data-theme={t.theme}>
-      <div className="titlebar">
-        <div className="tb-left">
-          <span className="tb-dot"/>
-          <span className="tb-title">Lurker</span>
-          <span className="tb-status">— {volumes.length} mounted · {isLinux ? "Linux" : "macOS"}</span>
-        </div>
-        <div className="tb-ctrls">
-          <button className="tb-btn"><Icon.Min/></button>
-          <button className="tb-btn"><Icon.Max/></button>
-          <button className="tb-btn close"><Icon.CloseW/></button>
-        </div>
-      </div>
-
       <div className="body">
         <aside className="side">
           <div className="brand">
@@ -1667,6 +1829,11 @@ function App() {
             <NavItem active={view==="manage"} onClick={() => setView("manage")} icon={<Icon.LockOpen/>} kbd="⌘2" label="Manage"/>
           </div>
 
+          <div className="side-status">
+            <span className="side-status-dot"/>
+            <span>{volumes.length} mounted</span>
+          </div>
+
         </aside>
 
         <main className="main">
@@ -1677,6 +1844,7 @@ function App() {
                 <p className="main-sub">{subtitle}</p>
               </div>
               <div className="actions">
+                <ZoomPill value={t.zoom ?? 1} onChange={v => setTweak("zoom", v)}/>
                 <button
                   className="icon-round"
                   title={`Switch to ${t.theme === "dark" ? "light" : "dark"} mode`}
@@ -1724,6 +1892,9 @@ function App() {
         <TweakRadio label="Size" value={t.density}
           options={["compact","regular","comfy"]}
           onChange={v => setTweak("density", v)}/>
+        <TweakSection label="Display"/>
+        <TweakSlider label="UI zoom" value={Math.round((t.zoom ?? 1) * 100)} min={50} max={300} step={5} unit="%"
+          onChange={v => setTweak("zoom", v / 100)}/>
       </TweaksPanel>
     </div>
   );

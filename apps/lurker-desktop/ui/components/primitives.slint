@@ -5,7 +5,7 @@ import { UiTheme } from "../theme.slint";
 
 // ── Divider ── (.card-section top-border, .side-foot top-border)
 export component Divider inherits Rectangle {
-    height: 0.5px;
+    height: 0.5px * UiTheme.scale;
     background: UiTheme.line;
 }
 
@@ -13,8 +13,8 @@ export component Divider inherits Rectangle {
 // the main scroll area. Not a drop shadow — an absolutely-positioned radial
 // gradient on a big offset rectangle.
 export component Glow inherits Rectangle {
-    width: 540px;
-    height: 540px;
+    width: 540px * UiTheme.scale;
+    height: 540px * UiTheme.scale;
     opacity: 0.35;
     background: @radial-gradient(circle, UiTheme.glow-stop 0%, transparent 65%);
 }
@@ -24,10 +24,10 @@ export component Glow inherits Rectangle {
 export component PillSurface inherits Rectangle {
     in property <string> text;
     in property <string> tone: "neutral";
-    in property <length> font-size: 11.5px;
+    in property <length> font-size: 11.5px * UiTheme.scale;
     in property <bool> uppercase: false;
     in property <bool> mono: false;
-    in property <length> letter-spacing: 0px;
+    in property <length> letter-spacing: 0px * UiTheme.scale;
     in property <bool> dot-leading: false;
 
     private property <brush> tone-fg:
@@ -43,23 +43,23 @@ export component PillSurface inherits Rectangle {
         : tone == "danger" ? UiTheme.danger-soft
         : UiTheme.bg-2;
 
-    min-height: 22px;
-    preferred-height: 26px;
+    min-height: 22px * UiTheme.scale;
+    preferred-height: 26px * UiTheme.scale;
     border-radius: 999px;
-    border-width: 0.5px;
+    border-width: 0.5px * UiTheme.scale;
     border-color: UiTheme.line-strong;
     background: tone-bg;
     horizontal-stretch: 0;
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 6px;
+        padding-left: 10px * UiTheme.scale;
+        padding-right: 10px * UiTheme.scale;
+        spacing: 6px * UiTheme.scale;
         alignment: center;
 
         if dot-leading: Rectangle {
-            width: 5px;
-            height: 5px;
+            width: 5px * UiTheme.scale;
+            height: 5px * UiTheme.scale;
             border-radius: 999px;
             background: tone-fg;
             y: (parent.height - self.height) / 2;
@@ -81,8 +81,8 @@ export component PillSurface inherits Rectangle {
 // variant: "ghost" | "round" | "subtle"
 export component IconAction inherits Rectangle {
     in property <image> icon;
-    in property <length> size: 26px;
-    in property <length> icon-size: 13px;
+    in property <length> size: 26px * UiTheme.scale;
+    in property <length> icon-size: 13px * UiTheme.scale;
     in property <string> variant: "ghost";
     in property <bool> enabled: true;
     in property <brush> tint: UiTheme.fg-2;
@@ -98,11 +98,13 @@ export component IconAction inherits Rectangle {
 
     width: size;
     height: size;
+    vertical-stretch: 0;
+    horizontal-stretch: 0;
     accessible-role: button;
     accessible-label: tooltip;
     accessible-action-default => { root.clicked(); }
-    border-radius: variant == "round" ? 999px : 5px;
-    border-width: variant == "round" ? 0.5px : 0px;
+    border-radius: variant == "round" ? 999px : 5px * UiTheme.scale;
+    border-width: variant == "round" ? 0.5px * UiTheme.scale : 0px * UiTheme.scale;
     border-color: UiTheme.line-strong;
     background: fill;
 
@@ -131,34 +133,34 @@ export component Toggle inherits Rectangle {
 
     callback toggled;
 
-    min-height: 20px;
-    preferred-height: max(32px, label-text.preferred-height + 4px);
+    min-height: 20px * UiTheme.scale;
+    preferred-height: max(32px * UiTheme.scale, label-text.preferred-height + 4px * UiTheme.scale);
     horizontal-stretch: 1;
 
     HorizontalLayout {
         alignment: start;
-        spacing: 12px;
+        spacing: 12px * UiTheme.scale;
 
         track := Rectangle {
-            width: 32px;
-            height: 18px;
+            width: 32px * UiTheme.scale;
+            height: 18px * UiTheme.scale;
             y: (parent.height - self.height) / 2;
             border-radius: 999px;
-            border-width: 0.5px;
+            border-width: 0.5px * UiTheme.scale;
             border-color: UiTheme.line-strong;
             background: root.checked ? UiTheme.accent : UiTheme.bg-3;
 
             animate background { duration: 150ms; easing: ease-out; }
 
             thumb := Rectangle {
-                width: 13px;
-                height: 13px;
-                y: 1.5px;
-                x: root.checked ? 15px : 1.5px;
+                width: 13px * UiTheme.scale;
+                height: 13px * UiTheme.scale;
+                y: 1.5px * UiTheme.scale;
+                x: root.checked ? 15px * UiTheme.scale : 1.5px * UiTheme.scale;
                 border-radius: 999px;
                 background: UiTheme.bg-0;
-                drop-shadow-blur: 3px;
-                drop-shadow-offset-y: 1px;
+                drop-shadow-blur: 3px * UiTheme.scale;
+                drop-shadow-offset-y: 1px * UiTheme.scale;
                 drop-shadow-color: #00000080;
 
                 animate x { duration: 150ms; easing: ease-out; }
@@ -166,11 +168,11 @@ export component Toggle inherits Rectangle {
         }
 
         VerticalLayout {
-            spacing: 2px;
+            spacing: 2px * UiTheme.scale;
 
             label-text := Text {
                 text: root.label;
-                font-size: 12.5px;
+                font-size: 12.5px * UiTheme.scale;
                 font-weight: 500;
                 font-family: "Inter Tight";
                 color: UiTheme.fg-1;
@@ -179,7 +181,7 @@ export component Toggle inherits Rectangle {
 
             if root.hint != "": Text {
                 text: root.hint;
-                font-size: 11px;
+                font-size: 11px * UiTheme.scale;
                 font-family: "JetBrains Mono";
                 color: UiTheme.fg-3;
             }
@@ -209,37 +211,37 @@ export component Segmented inherits Rectangle {
 
     callback selected(string);
 
-    private property <length> inner-padding: 3px;
+    private property <length> inner-padding: 3px * UiTheme.scale;
 
-    min-height: 34px;
-    preferred-height: 34px;
+    min-height: 34px * UiTheme.scale;
+    preferred-height: 34px * UiTheme.scale;
     horizontal-stretch: 0;
-    border-radius: 8px;
-    border-width: 0.5px;
+    border-radius: 8px * UiTheme.scale;
+    border-width: 0.5px * UiTheme.scale;
     border-color: UiTheme.line-strong;
     background: UiTheme.bg-0;
 
     HorizontalLayout {
         padding: root.inner-padding;
-        spacing: 2px;
+        spacing: 2px * UiTheme.scale;
 
         for opt[i] in root.options: Rectangle {
             private property <bool> on: root.value == opt.value;
 
             horizontal-stretch: 0;
-            min-width: 80px;
-            border-radius: 6px;
+            min-width: 80px * UiTheme.scale;
+            border-radius: 6px * UiTheme.scale;
             background: on ? UiTheme.bg-2 : transparent;
-            border-width: on ? 0.5px : 0px;
+            border-width: on ? 0.5px * UiTheme.scale : 0px * UiTheme.scale;
             border-color: UiTheme.line-strong;
 
             HorizontalLayout {
-                padding-left: 14px;
-                padding-right: 14px;
+                padding-left: 14px * UiTheme.scale;
+                padding-right: 14px * UiTheme.scale;
                 alignment: center;
                 lbl := Text {
                     text: opt.label;
-                    font-size: 12px;
+                    font-size: 12px * UiTheme.scale;
                     font-weight: 500;
                     font-family: "Inter Tight";
                     color: on ? UiTheme.fg-0 : (t.has-hover ? UiTheme.fg-0 : UiTheme.fg-2);
@@ -267,19 +269,19 @@ export component Field {
     in property <bool> required: false;
 
     VerticalLayout {
-        spacing: 6px;
+        spacing: 6px * UiTheme.scale;
 
         HorizontalLayout {
             alignment: space-between;
-            spacing: 8px;
+            spacing: 8px * UiTheme.scale;
 
             HorizontalLayout {
                 alignment: start;
-                spacing: 6px;
+                spacing: 6px * UiTheme.scale;
 
                 Text {
                     text: root.label;
-                    font-size: 12px;
+                    font-size: 12px * UiTheme.scale;
                     font-weight: 500;
                     font-family: "Inter Tight";
                     color: UiTheme.fg-1;
@@ -288,7 +290,7 @@ export component Field {
 
                 if root.required: Text {
                     text: "required";
-                    font-size: 10px;
+                    font-size: 10px * UiTheme.scale;
                     font-family: "JetBrains Mono";
                     color: UiTheme.accent;
                     vertical-alignment: center;
@@ -297,7 +299,7 @@ export component Field {
 
             if root.hint != "": Text {
                 text: root.hint;
-                font-size: 11px;
+                font-size: 11px * UiTheme.scale;
                 font-family: "JetBrains Mono";
                 color: UiTheme.fg-3;
                 vertical-alignment: center;
@@ -328,7 +330,7 @@ export component CardSection inherits VerticalLayout {
     spacing: 0;
 
     if top-divider: Rectangle {
-        height: 0.5px;
+        height: 0.5px * UiTheme.scale;
         background: UiTheme.line;
     }
 
@@ -362,10 +364,10 @@ export component SectionHead {
 
         Text {
             text: root.title;
-            font-size: 11px;
+            font-size: 11px * UiTheme.scale;
             font-weight: 600;
             font-family: "Inter Tight";
-            letter-spacing: 1.32px;   // 0.12em on 11px ≈ 1.32px
+            letter-spacing: 1.32px * UiTheme.scale;   // 0.12em on 11px * UiTheme.scale ≈ 1.32px * UiTheme.scale
             color: UiTheme.fg-3;
             vertical-alignment: center;
             horizontal-stretch: 1;
@@ -374,7 +376,7 @@ export component SectionHead {
 
         if root.hint != "": Text {
             text: root.hint;
-            font-size: 11px;
+            font-size: 11px * UiTheme.scale;
             font-family: "Inter Tight";
             color: UiTheme.fg-3;
             vertical-alignment: center;
@@ -392,6 +394,126 @@ export struct ToastData {
     opacity: float,   // 0..1, animated by Rust-driven single-shot timers
 }
 
+// ── ZoomPill ── (Lurker.html:164-186) Telegram-style zoom stepper.
+// Discrete preset list: 0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3.
+// Minus disabled at step 0; plus disabled at step 10. Middle %‑label shows
+// accent color and "click to reset" behavior whenever scale != 1.0.
+export component ZoomPill inherits Rectangle {
+    in property <float> value: 1.0;
+    callback changed(float);
+
+    // Preset steps hardcoded — Slint can't easily iterate over a float list
+    // across a binding, so we compare against the 11 canonical values.
+    private property <int> idx:
+        value <= 0.6   ? 0                     // 0.5
+        : value <= 0.82 ? 1                    // 0.75
+        : value <= 0.94 ? 2                    // 0.9
+        : value <= 1.04 ? 3                    // 1.0
+        : value <= 1.17 ? 4                    // 1.1
+        : value <= 1.37 ? 5                    // 1.25
+        : value <= 1.62 ? 6                    // 1.5
+        : value <= 1.87 ? 7                    // 1.75
+        : value <= 2.25 ? 8                    // 2.0
+        : value <= 2.75 ? 9                    // 2.5
+        : 10;                                  // 3.0
+    private property <bool> at-min: idx <= 0;
+    private property <bool> at-max: idx >= 10;
+    private property <bool> at-default: abs(value - 1.0) < 0.001;
+    private property <int> percent: round(value * 100);
+
+    height: 34px * UiTheme.scale;
+    vertical-stretch: 0;
+    horizontal-stretch: 0;
+    preferred-width: content.preferred-width + 4px * UiTheme.scale;
+    border-radius: 999px;
+    border-width: 0.5px * UiTheme.scale;
+    border-color: UiTheme.line-strong;
+    background: UiTheme.bg-2;
+
+    content := HorizontalLayout {
+        padding-left: 2px * UiTheme.scale;
+        padding-right: 2px * UiTheme.scale;
+        spacing: 0;
+        alignment: center;
+
+        // Minus button — SVG line-stroke icon to match design (stroke 1.6)
+        minus := Rectangle {
+            private property <bool> enabled: !root.at-min;
+            width: 30px * UiTheme.scale;
+            height: 30px * UiTheme.scale;
+            y: (parent.height - self.height) / 2;
+            border-radius: 999px;
+            background: minus-t.has-hover && enabled ? UiTheme.bg-3 : transparent;
+            opacity: enabled ? 1.0 : 0.35;
+            Image {
+                source: @image-url("../icons/zoom-minus.svg");
+                width: 13px * UiTheme.scale;
+                height: 13px * UiTheme.scale;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                colorize: minus-t.has-hover && minus.enabled ? UiTheme.fg-0 : UiTheme.fg-2;
+            }
+            minus-t := TouchArea {
+                enabled: minus.enabled;
+                clicked => {
+                    root.changed(UiTheme.zoom-step-down(root.value));
+                }
+            }
+        }
+
+        // Value / reset button
+        val := Rectangle {
+            min-width: 44px * UiTheme.scale;
+            height: 30px * UiTheme.scale;
+            y: (parent.height - self.height) / 2;
+            border-radius: 6px * UiTheme.scale;
+            background: val-t.has-hover ? UiTheme.bg-3 : transparent;
+            Text {
+                text: root.percent + "%";
+                font-size: 12px * UiTheme.scale;
+                font-weight: 500;
+                font-family: "JetBrains Mono";
+                letter-spacing: 0.12px * UiTheme.scale;
+                color: !root.at-default
+                    ? UiTheme.accent
+                    : (val-t.has-hover ? UiTheme.fg-0 : UiTheme.fg-1);
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: parent.width;
+                height: parent.height;
+            }
+            val-t := TouchArea {
+                clicked => { root.changed(1.0); }
+            }
+        }
+
+        // Plus button — SVG line-stroke icon to match design (stroke 1.6)
+        plus := Rectangle {
+            private property <bool> enabled: !root.at-max;
+            width: 30px * UiTheme.scale;
+            height: 30px * UiTheme.scale;
+            y: (parent.height - self.height) / 2;
+            border-radius: 999px;
+            background: plus-t.has-hover && enabled ? UiTheme.bg-3 : transparent;
+            opacity: enabled ? 1.0 : 0.35;
+            Image {
+                source: @image-url("../icons/zoom-plus.svg");
+                width: 13px * UiTheme.scale;
+                height: 13px * UiTheme.scale;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                colorize: plus-t.has-hover && plus.enabled ? UiTheme.fg-0 : UiTheme.fg-2;
+            }
+            plus-t := TouchArea {
+                enabled: plus.enabled;
+                clicked => {
+                    root.changed(UiTheme.zoom-step-up(root.value));
+                }
+            }
+        }
+    }
+}
+
 // ── Toast ── (Lurker.html:368-383)
 export component Toast inherits Rectangle {
     in property <ToastData> data;
@@ -401,42 +523,42 @@ export component Toast inherits Rectangle {
         : data.kind == "info" ? UiTheme.accent
         : UiTheme.ok;
 
-    min-width: 260px;
-    preferred-height: 56px;
-    border-radius: 10px;
-    border-width: 0.5px;
+    min-width: 260px * UiTheme.scale;
+    preferred-height: 56px * UiTheme.scale;
+    border-radius: 10px * UiTheme.scale;
+    border-width: 0.5px * UiTheme.scale;
     border-color: UiTheme.line-strong;
     background: UiTheme.bg-2;
-    drop-shadow-blur: 40px;
-    drop-shadow-offset-y: 12px;
+    drop-shadow-blur: 40px * UiTheme.scale;
+    drop-shadow-offset-y: 12px * UiTheme.scale;
     drop-shadow-color: #00000066;
     opacity: data.opacity;
 
     animate opacity { duration: 200ms; easing: ease-out; }
 
     HorizontalLayout {
-        padding-left: 14px;
-        padding-right: 14px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-        spacing: 10px;
+        padding-left: 14px * UiTheme.scale;
+        padding-right: 14px * UiTheme.scale;
+        padding-top: 10px * UiTheme.scale;
+        padding-bottom: 10px * UiTheme.scale;
+        spacing: 10px * UiTheme.scale;
         alignment: start;
 
         dot := Rectangle {
-            width: 8px;
-            height: 8px;
+            width: 8px * UiTheme.scale;
+            height: 8px * UiTheme.scale;
             y: (parent.height - self.height) / 2;
             border-radius: 999px;
             background: dot-color;
         }
 
         VerticalLayout {
-            spacing: 2px;
+            spacing: 2px * UiTheme.scale;
             horizontal-stretch: 1;
 
             Text {
                 text: root.data.title;
-                font-size: 12.5px;
+                font-size: 12.5px * UiTheme.scale;
                 font-weight: 500;
                 font-family: "Inter Tight";
                 color: UiTheme.fg-0;
@@ -444,7 +566,7 @@ export component Toast inherits Rectangle {
 
             if root.data.detail != "": Text {
                 text: root.data.detail;
-                font-size: 11px;
+                font-size: 11px * UiTheme.scale;
                 font-family: "JetBrains Mono";
                 color: UiTheme.fg-3;
             }

@@ -11,14 +11,14 @@ export { IconAction, Segmented, SegmentOption, Field } from "primitives.slint";
 export component ThemedLineEdit inherits Rectangle {
     in-out property <string> text <=> input.text;
     in property <string> placeholder-text: "";
-    in property <length> text_size: 13px;
+    in property <length> text_size: 13px * UiTheme.scale;
     in property <InputType> input-type: InputType.text;
     in property <bool> enabled: true;
     in property <bool> read-only: false;
     in property <bool> mono: true;
     in property <image> prefix-icon;
     in property <bool> has-prefix: false;
-    in property <length> suffix-reserved: 0px;
+    in property <length> suffix-reserved: 0px * UiTheme.scale;
     out property <bool> has-focus <=> input.has-focus;
 
     callback accepted(string);
@@ -31,13 +31,13 @@ export component ThemedLineEdit inherits Rectangle {
     accessible-read-only: root.read-only;
     accessible-action-set-value(v) => { text = v; }
 
-    private property <length> prefix-reserved: has-prefix ? 30px : 12px;
-    private property <length> left-pad: has-prefix ? 10px : 12px;
+    private property <length> prefix-reserved: has-prefix ? 30px * UiTheme.scale : 12px * UiTheme.scale;
+    private property <length> left-pad: has-prefix ? 10px * UiTheme.scale : 12px * UiTheme.scale;
 
     horizontal-stretch: 1;
-    min-height: 34px;
-    preferred-height: max(34px, root.text_size + 14px);
-    border-width: 0.5px;
+    min-height: 34px * UiTheme.scale;
+    preferred-height: max(34px * UiTheme.scale, root.text_size + 14px * UiTheme.scale);
+    border-width: 0.5px * UiTheme.scale;
     border-color: input.has-focus ? UiTheme.accent : UiTheme.line-strong;
     border-radius: UiTheme.radius-sm;
     background: input.has-focus ? UiTheme.bg-1 : UiTheme.bg-0;
@@ -45,29 +45,29 @@ export component ThemedLineEdit inherits Rectangle {
 
     // focus-ring outer glow (accent-soft halo)
     if input.has-focus: Rectangle {
-        x: -3px;
-        y: -3px;
-        width: parent.width + 6px;
-        height: parent.height + 6px;
-        border-radius: UiTheme.radius-sm + 3px;
-        border-width: 3px;
+        x: -3px * UiTheme.scale;
+        y: -3px * UiTheme.scale;
+        width: parent.width + 6px * UiTheme.scale;
+        height: parent.height + 6px * UiTheme.scale;
+        border-radius: UiTheme.radius-sm + 3px * UiTheme.scale;
+        border-width: 3px * UiTheme.scale;
         border-color: UiTheme.accent-soft;
         background: transparent;
     }
 
     if root.has-prefix: Image {
         source: root.prefix-icon;
-        x: 10px;
+        x: 10px * UiTheme.scale;
         y: (parent.height - self.height) / 2;
-        width: 14px;
-        height: 14px;
+        width: 14px * UiTheme.scale;
+        height: 14px * UiTheme.scale;
         colorize: UiTheme.fg-3;
     }
 
     placeholder := Text {
         x: root.prefix-reserved;
         y: 0;
-        width: parent.width - root.prefix-reserved - root.suffix-reserved - 12px;
+        width: parent.width - root.prefix-reserved - root.suffix-reserved - 12px * UiTheme.scale;
         height: parent.height;
         text: root.placeholder-text;
         font-size: root.text_size;
@@ -81,7 +81,7 @@ export component ThemedLineEdit inherits Rectangle {
     input := TextInput {
         x: root.prefix-reserved;
         y: 0;
-        width: parent.width - root.prefix-reserved - root.suffix-reserved - 12px;
+        width: parent.width - root.prefix-reserved - root.suffix-reserved - 12px * UiTheme.scale;
         height: parent.height;
         font-size: root.text_size;
         font-family: root.mono ? "JetBrains Mono" : "Inter Tight";
@@ -110,8 +110,8 @@ export component PassphraseInput inherits Rectangle {
 
     private property <bool> show-text: false;
 
-    min-height: 34px;
-    preferred-height: 34px;
+    min-height: 34px * UiTheme.scale;
+    preferred-height: 34px * UiTheme.scale;
     horizontal-stretch: 1;
 
     field := ThemedLineEdit {
@@ -121,16 +121,16 @@ export component PassphraseInput inherits Rectangle {
         enabled: root.enabled;
         placeholder-text: root.placeholder-text;
         input-type: root.show-text ? InputType.text : InputType.password;
-        suffix-reserved: root.show-strength-button ? 58px : 30px;
+        suffix-reserved: root.show-strength-button ? 58px * UiTheme.scale : 30px * UiTheme.scale;
     }
 
     // Suffix area overlays on the right
     HorizontalLayout {
-        x: parent.width - (root.show-strength-button ? 58px : 30px) - 6px;
-        y: (parent.height - 26px) / 2;
-        width: root.show-strength-button ? 58px : 30px;
-        height: 26px;
-        spacing: 2px;
+        x: parent.width - (root.show-strength-button ? 58px * UiTheme.scale : 30px * UiTheme.scale) - 6px * UiTheme.scale;
+        y: (parent.height - 26px * UiTheme.scale) / 2;
+        width: root.show-strength-button ? 58px * UiTheme.scale : 30px * UiTheme.scale;
+        height: 26px * UiTheme.scale;
+        spacing: 2px * UiTheme.scale;
 
         IconAction {
             icon: @image-url("../icons/eye.svg");
@@ -165,10 +165,10 @@ export component Drop inherits Rectangle {
     private property <bool> drag-over: false;
 
     border-radius: UiTheme.radius;
-    border-width: 1px;
+    border-width: 1px * UiTheme.scale;
     border-color: drag-over ? UiTheme.accent : (touch.has-hover ? UiTheme.accent : UiTheme.line-strong);
     background: drag-over ? UiTheme.bg-1 : (touch.has-hover ? UiTheme.bg-1 : UiTheme.bg-0);
-    min-height: 110px;
+    min-height: 110px * UiTheme.scale;
 
     VerticalLayout {
         padding-left: root.pad-h;
@@ -180,15 +180,15 @@ export component Drop inherits Rectangle {
 
         Image {
             source: root.icon;
-            width: 22px;
-            height: 22px;
+            width: 22px * UiTheme.scale;
+            height: 22px * UiTheme.scale;
             colorize: UiTheme.fg-2;
             horizontal-alignment: center;
         }
 
         Text {
             text: root.title;
-            font-size: 13px;
+            font-size: 13px * UiTheme.scale;
             font-weight: 500;
             font-family: "Inter Tight";
             color: UiTheme.fg-1;
@@ -197,7 +197,7 @@ export component Drop inherits Rectangle {
 
         if root.subtitle != "": Text {
             text: root.subtitle;
-            font-size: 11.5px;
+            font-size: 11.5px * UiTheme.scale;
             font-family: "JetBrains Mono";
             color: UiTheme.fg-3;
             horizontal-alignment: center;
@@ -217,8 +217,8 @@ export component KeyFilePicker inherits Rectangle {
     in-out property <string> value;
     private property <bool> typing: false;
 
-    min-height: 110px;
-    preferred-height: (value == "" && !typing) ? 110px : 34px;
+    min-height: 110px * UiTheme.scale;
+    preferred-height: (value == "" && !typing) ? 110px * UiTheme.scale : 34px * UiTheme.scale;
 
     if value == "" && !typing: Drop {
         width: parent.width;
@@ -226,14 +226,14 @@ export component KeyFilePicker inherits Rectangle {
         icon: @image-url("../icons/key.svg");
         title: "Select a key file";
         subtitle: "drop a file here or click to type a path";
-        pad-v: 18px;
+        pad-v: 18px * UiTheme.scale;
         clicked => { root.typing = true; }
         dropped(p) => { root.value = p; }
     }
 
     if value != "" || typing: Rectangle {
         width: parent.width;
-        height: 34px;
+        height: 34px * UiTheme.scale;
 
         field := ThemedLineEdit {
             width: parent.width;
@@ -242,13 +242,13 @@ export component KeyFilePicker inherits Rectangle {
             has-prefix: true;
             prefix-icon: @image-url("../icons/key.svg");
             placeholder-text: "~/.lurker/keys/archive.key";
-            suffix-reserved: 30px;
+            suffix-reserved: 30px * UiTheme.scale;
         }
         HorizontalLayout {
-            x: parent.width - 30px;
-            y: (parent.height - 26px) / 2;
-            width: 30px;
-            height: 26px;
+            x: parent.width - 30px * UiTheme.scale;
+            y: (parent.height - 26px * UiTheme.scale) / 2;
+            width: 30px * UiTheme.scale;
+            height: 26px * UiTheme.scale;
             IconAction {
                 icon: @image-url("../icons/x.svg");
                 tooltip: "Clear";
@@ -262,27 +262,253 @@ export component KeyFilePicker inherits Rectangle {
     }
 }
 
+// ── DeviceInfo — row data for DevicePicker
+export struct DeviceInfo {
+    path: string,     // /dev/sdb1
+    label: string,    // TOSHIBA TransMemory
+    sub: string,      // USB · 32 GB · FAT32
+    kind: string,     // "usb" | "ssd" | "map"
+}
+
+// ── DevicePicker ── (Lurker.html:287-332) dropdown for selecting a block
+// device. Replaces the freeform partition text input. Inline expansion
+// style (like SelectField) — clicking the trigger expands the menu below
+// it inside the same Rectangle. No PopupWindow, so no outside-click-close;
+// click the trigger again (or pick an item) to close.
+export component DevicePicker inherits Rectangle {
+    in property <[DeviceInfo]> devices;
+    in-out property <string> value;
+    in property <string> selected-label;
+    in property <string> placeholder: "Pick a device";
+    in property <bool> enabled: true;
+
+    callback picked(DeviceInfo);
+    callback rescan;
+
+    private property <bool> open: false;
+    private property <bool> has-selection: root.value != "";
+    private property <length> collapsed-h: 38px * UiTheme.scale;
+    private property <length> option-h: 36px * UiTheme.scale;
+    private property <length> menu-h:
+        root.devices.length == 0
+            ? 44px * UiTheme.scale + 32px * UiTheme.scale + 1px + 8px * UiTheme.scale
+            : (root.option-h * root.devices.length) + 32px * UiTheme.scale + 1px + 8px * UiTheme.scale;
+
+    horizontal-stretch: 1;
+    min-width: 160px * UiTheme.scale;
+    preferred-height: root.collapsed-h + (root.open ? root.menu-h : 0px * UiTheme.scale);
+    min-height: self.preferred-height;
+    border-width: 0.5px * UiTheme.scale;
+    border-color: root.open ? UiTheme.accent : (t.has-hover ? UiTheme.fg-3 : UiTheme.line-strong);
+    border-radius: UiTheme.radius-sm;
+    background: UiTheme.bg-0;
+    clip: true;
+
+    VerticalLayout {
+        spacing: 0;
+
+        // ── Trigger row (always visible)
+        Rectangle {
+            min-height: root.collapsed-h;
+            background: transparent;
+
+            HorizontalLayout {
+                padding-left: 12px * UiTheme.scale;
+                padding-right: 12px * UiTheme.scale;
+                spacing: 10px * UiTheme.scale;
+                alignment: start;
+
+                Image {
+                    source: @image-url("../icons/drive.svg");
+                    width: 13px * UiTheme.scale;
+                    height: 13px * UiTheme.scale;
+                    y: (parent.height - self.height) / 2;
+                    colorize: UiTheme.fg-3;
+                }
+
+                Text {
+                    text: root.has-selection ? root.value : root.placeholder;
+                    font-size: UiTheme.fs-base;
+                    font-family: "JetBrains Mono";
+                    color: root.has-selection ? UiTheme.fg-0 : UiTheme.fg-3;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+
+                if root.has-selection && root.selected-label != "": Text {
+                    text: root.selected-label;
+                    font-size: UiTheme.fs-sm;
+                    color: UiTheme.fg-3;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                Image {
+                    source: root.open
+                        ? @image-url("../icons/chevron-up.svg")
+                        : @image-url("../icons/chevron-down.svg");
+                    width: 11px * UiTheme.scale;
+                    height: 11px * UiTheme.scale;
+                    y: (parent.height - self.height) / 2;
+                    colorize: UiTheme.fg-3;
+                }
+            }
+
+            t := TouchArea {
+                enabled: root.enabled;
+                clicked => { root.open = !root.open; }
+            }
+        }
+
+        // ── Expanded menu (below trigger, inline)
+        if root.open: Rectangle {
+            height: 0.5px * UiTheme.scale;
+            background: UiTheme.line;
+        }
+
+        if root.open: VerticalLayout {
+            padding-top: 4px * UiTheme.scale;
+            padding-left: 4px * UiTheme.scale;
+            padding-right: 4px * UiTheme.scale;
+            padding-bottom: 0;
+            spacing: 1px * UiTheme.scale;
+
+            for item in root.devices: Rectangle {
+                private property <bool> on: item.path == root.value;
+                min-height: root.option-h;
+                border-radius: 5px * UiTheme.scale;
+                background: on
+                    ? UiTheme.bg-3
+                    : (hov.has-hover ? UiTheme.bg-2 : transparent);
+
+                HorizontalLayout {
+                    padding-left: 10px * UiTheme.scale;
+                    padding-right: 10px * UiTheme.scale;
+                    spacing: 10px * UiTheme.scale;
+                    alignment: start;
+
+                    Image {
+                        source: item.kind == "map"
+                            ? @image-url("../icons/lock.svg")
+                            : @image-url("../icons/drive.svg");
+                        width: 13px * UiTheme.scale;
+                        height: 13px * UiTheme.scale;
+                        y: (parent.height - self.height) / 2;
+                        colorize: UiTheme.fg-3;
+                    }
+                    Text {
+                        text: item.path;
+                        font-size: 12.5px * UiTheme.scale;
+                        font-family: "JetBrains Mono";
+                        color: UiTheme.fg-0;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: item.sub;
+                        font-size: UiTheme.fs-sm;
+                        color: on ? UiTheme.fg-2 : UiTheme.fg-3;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                hov := TouchArea {
+                    clicked => {
+                        root.value = item.path;
+                        root.picked(item);
+                        root.open = false;
+                    }
+                }
+            }
+
+            if root.devices.length == 0: Rectangle {
+                min-height: 44px * UiTheme.scale;
+                HorizontalLayout {
+                    padding-left: 10px * UiTheme.scale;
+                    padding-right: 10px * UiTheme.scale;
+                    alignment: center;
+                    Text {
+                        text: "No devices detected — click rescan";
+                        font-size: UiTheme.fs-sm;
+                        font-family: "JetBrains Mono";
+                        color: UiTheme.fg-3;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if root.open: Rectangle {
+            height: 0.5px * UiTheme.scale;
+            background: UiTheme.line;
+        }
+
+        if root.open: Rectangle {
+            min-height: 32px * UiTheme.scale;
+
+            HorizontalLayout {
+                padding-left: 10px * UiTheme.scale;
+                padding-right: 10px * UiTheme.scale;
+                alignment: space-between;
+
+                Text {
+                    text: root.devices.length + (root.devices.length == 1 ? " device" : " devices");
+                    font-size: UiTheme.fs-sm;
+                    font-family: "JetBrains Mono";
+                    color: UiTheme.fg-3;
+                    vertical-alignment: center;
+                }
+
+                HorizontalLayout {
+                    spacing: 4px * UiTheme.scale;
+                    alignment: end;
+                    Image {
+                        source: @image-url("../icons/refresh.svg");
+                        width: 11px * UiTheme.scale;
+                        height: 11px * UiTheme.scale;
+                        y: (parent.height - self.height) / 2;
+                        colorize: rescan-t.has-hover ? UiTheme.fg-0 : UiTheme.fg-2;
+                    }
+                    Text {
+                        text: "rescan";
+                        font-size: UiTheme.fs-sm;
+                        color: rescan-t.has-hover ? UiTheme.fg-0 : UiTheme.fg-2;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            rescan-t := TouchArea {
+                clicked => { root.rescan(); }
+            }
+        }
+    }
+}
+
 // ── SelectField ── dropdown, inline expansion style.
 export component SelectField inherits Rectangle {
     in property <[string]> model;
     in-out property <string> value;
-    in property <length> text_size: 13px;
+    in property <length> text_size: 13px * UiTheme.scale;
     in property <bool> enabled: true;
 
     callback selected(string);
 
     private property <bool> expanded: false;
-    private property <length> collapsed_height: 34px;
-    private property <length> option_height: 32px;
+    private property <length> collapsed_height: 34px * UiTheme.scale;
+    private property <length> option_height: 32px * UiTheme.scale;
     private property <string> display_value: root.value != ""
         ? root.value
         : (root.model.length > 0 ? root.model[0] : "");
 
     horizontal-stretch: 1;
-    min-width: 90px;
-    preferred-height: root.collapsed_height + (root.expanded ? (root.option_height * root.model.length + 8px) : 0px);
+    min-width: 90px * UiTheme.scale;
+    preferred-height: root.collapsed_height + (root.expanded ? (root.option_height * root.model.length + 8px * UiTheme.scale) : 0px * UiTheme.scale);
     min-height: self.preferred-height;
-    border-width: 0.5px;
+    border-width: 0.5px * UiTheme.scale;
     border-color: root.expanded ? UiTheme.accent : UiTheme.line-strong;
     border-radius: UiTheme.radius-sm;
     background: UiTheme.bg-0;
@@ -296,9 +522,9 @@ export component SelectField inherits Rectangle {
             background: transparent;
 
             HorizontalLayout {
-                padding-left: 12px;
-                padding-right: 8px;
-                spacing: 6px;
+                padding-left: 12px * UiTheme.scale;
+                padding-right: 8px * UiTheme.scale;
+                spacing: 6px * UiTheme.scale;
 
                 Text {
                     text: root.display_value;
@@ -314,8 +540,8 @@ export component SelectField inherits Rectangle {
                     source: root.expanded
                         ? @image-url("../icons/chevron-up.svg")
                         : @image-url("../icons/chevron-down.svg");
-                    width: 12px;
-                    height: 12px;
+                    width: 12px * UiTheme.scale;
+                    height: 12px * UiTheme.scale;
                     y: (parent.height - self.height) / 2;
                     colorize: UiTheme.fg-3;
                     vertical-alignment: center;
@@ -329,18 +555,18 @@ export component SelectField inherits Rectangle {
         }
 
         if root.expanded: VerticalLayout {
-            padding: 4px;
-            spacing: 2px;
+            padding: 4px * UiTheme.scale;
+            spacing: 2px * UiTheme.scale;
 
             for opt in root.model: Rectangle {
                 private property <bool> on: opt == root.value;
                 min-height: root.option_height;
-                border-radius: 4px;
+                border-radius: 4px * UiTheme.scale;
                 background: on ? UiTheme.accent-soft : (t.has-hover ? UiTheme.bg-2 : transparent);
 
                 HorizontalLayout {
-                    padding-left: 10px;
-                    padding-right: 10px;
+                    padding-left: 10px * UiTheme.scale;
+                    padding-right: 10px * UiTheme.scale;
                     Text {
                         text: opt;
                         font-size: root.text_size;
@@ -351,8 +577,8 @@ export component SelectField inherits Rectangle {
                     }
                     if on: Image {
                         source: @image-url("../icons/check.svg");
-                        width: 13px;
-                        height: 13px;
+                        width: 13px * UiTheme.scale;
+                        height: 13px * UiTheme.scale;
                         y: (parent.height - self.height) / 2;
                         colorize: UiTheme.accent;
                     }
@@ -374,14 +600,14 @@ export component SelectField inherits Rectangle {
 export component ActionButton inherits Rectangle {
     in property <string> text;
     in property <string> tone: "secondary";
-    in property <length> text_size: 12.5px;
+    in property <length> text_size: 12.5px * UiTheme.scale;
     in property <bool> enabled: true;
     in property <bool> fill-width: false;
     in property <bool> left-aligned: false;
     in property <image> icon;
     in property <bool> has-icon: false;
     in property <string> kbd: "";
-    in property <length> height-override: 0px;
+    in property <length> height-override: 0px * UiTheme.scale;
 
     callback clicked;
 
@@ -419,27 +645,27 @@ export component ActionButton inherits Rectangle {
         : UiTheme.fg-0;
 
     horizontal-stretch: root.fill-width ? 1 : 0;
-    preferred-width: label.preferred-width + (has-icon ? 22px : 0) + (kbd != "" ? 40px : 0) + 28px;
-    preferred-height: max(height-override == 0px ? 32px : height-override, root.text_size + 18px);
+    preferred-width: label.preferred-width + (has-icon ? 22px * UiTheme.scale : 0) + (kbd != "" ? 40px * UiTheme.scale : 0) + 28px * UiTheme.scale;
+    preferred-height: max(height-override == 0px * UiTheme.scale ? 32px * UiTheme.scale : height-override, root.text_size + 18px * UiTheme.scale);
     min-height: self.preferred-height;
-    border-width: has-stroke ? 0.5px : 0px;
+    border-width: has-stroke ? 0.5px * UiTheme.scale : 0px * UiTheme.scale;
     border-color: stroke;
-    border-radius: 8px;
+    border-radius: 8px * UiTheme.scale;
     background: fill;
-    drop-shadow-blur: tone == "primary" && root.enabled ? 16px : 0px;
-    drop-shadow-offset-y: tone == "primary" && root.enabled ? 4px : 0px;
+    drop-shadow-blur: tone == "primary" && root.enabled ? 16px * UiTheme.scale : 0px * UiTheme.scale;
+    drop-shadow-offset-y: tone == "primary" && root.enabled ? 4px * UiTheme.scale : 0px * UiTheme.scale;
     drop-shadow-color: #d84d2859;
 
     HorizontalLayout {
-        padding-left: 14px;
-        padding-right: 14px;
-        spacing: 8px;
+        padding-left: 14px * UiTheme.scale;
+        padding-right: 14px * UiTheme.scale;
+        spacing: 8px * UiTheme.scale;
         alignment: root.left-aligned ? start : center;
 
         if root.has-icon: Image {
             source: root.icon;
-            width: 13px;
-            height: 13px;
+            width: 13px * UiTheme.scale;
+            height: 13px * UiTheme.scale;
             y: (parent.height - self.height) / 2;
             colorize: fg;
         }
@@ -458,7 +684,7 @@ export component ActionButton inherits Rectangle {
 
         if root.kbd != "": Text {
             text: "│ " + root.kbd;
-            font-size: 10px;
+            font-size: 10px * UiTheme.scale;
             font-family: "JetBrains Mono";
             color: fg;
             opacity: 0.7;

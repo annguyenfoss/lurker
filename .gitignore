@@ -1,3 +1,4 @@
+# Local agent and IDE state
 .codex
 .claude
 .cursor
@@ -6,7 +7,33 @@
 .idea
 *.iml
 
-/target/
-/legacy/rust-cli-monolith/target/
+# Cargo build output (workspace and standalone crates)
+target/
+rustc-ice-*.txt
+*.profraw
+*.profdata
 
+# Other generated output and local scratch directories
+/build/
+/dist/
+/tmp/
+/temp/
+/.cache/
+
+# Runtime temporary volumes
 *.lurker-tmp-*
+
+# Logs, temporary files, and editor backups
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*~
+.#*
+\#*\#
+
+# Desktop file-manager metadata
+.DS_Store
+Thumbs.db

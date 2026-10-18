@@ -1,6 +1,8 @@
+mod devices;
 mod helper;
 mod logic;
 
+use crate::devices::list_block_devices;
 use crate::helper::{resolve_helper_path, run_helper};
 use crate::logic::{
     build_create_command, build_mount_command, build_unmount_command_for_volume, response_error,
@@ -47,6 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bind_callbacks(&window, &state);
     state.refresh_active_volumes(false);
+    state.rescan_devices();
     window.run()?;
     Ok(())
 }
@@ -125,9 +128,47 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
     // ── Unmount (from volume row index) ──
     let us = state.clone();
     window.on_unmount_volume(move |index| us.unmount_volume(index));
+
+    // ── Device rescan ──
+    let ds = state.clone();
+    window.on_rescan_devices(move || ds.rescan_devices());
+
+    // ── Device picked → mirror label for the trigger meta text ──
+    let lc = window.as_weak();
+    window.on_device_picked_for_create(move |info| {
+        if let Some(w) = lc.upgrade() {
+            w.set_create_partition_label(info.label);
+        }
+    });
+    let lm = window.as_weak();
+    window.on_device_picked_for_mount(move |info| {
+        if let Some(w) = lm.upgrade() {
+            w.set_mount_source_label(info.label);
+        }
+    });
 }
 
 impl AppState {
+    fn rescan_devices(&self) {
+        let window = self.window.clone();
+        thread::spawn(move || {
+            let list = list_block_devices();
+            let _ = window.upgrade_in_event_loop(move |ui| {
+                let items = list
+                    .into_iter()
+                    .map(|d| DeviceInfo {
+                        path: d.path.into(),
+                        label: d.label.into(),
+                        sub: d.sub.into(),
+                        kind: d.kind.into(),
+                    })
+                    .collect::<Vec<_>>();
+                let model = Rc::new(VecModel::from(items));
+                ui.set_devices(ModelRc::from(model));
+            });
+        });
+    }
+
     fn refresh_active_volumes(&self, announce: bool) {
         let window = self.window.clone();
         let store = Arc::clone(&self.active_volumes);

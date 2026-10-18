@@ -17,21 +17,37 @@ export global UiTheme {
         root.mode == "dark"
         || (root.mode == "system" && Palette.color-scheme == ColorScheme.dark);
 
+    // UI zoom — driven by ZoomPill in the header. Multiplies every length
+    // (spacing, radii, width tokens, and every font-size in components).
+    // Matches the design's CSS `zoom: var(--zoom)` on `.app`.
+    in property <float> scale: 1.0;
+
+    // Scaled font-size tokens so components inherit zoom without plumbing
+    // the multiplier everywhere.
+    out property <length> fs-xs: 10px * scale;       // kbd hints, small caps
+    out property <length> fs-sm: 11px * scale;       // lbl-h, sec-title, meta
+    out property <length> fs-md: 12px * scale;       // segmented, lbl-t
+    out property <length> fs-base: 13px * scale;     // inputs, body
+    out property <length> fs-lg: 15px * scale;       // brand, list items
+    out property <length> fs-xl: 22px * scale;       // page titles
+
     // ── Geometry tokens (design: Lurker.html:25-34, 74-83) ────────────────
-    out property <length> radius: 10px;
-    out property <length> radius-sm: 6px;
-    out property <length> radius-lg: 14px;
-    out property <length> s1: 4px;
-    out property <length> s2: 8px;
-    out property <length> s3: 12px;
-    out property <length> s4: 16px;
-    out property <length> s5: 24px;
-    out property <length> s6: 32px;
+    out property <length> radius: 10px * scale;
+    out property <length> radius-sm: 6px * scale;
+    out property <length> radius-lg: 14px * scale;
+    out property <length> s1: 4px * scale;
+    out property <length> s2: 8px * scale;
+    out property <length> s3: 12px * scale;
+    out property <length> s4: 16px * scale;
+    out property <length> s5: 24px * scale;
+    out property <length> s6: 32px * scale;
 
     // Layout tokens
-    out property <length> sidebar-width: 220px;
-    out property <length> main-min-width: 1180px;
-    out property <length> control-min-height: 32px;
+    out property <length> sidebar-width: 220px * scale;
+    out property <length> main-min-width: 720px * scale;
+    out property <length> main-max-width: 1240px * scale;
+    out property <length> work-wrap-max: 820px * scale;
+    out property <length> control-min-height: 32px * scale;
 
     // Legacy geometry aliases (keep so existing app-window.slint compiles
     // during migration; removed in Step 8 after layout rewrite lands).
@@ -125,4 +141,33 @@ export global UiTheme {
     out property <brush> warning:      warn;
     out property <brush> warning-soft: oklch(70%, 35%,  75deg, 15%);
     out property <brush> danger-soft:  oklch(58%, 50%,  25deg, 15%);
+
+    // ── Zoom preset stepper (Lurker.html:1662) ────────────────────────────
+    // Matches the design's ZOOM_STEPS array. Called by both the ZoomPill's
+    // +/- buttons and the FocusScope keyboard handler so Ctrl+= / Ctrl+-
+    // navigate the same discrete list the mouse does.
+    public pure function zoom-step-up(v: float) -> float {
+        return v < 0.6   ? 0.75
+            : v < 0.82 ? 0.9
+            : v < 0.94 ? 1.0
+            : v < 1.04 ? 1.1
+            : v < 1.17 ? 1.25
+            : v < 1.37 ? 1.5
+            : v < 1.62 ? 1.75
+            : v < 1.87 ? 2.0
+            : v < 2.25 ? 2.5
+            : 3.0;
+    }
+    public pure function zoom-step-down(v: float) -> float {
+        return v > 2.75 ? 2.5
+            : v > 2.25 ? 2.0
+            : v > 1.87 ? 1.75
+            : v > 1.62 ? 1.5
+            : v > 1.37 ? 1.25
+            : v > 1.17 ? 1.1
+            : v > 1.04 ? 1.0
+            : v > 0.94 ? 0.9
+            : v > 0.82 ? 0.75
+            : 0.5;
+    }
 }

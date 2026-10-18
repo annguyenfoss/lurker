@@ -12,17 +12,22 @@ import {
 } from "../components/primitives.slint";
 import {
     ThemedLineEdit, SelectField, ActionButton, PassphraseInput, KeyFilePicker,
-    Drop
+    Drop, DevicePicker, DeviceInfo
 } from "../components/inputs.slint";
 
 export component MountView inherits Card {
     in-out property <string> source-kind: "file";   // "file" | "partition"
     in-out property <string> source: "";
+    in-out property <string> source-label: "";
     in-out property <string> mount-point: "/mnt/";
     in-out property <string> auth-method: "pass";   // "pass" | "key"
     in-out property <string> passphrase: "";
     in-out property <string> key-file: "";
     in-out property <bool>   readonly: false;
+
+    in property <[DeviceInfo]> devices;
+    callback device-picked(DeviceInfo);
+    callback rescan;
 
     callback submit;
     callback reset;
@@ -74,8 +79,8 @@ export component MountView inherits Card {
         }
 
         if root.source-kind == "file" && (root.source != "" || root.typing-source): Rectangle {
-            min-height: 34px;
-            preferred-height: 34px;
+            min-height: 34px * UiTheme.scale;
+            preferred-height: 34px * UiTheme.scale;
             ThemedLineEdit {
                 width: parent.width;
                 height: parent.height;
@@ -83,17 +88,17 @@ export component MountView inherits Card {
                 has-prefix: true;
                 prefix-icon: @image-url("../icons/file.svg");
                 placeholder-text: "~/vaults/archive.luks";
-                suffix-reserved: 30px;
+                suffix-reserved: 30px * UiTheme.scale;
             }
             Rectangle {
-                x: parent.width - 30px;
-                y: (parent.height - 26px) / 2;
-                width: 26px;
-                height: 26px;
+                x: parent.width - 30px * UiTheme.scale;
+                y: (parent.height - 26px * UiTheme.scale) / 2;
+                width: 26px * UiTheme.scale;
+                height: 26px * UiTheme.scale;
                 Image {
                     source: @image-url("../icons/x.svg");
-                    width: 13px;
-                    height: 13px;
+                    width: 13px * UiTheme.scale;
+                    height: 13px * UiTheme.scale;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
                     colorize: UiTheme.fg-2;
@@ -107,18 +112,13 @@ export component MountView inherits Card {
             }
         }
 
-        if root.source-kind == "partition": Rectangle {
-            min-height: 34px;
-            preferred-height: 34px;
-            ThemedLineEdit {
-                width: parent.width;
-                height: parent.height;
-                text <=> root.source;
-                has-prefix: true;
-                prefix-icon: @image-url("../icons/drive.svg");
-                placeholder-text: "/dev/sdb1";
-                suffix-reserved: 30px;
-            }
+        if root.source-kind == "partition": DevicePicker {
+            devices: root.devices;
+            value <=> root.source;
+            selected-label: root.source-label;
+            placeholder: "Pick an encrypted partition";
+            picked(info) => { root.device-picked(info); }
+            rescan => { root.rescan(); }
         }
     }
 
@@ -147,24 +147,24 @@ export component MountView inherits Card {
             }
 
             if root.auth-method == "key": Rectangle {
-                min-height: 32px;
+                min-height: 32px * UiTheme.scale;
                 border-radius: UiTheme.radius-sm;
-                border-width: 0.5px;
+                border-width: 0.5px * UiTheme.scale;
                 border-color: UiTheme.line-strong;
                 background: UiTheme.bg-0;
                 HorizontalLayout {
-                    padding: 10px;
-                    spacing: 8px;
+                    padding: 10px * UiTheme.scale;
+                    spacing: 8px * UiTheme.scale;
                     Image {
                         source: @image-url("../icons/info.svg");
-                        width: 13px;
-                        height: 13px;
+                        width: 13px * UiTheme.scale;
+                        height: 13px * UiTheme.scale;
                         y: (parent.height - self.height) / 2;
                         colorize: UiTheme.fg-3;
                     }
                     Text {
                         text: "Key-file unlock is scaffolded — backend support is coming soon.";
-                        font-size: 11.5px;
+                        font-size: 11.5px * UiTheme.scale;
                         font-family: "JetBrains Mono";
                         color: UiTheme.fg-2;
                         vertical-alignment: center;

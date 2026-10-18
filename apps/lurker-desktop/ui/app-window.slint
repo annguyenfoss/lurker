@@ -14,8 +14,8 @@ import "fonts/JetBrainsMono-Regular.ttf";
 import "fonts/JetBrainsMono-Medium.ttf";
 import "fonts/JetBrainsMono-SemiBold.ttf";
 
-import { Glow, Toast, ToastData } from "components/primitives.slint";
-import { IconAction } from "components/inputs.slint";
+import { Glow, Toast, ToastData, ZoomPill } from "components/primitives.slint";
+import { IconAction, DeviceInfo } from "components/inputs.slint";
 import { Sidebar, NavItem, NavLabel, SideFoot, MainHeader } from "components/chrome.slint";
 import { VolumeRow, VolumeRowData } from "components/volume-row.slint";
 
@@ -25,15 +25,16 @@ import { ManageView } from "views/manage.slint";
 export { ZoomMetricsWindow } from "zoom-metrics.slint";
 export { VolumeRowData } from "components/volume-row.slint";
 export { ToastData } from "components/primitives.slint";
+export { DeviceInfo } from "components/inputs.slint";
 
 export component MainWindow inherits Window {
     title: "Lurker";
-    preferred-width: 1340px;
-    preferred-height: 860px;
-    min-width: 1180px;
-    min-height: 720px;
+    preferred-width: 1340px * UiTheme.scale;
+    preferred-height: 860px * UiTheme.scale;
+    min-width: 1180px * UiTheme.scale;
+    min-height: 720px * UiTheme.scale;
     default-font-family: "Inter Tight";
-    default-font-size: 14px;
+    default-font-size: 14px * UiTheme.scale;
     background: UiTheme.bg-0;
 
     // ── Top-level state ──────────────────────────────────────────────
@@ -67,6 +68,9 @@ export component MainWindow inherits Window {
     // Data
     in property <[VolumeRowData]> volumes: [];
     in property <[ToastData]> toasts: [];
+    in property <[DeviceInfo]> devices: [];
+    in property <string> create-partition-label;   // meta shown in DevicePicker
+    in property <string> mount-source-label;       // meta shown in DevicePicker
     in property <string> backend-label: "LINUX";
 
     // ── Callbacks (only ones with Rust side) ──────────────────────────
@@ -75,13 +79,20 @@ export component MainWindow inherits Window {
     callback reset-mount();
     callback unmount-volume(int);
     callback refresh-volumes();
+    callback rescan-devices();
+    callback device-picked-for-create(DeviceInfo);
+    callback device-picked-for-mount(DeviceInfo);
 
     init => {
         UiTheme.mode = root.theme-mode;
+        UiTheme.scale = root.ui_scale;
         focus-scope.focus();
     }
     changed theme-mode => {
         UiTheme.mode = root.theme-mode;
+    }
+    changed ui_scale => {
+        UiTheme.scale = root.ui_scale;
     }
 
     // ── Body ──────────────────────────────────────────────────────────
@@ -108,11 +119,11 @@ export component MainWindow inherits Window {
                     return accept;
                 }
                 if (event.text == "=" || event.text == "+") {
-                    root.ui_scale = min(2.0, root.ui_scale + 0.1);
+                    root.ui_scale = UiTheme.zoom-step-up(root.ui_scale);
                     return accept;
                 }
                 if (event.text == "-") {
-                    root.ui_scale = max(0.8, root.ui_scale - 0.1);
+                    root.ui_scale = UiTheme.zoom-step-down(root.ui_scale);
                     return accept;
                 }
                 if (event.text == "0") {
@@ -138,7 +149,7 @@ export component MainWindow inherits Window {
                     padding-right: UiTheme.s2;
                     padding-top: UiTheme.s1;
                     padding-bottom: 0;
-                    spacing: 2px;
+                    spacing: 2px * UiTheme.scale;
 
                     NavItem {
                         label: "Create";
@@ -178,12 +189,17 @@ export component MainWindow inherits Window {
                         ? "Make a new encrypted file or partition."
                         : "Mounted volumes, and unlock new ones.";
 
+                    ZoomPill {
+                        value: root.ui_scale;
+                        changed(v) => { root.ui_scale = v; }
+                    }
+
                     IconAction {
                         icon: UiTheme.dark
                             ? @image-url("icons/sun.svg")
                             : @image-url("icons/moon.svg");
-                        size: 34px;
-                        icon-size: 15px;
+                        size: 34px * UiTheme.scale;
+                        icon-size: 15px * UiTheme.scale;
                         variant: "round";
                         tint: UiTheme.fg-1;
                         tooltip: UiTheme.dark ? "Switch to light mode" : "Switch to dark mode";
@@ -202,8 +218,8 @@ export component MainWindow inherits Window {
                         clip: true;
 
                         Glow {
-                            x: -180px;
-                            y: -240px;
+                            x: -180px * UiTheme.scale;
+                            y: -240px * UiTheme.scale;
                         }
 
                         // .work-wrap — 720px centered column.
@@ -216,7 +232,7 @@ export component MainWindow inherits Window {
                             Rectangle { horizontal-stretch: 1; background: transparent; }
 
                             wrap := VerticalLayout {
-                                width: 720px;
+                                width: UiTheme.work-wrap-max;
 
                             if root.current-view == "create": CreateView {
                                 target-kind <=> root.create-target-kind;
@@ -224,11 +240,15 @@ export component MainWindow inherits Window {
                                 file-path <=> root.create-file-path;
                                 file-name <=> root.create-file-name;
                                 partition <=> root.create-partition;
+                                partition-label: root.create-partition-label;
                                 size <=> root.create-size;
                                 size-unit <=> root.create-size-unit;
                                 cipher <=> root.create-cipher;
                                 passphrase <=> root.create-passphrase;
                                 confirm <=> root.create-confirm;
+                                devices: root.devices;
+                                device-picked(info) => { root.device-picked-for-create(info); }
+                                rescan => { root.rescan-devices(); }
                                 submit => { root.submit-create(); }
                             }
 
@@ -237,11 +257,15 @@ export component MainWindow inherits Window {
                                 selected-index <=> root.mount-selected-index;
                                 mount-source-kind <=> root.mount-source-kind;
                                 mount-source <=> root.mount-source;
+                                mount-source-label: root.mount-source-label;
                                 mount-point <=> root.mount-point;
                                 mount-auth-method <=> root.mount-auth-method;
                                 mount-passphrase <=> root.mount-passphrase;
                                 mount-key-file <=> root.mount-key-file;
                                 mount-readonly <=> root.mount-readonly;
+                                devices: root.devices;
+                                device-picked(info) => { root.device-picked-for-mount(info); }
+                                rescan => { root.rescan-devices(); }
                                 unmount(i) => { root.unmount-volume(i); }
                                 submit-mount => { root.submit-mount(); }
                                 reset-mount => { root.reset-mount(); }
@@ -258,15 +282,15 @@ export component MainWindow inherits Window {
 
     // ── Toasts overlay ──
     toasts-overlay := Rectangle {
-        x: parent.width - self.width - 20px;
-        y: parent.height - self.height - 20px;
-        width: 300px;
+        x: parent.width - self.width - 20px * UiTheme.scale;
+        y: parent.height - self.height - 20px * UiTheme.scale;
+        width: 300px * UiTheme.scale;
         height: toasts-col.preferred-height;
         background: transparent;
 
         toasts-col := VerticalLayout {
             alignment: end;
-            spacing: 8px;
+            spacing: 8px * UiTheme.scale;
 
             for data in root.toasts: Toast {
                 data: data;
