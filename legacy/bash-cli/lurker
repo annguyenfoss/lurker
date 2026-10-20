@@ -1,4 +1,6 @@
 #!/bin/bash
+# Archived Linux-only implementation. macOS Apple (AES-256/APFS disk image) and
+# VeraCrypt (same ciphers/SHA-512, exFAT filesystem) live in lurker-core.
 
 set -euo pipefail
 

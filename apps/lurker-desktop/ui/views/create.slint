@@ -11,8 +11,9 @@ import {
 } from "../components/inputs.slint";
 
 export component CreateView inherits Card {
+    in property <bool> is-macos: false;
     in-out property <string> target-kind: "file";   // "file" | "partition"
-    in-out property <string> format: "luks";         // "luks" | "vera"
+    in-out property <string> format: "luks";         // "luks" | "vera" | "apple"
     in-out property <string> file-path: "~/vaults/";
     in-out property <string> file-name: "archive.luks";
     in-out property <string> partition: "";
@@ -28,6 +29,7 @@ export component CreateView inherits Card {
     callback rescan;
 
     callback submit;
+    callback generate-passphrase;
 
     private property <bool> pass-match: root.passphrase.character-count > 0 && root.passphrase == root.confirm;
     private property <bool> can-submit:
@@ -42,7 +44,7 @@ export component CreateView inherits Card {
         Segmented {
             value <=> root.format;
             options: [
-                { value: "luks", label: "LUKS" },
+                { value: root.is-macos ? "apple" : "luks", label: root.is-macos ? "Apple Encryption" : "LUKS" },
                 { value: "vera", label: "VeraCrypt" },
             ];
         }
@@ -50,11 +52,11 @@ export component CreateView inherits Card {
 
     // ── Target section ────────────────────────────────────────────────
     CardSection {
-        SectionHead { title: "TARGET"; hint: "file or partition"; }
+        SectionHead { title: "TARGET"; hint: root.is-macos ? "file container" : "file or partition"; }
 
         Rectangle { height: UiTheme.s3; }   // spacer
 
-        Segmented {
+        if !root.is-macos: Segmented {
             value <=> root.target-kind;
             options: [
                 { value: "file",      label: "File container" },
@@ -153,8 +155,12 @@ export component CreateView inherits Card {
 
     // ── Cipher section ────────────────────────────────────────────────
     CardSection {
-        SectionHead { title: "CIPHER"; hint: "pick one — the rest is handled for you"; }
-        Segmented {
+        SectionHead { title: "CIPHER"; hint: root.format == "apple" ? "AES-256" : "pick one — the rest is handled for you"; }
+        if root.format == "apple": Text {
+            text: "AES-256";
+            color: UiTheme.fg-1;
+        }
+        if root.format != "apple": Segmented {
             value <=> root.cipher;
             options: [
                 { value: "aes",     label: "AES" },
@@ -178,10 +184,7 @@ export component CreateView inherits Card {
                     text <=> root.passphrase;
                     show-strength-button: true;
                     generate-requested => {
-                        // Simple in-UI generator: 5 words + 2 digits (diceware-ish)
-                        // Deterministic fallback if no source of randomness.
-                        root.passphrase = "forest-ember-harbor-gravel-lucid-42";
-                        root.confirm = "";
+                        root.generate-passphrase();
                     }
                 }
             }

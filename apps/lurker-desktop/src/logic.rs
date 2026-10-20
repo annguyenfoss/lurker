@@ -33,11 +33,17 @@ pub fn build_create_command(
     };
     let volume_type = match format {
         "luks" => VolumeType::Luks,
+        "apple" => VolumeType::Apple,
         "vera" | "veracrypt" => VolumeType::Veracrypt,
         _ => return Err(format!("Unsupported format: {format}")),
     };
-    let cipher = CreateCipher::parse(cipher)
-        .ok_or_else(|| format!("Unsupported create cipher: {cipher}"))?;
+    // Apple has a fixed profile and no cipher selector in the form. A previous
+    // VeraCrypt selection may still be stored when the user switches formats.
+    let cipher = if volume_type == VolumeType::Apple {
+        CreateCipher::Aes
+    } else {
+        CreateCipher::parse(cipher).ok_or_else(|| format!("Unsupported create cipher: {cipher}"))?
+    };
 
     let target = match source_kind {
         SourceKind::File => {
@@ -53,8 +59,8 @@ pub fn build_create_command(
         SourceKind::Block => required_value("Partition", partition)?.to_string(),
     };
 
-    let passphrase = required_value("Passphrase", passphrase)?;
-    let confirm = required_value("Passphrase confirmation", confirm)?;
+    let passphrase = required_secret("Passphrase", passphrase)?;
+    let confirm = required_secret("Passphrase confirmation", confirm)?;
     if passphrase != confirm {
         return Err("Create passphrase confirmation does not match.".into());
     }
@@ -101,9 +107,9 @@ pub fn build_mount_command(
 
     let source = required_value("Source", source)?;
     let mountpoint = required_value("Mount point", mount_point)?;
-    let passphrase = required_value("Passphrase", passphrase)?;
+    let passphrase = required_secret("Passphrase", passphrase)?;
 
-    // Auto volume type — backend detects LUKS vs VeraCrypt from source magic.
+    // The platform backend detects the container type.
     // We don't have a UI field for type in the new design, so pass Auto.
     let volume_type = VolumeType::Auto;
     let _ = source_kind;
@@ -133,26 +139,30 @@ pub fn volume_rows(volumes: &[ActiveVolume]) -> Vec<VolumeRowView> {
     volumes
         .iter()
         .map(|volume| {
-            let source_display = volume.mapper_path.display().to_string();
+            let source_display = volume
+                .source_path
+                .as_ref()
+                .unwrap_or(&volume.mapper_path)
+                .display()
+                .to_string();
             let mount_display = volume
                 .mountpoint
                 .as_ref()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|| "(unmounted)".to_string());
-            // Best-effort source kind from the mapper path (always /dev/mapper/*)
-            // The "original source" (file vs block) isn't tracked on ActiveVolume
-            // in lurker-core so we leave this as "partition" for display purposes.
-            let source_kind = "partition".to_string();
+            // Linux currently exposes mapper devices; macOS also supplies the backing file.
+            let source_kind = if volume.source_path.is_some() {
+                "file"
+            } else {
+                "partition"
+            }
+            .to_string();
             VolumeRowView {
                 name: volume.mapper_name.clone(),
                 source: source_display,
                 mount: mount_display,
-                readonly: false, // not tracked on ActiveVolume yet
-                cipher: volume
-                    .filesystem_type
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_string(),
+                readonly: volume.readonly,
+                cipher: volume.filesystem_type.as_deref().unwrap_or("").to_string(),
                 source_kind,
             }
         })
@@ -175,6 +185,16 @@ fn required_value<'a>(label: &str, value: &'a str) -> Result<&'a str, String> {
     }
 }
 
+// The existing Generate button must never return a fixed example password.
+pub fn generate_passphrase() -> Result<String, String> {
+    use std::io::Read;
+    let mut random = [0u8; 16];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut file| file.read_exact(&mut random))
+        .map_err(|e| format!("Could not read system randomness: {e}"))?;
+    Ok(random.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{build_create_command, build_mount_command, volume_rows};
@@ -182,9 +202,27 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn generated_passphrases_use_system_randomness() {
+        let first = super::generate_passphrase().unwrap();
+        let second = super::generate_passphrase().unwrap();
+        assert_eq!(first.len(), 32);
+        assert!(first.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_ne!(first, second);
+    }
+
+    #[test]
     fn build_create_command_joins_file_path_and_name() {
         let cmd = build_create_command(
-            "file", "luks", "~/vaults/", "archive.luks", "", "4", "GB", "aes", "secret", "secret",
+            "file",
+            "luks",
+            "~/vaults/",
+            "archive.luks",
+            "",
+            "4",
+            "GB",
+            "aes",
+            "secret",
+            "secret",
         )
         .unwrap();
         assert_eq!(cmd.target, PathBuf::from("~/vaults/archive.luks"));
@@ -206,7 +244,16 @@ mod tests {
     #[test]
     fn build_create_command_for_partition_skips_size() {
         let cmd = build_create_command(
-            "partition", "vera", "", "", "/dev/sdb1", "", "GB", "twofish", "secret", "secret",
+            "partition",
+            "vera",
+            "",
+            "",
+            "/dev/sdb1",
+            "",
+            "GB",
+            "twofish",
+            "secret",
+            "secret",
         )
         .unwrap();
         assert_eq!(cmd.target, PathBuf::from("/dev/sdb1"));
@@ -227,16 +274,8 @@ mod tests {
 
     #[test]
     fn build_mount_command_accepts_readonly_flag() {
-        let cmd = build_mount_command(
-            "/tmp/v.luks",
-            "/mnt/v",
-            "pass",
-            "secret",
-            "",
-            true,
-            "file",
-        )
-        .unwrap();
+        let cmd = build_mount_command("/tmp/v.luks", "/mnt/v", "pass", "secret", "", true, "file")
+            .unwrap();
         assert_eq!(cmd.source, PathBuf::from("/tmp/v.luks"));
         assert_eq!(cmd.mountpoint, PathBuf::from("/mnt/v"));
         assert!(cmd.readonly);
@@ -261,6 +300,8 @@ mod tests {
     #[test]
     fn volume_rows_projects_active_volumes() {
         let rows = volume_rows(&[ActiveVolume {
+            source_path: None,
+            readonly: false,
             mapper_name: "lurker_test".into(),
             mapper_path: PathBuf::from("/dev/mapper/lurker_test"),
             mountpoint: Some(PathBuf::from("/mnt/test")),
@@ -270,5 +311,45 @@ mod tests {
         assert_eq!(rows[0].name, "lurker_test");
         assert_eq!(rows[0].mount, "/mnt/test");
         assert_eq!(rows[0].cipher, "btrfs");
+    }
+    #[test]
+    fn apple_create_preserves_passphrase_spaces_and_mac_volume_metadata() {
+        let c = build_create_command(
+            "file", "apple", "/tmp", "a.dmg", "", "32", "MB", "aes", " secret ", " secret ",
+        )
+        .unwrap();
+        assert_eq!(c.volume_type, VolumeType::Apple);
+        assert_eq!(c.passphrase.as_deref(), Some(" secret "));
+        let v = ActiveVolume {
+            mapper_name: "a.dmg".into(),
+            mapper_path: "/dev/disk10".into(),
+            source_path: Some("/tmp/a.dmg".into()),
+            readonly: true,
+            mountpoint: Some("/tmp/mount".into()),
+            filesystem_type: Some("apfs".into()),
+        };
+        let rows = volume_rows(&[v]);
+        assert_eq!(rows[0].source, "/tmp/a.dmg");
+        assert_eq!(rows[0].source_kind, "file");
+        assert!(rows[0].readonly);
+        let c = build_mount_command(
+            "/tmp/a.dmg",
+            "/tmp/mount",
+            "pass",
+            " secret ",
+            "",
+            true,
+            "file",
+        )
+        .unwrap();
+        assert_eq!(c.passphrase.as_deref(), Some(" secret "));
+    }
+}
+
+fn required_secret<'a>(label: &str, value: &'a str) -> Result<&'a str, String> {
+    if value.is_empty() {
+        Err(format!("{label} is required."))
+    } else {
+        Ok(value)
     }
 }

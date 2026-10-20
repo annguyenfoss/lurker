@@ -56,6 +56,10 @@ pub struct SystemProbe {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveVolume {
+    #[serde(default)]
+    pub source_path: Option<PathBuf>,
+    #[serde(default)]
+    pub readonly: bool,
     pub mapper_name: String,
     pub mapper_path: PathBuf,
     pub mountpoint: Option<PathBuf>,

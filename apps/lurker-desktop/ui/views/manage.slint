@@ -11,6 +11,7 @@ import { DeviceInfo } from "../components/inputs.slint";
 import { MountView } from "mount.slint";
 
 export component ManageView inherits Rectangle {
+    in property <bool> is-macos: false;
     in property <[VolumeRowData]> volumes;
     in-out property <int> selected-index: -1;
 
@@ -150,6 +151,7 @@ export component ManageView inherits Rectangle {
 
         // ── Inlined MountView ────────────────────────────────────────
         MountView {
+            is-macos: root.is-macos;
             source-kind <=> root.mount-source-kind;
             source <=> root.mount-source;
             source-label <=> root.mount-source-label;

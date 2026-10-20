@@ -5,12 +5,12 @@ Use this file as the source of truth for create-time cipher policy.
 ## Scope
 
 - Applies to create flows only.
-- Supported `--cipher` values: `aes`, `serpent`, `twofish`.
+- Supported `--cipher` values: `aes`, `serpent`, `twofish` for LUKS/VeraCrypt. Apple images accept only `aes`.
 - No cascades.
 - No user-tunable low-level crypto knobs.
 - Keep these profiles hardcoded in code.
 
-## LUKS Profiles
+## LUKS Profiles (Linux)
 
 - `aes`
   - label: `AES`
@@ -68,7 +68,8 @@ Use this file as the source of truth for create-time cipher policy.
   - `--force`
   - `--volume-type=normal`
   - `--hash=SHA-512`
-  - `--filesystem=none`
+  - `--filesystem=none` on Linux (followed by mkfs.btrfs)
+  - `--filesystem=exFAT` on macOS (VeraCrypt formats the virtual disk)
   - `--random-source=/dev/urandom`
   - `--pim=0`
   - `-k ""`
@@ -103,3 +104,14 @@ If cipher choices change, also update:
 - `crates/lurker-cli/src/cli.rs`
 - `apps/lurker-desktop/src/logic.rs`
 - `apps/lurker-desktop/ui/app-window.slint`
+
+## Apple Disk Images (macOS)
+
+- Create defaults to `apple` on macOS; Linux defaults to `luks`.
+- `hdiutil create -type UDIF -fs APFS -volname Lurker -encryption AES-256 -stdinpass`.
+- Size is specified in MiB. File containers only, minimum 32 MiB.
+- Encryption protects the virtual disk image; APFS inside is not separately encrypted.
+- AES-256 is fixed. Reject Serpent/Twofish instead of silently ignoring the selected cipher.
+- Mount uses `hdiutil attach -stdinpass`, optionally `-readonly`; unmount detaches the virtual disk without force.
+- macOS VeraCrypt retains the existing cipher names, SHA-512, PIM 0, no keyfiles, and full initialization; it changes only the inner filesystem to exFAT.
+- Archived Bash is Linux-only and does not implement Apple or macOS workflows.

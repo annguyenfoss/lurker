@@ -42,11 +42,7 @@ struct LsblkNode {
 
 pub fn list_block_devices() -> Vec<BlockDevice> {
     let output = match Command::new("lsblk")
-        .args([
-            "-J",
-            "-o",
-            "PATH,LABEL,MODEL,SIZE,FSTYPE,TRAN,TYPE",
-        ])
+        .args(["-J", "-o", "PATH,LABEL,MODEL,SIZE,FSTYPE,TRAN,TYPE"])
         .output()
     {
         Ok(o) if o.status.success() => o,
@@ -80,7 +76,10 @@ fn flatten(node: &LsblkNode, out: &mut Vec<BlockDevice>) {
                 .unwrap_or_else(|| "(unlabeled)".to_string());
             let tran = node.tran.clone().unwrap_or_default().to_ascii_uppercase();
             let size = node.size.clone().unwrap_or_default();
-            let fstype = node.fstype.clone().unwrap_or_else(|| "unallocated".to_string());
+            let fstype = node
+                .fstype
+                .clone()
+                .unwrap_or_else(|| "unallocated".to_string());
             let sub = [tran.clone(), size, fstype]
                 .into_iter()
                 .filter(|s| !s.is_empty())

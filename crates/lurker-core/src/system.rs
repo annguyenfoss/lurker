@@ -441,21 +441,8 @@ fn is_executable(path: &Path) -> bool {
 }
 
 pub fn effective_uid() -> AppResult<u32> {
-    let status = fs::read_to_string("/proc/self/status")
-        .map_err(|err| AppError::io("Failed to read /proc/self/status", err))?;
-    for line in status.lines() {
-        if let Some(values) = line.strip_prefix("Uid:") {
-            let mut parts = values.split_whitespace();
-            let _real = parts.next();
-            let effective = parts
-                .next()
-                .ok_or_else(|| AppError::new("Failed to parse effective uid."))?;
-            return effective
-                .parse::<u32>()
-                .map_err(|_| AppError::new("Failed to parse effective uid."));
-        }
-    }
-    Err(AppError::new("Failed to locate effective uid."))
+    // get euid from the OS rather than environment variables or Linux procfs.
+    Ok(crate::effective_uid())
 }
 
 #[cfg(test)]

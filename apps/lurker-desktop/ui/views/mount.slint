@@ -16,6 +16,7 @@ import {
 } from "../components/inputs.slint";
 
 export component MountView inherits Card {
+    in property <bool> is-macos: false;
     in-out property <string> source-kind: "file";   // "file" | "partition"
     in-out property <string> source: "";
     in-out property <string> source-label: "";
@@ -52,11 +53,11 @@ export component MountView inherits Card {
     // ── Source section ────────────────────────────────────────────────
     CardSection {
         top-divider: false;
-        SectionHead { title: "SOURCE"; hint: "encrypted file or partition to unlock"; }
+        SectionHead { title: "SOURCE"; hint: root.is-macos ? "encrypted file container to unlock" : "encrypted file or partition to unlock"; }
 
         Rectangle { height: UiTheme.s3; }
 
-        Segmented {
+        if !root.is-macos: Segmented {
             value: root.source-kind;
             options: [
                 { value: "file",      label: "File container" },
@@ -73,7 +74,7 @@ export component MountView inherits Card {
         if root.source-kind == "file" && root.source == "" && !root.typing-source: Drop {
             icon: @image-url("../icons/file.svg");
             title: "Drop a container file here";
-            subtitle: "or click to type a path · LUKS, VeraCrypt";
+            subtitle: root.is-macos ? "or click to type a path · Apple Encryption, VeraCrypt" : "or click to type a path · LUKS, VeraCrypt";
             clicked => { root.typing-source = true; }
             dropped(path) => { root.source = path; }
         }
@@ -87,7 +88,7 @@ export component MountView inherits Card {
                 text <=> root.source;
                 has-prefix: true;
                 prefix-icon: @image-url("../icons/file.svg");
-                placeholder-text: "~/vaults/archive.luks";
+                placeholder-text: root.is-macos ? "~/archive.dmg" : "~/vaults/archive.luks";
                 suffix-reserved: 30px * UiTheme.scale;
             }
             Rectangle {

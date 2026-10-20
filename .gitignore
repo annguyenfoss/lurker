@@ -14,11 +14,18 @@ rustc-ice-*.txt
 *.profdata
 
 # Other generated output and local scratch directories
-/build/
-/dist/
-/tmp/
-/temp/
-/.cache/
+build/
+dist/
+tmp/
+temp/
+.cache/
+
+# Python build tooling and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
 
 # Runtime temporary volumes
 *.lurker-tmp-*
@@ -30,6 +37,8 @@ rustc-ice-*.txt
 *.swp
 *.swo
 *.bak
+*.orig
+*.rej
 *~
 .#*
 \#*\#

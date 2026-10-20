@@ -1,9 +1,15 @@
 mod api;
 mod error;
+#[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 mod model;
 mod output;
+#[cfg(target_os = "linux")]
 mod sha256;
+mod size;
+#[cfg(target_os = "linux")]
 mod system;
 mod workflow;
 
@@ -15,17 +21,27 @@ pub use error::{AppError, AppResult};
 pub use model::{ColorMode, CreateCipher, ResolvedTargetKind, SourceKind, VolumeType};
 pub use output::{Output, OutputBuffer, OutputEntry, OutputLevel};
 
+#[cfg(target_os = "linux")]
 use crate::linux::{canonical_device_path, read_mountinfo};
+#[cfg(target_os = "linux")]
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::path::Path;
 
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
-    workflow::run(command, output)
+    #[cfg(target_os = "macos")]
+    {
+        macos::run(command, output)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        workflow::run(command, output)
+    }
 }
 
 pub fn run_buffered(command: CommandAction) -> OperationResponse {
     let (output, buffer) = Output::buffered();
-    match workflow::run(command, output) {
+    match run(command, output) {
         Ok(()) => OperationResponse {
             ok: true,
             logs: buffer.entries(),
@@ -44,10 +60,29 @@ pub fn run_buffered(command: CommandAction) -> OperationResponse {
 }
 
 pub fn probe_system() -> AppResult<SystemProbe> {
-    system::probe_system()
+    #[cfg(target_os = "macos")]
+    {
+        macos::probe_system()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        system::probe_system()
+    }
 }
 
 pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::list_active_volumes()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        list_linux_volumes()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn list_linux_volumes() -> AppResult<Vec<ActiveVolume>> {
     let mounts = read_mountinfo()?;
     let mut volumes = Vec::new();
     let entries = fs::read_dir("/dev/mapper")
@@ -76,6 +111,8 @@ pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
         });
 
         volumes.push(ActiveVolume {
+            source_path: None,
+            readonly: false,
             mapper_name: mapper_name.to_string(),
             mapper_path: path,
             mountpoint: mount.map(|item| item.mount_point.clone()),
@@ -85,4 +122,12 @@ pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 
     volumes.sort_by(|left, right| left.mapper_name.cmp(&right.mapper_name));
     Ok(volumes)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+compile_error!("Lurker supports Linux and macOS only.");
+
+pub fn effective_uid() -> u32 {
+    // SAFETY: geteuid has no arguments or preconditions.
+    unsafe { libc::geteuid() }
 }

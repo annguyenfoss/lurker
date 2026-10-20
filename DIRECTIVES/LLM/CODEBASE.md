@@ -2,7 +2,7 @@
 
 ## Product Model
 
-`lurker` is a Linux encryption utility with two first-class frontends:
+`lurker` is a Linux and macOS file-container encryption utility with two first-class frontends:
 
 - `lurker`: CLI for terminal/scripting use
 - `lurker-desktop`: Slint desktop app for simple create/mount/unmount flows
@@ -14,7 +14,10 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 - `crates/lurker-core`
   - `src/api.rs`: shared serde command/response types
   - `src/model.rs`: enums such as `VolumeType`, `CreateCipher`, `SourceKind`
-  - `src/workflow.rs`: source of truth for create/mount/unmount behavior and hardcoded crypto profiles
+  - `src/workflow.rs`: source of truth for hardcoded crypto profiles and Linux workflow dispatch
+  - `src/macos.rs`: hdiutil/VeraCrypt file-container workflows and native volume discovery
+  - `src/linux_workflow.rs`: Linux create/mount/unmount implementation
+  - `src/size.rs`: shared size validation
   - `src/linux.rs`: mapper naming, path resolution, mountinfo parsing, target detection
   - `src/system.rs`: tool discovery, subprocess execution, privilege-aware context
   - `src/output.rs`: structured human-facing output
@@ -23,7 +26,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
   - `src/main.rs`: parse -> run core
 - `crates/lurker-helper`
   - `src/main.rs`: desktop helper; reads `CommandAction` JSON on stdin and writes `OperationResponse` JSON on stdout
-  - reruns itself via `pkexec` first, `sudo` fallback only when a TTY exists
+  - Linux reruns itself via `pkexec` first, `sudo` fallback only when a TTY exists; macOS runs directly as the login user
 - `apps/lurker-desktop`
   - `src/main.rs`: UI callbacks, zoom state, background threading, refresh flow
   - `src/logic.rs`: form validation and conversion into shared commands
@@ -32,6 +35,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
   - `ui/controls.slint`: custom button/select/checkbox controls
   - `ui/theme.slint`: layout tokens
   - `ui/zoom-metrics.slint`: regression surface for text zoom tests
+- `scripts/build-macos-dmg.py`: native release app bundle and drag-to-Applications DMG packaging; helper stays beside the desktop executable inside `Contents/MacOS`
 - `legacy/bash-cli`
   - archived Bash implementation; still kept in sync for create cipher profiles
 - `legacy/rust-cli-monolith`
@@ -39,12 +43,13 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 
 ## Core Invariants
 
-- Linux only.
-- Supported create volume types: `luks`, `veracrypt`.
+- Linux and macOS only. macOS operations are file-backed virtual disks, never physical-device encryption.
+- Linux create types: `luks` (default), `veracrypt`. macOS: `apple` (default), `veracrypt`.
+- Apple encryption is AES-256 at the disk-image layer, with APFS inside; it is not system FileVault or APFS filesystem encryption.
 - Supported create ciphers: `aes`, `serpent`, `twofish`.
 - Create cipher matters only on create. Mount/unmount detect existing volumes.
-- Filesystem created after successful create is always `btrfs`.
-- Btrfs mounts use `compress=zstd`.
+- Linux create uses `btrfs`; macOS Apple images use APFS and VeraCrypt uses exFAT.
+- Linux Btrfs mounts use `compress=zstd`.
 - VeraCrypt tags are unsupported.
 - The desktop app never invokes the installed CLI binary.
 - The helper is an implementation detail for desktop privilege escalation.
@@ -55,7 +60,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 
 - CLI: parse args -> build `CommandAction` -> `lurker_core::run()`
 - Desktop: gather form state -> `apps/lurker-desktop/src/logic.rs` builds shared command -> `lurker-helper` runs core -> desktop refreshes active volumes
-- Active volume listing comes from `lurker_core::list_active_volumes()`, which scans `/dev/mapper/lurker_*` and correlates mountinfo
+- Active volume listing comes from `lurker_core::list_active_volumes()`, which scans `/dev/mapper/lurker_*` and correlates mountinfo on Linux. On macOS it reads hdiutil plists and VeraCrypt verbose listings, showing the user's attached encrypted disk images and VeraCrypt volumes
 
 ## What Lives Where
 
@@ -94,3 +99,16 @@ If you add or remove a supported create cipher, also update:
 - `cargo check --workspace`
 - `cargo test --workspace`
 - For desktop-only changes, also run `cargo test -p lurker-desktop`
+
+## macOS Rules
+
+- Use `/usr/bin/hdiutil` for Apple disk-image encryption, attach, detach, and structured discovery.
+- VeraCrypt unmount must first use `/usr/sbin/diskutil unmount` to reject busy filesystems; some VeraCrypt builds force-detach internally.
+- The existing Generate button must use system randomness, with no fixed example password fallback.
+- Use the installed VeraCrypt application executable (also discoverable on PATH); its matching FUSE-T/macFUSE runtime is required.
+- Passphrases travel over stdin only. hdiutil uses a NUL terminator; VeraCrypt uses a newline. Reject embedded NUL/newline characters and preserve spaces.
+- The desktop still invokes lurker-helper, never the CLI; macOS helper requests run in the login user session without Linux escalation.
+- Reject LUKS and physical devices on macOS, and reject Apple images on Linux with platform-specific errors.
+- Mac create stages in a private same-directory folder, publishes atomically, and refuses to overwrite attached images.
+- macOS active volume listing includes attached encrypted images belonging to the current user and VeraCrypt volumes, including those mounted outside Lurker. Unmount is always scoped to one identified encrypted container.
+- Run the opt-in native suite with `cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1`; it creates only disposable file containers.

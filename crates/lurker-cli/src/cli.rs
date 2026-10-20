@@ -130,7 +130,7 @@ where
                 let value = &current["--type=".len()..];
                 volume_type = VolumeType::parse(value).ok_or_else(|| ParseFailure {
                     message: Some(format!(
-                        "Invalid --type value: {}. Use auto, luks, or veracrypt.",
+                        "Invalid --type value: {}. Use auto, luks, veracrypt, or apple.",
                         value
                     )),
                     exit_code: 1,
@@ -326,7 +326,7 @@ where
                 (VolumeType::Auto, true) => {
                     return Err(ParseFailure {
                         message: Some(
-                            "Option --type auto is not valid with create. Use luks or veracrypt."
+                            "Option --type auto is not valid with create. Use luks, veracrypt, or apple."
                                 .into(),
                         ),
                         exit_code: 1,
@@ -336,7 +336,7 @@ where
                         color_mode,
                     });
                 }
-                (VolumeType::Auto, false) => VolumeType::Luks,
+                (VolumeType::Auto, false) => VolumeType::default_create(),
                 (value, _) => value,
             };
 
@@ -432,7 +432,7 @@ where
             let _ = source_kind;
 
             let mountpoint = PathBuf::from(&action_args[1]);
-            if !mountpoint.is_dir() {
+            if !mountpoint.is_dir() && !(cfg!(target_os = "macos") && !mountpoint.exists()) {
                 return Err(ParseFailure {
                     message: Some(format!(
                         "Directory does not exist: {}",
@@ -528,8 +528,14 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
         ("", "", "")
     };
 
+    if cfg!(target_os = "macos") {
+        return format!(
+            "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type apple|veracrypt] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} mount [--type auto|apple|veracrypt] <file> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type auto|apple|veracrypt] <file|mountpoint|virtual-device>{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.dmg 4{reset}\n  {accent}{script_name} createvc --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} mount ./vault.dmg ~/vault-mount{reset}\n  {accent}{script_name} unmount ~/vault-mount{reset}\n\n{header}Options:{reset}\n  {accent}--type TYPE{reset}       Create defaults to apple; mount/unmount default to auto\n  {accent}--cipher CIPHER{reset}   aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}-F, --force{reset}       Replace an existing unmounted regular file after successful create\n  {accent}--color=WHEN{reset}      auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n\n  macOS supports file containers only (minimum 32 MiB). LUKS and tags require Linux.\n"
+        );
+    }
+
     format!(
-        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --cipher serpent ./vault-serpent.img 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Use /dev/mapper/lurker_TAG for mount or unmount\n  {accent}--type TYPE{reset}       Container type: create uses luks|veracrypt; mount/unmount use auto|luks|veracrypt\n  {accent}--cipher CIPHER{reset}   Create cipher: aes, serpent, or twofish\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n"
+        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), apple (macOS default), veracrypt; auto for mount/unmount\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n"
     )
 }
 
@@ -558,7 +564,7 @@ fn parse_volume_type(
 ) -> Result<VolumeType, ParseFailure> {
     VolumeType::parse(&value.to_string_lossy()).ok_or_else(|| ParseFailure {
         message: Some(format!(
-            "Invalid --type value: {}. Use auto, luks, or veracrypt.",
+            "Invalid --type value: {}. Use auto, luks, veracrypt, or apple.",
             value.to_string_lossy()
         )),
         exit_code: 1,
@@ -710,7 +716,7 @@ mod tests {
 
         match command.command {
             CommandAction::Create(create) => {
-                assert_eq!(create.volume_type, VolumeType::Luks);
+                assert_eq!(create.volume_type, VolumeType::default_create());
                 assert_eq!(create.cipher, CreateCipher::Serpent);
             }
             _ => panic!("unexpected command"),
@@ -739,6 +745,37 @@ mod tests {
                 assert_eq!(create.cipher, CreateCipher::Twofish);
             }
             _ => panic!("unexpected command"),
+        }
+    }
+    #[test]
+    fn apple_type_and_platform_default_round_trip() {
+        for flag in [vec!["--type", "apple"], vec!["--type=apple"]] {
+            let mut input = vec![OsString::from("lurker"), OsString::from("create")];
+            input.extend(flag.iter().map(OsString::from));
+            input.extend([OsString::from("vault.dmg"), OsString::from("1")]);
+            let ParseOutcome::Run(cli) = parse_env_args(input).unwrap() else {
+                panic!()
+            };
+            let CommandAction::Create(c) = cli.command else {
+                panic!()
+            };
+            assert_eq!(c.volume_type, VolumeType::Apple);
+        }
+        let input = ["lurker", "create", "vault", "1"].map(OsString::from);
+        let ParseOutcome::Run(cli) = parse_env_args(input).unwrap() else {
+            panic!()
+        };
+        let CommandAction::Create(c) = cli.command else {
+            panic!()
+        };
+        assert_eq!(c.volume_type, VolumeType::default_create());
+        assert_eq!(c.cipher, CreateCipher::Aes);
+        for input in [
+            vec!["lurker", "create", "--type", "auto", "vault", "1"],
+            vec!["lurker", "createvc", "--type", "apple", "vault", "1"],
+            vec!["lurker", "unmount", "--cipher", "aes", "vault"],
+        ] {
+            assert!(parse_env_args(input.into_iter().map(OsString::from)).is_err());
         }
     }
 }

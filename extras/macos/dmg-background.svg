@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="800" height="500" viewBox="0 0 800 500">
+  <image xlink:href="dmg-illustration.png" width="800" height="500" preserveAspectRatio="xMidYMid slice"/>
+  <g font-family="Inter Tight, -apple-system, Helvetica Neue, sans-serif">
+    <text x="64" y="181" fill="#bfd2d9" font-size="22" font-weight="400">File encryption, kept simple.</text>
+    <path d="M 370 348 H 430 M 418 336 L 430 348 L 418 360" stroke="#7bd7cb" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Finder draws black file labels over image backgrounds in both appearances. -->
+    <g fill="#bdd8d5" stroke="#e0efeb" stroke-opacity="0.35">
+      <rect x="184" y="410" width="112" height="28" rx="7"/>
+      <rect x="486" y="410" width="148" height="28" rx="7"/>
+    </g>
+  </g>
+</svg>

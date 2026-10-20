@@ -25,6 +25,7 @@ pub enum VolumeType {
     Auto,
     Luks,
     Veracrypt,
+    Apple,
 }
 
 impl VolumeType {
@@ -33,6 +34,7 @@ impl VolumeType {
             "auto" => Some(Self::Auto),
             "luks" => Some(Self::Luks),
             "veracrypt" => Some(Self::Veracrypt),
+            "apple" => Some(Self::Apple),
             _ => None,
         }
     }
@@ -42,6 +44,7 @@ impl VolumeType {
             Self::Auto => "auto",
             Self::Luks => "luks",
             Self::Veracrypt => "veracrypt",
+            Self::Apple => "apple",
         }
     }
 }
@@ -116,5 +119,15 @@ impl ResolvedTargetKind {
 impl Display for ResolvedTargetKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl VolumeType {
+    pub fn default_create() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Apple
+        } else {
+            Self::Luks
+        }
     }
 }

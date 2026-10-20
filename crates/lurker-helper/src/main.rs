@@ -38,7 +38,9 @@ fn handle_run(as_root: bool) -> OperationResponse {
         Err(message) => return operation_error(message),
     };
 
-    if as_root || is_root() {
+    // macOS disk images and VeraCrypt run in the login user session.
+    // VeraCrypt owns any platform authorization it needs.
+    if cfg!(target_os = "macos") || as_root || is_root() {
         return run_direct(&payload);
     }
 
@@ -147,12 +149,7 @@ fn read_stdin() -> Result<Vec<u8>, String> {
 }
 
 fn is_root() -> bool {
-    env::var("EUID")
-        .ok()
-        .or_else(|| env::var("UID").ok())
-        .and_then(|value| value.parse::<u32>().ok())
-        .map(|uid| uid == 0)
-        .unwrap_or(false)
+    lurker_core::effective_uid() == 0
 }
 
 fn has_terminal_for_sudo() -> bool {

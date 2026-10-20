@@ -8,10 +8,10 @@ Read these before editing:
 
 Non-negotiables:
 
-- Linux only.
+- Linux and macOS. macOS supports encrypted file containers; physical-device create remains Linux-only.
 - First-class products are `lurker` CLI and `lurker-desktop`, both on top of `lurker-core`.
 - `lurker-helper` is internal. The desktop app uses it; the desktop app must not shell out to the CLI.
-- Use system binaries for crypto/filesystem work: `cryptsetup`, `veracrypt`, `mkfs.btrfs`, `mount`, `umount`, `lsblk`, optional `blkid`.
+- Use system binaries for crypto/filesystem work: `cryptsetup`, `veracrypt`, `mkfs.btrfs`, `mount`, `umount`, `lsblk`, optional `blkid`; on macOS use `hdiutil`, `diskutil`, and `veracrypt`.
 - Do not reintroduce Tauri, Electron, or any WebView stack.
 - The desktop app is Slint + winit + software renderer.
 - `apps/lurker-desktop/build.rs` intentionally uses Slint `material`; do not switch styles casually.

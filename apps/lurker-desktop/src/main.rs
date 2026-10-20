@@ -34,10 +34,20 @@ struct AppState {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     BackendSelector::new()
         .backend_name("winit".into())
-        .renderer_name("skia".into())
+        .renderer_name("software".into())
         .select()?;
 
     let window = MainWindow::new()?;
+    if cfg!(target_os = "macos") {
+        window.set_is_macos(true);
+        window.set_backend_label("MACOS".into());
+        window.set_create_format("apple".into());
+        window.set_create_file_name("archive.dmg".into());
+        window.set_mount_point(default_mountpoint().into());
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        window.set_create_file_path(home.to_string_lossy().as_ref().into());
+    }
     let helper_path = resolve_helper_path();
     let state = AppState {
         window: window.as_weak(),
@@ -49,7 +59,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bind_callbacks(&window, &state);
     state.refresh_active_volumes(false);
-    state.rescan_devices();
+    if cfg!(target_os = "linux") {
+        state.rescan_devices();
+    }
     window.run()?;
     Ok(())
 }
@@ -58,6 +70,19 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
     // ── Volumes refresh ──
     let rs = state.clone();
     window.on_refresh_volumes(move || rs.refresh_active_volumes(true));
+
+    let gs = state.clone();
+    window.on_generate_passphrase(move || {
+        if let Some(window) = gs.window.upgrade() {
+            match logic::generate_passphrase() {
+                Ok(passphrase) => {
+                    window.set_create_passphrase(passphrase.into());
+                    window.set_create_confirm("".into());
+                }
+                Err(message) => gs.push_toast("err", "Passphrase generation failed", &message),
+            }
+        }
+    });
 
     // ── Submit Create ──
     let cs = state.clone();
@@ -117,7 +142,7 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
     window.on_reset_mount(move || {
         if let Some(w) = rms.upgrade() {
             w.set_mount_source("".into());
-            w.set_mount_point("/mnt/".into());
+            w.set_mount_point(default_mountpoint().into());
             w.set_mount_passphrase("".into());
             w.set_mount_key_file("".into());
             w.set_mount_auth_method("pass".into());
@@ -193,8 +218,12 @@ impl AppState {
         if index < 0 {
             return;
         }
-        let Ok(guard) = self.active_volumes.lock() else { return };
-        let Some(volume) = guard.get(index as usize).cloned() else { return };
+        let Ok(guard) = self.active_volumes.lock() else {
+            return;
+        };
+        let Some(volume) = guard.get(index as usize).cloned() else {
+            return;
+        };
         drop(guard);
         let command = build_unmount_command_for_volume(&volume);
         self.run_operation(
@@ -404,6 +433,40 @@ mod tests {
     }
 
     #[test]
+    fn macos_form_switches_between_apple_and_veracrypt() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        ui.set_is_macos(true);
+        ui.set_create_format("vera".into());
+        ui.set_create_cipher("serpent".into());
+        ui.show().unwrap();
+        render(&window);
+        ui.set_create_format("apple".into());
+        render(&window);
+        let command = super::logic::build_create_command(
+            "file",
+            &ui.get_create_format(),
+            "/tmp",
+            "test.dmg",
+            "",
+            "32",
+            "MB",
+            &ui.get_create_cipher(),
+            "test password",
+            "test password",
+        )
+        .unwrap();
+        assert_eq!(command.cipher, lurker_core::CreateCipher::Aes);
+        ui.set_current_view("manage".into());
+        render(&window);
+        ui.set_current_view("create".into());
+        render(&window);
+        assert_eq!(ui.get_create_format().as_str(), "apple");
+        ui.hide().unwrap();
+    }
+
+    #[test]
     fn inline_probe_font_size_updates_text_layout() {
         let _guard = TEST_LOCK
             .lock()
@@ -430,5 +493,15 @@ mod tests {
             after_ascent > before_ascent,
             "inline probe ascent did not grow: before={before_ascent} after={after_ascent}"
         );
+    }
+}
+
+fn default_mountpoint() -> String {
+    if cfg!(target_os = "macos") {
+        std::env::var("HOME")
+            .map(|home| format!("{home}/Lurker-mount"))
+            .unwrap_or_else(|_| "/Volumes/Lurker".into())
+    } else {
+        "/mnt/".into()
     }
 }

@@ -71,10 +71,12 @@ export component MainWindow inherits Window {
     in property <[DeviceInfo]> devices: [];
     in property <string> create-partition-label;   // meta shown in DevicePicker
     in property <string> mount-source-label;       // meta shown in DevicePicker
+    in property <bool> is-macos: false;
     in property <string> backend-label: "LINUX";
 
     // ── Callbacks (only ones with Rust side) ──────────────────────────
     callback submit-create();
+    callback generate-passphrase();
     callback submit-mount();
     callback reset-mount();
     callback unmount-volume(int);
@@ -140,7 +142,7 @@ export component MainWindow inherits Window {
             // ── Sidebar ──
             Sidebar {
                 brand-name: "Lurker";
-                brand-tag: "LUKS · VERACRYPT";
+                brand-tag: root.is-macos ? "APPLE · VERACRYPT" : "LUKS · VERACRYPT";
 
                 NavLabel { text: "ACTIONS"; }
 
@@ -186,7 +188,7 @@ export component MainWindow inherits Window {
                         ? "Create encrypted container"
                         : "Manage volumes";
                     subtitle: root.current-view == "create"
-                        ? "Make a new encrypted file or partition."
+                        ? (root.is-macos ? "Make a new encrypted file container." : "Make a new encrypted file or partition.")
                         : "Mounted volumes, and unlock new ones.";
 
                     ZoomPill {
@@ -235,6 +237,7 @@ export component MainWindow inherits Window {
                                 width: UiTheme.work-wrap-max;
 
                             if root.current-view == "create": CreateView {
+                                is-macos: root.is-macos;
                                 target-kind <=> root.create-target-kind;
                                 format <=> root.create-format;
                                 file-path <=> root.create-file-path;
@@ -250,9 +253,11 @@ export component MainWindow inherits Window {
                                 device-picked(info) => { root.device-picked-for-create(info); }
                                 rescan => { root.rescan-devices(); }
                                 submit => { root.submit-create(); }
+                                generate-passphrase => { root.generate-passphrase(); }
                             }
 
                             if root.current-view == "manage": ManageView {
+                                is-macos: root.is-macos;
                                 volumes: root.volumes;
                                 selected-index <=> root.mount-selected-index;
                                 mount-source-kind <=> root.mount-source-kind;
