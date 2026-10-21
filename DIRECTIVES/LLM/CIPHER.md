@@ -79,8 +79,16 @@ Use this file as the source of truth for create-time cipher policy.
 - File-backed create adds:
   - `--size=<MiB>M`
 - Block-device create adds:
-  - `--size=max`
   - `--quick`
+  - omit `--size`: VeraCrypt determines the full device size; `--size=max` can fail for device-hosted volumes.
+
+## Linux VeraCrypt Password Transport
+
+- Cipher, hash, PIM and KDF defaults remain as specified above.
+- Mount/open uses `cryptsetup open --type tcrypt --veracrypt`.
+- Supplied TCRYPT passphrases go directly through stdin with `--batch-mode`; do not use `--key-file -`, which mixes a TrueCrypt keyfile with the password.
+- Supplied passphrases cannot be empty or contain NUL or line breaks, because TCRYPT password input is line based.
+- Mounting does not require the VeraCrypt binary. Creation still does.
 
 ## Opinionated Intent
 

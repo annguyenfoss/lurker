@@ -164,3 +164,51 @@ fn operation_error(message: impl Into<String>) -> OperationResponse {
         error: Some(message),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::process::ExitStatusExt;
+
+    #[test]
+    fn malformed_payload_is_a_structured_error() {
+        let response = run_direct(b"{bad json}");
+        assert!(!response.ok);
+        assert!(response.error.unwrap().contains("decode helper request"));
+    }
+
+    #[test]
+    fn elevated_output_must_be_valid_json() {
+        let output = Output {
+            status: std::process::ExitStatus::from_raw(0),
+            stdout: b"invalid".to_vec(),
+            stderr: vec![],
+        };
+        assert!(decode_reexec_output("test", output).is_err());
+        let response = operation_error("cancelled");
+        let output = Output {
+            status: std::process::ExitStatus::from_raw(0),
+            stdout: serde_json::to_vec(&response).unwrap(),
+            stderr: vec![],
+        };
+        assert!(!decode_reexec_output("test", output).unwrap().ok);
+    }
+
+    #[test]
+    fn elevation_failures_keep_the_error_message() {
+        let output = Output {
+            status: std::process::ExitStatus::from_raw(256),
+            stdout: vec![],
+            stderr: b"authorization cancelled".to_vec(),
+        };
+        assert_eq!(
+            decode_reexec_output("test", output).unwrap_err(),
+            "authorization cancelled"
+        );
+    }
+
+    #[test]
+    fn root_detection_matches_effective_identity() {
+        assert_eq!(is_root(), lurker_core::probe_system().unwrap().is_root);
+    }
+}

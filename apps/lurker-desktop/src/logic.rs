@@ -211,6 +211,40 @@ mod tests {
     }
 
     #[test]
+    fn passwords_preserve_leading_and_trailing_whitespace() {
+        let password = "  secret 密碼  ";
+        let cmd = build_create_command(
+            "file", "vera", "/tmp", "vault.hc", "", "1", "GB", "aes", password, password,
+        )
+        .unwrap();
+        assert_eq!(cmd.passphrase.as_deref(), Some(password));
+        assert!(build_create_command(
+            "file",
+            "vera",
+            "/tmp",
+            "vault.hc",
+            "",
+            "1",
+            "GB",
+            "aes",
+            password,
+            password.trim()
+        )
+        .is_err());
+        let cmd = build_mount_command(
+            "/tmp/vault.hc",
+            "/tmp/mnt",
+            "password",
+            password,
+            "",
+            false,
+            "file",
+        )
+        .unwrap();
+        assert_eq!(cmd.passphrase.as_deref(), Some(password));
+    }
+
+    #[test]
     fn build_create_command_joins_file_path_and_name() {
         let cmd = build_create_command(
             "file",

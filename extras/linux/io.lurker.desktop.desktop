@@ -6,5 +6,5 @@ Comment=Create, mount, and unmount encrypted Linux volumes
 Exec=lurker-desktop
 Icon=lurker
 Terminal=false
-Categories=Utility;Security;
+Categories=System;Security;
 Keywords=encryption;luks;veracrypt;cryptsetup;

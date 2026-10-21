@@ -29,7 +29,6 @@ pub struct AppContext {
     is_root: bool,
     sudo_ready: bool,
     cleanup_mapper: Option<String>,
-    veracrypt_fallback_noticed: bool,
 }
 
 impl AppContext {
@@ -42,7 +41,6 @@ impl AppContext {
             is_root,
             sudo_ready: false,
             cleanup_mapper: None,
-            veracrypt_fallback_noticed: false,
         })
     }
 
@@ -87,18 +85,6 @@ impl AppContext {
             .veracrypt
             .as_deref()
             .ok_or_else(|| AppError::new("Required command not found: veracrypt"))
-    }
-
-    pub fn have_veracrypt(&self) -> bool {
-        self.tools.veracrypt.is_some()
-    }
-
-    pub fn notice_veracrypt_fallback(&mut self) {
-        if !self.veracrypt_fallback_noticed {
-            self.output
-                .msg2("veracrypt not found; falling back to cryptsetup for veracrypt container");
-            self.veracrypt_fallback_noticed = true;
-        }
     }
 
     pub fn set_cleanup_mapper(&mut self, mapper_name: impl Into<String>) {
@@ -179,19 +165,31 @@ impl AppContext {
         let mut command = self.prepare_command(program, args, privileged, false)?;
         command.stdin(Stdio::piped());
         command.stdout(Stdio::null());
-        command.stderr(Stdio::null());
+        command.stderr(Stdio::piped());
 
         let mut child = command.spawn().map_err(|err| AppError::io(context, err))?;
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(stdin_data)
-                .map_err(|err| AppError::io(context, err))?;
-        }
-        let status = child.wait().map_err(|err| AppError::io(context, err))?;
-        if status.success() {
-            Ok(())
+        let write_result = if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(stdin_data)
         } else {
-            Err(AppError::new(format!("{context} failed.")))
+            Ok(())
+        };
+        // Reap the child even when it exits before consuming its input.
+        let result = child
+            .wait_with_output()
+            .map_err(|err| AppError::io(context, err))?;
+        if result.status.success() {
+            write_result.map_err(|err| AppError::io(context, err))
+        } else {
+            let detail: String = String::from_utf8_lossy(&result.stderr)
+                .trim()
+                .chars()
+                .take(8192)
+                .collect();
+            Err(AppError::new(if detail.is_empty() {
+                format!("{context} failed.")
+            } else {
+                format!("{context}: {detail}")
+            }))
         }
     }
 
@@ -448,6 +446,63 @@ pub fn effective_uid() -> AppResult<u32> {
 #[cfg(test)]
 mod tests {
     use super::effective_uid;
+
+    fn subprocess_context() -> super::AppContext {
+        super::AppContext {
+            output: crate::output::Output::buffered().0,
+            tools: super::ToolPaths {
+                cryptsetup: "/bin/false".into(),
+                mkfs_btrfs: None,
+                mount: None,
+                umount: None,
+                blkid: None,
+                lsblk: None,
+                veracrypt: None,
+                sudo: None,
+            },
+            is_root: false,
+            sudo_ready: false,
+            cleanup_mapper: None,
+        }
+    }
+
+    #[test]
+    fn subprocess_stdin_errors_are_reaped_and_reported() {
+        let mut context = subprocess_context();
+        let error = context
+            .run_command_with_input(
+                std::path::Path::new("/bin/sh"),
+                &[
+                    "-c".into(),
+                    "printf 'crypto test diagnostic' >&2; exit 7".into(),
+                ],
+                false,
+                &vec![b'x'; 1024 * 1024],
+                "Crypto test",
+            )
+            .unwrap_err();
+        assert!(error
+            .message
+            .contains("Crypto test: crypto test diagnostic"));
+    }
+
+    #[test]
+    fn subprocess_errors_are_bounded() {
+        let mut context = subprocess_context();
+        let error = context
+            .run_command_with_input(
+                std::path::Path::new("/bin/sh"),
+                &[
+                    "-c".into(),
+                    "head -c 16384 /dev/zero | tr '\\0' x >&2; exit 1".into(),
+                ],
+                false,
+                b"",
+                "Crypto test",
+            )
+            .unwrap_err();
+        assert_eq!(error.message.len(), "Crypto test: ".len() + 8192);
+    }
 
     #[test]
     fn effective_uid_is_available() {

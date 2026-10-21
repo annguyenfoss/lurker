@@ -85,8 +85,11 @@ pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 fn list_linux_volumes() -> AppResult<Vec<ActiveVolume>> {
     let mounts = read_mountinfo()?;
     let mut volumes = Vec::new();
-    let entries = fs::read_dir("/dev/mapper")
-        .map_err(|err| AppError::io("Failed to inspect /dev/mapper", err))?;
+    let entries = match fs::read_dir("/dev/mapper") {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(volumes),
+        Err(err) => return Err(AppError::io("Failed to inspect /dev/mapper", err)),
+    };
     for entry in entries {
         let entry = entry.map_err(|err| AppError::io("Failed to inspect /dev/mapper", err))?;
         let path = entry.path();

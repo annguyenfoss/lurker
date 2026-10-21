@@ -21,7 +21,8 @@ const VERACRYPT_CREATE_ARGS_COMMON: &[&str] = &[
 ];
 
 #[cfg(target_os = "linux")]
-const VERACRYPT_CREATE_ARGS_BLOCK: &[&str] = &["--size=max", "--quick"];
+// VeraCrypt determines the full device size; --size=max is file-only.
+const VERACRYPT_CREATE_ARGS_BLOCK: &[&str] = &["--quick"];
 const VERACRYPT_CREATE_ARGS_NO_KEYFILES: &[&str] = &["-k", ""];
 
 const LUKS_FORMAT_ARGS_AES: &[&str] = &[

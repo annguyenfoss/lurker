@@ -91,7 +91,6 @@ readonly -a VERACRYPT_CREATE_ARGS_NO_KEYFILES=(
     ""
 )
 readonly -a VERACRYPT_CREATE_ARGS_BLOCK=(
-    --size=max
     --quick
 )
 

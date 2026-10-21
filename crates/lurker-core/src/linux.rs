@@ -49,7 +49,10 @@ pub fn absolute_path(input_path: &Path) -> AppResult<PathBuf> {
         });
     }
 
-    let parent = input_path.parent().unwrap_or_else(|| Path::new("."));
+    let parent = input_path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     let base = input_path.file_name().ok_or_else(|| {
         AppError::new(format!(
             "Path is missing a usable file name: {}",
@@ -474,6 +477,38 @@ mod tests {
         assert_eq!(size_gb_to_mib("1").unwrap(), 1024);
         assert_eq!(size_gb_to_mib("1.5").unwrap(), 1536);
         assert_eq!(size_gb_to_mib(".5").unwrap(), 512);
+    }
+
+    #[test]
+    fn size_parser_rejects_invalid_and_overflowing_sizes() {
+        for raw in [
+            "",
+            "0",
+            "0.0001",
+            "-1",
+            "NaN",
+            "inf",
+            "1e3",
+            "1.",
+            "1.2.3",
+            " 1",
+            "184467440737095516160000",
+        ] {
+            assert!(size_gb_to_mib(raw).is_err(), "accepted {raw}");
+        }
+    }
+
+    #[test]
+    fn bare_relative_filename_resolves_in_current_directory() {
+        let path = std::path::Path::new("nonexistent-lurker-relative-volume.hc");
+        assert_eq!(
+            super::absolute_path(path).unwrap(),
+            std::env::current_dir().unwrap().join(path)
+        );
+        assert_eq!(
+            super::mapper_name_for_path(path).unwrap(),
+            super::mapper_name_for_path(&std::env::current_dir().unwrap().join(path)).unwrap()
+        );
     }
 
     #[test]

@@ -467,6 +467,25 @@ mod tests {
     }
 
     #[test]
+    fn main_window_renders_all_views_with_software_renderer() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        ui.show().unwrap();
+        for scale in [1.0, 1.25, 1.5] {
+            ui.set_ui_scale(scale);
+            for view in ["create", "mount", "manage"] {
+                ui.set_current_view(view.into());
+                for format in ["luks", "vera"] {
+                    ui.set_create_format(format.into());
+                    render(&window);
+                }
+            }
+        }
+        ui.hide().unwrap();
+    }
+
+    #[test]
     fn inline_probe_font_size_updates_text_layout() {
         let _guard = TEST_LOCK
             .lock()

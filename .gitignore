@@ -18,9 +18,22 @@ build/
 dist/
 tmp/
 temp/
+.tmp/
+.temp/
 .cache/
 
-# Python build tooling and caches
+# Local makepkg work directories and generated package archives
+/packaging/aur/src/
+/packaging/aur/pkg/
+*.pkg.tar
+*.pkg.tar.*
+*.src.tar
+*.src.tar.*
+.PKGINFO
+.BUILDINFO
+.MTREE
+
+# Python caches from build and verification scripts
 __pycache__/
 *.py[cod]
 .venv/
@@ -33,7 +46,9 @@ venv/
 # Logs, temporary files, and editor backups
 *.log
 *.tmp
+*.tmp.*
 *.temp
+*.temp.*
 *.swp
 *.swo
 *.bak

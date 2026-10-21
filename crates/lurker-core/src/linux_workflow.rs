@@ -2,13 +2,12 @@ use super::*;
 use crate::api::{CommandAction, CreateCommand, MountCommand, UnmountCommand};
 use crate::error::{AppError, AppResult};
 use crate::linux::{
-    absolute_path, canonical_device_path, find_mount_source_for_mountpoint, is_block_device_target,
-    mapper_device_path, mapper_name_for_source, normalize_mapper_name, resolve_umount_target,
-    size_gb_to_mib, source_kind_for_path,
+    absolute_path, is_block_device_target, mapper_device_path, mapper_name_for_source,
+    read_mountinfo, resolve_umount_target, size_gb_to_mib, source_kind_for_path,
 };
-use crate::model::{SourceKind, VolumeType};
+use crate::model::{CreateCipher, SourceKind, VolumeType};
 use crate::output::Output;
-use crate::system::{run_status, trim_stdout, AppContext};
+use crate::system::{trim_stdout, AppContext};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, IsTerminal, Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -34,7 +33,16 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
 }
 
 fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> {
+    if command.volume_type == VolumeType::Auto {
+        return Err(AppError::new(
+            "Option --type auto is not valid with create.",
+        ));
+    }
+    if command.volume_type == VolumeType::Veracrypt {
+        validate_veracrypt_passphrase(command.passphrase.as_deref())?;
+    }
     assert_create_target(ctx, &command)?;
+    assert_mapper_available(&mapper_name_for_source(&command.target, None)?)?;
     match command.volume_type {
         VolumeType::Veracrypt => veracrypt_create_device(ctx, &command),
         VolumeType::Luks => luks_create_device(ctx, &command),
@@ -45,29 +53,35 @@ fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> 
     }
 }
 
-fn mount_device(ctx: &mut AppContext, command: MountCommand) -> AppResult<()> {
+fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()> {
+    if source_kind_for_path(&command.source).is_none() {
+        return Err(AppError::new(
+            "Source must be a regular file or block device.",
+        ));
+    }
+    if !command.mountpoint.is_dir() {
+        return Err(AppError::new("Mountpoint must be an existing directory."));
+    }
+    command.source = absolute_path(&command.source)?;
+    command.mountpoint = absolute_path(&command.mountpoint)?;
+    let mountpoint = &command.mountpoint;
+    if read_mountinfo()?
+        .iter()
+        .any(|mount| &mount.mount_point == mountpoint)
+    {
+        return Err(AppError::new("Mountpoint is already mounted."));
+    }
     let detected_type = detect_source_volume_type(ctx, &command.source, command.volume_type)?;
     match detected_type {
         VolumeType::Veracrypt => {
             require_supported_veracrypt_tag(command.tag.as_deref())?;
-            if ctx.have_veracrypt() {
-                veracrypt_mount_device(
-                    ctx,
-                    &command.source,
-                    &command.mountpoint,
-                    command.passphrase.as_deref(),
-                    command.readonly,
-                )
-            } else {
-                ctx.notice_veracrypt_fallback();
-                tcrypt_mount_device(
-                    ctx,
-                    &command.source,
-                    &command.mountpoint,
-                    command.passphrase.as_deref(),
-                    command.readonly,
-                )
-            }
+            tcrypt_mount_device(
+                ctx,
+                &command.source,
+                &command.mountpoint,
+                command.passphrase.as_deref(),
+                command.readonly,
+            )
         }
         VolumeType::Luks => luks_mount_device(
             ctx,
@@ -84,24 +98,25 @@ fn mount_device(ctx: &mut AppContext, command: MountCommand) -> AppResult<()> {
 
 fn unmount_device(ctx: &mut AppContext, command: UnmountCommand) -> AppResult<()> {
     warn_ignored_umount_tag(ctx, &command.target, command.tag.as_deref());
-    let detected_type = detect_umount_volume_type(ctx, &command.target, command.volume_type)?;
-    match detected_type {
-        VolumeType::Veracrypt => {
-            require_supported_veracrypt_tag(command.tag.as_deref())?;
-            if ctx.have_veracrypt() {
-                veracrypt_umount_device(ctx, &command.target)
-            } else {
-                ctx.notice_veracrypt_fallback();
-                dmcrypt_umount_device(ctx, &command.target, None)
-            }
-        }
-        VolumeType::Luks => dmcrypt_umount_device(ctx, &command.target, command.tag.as_deref()),
-        VolumeType::Apple => Err(AppError::new("Apple encrypted disk images require macOS.")),
-        VolumeType::Auto => Err(AppError::new("Unsupported volume type: auto")),
+    let resolved = resolve_umount_target(&command.target, command.tag.as_deref())?;
+    let actual_type = active_mapper_volume_type(ctx, &resolved.mapper_name)?;
+    let detected_type = resolve_volume_type(
+        command.volume_type,
+        actual_type,
+        &command.target,
+        "target",
+        false,
+    )?;
+    if detected_type == VolumeType::Veracrypt {
+        require_supported_veracrypt_tag(command.tag.as_deref())?;
     }
+    dmcrypt_umount_device(ctx, &command.target, command.tag.as_deref())
 }
 
 fn assert_create_target(ctx: &mut AppContext, command: &CreateCommand) -> AppResult<()> {
+    if command.source_kind == SourceKind::File && is_block_device_target(&command.target) {
+        return Err(AppError::new("File create cannot target a block device."));
+    }
     match command.source_kind {
         SourceKind::File => assert_create_file_target(&command.target, command.force),
         SourceKind::Block => assert_create_block_target(ctx, &command.target, command.force),
@@ -109,7 +124,10 @@ fn assert_create_target(ctx: &mut AppContext, command: &CreateCommand) -> AppRes
 }
 
 fn assert_create_file_target(path: &Path, force: bool) -> AppResult<()> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     let metadata = fs::metadata(parent).map_err(|err| {
         AppError::io(
             format!("Directory does not exist: {}", parent.display()),
@@ -210,6 +228,11 @@ fn assert_create_block_target(ctx: &mut AppContext, path: &Path, force: bool) ->
         }
     }
 
+    if block_device_tree_has_holders(ctx, path)? {
+        return Err(AppError::new(
+            "Block device or a child has active device holders.",
+        ));
+    }
     if block_device_tree_has_mounts(ctx, path)? {
         return Err(AppError::new(format!(
             "Block device or one of its children is mounted: {}",
@@ -263,7 +286,6 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
             ctx.output.msg2("Formatting LUKS2 header");
             luks_format(ctx, &temp_path, command.passphrase.as_deref(), profile)?;
 
-            ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2(&format!(
                 "Opening mapper {}",
                 mapper_device_path(&mapper_name).display()
@@ -274,8 +296,10 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
                 &mapper_name,
                 command.passphrase.as_deref(),
                 Some(profile),
+                false,
             )?;
 
+            ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2("Creating Btrfs filesystem");
             mkfs_btrfs(ctx, &mapper_device_path(&mapper_name))?;
 
@@ -286,9 +310,7 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
             crypt_close(ctx, &mapper_name)?;
             ctx.clear_cleanup_mapper();
 
-            fs::rename(&temp_path, &command.target).map_err(|err| {
-                AppError::io(format!("Failed to move {}", command.target.display()), err)
-            })?;
+            publish_container(&temp_path, &command.target, command.force)?;
             temp_guard.persist();
         }
         SourceKind::Block => {
@@ -302,7 +324,6 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
             ctx.output.msg2("Formatting LUKS2 header");
             luks_format(ctx, &command.target, command.passphrase.as_deref(), profile)?;
 
-            ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2(&format!(
                 "Opening mapper {}",
                 mapper_device_path(&mapper_name).display()
@@ -313,8 +334,10 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
                 &mapper_name,
                 command.passphrase.as_deref(),
                 Some(profile),
+                false,
             )?;
 
+            ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2("Creating Btrfs filesystem");
             mkfs_btrfs(ctx, &mapper_device_path(&mapper_name))?;
 
@@ -372,13 +395,19 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
                 AppError::io(format!("Failed to secure {}", temp_path.display()), err)
             })?;
 
-            ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2(&format!(
                 "Opening mapper {} with cryptsetup",
                 mapper_device_path(&mapper_name).display()
             ));
-            tcrypt_open(ctx, &temp_path, &mapper_name, command.passphrase.as_deref())?;
+            tcrypt_open(
+                ctx,
+                &temp_path,
+                &mapper_name,
+                command.passphrase.as_deref(),
+                false,
+            )?;
 
+            ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2("Creating Btrfs filesystem");
             mkfs_btrfs(ctx, &mapper_device_path(&mapper_name))?;
 
@@ -389,9 +418,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
             crypt_close(ctx, &mapper_name)?;
             ctx.clear_cleanup_mapper();
 
-            fs::rename(&temp_path, &command.target).map_err(|err| {
-                AppError::io(format!("Failed to move {}", command.target.display()), err)
-            })?;
+            publish_container(&temp_path, &command.target, command.force)?;
             temp_guard.persist();
         }
         SourceKind::Block => {
@@ -417,7 +444,6 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
                 command.passphrase.as_deref(),
             )?;
 
-            ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2(&format!(
                 "Opening mapper {} with cryptsetup",
                 mapper_device_path(&mapper_name).display()
@@ -427,8 +453,10 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
                 &command.target,
                 &mapper_name,
                 command.passphrase.as_deref(),
+                false,
             )?;
 
+            ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2("Creating Btrfs filesystem");
             mkfs_btrfs(ctx, &mapper_device_path(&mapper_name))?;
 
@@ -462,7 +490,6 @@ fn luks_mount_device(
     require_passphrase(passphrase)?;
     let mapper_name = mapper_name_for_source(source_path, tag_override)?;
     let profile = detect_luks_cipher_profile(ctx, source_path)?;
-    ctx.set_cleanup_mapper(mapper_name.clone());
 
     ctx.output
         .msg(&format!("Mounting source {}", source_path.display()));
@@ -474,7 +501,16 @@ fn luks_mount_device(
         "Opening mapper {}",
         mapper_device_path(&mapper_name).display()
     ));
-    luks_open(ctx, source_path, &mapper_name, passphrase, profile)?;
+    assert_mapper_available(&mapper_name)?;
+    luks_open(
+        ctx,
+        source_path,
+        &mapper_name,
+        passphrase,
+        profile,
+        readonly,
+    )?;
+    ctx.set_cleanup_mapper(mapper_name.clone());
     mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
 
@@ -496,17 +532,18 @@ fn tcrypt_mount_device(
 ) -> AppResult<()> {
     require_passphrase(passphrase)?;
     let mapper_name = mapper_name_for_source(source_path, None)?;
-    ctx.set_cleanup_mapper(mapper_name.clone());
 
     ctx.output.msg(&format!(
         "Mounting VeraCrypt source {}",
         source_path.display()
     ));
     ctx.output.msg2(&format!(
-        "Opening mapper {} with cryptsetup fallback",
+        "Opening mapper {} with cryptsetup",
         mapper_device_path(&mapper_name).display()
     ));
-    tcrypt_open(ctx, source_path, &mapper_name, passphrase)?;
+    assert_mapper_available(&mapper_name)?;
+    tcrypt_open(ctx, source_path, &mapper_name, passphrase, readonly)?;
+    ctx.set_cleanup_mapper(mapper_name.clone());
     mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
 
@@ -516,59 +553,6 @@ fn tcrypt_mount_device(
         mountpoint.display()
     ));
     ctx.output.msg2(&format!("Mapper name: {}", mapper_name));
-    Ok(())
-}
-
-fn veracrypt_mount_device(
-    ctx: &mut AppContext,
-    source_path: &Path,
-    mountpoint: &Path,
-    passphrase: Option<&str>,
-    readonly: bool,
-) -> AppResult<()> {
-    require_passphrase(passphrase)?;
-    ctx.output.msg(&format!(
-        "Mounting VeraCrypt source {}",
-        source_path.display()
-    ));
-    let veracrypt = ctx.veracrypt_path()?.to_path_buf();
-    let mut args = vec![
-        OsString::from("-t"),
-        OsString::from("--mount"),
-        OsString::from("-k"),
-        OsString::from(""),
-        OsString::from("--pim=0"),
-        OsString::from("--protect-hidden=no"),
-        source_path.as_os_str().to_os_string(),
-        mountpoint.as_os_str().to_os_string(),
-    ];
-    if readonly {
-        args.insert(0, OsString::from("--mount-options=ro"));
-    }
-    if let Some(passphrase) = passphrase {
-        args.insert(6, OsString::from("--non-interactive"));
-        args.insert(7, OsString::from("--stdin"));
-        ctx.run_command_with_input(
-            &veracrypt,
-            &args,
-            true,
-            passphrase.as_bytes(),
-            "Failed to mount VeraCrypt container",
-        )?;
-    } else {
-        ctx.run_command(
-            &veracrypt,
-            &args,
-            true,
-            true,
-            "Failed to mount VeraCrypt container",
-        )?;
-    }
-    ctx.output.success(&format!(
-        "Mounted {} at {}",
-        source_path.display(),
-        mountpoint.display()
-    ));
     Ok(())
 }
 
@@ -611,29 +595,23 @@ fn dmcrypt_umount_device(
     Ok(())
 }
 
-fn veracrypt_umount_device(ctx: &mut AppContext, target: &Path) -> AppResult<()> {
-    let identifier = resolve_veracrypt_umount_identifier(ctx, target)?;
-    ctx.output.msg(&format!(
-        "Unmounting VeraCrypt target {}",
-        identifier.display()
-    ));
-    let veracrypt = ctx.veracrypt_path()?.to_path_buf();
-    let args = vec![
-        OsString::from("-t"),
-        OsString::from("-u"),
-        identifier.as_os_str().to_os_string(),
-    ];
-    ctx.run_command(
-        &veracrypt,
-        &args,
-        true,
-        false,
-        "Failed to unmount VeraCrypt target",
-    )?;
-    ctx.output.success(&format!(
-        "Unmounted VeraCrypt target {}",
-        identifier.display()
-    ));
+fn assert_mapper_available(mapper_name: &str) -> AppResult<()> {
+    if fs::symlink_metadata(mapper_device_path(mapper_name)).is_ok() {
+        return Err(AppError::new(format!(
+            "Mapper is already active: {mapper_name}"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_veracrypt_passphrase(passphrase: Option<&str>) -> AppResult<()> {
+    if let Some(passphrase) = passphrase {
+        if passphrase.is_empty() || passphrase.contains(['\n', '\r', '\0']) {
+            return Err(AppError::new(
+                "VeraCrypt passphrase must be nonempty and cannot contain NUL or line breaks.",
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -657,8 +635,8 @@ fn warn_ignored_umount_tag(ctx: &AppContext, target: &Path, tag_override: Option
             .warn("Ignoring -t for /dev/mapper input; the explicit mapper path takes precedence.");
     } else if target.is_dir() {
         ctx.output.warn(
-        "Ignoring -t for mountpoint input; the active mapper is resolved from the mounted filesystem.",
-    );
+            "Ignoring -t for mountpoint input; the active mapper is resolved from the mounted filesystem.",
+        );
     }
 }
 
@@ -707,71 +685,22 @@ fn detect_source_volume_type(
     source_path: &Path,
     requested_type: VolumeType,
 ) -> AppResult<VolumeType> {
-    let actual_type = probe_source_volume_type(ctx, source_path)?;
-    resolve_volume_type(requested_type, actual_type, source_path, "source", false)
-}
-
-fn detect_umount_volume_type(
-    ctx: &mut AppContext,
-    target: &Path,
-    requested_type: VolumeType,
-) -> AppResult<VolumeType> {
-    if target.starts_with("/dev/mapper") {
-        let mapper_name = normalize_mapper_name(target);
-        let mut actual_type = active_mapper_volume_type(ctx, &mapper_name)?;
-        if actual_type.is_none() && ctx.have_veracrypt() {
-            if let Some(mountpoint) = crate::linux::find_mountpoint_for_source(target)? {
-                if veracrypt_target_is_mounted(ctx, &mountpoint)? {
-                    actual_type = Some(VolumeType::Veracrypt);
-                }
-            }
-        }
-        if requested_type == VolumeType::Auto && actual_type.is_none() {
-            return Ok(VolumeType::Luks);
-        }
-        return resolve_volume_type(requested_type, actual_type, target, "target", true);
-    }
-
-    if target.is_dir() {
-        let canonical_target = absolute_path(target)?;
-        let source = find_mount_source_for_mountpoint(&canonical_target)?;
-        let mut actual_type = None;
-        if ctx.have_veracrypt() && veracrypt_target_is_mounted(ctx, &canonical_target)? {
-            actual_type = Some(VolumeType::Veracrypt);
-        } else if let Some(source) = source {
-            if source.starts_with("/dev/mapper") {
-                let mapper_name = normalize_mapper_name(&source);
-                actual_type = active_mapper_volume_type(ctx, &mapper_name)?;
-            }
-        }
-
-        if requested_type == VolumeType::Auto && actual_type.is_none() {
-            return Ok(VolumeType::Luks);
-        }
-        return resolve_volume_type(requested_type, actual_type, target, "target", true);
-    }
-
-    let actual_type = probe_source_volume_type(ctx, target)?;
-    resolve_volume_type(requested_type, actual_type, target, "target", false)
-}
-
-fn probe_source_volume_type(
-    ctx: &mut AppContext,
-    source_path: &Path,
-) -> AppResult<Option<VolumeType>> {
-    let canonical_source = if is_block_device_target(source_path) {
-        canonical_device_path(source_path)
+    // VeraCrypt headers are encrypted and cannot be identified without a password.
+    // Identify LUKS first; otherwise authenticate as TCRYPT during open, once.
+    let source = absolute_path(source_path)?;
+    if is_luks_source(ctx, &source)? {
+        resolve_volume_type(
+            requested_type,
+            Some(VolumeType::Luks),
+            source_path,
+            "source",
+            false,
+        )
+    } else if requested_type == VolumeType::Luks {
+        Err(AppError::new("Source is not a LUKS container."))
     } else {
-        absolute_path(source_path)?
-    };
-
-    if is_luks_source(ctx, &canonical_source)? {
-        return Ok(Some(VolumeType::Luks));
+        Ok(VolumeType::Veracrypt)
     }
-    if is_veracrypt_source(ctx, &canonical_source)? {
-        return Ok(Some(VolumeType::Veracrypt));
-    }
-    Ok(None)
 }
 
 fn is_luks_source(ctx: &mut AppContext, source: &Path) -> AppResult<bool> {
@@ -780,7 +709,7 @@ fn is_luks_source(ctx: &mut AppContext, source: &Path) -> AppResult<bool> {
         ctx,
         &cryptsetup,
         &[OsString::from("isLuks"), source.as_os_str().to_os_string()],
-        false,
+        true,
         "Failed to inspect source with cryptsetup isLuks",
     )
 }
@@ -831,23 +760,6 @@ fn parse_luks_cipher_name(value: &str) -> Option<CreateCipher> {
     }
 }
 
-fn is_veracrypt_source(ctx: &mut AppContext, source: &Path) -> AppResult<bool> {
-    let cryptsetup = ctx.cryptsetup_path().to_path_buf();
-    command_success(
-        ctx,
-        &cryptsetup,
-        &[
-            OsString::from("tcryptDump"),
-            OsString::from("--type"),
-            OsString::from("tcrypt"),
-            OsString::from("--veracrypt"),
-            source.as_os_str().to_os_string(),
-        ],
-        false,
-        "Failed to inspect source with cryptsetup tcryptDump",
-    )
-}
-
 fn active_mapper_volume_type(
     ctx: &mut AppContext,
     mapper_name: &str,
@@ -872,89 +784,6 @@ fn active_mapper_volume_type(
         }
     }
     Ok(None)
-}
-
-fn veracrypt_target_is_mounted(ctx: &mut AppContext, identifier: &Path) -> AppResult<bool> {
-    if !ctx.have_veracrypt() {
-        return Ok(false);
-    }
-    let veracrypt = ctx.veracrypt_path()?.to_path_buf();
-    command_success(
-        ctx,
-        &veracrypt,
-        &[
-            OsString::from("-t"),
-            OsString::from("-l"),
-            identifier.as_os_str().to_os_string(),
-        ],
-        true,
-        "Failed to inspect VeraCrypt mounts",
-    )
-}
-
-fn resolve_veracrypt_umount_identifier(ctx: &mut AppContext, target: &Path) -> AppResult<PathBuf> {
-    if target.starts_with("/dev/mapper") {
-        let mountpoint = crate::linux::find_mountpoint_for_source(target)?.ok_or_else(|| {
-            AppError::new(format!(
-                "VeraCrypt mapper is not mounted: {}",
-                target.display()
-            ))
-        })?;
-        if !veracrypt_target_is_mounted(ctx, &mountpoint)? {
-            return Err(AppError::new(format!(
-                "VeraCrypt mapper is not mounted: {}",
-                target.display()
-            )));
-        }
-        return Ok(mountpoint);
-    }
-
-    if target.is_dir() {
-        let canonical_target = absolute_path(target)?;
-        if !veracrypt_target_is_mounted(ctx, &canonical_target)? {
-            return Err(AppError::new(format!(
-                "Not a mounted VeraCrypt path: {}",
-                target.display()
-            )));
-        }
-        return Ok(canonical_target);
-    }
-
-    if is_block_device_target(target) {
-        if veracrypt_target_is_mounted(ctx, target)? {
-            return Ok(target.to_path_buf());
-        }
-        let canonical_target = canonical_device_path(target);
-        if canonical_target != target && veracrypt_target_is_mounted(ctx, &canonical_target)? {
-            return Ok(canonical_target);
-        }
-        return Err(AppError::new(format!(
-            "VeraCrypt source is not mounted: {}",
-            target.display()
-        )));
-    }
-
-    match source_kind_for_path(target) {
-        Some(SourceKind::File) => {}
-        _ => {
-            return Err(AppError::new(format!(
-                "File does not exist or is not a regular file: {}",
-                target.display()
-            )));
-        }
-    }
-
-    if veracrypt_target_is_mounted(ctx, target)? {
-        return Ok(target.to_path_buf());
-    }
-    let canonical_target = absolute_path(target)?;
-    if canonical_target != target && veracrypt_target_is_mounted(ctx, &canonical_target)? {
-        return Ok(canonical_target);
-    }
-    Err(AppError::new(format!(
-        "VeraCrypt source is not mounted: {}",
-        target.display()
-    )))
 }
 
 fn detect_filesystem_type(ctx: &mut AppContext, device_path: &Path) -> AppResult<Option<String>> {
@@ -1057,6 +886,9 @@ fn block_device_type(ctx: &mut AppContext, device_path: &Path) -> AppResult<Stri
         false,
         "Failed to inspect block device",
     )?;
+    if !output.status.success() {
+        return Err(AppError::new("lsblk failed to inspect block device."));
+    }
     Ok(trim_stdout(&output))
 }
 
@@ -1073,7 +905,49 @@ fn block_device_filesystem(ctx: &mut AppContext, device_path: &Path) -> AppResul
         false,
         "Failed to inspect block device",
     )?;
+    if !output.status.success() {
+        return Err(AppError::new("lsblk failed to inspect block device."));
+    }
     Ok(trim_stdout(&output))
+}
+
+fn block_device_tree_has_holders(ctx: &mut AppContext, device_path: &Path) -> AppResult<bool> {
+    let lsblk = ctx.lsblk_path()?.to_path_buf();
+    let output = ctx.capture_command(
+        &lsblk,
+        &[
+            OsString::from("-nrpo"),
+            OsString::from("NAME"),
+            OsString::from("--"),
+            device_path.as_os_str().to_os_string(),
+        ],
+        false,
+        "Failed to inspect block device holders",
+    )?;
+    if !output.status.success() {
+        return Err(AppError::new(
+            "lsblk failed to inspect block device holders.",
+        ));
+    }
+    for device in String::from_utf8_lossy(&output.stdout).lines() {
+        let canonical = fs::canonicalize(device.trim())
+            .map_err(|err| AppError::io("Failed to resolve block device", err))?;
+        let name = canonical
+            .file_name()
+            .ok_or_else(|| AppError::new("Invalid block device path."))?;
+        let holders = Path::new("/sys/class/block").join(name).join("holders");
+        let mut entries = fs::read_dir(holders)
+            .map_err(|err| AppError::io("Failed to inspect block device holders", err))?;
+        if entries
+            .next()
+            .transpose()
+            .map_err(|err| AppError::io("Failed to inspect holders", err))?
+            .is_some()
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn block_device_tree_has_mounts(ctx: &mut AppContext, device_path: &Path) -> AppResult<bool> {
@@ -1089,6 +963,9 @@ fn block_device_tree_has_mounts(ctx: &mut AppContext, device_path: &Path) -> App
         false,
         "Failed to inspect block device tree",
     )?;
+    if !output.status.success() {
+        return Err(AppError::new("lsblk failed to inspect block device tree."));
+    }
     Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
         .any(|line| !line.trim().is_empty()))
@@ -1120,9 +997,13 @@ fn luks_format(
         args.push(OsString::from("-y"));
         args.push(OsString::from("luksFormat"));
         args.push(target.as_os_str().to_os_string());
-        let mut command = ctx.prepare_command(&cryptsetup, &args, privileged, true)?;
-        command.stdout(Stdio::null());
-        run_status(&mut command, "Failed to format LUKS container")
+        ctx.run_command(
+            &cryptsetup,
+            &args,
+            privileged,
+            true,
+            "Failed to format LUKS container",
+        )
     }
 }
 
@@ -1132,12 +1013,16 @@ fn luks_open(
     mapper_name: &str,
     passphrase: Option<&str>,
     profile: Option<&CreateCipherProfile>,
+    readonly: bool,
 ) -> AppResult<()> {
     let mut args = vec![
         OsString::from("open"),
         OsString::from("--type"),
         OsString::from("luks"),
     ];
+    if readonly {
+        args.push(OsString::from("--readonly"));
+    }
     if let Some(profile) = profile {
         args.extend(profile.open_args.iter().map(OsString::from));
         if !profile.open_args.is_empty() {
@@ -1178,16 +1063,22 @@ fn tcrypt_open(
     source: &Path,
     mapper_name: &str,
     passphrase: Option<&str>,
+    readonly: bool,
 ) -> AppResult<()> {
+    validate_veracrypt_passphrase(passphrase)?;
     let mut args = vec![
         OsString::from("open"),
         OsString::from("--type"),
         OsString::from("tcrypt"),
         OsString::from("--veracrypt"),
     ];
+    if readonly {
+        args.push(OsString::from("--readonly"));
+    }
+    // TCRYPT --key-file mixes a keyfile with the password. Read the password
+    // directly from stdin instead; it is line based in this mode.
     if passphrase.is_some() {
-        args.push(OsString::from("--key-file"));
-        args.push(OsString::from("-"));
+        args.push(OsString::from("--batch-mode"));
     }
     args.extend([
         source.as_os_str().to_os_string(),
@@ -1292,8 +1183,28 @@ fn command_success(
     Ok(status.success())
 }
 
+fn publish_container(temp: &Path, target: &Path, force: bool) -> AppResult<()> {
+    if force {
+        fs::rename(temp, target)
+    } else {
+        // Atomic no-clobber publication also works on filesystems without hard links.
+        rustix::fs::renameat_with(
+            rustix::fs::CWD,
+            temp,
+            rustix::fs::CWD,
+            target,
+            rustix::fs::RenameFlags::NOREPLACE,
+        )
+        .map_err(io::Error::from)
+    }
+    .map_err(|err| AppError::io(format!("Failed to publish {}", target.display()), err))
+}
+
 fn temp_container_path(target: &Path) -> AppResult<PathBuf> {
-    let parent = target.parent().unwrap_or_else(|| Path::new("."));
+    let parent = target
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     let base = target
         .file_name()
         .map(|value| value.to_string_lossy().into_owned())
@@ -1401,11 +1312,90 @@ impl Drop for TempFileGuard {
 
 #[cfg(test)]
 mod tests {
-    use super::require_supported_veracrypt_tag;
+    use super::*;
 
     #[test]
     fn veracrypt_tags_are_rejected() {
         assert!(require_supported_veracrypt_tag(Some("work")).is_err());
         assert!(require_supported_veracrypt_tag(None).is_ok());
+    }
+
+    #[test]
+    fn veracrypt_password_transport_rejects_truncation() {
+        for value in ["", "first\nsecond", "first\rsecond", "first\0second"] {
+            assert!(validate_veracrypt_passphrase(Some(value)).is_err());
+        }
+        assert!(validate_veracrypt_passphrase(Some("  пароль 密碼  ")).is_ok());
+        assert!(validate_veracrypt_passphrase(None).is_ok());
+    }
+
+    #[test]
+    fn luks_cipher_detection_handles_header_versions() {
+        for (name, expected) in [
+            (" aes-xts-plain64", CreateCipher::Aes),
+            ("SERPENT", CreateCipher::Serpent),
+            ("twofish-xts-plain64", CreateCipher::Twofish),
+        ] {
+            assert_eq!(parse_luks_cipher_name(name), Some(expected));
+        }
+        assert_eq!(parse_luks_cipher_name("camellia-xts-plain64"), None);
+    }
+
+    #[test]
+    fn pinned_types_reject_mismatches_and_unknown_mappers() {
+        let path = Path::new("vault");
+        for actual in [VolumeType::Luks, VolumeType::Veracrypt] {
+            assert_eq!(
+                resolve_volume_type(VolumeType::Auto, Some(actual), path, "source", false).unwrap(),
+                actual
+            );
+            assert!(resolve_volume_type(actual, Some(actual), path, "source", false).is_ok());
+            let wrong = if actual == VolumeType::Luks {
+                VolumeType::Veracrypt
+            } else {
+                VolumeType::Luks
+            };
+            assert!(resolve_volume_type(wrong, Some(actual), path, "source", false).is_err());
+            assert!(resolve_volume_type(actual, None, path, "target", false).is_err());
+        }
+        assert!(resolve_volume_type(VolumeType::Auto, None, path, "target", false).is_err());
+    }
+
+    #[test]
+    fn atomic_publication_never_clobbers_without_force() {
+        let dir = std::env::temp_dir().join(format!("lurker-publish-{}", std::process::id()));
+        fs::create_dir(&dir).unwrap();
+        let temp = dir.join("temp");
+        let target = dir.join("target");
+        fs::write(&temp, "new").unwrap();
+        fs::write(&target, "original").unwrap();
+        assert!(publish_container(&temp, &target, false).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "original");
+        publish_container(&temp, &target, true).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        assert!(!temp.exists());
+        fs::write(&temp, "another").unwrap();
+        fs::remove_file(&target).unwrap();
+        publish_container(&temp, &target, false).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "another");
+        assert!(!temp.exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn file_target_guards_preserve_existing_content() {
+        let dir = std::env::temp_dir().join(format!("lurker-target-{}", std::process::id()));
+        fs::create_dir(&dir).unwrap();
+        let file = dir.join("file");
+        let link = dir.join("link");
+        fs::write(&file, "original").unwrap();
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+        assert!(assert_create_file_target(&file, false).is_err());
+        assert!(assert_create_file_target(&file, true).is_ok());
+        assert!(assert_create_file_target(&link, true).is_err());
+        assert!(assert_create_file_target(&dir, true).is_err());
+        assert!(assert_create_file_target(&dir.join("missing/file"), false).is_err());
+        assert_eq!(fs::read_to_string(file).unwrap(), "original");
+        fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -2445,6 +2445,7 @@ dependencies = [
  "libc",
  "plist",
  "rpassword",
+ "rustix 1.1.4",
  "serde",
 ]
 

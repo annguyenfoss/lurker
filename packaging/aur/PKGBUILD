@@ -1,0 +1,61 @@
+# Maintainer: An Nguyen <an@linux.com>
+# Local/AUR recipe. Publish only after the Linux changes are available upstream.
+PACKAGER='An Nguyen <an@linux.com>'
+pkgname=lurker-git
+pkgver=0.1.0.r14.g92eaa35
+pkgrel=1
+pkgdesc='Linux LUKS and VeraCrypt containers with a CLI and Slint desktop app'
+arch=('x86_64')
+url='https://github.com/annguyenfoss/lurker'
+license=('GPL-3.0-only')
+depends=('cryptsetup' 'btrfs-progs' 'util-linux' 'polkit' 'libxkbcommon'
+         'libxkbcommon-x11' 'libx11' 'libxcb' 'libxcursor' 'libxi' 'libxrandr' 'wayland'
+         'fontconfig' 'freetype2' 'gcc-libs')
+makedepends=('cargo' 'git')
+optdepends=('veracrypt: create VeraCrypt volumes (mounting uses cryptsetup)'
+            'sudo: CLI privilege escalation and desktop terminal fallback')
+provides=('lurker')
+conflicts=('lurker')
+source=('lurker::git+https://github.com/annguyenfoss/lurker.git')
+sha256sums=('SKIP')
+options=('!lto')
+
+pkgver() {
+    cd "$srcdir/lurker"
+    local version
+    version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' Cargo.toml)
+    printf '%s.r%s.g%s' "$version" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd "$srcdir/lurker"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+}
+
+build() {
+    cd "$srcdir/lurker"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR="$srcdir/target"
+    export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/debug/lurker"
+    cargo build --release --locked --offline --workspace
+}
+
+check() {
+    cd "$srcdir/lurker"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR="$srcdir/target"
+    export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/debug/lurker"
+    cargo test --release --locked --offline --workspace
+}
+
+package() {
+    cd "$srcdir/lurker"
+    install -Dm755 "$srcdir/target/release/lurker" "$pkgdir/usr/bin/lurker"
+    install -Dm755 "$srcdir/target/release/lurker-desktop" "$pkgdir/usr/bin/lurker-desktop"
+    install -Dm755 "$srcdir/target/release/lurker-helper" "$pkgdir/usr/bin/lurker-helper"
+    install -Dm644 extras/linux/io.lurker.desktop.desktop "$pkgdir/usr/share/applications/io.lurker.desktop.desktop"
+    install -Dm644 extras/assets/lurker.png "$pkgdir/usr/share/pixmaps/lurker.png"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/lurker/README.md"
+    install -Dm644 docs/linux-validation.md "$pkgdir/usr/share/doc/lurker/docs/linux-validation.md"
+}

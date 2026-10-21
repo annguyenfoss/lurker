@@ -29,7 +29,7 @@ lurker/
 ```text
 lurker create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]
 lurker create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]
-lurker mount [--type TYPE] [-t TAG] <source> <mountpoint>
+lurker mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>
 lurker unmount [--type TYPE] [-t TAG] <target>
 ```
 
@@ -111,7 +111,7 @@ For system packaging, keep `lurker-desktop` and `lurker-helper` together.
 - `pkexec` for preferred desktop privilege escalation
 - `sudo` for desktop fallback when launched from a terminal
 - optional `blkid`
-- optional `veracrypt`
+- optional `veracrypt` (required for VeraCrypt creation; Linux mounting and unmounting use cryptsetup)
 
 ## macOS Drag-and-Drop Installer
 
@@ -172,15 +172,20 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - AES uses the updated LUKS2 + Argon2id profile from `CIPHER.md`.
 - Serpent uses the heavier Argon2id profile from `CIPHER.md`.
 - Twofish uses the `CIPHER.md` sector-size tuning and automatically applies the documented open-time perf flags when a Twofish LUKS header is detected.
-- VeraCrypt create supports the same three single-cipher choices and keeps `SHA-512` fixed.
-- `mount` and `unmount` auto-detect the container type supported on the current platform unless `--type` is pinned.
+- VeraCrypt create supports the same three single-cipher choices and keeps `SHA-512` fixed. Device creation uses the full device size detected by VeraCrypt, with quick format.
+- On Linux, `mount` recognizes LUKS metadata first; other sources are authenticated as VeraCrypt when opening. Encrypted VeraCrypt headers cannot be identified without the passphrase. `unmount` reads the active mapper type. Use `--type` to pin the format.
+- Linux VeraCrypt mounts use `cryptsetup --type tcrypt --veracrypt`, with the same `lurker_*` mapper naming, active-volume listing, filesystem handling, and cleanup as LUKS.
+- `mount --readonly` opens the mapper and mounts the filesystem read-only. The desktop readonly checkbox does the same.
+- VeraCrypt supports normal password-only volumes with the default PIM. Keyfiles, hidden-volume controls, and custom PIM are not exposed.
+- VeraCrypt passphrases supplied through the helper cannot be empty or contain NUL or line breaks. Leading/trailing spaces and Unicode are preserved.
 - `-t TAG` is supported for LUKS source-path mount/unmount.
 - VeraCrypt tags are still unsupported.
-- Linux Btrfs volumes are mounted with `compress=zstd`.
-- File-backed create uses same-directory temporary files and atomic rename.
-- The desktop app uses passphrase entry inside the app. Create passphrase confirmation is enforced by the UI. The existing Generate button uses system randomness (128 bits).
+- Btrfs volumes are mounted with `compress=zstd`.
+- File-backed create uses same-directory temporary files, atomic publication without overwriting unless forced, and atomic replacement when forced.
+- The desktop app uses passphrase entry inside the app. Create passphrase confirmation is enforced by the UI. The Generate button uses system randomness (128 bits).
 - The desktop app does not call the CLI binary. It talks to `lurker-helper` over a local stdin/stdout JSON contract.
-- The CLI supports interactive terminal prompting; macOS create also confirms the passphrase.
+- The CLI supports interactive terminal prompting; macOS create also confirms the passphrase. Passphrases are passed to crypto tools through terminal input or stdin, never command-line arguments.
+- New Btrfs filesystems initially have root-owned directories. After mounting a new personal volume, set its ownership once with `sudo chown "$(id -u):$(id -g)" /your/mountpoint` if needed.
 - The archived Bash implementation in `legacy/bash-cli/` was updated to match the same three create cipher profiles.
 
 ## Verification
@@ -190,14 +195,28 @@ Native tests use only disposable file containers. The installed FUSE-T runtime c
 Current verification target:
 
 ```bash
-cargo check --workspace
-cargo test --workspace
+cargo check --workspace --locked
+cargo test --workspace --locked
 # macOS: native create/mount/read-only/remount/error tests using disposable files
 cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 cargo test -p lurker-helper --test macos_native -- --include-ignored --test-threads=1
 cargo build -p lurker-cli
 python3 tests/macos_cli.py
 ```
+
+Real Linux tests create fresh `/tmp` images and dedicated loop devices. They never target an existing vault. See `docs/linux-validation.md` for the full matrix and commands.
+
+## Local Arch/AUR Package
+
+`packaging/aur/PKGBUILD` builds the CLI, desktop app, and internal helper together. The Git recipe targets https://github.com/annguyenfoss/lurker.git and needs the changes upstream before publication.
+
+Build the current worktree locally, including uncommitted changes:
+
+```bash
+./scripts/build-local-aur.sh
+```
+
+The package, `.SRCINFO`, source snapshot, and logs are written under a fresh `dist/aur-build-*` directory. Nothing is uploaded or installed. Building requires the dependencies listed in the PKGBUILD; VeraCrypt remains optional for mounting existing containers.
 
 ## License
 

@@ -53,7 +53,11 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 - VeraCrypt tags are unsupported.
 - The desktop app never invokes the installed CLI binary.
 - The helper is an implementation detail for desktop privilege escalation.
-- File-backed create currently uses same-directory temp files and atomic rename.
+- File-backed create uses same-directory temp files, atomic no-clobber publication without force, and atomic rename with force.
+- Linux mounts for both formats use cryptsetup-managed `lurker_*` mappings; VeraCrypt is required only for VeraCrypt creation.
+- Probe LUKS metadata before open; authenticate VeraCrypt during open instead of probing encrypted headers without a password.
+- Register mapper cleanup only after a successful open, so failed duplicate operations cannot close an existing mapping.
+- Readonly applies to both the crypto mapping and the filesystem mount.
 - Block-device create is destructive and requires force.
 
 ## Request Flow
