@@ -10,12 +10,12 @@ license=('GPL-3.0-only' 'GPL-2.0-only' 'Apache-2.0' 'LicenseRef-TrueCrypt-3.0')
 depends=('cryptsetup' 'btrfs-progs' 'util-linux' 'polkit' 'libxkbcommon'
          'libxkbcommon-x11' 'libx11' 'libxcb' 'libxcursor' 'libxi' 'libxrandr' 'wayland'
          'fontconfig' 'freetype2' 'gcc-libs' 'fuse3' 'wxwidgets-common')
-makedepends=('cargo' 'git' 'python' 'bc' 'bison' 'flex' 'libelf')
+makedepends=('cargo' 'git' 'python' 'bc' 'bison' 'flex' 'libelf' 'wxwidgets-gtk3')
 optdepends=('veracrypt: create VeraCrypt volumes in privileged mode'
             'sudo: CLI privilege escalation and desktop terminal fallback')
 provides=('lurker')
 conflicts=('lurker')
-source=('lurker::git+https://github.com/annguyenfoss/lurker.git'
+source=('lurker::git+https://github.com/annguyenfoss/lurker.git#branch=main'
         'veracrypt-userspace::git+https://github.com/veracrypt/VeraCrypt.git#commit=8172bc55f834485f67be271e02c1167981423621'
         'lkl-userspace::git+https://github.com/lkl/linux.git#commit=d0f76a77e8c2ca68bd7d96190b8da09040eab072')
 sha256sums=('SKIP' 'SKIP' 'SKIP')

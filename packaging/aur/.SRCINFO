@@ -15,6 +15,7 @@ pkgbase = lurker-git
 	makedepends = bison
 	makedepends = flex
 	makedepends = libelf
+	makedepends = wxwidgets-gtk3
 	depends = cryptsetup
 	depends = btrfs-progs
 	depends = util-linux
@@ -37,7 +38,7 @@ pkgbase = lurker-git
 	provides = lurker
 	conflicts = lurker
 	options = !lto
-	source = lurker::git+https://github.com/annguyenfoss/lurker.git
+	source = lurker::git+https://github.com/annguyenfoss/lurker.git#branch=main
 	source = veracrypt-userspace::git+https://github.com/veracrypt/VeraCrypt.git#commit=8172bc55f834485f67be271e02c1167981423621
 	source = lkl-userspace::git+https://github.com/lkl/linux.git#commit=d0f76a77e8c2ca68bd7d96190b8da09040eab072
 	sha256sums = SKIP
