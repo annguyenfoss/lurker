@@ -247,9 +247,10 @@ cd lurker-git
 makepkg -si
 ```
 
-Build the current worktree locally, including uncommitted changes:
+`packaging/aur` is a Git submodule of ssh://aur@aur.archlinux.org/lurker-git.git. Initialize it before building the current worktree locally, including uncommitted changes:
 
 ```bash
+git submodule update --init packaging/aur
 ./scripts/build-local-aur.sh
 ```
 

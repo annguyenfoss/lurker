@@ -3,6 +3,10 @@
 # modifying the user's Git checkout or publishing anything.
 set -euo pipefail
 lurker_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+if [[ ! -f "$lurker_root/packaging/aur/PKGBUILD" ]]; then
+    echo 'Initialize the AUR submodule first: git submodule update --init packaging/aur' >&2
+    exit 1
+fi
 mkdir -p "$lurker_root/dist"
 lurker_output=$(mktemp -d "$lurker_root/dist/aur-build-XXXXXXXX")
 mkdir -p "$lurker_output/src"
