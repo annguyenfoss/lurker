@@ -17,6 +17,8 @@ import {
 
 export component MountView inherits Card {
     in property <bool> is-macos: false;
+    in property <bool> unprivileged: false;
+    in property <bool> busy: false;
     in-out property <string> source-kind: "file";   // "file" | "partition"
     in-out property <string> source: "";
     in-out property <string> source-label: "";
@@ -42,6 +44,7 @@ export component MountView inherits Card {
             ? root.passphrase.character-count > 0
             : root.key-file != "";
     private property <bool> can-submit:
+        !root.busy &&
         root.source != ""
         && root.has-auth
         && root.auth-method == "pass"   // key-file is scaffolded only
@@ -53,11 +56,11 @@ export component MountView inherits Card {
     // ── Source section ────────────────────────────────────────────────
     CardSection {
         top-divider: false;
-        SectionHead { title: "SOURCE"; hint: root.is-macos ? "encrypted file container to unlock" : "encrypted file or partition to unlock"; }
+        SectionHead { title: "SOURCE"; hint: root.unprivileged ? "VeraCrypt file container to unlock" : root.is-macos ? "encrypted file container to unlock" : "encrypted file or partition to unlock"; }
 
         Rectangle { height: UiTheme.s3; }
 
-        if !root.is-macos: Segmented {
+        if !root.is-macos && !root.unprivileged: Segmented {
             value: root.source-kind;
             options: [
                 { value: "file",      label: "File container" },
@@ -74,7 +77,7 @@ export component MountView inherits Card {
         if root.source-kind == "file" && root.source == "" && !root.typing-source: Drop {
             icon: @image-url("../icons/file.svg");
             title: "Drop a container file here";
-            subtitle: root.is-macos ? "or click to type a path · Apple Encryption, VeraCrypt" : "or click to type a path · LUKS, VeraCrypt";
+            subtitle: root.unprivileged ? "or click to type a path · VeraCrypt" : root.is-macos ? "or click to type a path · Apple Encryption, VeraCrypt" : "or click to type a path · LUKS, VeraCrypt";
             clicked => { root.typing-source = true; }
             dropped(path) => { root.source = path; }
         }

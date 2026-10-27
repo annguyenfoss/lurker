@@ -17,6 +17,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
   - `src/workflow.rs`: source of truth for hardcoded crypto profiles and Linux workflow dispatch
   - `src/macos.rs`: hdiutil/VeraCrypt file-container workflows and native volume discovery
   - `src/linux_workflow.rs`: Linux create/mount/unmount implementation
+  - `src/userspace.rs`: Linux unprivileged VeraCrypt file workflow and private session registry
   - `src/size.rs`: shared size validation
   - `src/linux.rs`: mapper naming, path resolution, mountinfo parsing, target detection
   - `src/system.rs`: tool discovery, subprocess execution, privilege-aware context
@@ -26,7 +27,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
   - `src/main.rs`: parse -> run core
 - `crates/lurker-helper`
   - `src/main.rs`: desktop helper; reads `CommandAction` JSON on stdin and writes `OperationResponse` JSON on stdout
-  - Linux reruns itself via `pkexec` first, `sudo` fallback only when a TTY exists; macOS runs directly as the login user
+  - Privileged Linux requests rerun via `pkexec` first, `sudo` fallback only when a TTY exists; unprivileged requests run directly; macOS runs directly as the login user
 - `apps/lurker-desktop`
   - `src/main.rs`: UI callbacks, zoom state, background threading, refresh flow
   - `src/logic.rs`: form validation and conversion into shared commands
@@ -36,6 +37,8 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
   - `ui/theme.slint`: layout tokens
   - `ui/zoom-metrics.slint`: regression surface for text zoom tests
 - `scripts/build-macos-dmg.py`: native release app bundle and drag-to-Applications DMG packaging; helper stays beside the desktop executable inside `Contents/MacOS`
+- `scripts/build-linux-userspace.py`: builds pinned, patched VeraCrypt and LKL filesystem helpers without installation or elevation; integration patches live under `native/linux-userspace/patches`
+- `docs/linux-userspace.md`: stock VeraCrypt/FUSE distinction, Linux privileged/unprivileged comparison, security findings, implementation lessons, validation evidence and open hardening work
 - `legacy/bash-cli`
   - archived Bash implementation; still kept in sync for create cipher profiles
 - `legacy/rust-cli-monolith`
@@ -54,7 +57,11 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 - The desktop app never invokes the installed CLI binary.
 - The helper is an implementation detail for desktop privilege escalation.
 - File-backed create uses same-directory temp files, atomic no-clobber publication without force, and atomic rename with force.
-- Linux mounts for both formats use cryptsetup-managed `lurker_*` mappings; VeraCrypt is required only for VeraCrypt creation.
+- Privileged Linux mounts use cryptsetup-managed `lurker_*` mappings; the installed VeraCrypt application is required only for creation on that route.
+- Unprivileged Linux supports VeraCrypt regular files, with the same cipher profiles and Btrfs/zstd default. It never invokes sudo, pkexec, mount, losetup, or device-mapper. No fallback to elevation is permitted.
+- The unprivileged crypto helper exposes a FUSE image; the filesystem helper runs Linux filesystem code inside LKL. Both run as the login user. Standard user FUSE mounting uses the system's existing fusermount3 helper.
+- The helper JSON command and active-volume records carry a serde-defaulted `privilege_mode`; missing mode retains the original privileged behavior. macOS hides the selector and keeps its existing native user-session route.
+- Userspace state belongs to the current uid in a private runtime directory. Record source device/inode, mount IDs, and process start time; never close a replaced mount or reused process. Drain the filesystem before closing its crypto image. Preserve recoverable sessions on busy/failed unmounts.
 - Probe LUKS metadata before open; authenticate VeraCrypt during open instead of probing encrypted headers without a password.
 - Register mapper cleanup only after a successful open, so failed duplicate operations cannot close an existing mapping.
 - Readonly applies to both the crypto mapping and the filesystem mount.
@@ -79,6 +86,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 
 - Keep the desktop app narrow: create, mount, unmount, active volumes.
 - Hide hardcoded expert defaults instead of exposing more knobs.
+- Linux offers Privileged/Unprivileged in the main header. Unprivileged selects VeraCrypt files, hides LUKS/devices, and cannot unmount privileged rows. Each row retains its own backend mode across selector changes.
 - Keep the custom Slint controls unless you re-verify text zoom behavior.
 - `apps/lurker-desktop/build.rs` intentionally uses Slint `material`; `fluent` previously broke runtime text zoom/layout in this app.
 
@@ -102,6 +110,7 @@ If you add or remove a supported create cipher, also update:
 
 - `cargo check --workspace`
 - `cargo test --workspace`
+- On Linux, build the optional native helpers, then run `scripts/test-linux-userspace.sh` as a normal user for the real userspace cipher/filesystem and recovery suites. Do not run this suite with sudo.
 - For desktop-only changes, also run `cargo test -p lurker-desktop`
 
 ## macOS Rules

@@ -82,7 +82,7 @@ Use this file as the source of truth for create-time cipher policy.
   - `--quick`
   - omit `--size`: VeraCrypt determines the full device size; `--size=max` can fail for device-hosted volumes.
 
-## Linux VeraCrypt Password Transport
+## Linux Privileged VeraCrypt Password Transport
 
 - Cipher, hash, PIM and KDF defaults remain as specified above.
 - Mount/open uses `cryptsetup open --type tcrypt --veracrypt`.
@@ -96,6 +96,16 @@ Use this file as the source of truth for create-time cipher policy.
 - `serpent` is the heavier/slower paranoid option.
 - `twofish` is the non-AES alternative with explicit open-time perf tuning.
 - The user chooses only the cipher family. The rest of the crypto profile stays fixed.
+
+## Linux Unprivileged VeraCrypt
+
+- Same normal-volume AES/Serpent/Twofish, SHA-512, PIM 0, no-keyfile profiles as the privileged route. Full initialization; no quick-format file default.
+- Create the VeraCrypt file with `--filesystem=none`, expose its decrypted image through the file-only userspace helper, then run `mkfs.btrfs` on that regular FUSE file.
+- Btrfs is mounted through the LKL filesystem helper with `compress=zstd`. New filesystem ownership belongs to the login user; existing container permissions are preserved.
+- The userspace helper reads passwords from stdin with a newline terminator, in a UTF-8 locale. Preserve spaces and reject embedded NUL/newlines.
+- Read-only applies to both the decrypted FUSE image and the filesystem driver.
+- No physical-device creation, LUKS, tags, custom PIM, keyfile or hidden-volume controls are added by this mode.
+- The archived Bash implementation retains the same crypto profiles but only implements the privileged kernel route.
 
 ## Sync Rules
 

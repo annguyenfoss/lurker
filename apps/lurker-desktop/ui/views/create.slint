@@ -12,6 +12,8 @@ import {
 
 export component CreateView inherits Card {
     in property <bool> is-macos: false;
+    in property <bool> unprivileged: false;
+    in property <bool> busy: false;
     in-out property <string> target-kind: "file";   // "file" | "partition"
     in-out property <string> format: "luks";         // "luks" | "vera" | "apple"
     in-out property <string> file-path: "~/vaults/";
@@ -31,8 +33,15 @@ export component CreateView inherits Card {
     callback submit;
     callback generate-passphrase;
 
+    private property <[SegmentOption]> userspace-formats: [{ value: "vera", label: "VeraCrypt" }];
+    private property <[SegmentOption]> platform-formats: [
+        { value: root.is-macos ? "apple" : "luks", label: root.is-macos ? "Apple Encryption" : "LUKS" },
+        { value: "vera", label: "VeraCrypt" },
+    ];
+
     private property <bool> pass-match: root.passphrase.character-count > 0 && root.passphrase == root.confirm;
     private property <bool> can-submit:
+        !root.busy &&
         (root.target-kind == "file" ? root.file-name != "" : root.partition != "")
         && root.passphrase.character-count >= 8
         && root.pass-match;
@@ -40,23 +49,20 @@ export component CreateView inherits Card {
     // ── Format section ────────────────────────────────────────────────
     CardSection {
         top-divider: false;
-        SectionHead { title: "FORMAT"; hint: "first is default"; }
+        SectionHead { title: "FORMAT"; hint: root.unprivileged ? "without administrator privileges" : "first is default"; }
         Segmented {
             value <=> root.format;
-            options: [
-                { value: root.is-macos ? "apple" : "luks", label: root.is-macos ? "Apple Encryption" : "LUKS" },
-                { value: "vera", label: "VeraCrypt" },
-            ];
+            options: root.unprivileged ? root.userspace-formats : root.platform-formats;
         }
     }
 
     // ── Target section ────────────────────────────────────────────────
     CardSection {
-        SectionHead { title: "TARGET"; hint: root.is-macos ? "file container" : "file or partition"; }
+        SectionHead { title: "TARGET"; hint: root.is-macos || root.unprivileged ? "file container" : "file or partition"; }
 
         Rectangle { height: UiTheme.s3; }   // spacer
 
-        if !root.is-macos: Segmented {
+        if !root.is-macos && !root.unprivileged: Segmented {
             value <=> root.target-kind;
             options: [
                 { value: "file",      label: "File container" },

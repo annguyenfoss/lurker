@@ -24,6 +24,7 @@ impl Fixture {
     }
     fn create(&self, kind: VolumeType, cipher: CreateCipher) -> CreateCommand {
         CreateCommand {
+            privilege_mode: lurker_core::PrivilegeMode::Privileged,
             target: self.0.join("vault with spaces.container"),
             size_gb: Some("0.03125".into()),
             force: false,
@@ -35,6 +36,7 @@ impl Fixture {
     }
     fn mount(&self, path: &Path, pass: &str, readonly: bool, kind: VolumeType) -> CommandAction {
         CommandAction::Mount(MountCommand {
+            privilege_mode: lurker_core::PrivilegeMode::Privileged,
             source: path.into(),
             mountpoint: self.0.join("mounted vault"),
             tag: None,
@@ -96,6 +98,7 @@ impl Drop for Fixture {
 
 fn unmount(target: &Path) -> CommandAction {
     CommandAction::Unmount(UnmountCommand {
+        privilege_mode: lurker_core::PrivilegeMode::Privileged,
         target: target.into(),
         tag: None,
         volume_type: VolumeType::Auto,
@@ -165,6 +168,7 @@ fn lifecycle(kind: VolumeType, cipher: CreateCipher) {
         VolumeType::Apple
     };
     bad(CommandAction::Unmount(UnmountCommand {
+        privilege_mode: lurker_core::PrivilegeMode::Privileged,
         target: source.clone(),
         tag: None,
         volume_type: other,

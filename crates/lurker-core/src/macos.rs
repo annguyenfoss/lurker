@@ -356,6 +356,7 @@ pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
     Ok(volumes()?
         .into_iter()
         .map(|v| ActiveVolume {
+            privilege_mode: crate::PrivilegeMode::Privileged,
             mapper_name: v
                 .source
                 .file_name()

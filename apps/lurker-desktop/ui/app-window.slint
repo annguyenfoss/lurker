@@ -14,7 +14,7 @@ import "fonts/JetBrainsMono-Regular.ttf";
 import "fonts/JetBrainsMono-Medium.ttf";
 import "fonts/JetBrainsMono-SemiBold.ttf";
 
-import { Glow, Toast, ToastData, ZoomPill } from "components/primitives.slint";
+import { Glow, Toast, ToastData, ZoomPill, Segmented } from "components/primitives.slint";
 import { IconAction, DeviceInfo } from "components/inputs.slint";
 import { Sidebar, NavItem, NavLabel, SideFoot, MainHeader } from "components/chrome.slint";
 import { VolumeRow, VolumeRowData } from "components/volume-row.slint";
@@ -42,6 +42,9 @@ export component MainWindow inherits Window {
     in-out property <string> current-view: "create";
     in-out property <float> ui_scale: 1.0;
     in-out property <string> zoom_label: "100%";
+    in-out property <string> privilege-mode: "privileged";
+    in property <bool> operation-busy: false;
+    private property <bool> unprivileged: !root.is-macos && root.privilege-mode == "unprivileged";
 
     // Create flow
     in-out property <string> create-target-kind: "file";
@@ -84,6 +87,7 @@ export component MainWindow inherits Window {
     callback rescan-devices();
     callback device-picked-for-create(DeviceInfo);
     callback device-picked-for-mount(DeviceInfo);
+    callback change-privilege-mode(string);
 
     init => {
         UiTheme.mode = root.theme-mode;
@@ -188,8 +192,18 @@ export component MainWindow inherits Window {
                         ? "Create encrypted container"
                         : "Manage volumes";
                     subtitle: root.current-view == "create"
-                        ? (root.is-macos ? "Make a new encrypted file container." : "Make a new encrypted file or partition.")
-                        : "Mounted volumes, and unlock new ones.";
+                        ? (root.is-macos ? "Make a new encrypted file container." : root.unprivileged ? "VeraCrypt file containers without administrator prompts." : "Make a new encrypted file or partition.")
+                        : (root.unprivileged ? "Unlock VeraCrypt files without administrator prompts." : "Mounted volumes, and unlock new ones.");
+
+                    if !root.is-macos: Segmented {
+                        value <=> root.privilege-mode;
+                        enabled: !root.operation-busy;
+                        options: [
+                            { value: "privileged", label: "Privileged" },
+                            { value: "unprivileged", label: "Unprivileged" },
+                        ];
+                        selected(value) => { root.change-privilege-mode(value); }
+                    }
 
                     ZoomPill {
                         value: root.ui_scale;
@@ -238,6 +252,8 @@ export component MainWindow inherits Window {
 
                             if root.current-view == "create": CreateView {
                                 is-macos: root.is-macos;
+                                unprivileged: root.unprivileged;
+                                busy: root.operation-busy;
                                 target-kind <=> root.create-target-kind;
                                 format <=> root.create-format;
                                 file-path <=> root.create-file-path;
@@ -258,6 +274,8 @@ export component MainWindow inherits Window {
 
                             if root.current-view == "manage": ManageView {
                                 is-macos: root.is-macos;
+                                unprivileged: root.unprivileged;
+                                busy: root.operation-busy;
                                 volumes: root.volumes;
                                 selected-index <=> root.mount-selected-index;
                                 mount-source-kind <=> root.mount-source-kind;

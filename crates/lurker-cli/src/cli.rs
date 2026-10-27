@@ -54,6 +54,8 @@ where
     let mut volume_type = VolumeType::Auto;
     let mut volume_type_explicit = false;
     let mut readonly = false;
+    let mut privilege_mode = lurker_core::PrivilegeMode::Privileged;
+    let mut privilege_mode_explicit = false;
     let mut create_cipher = CreateCipher::Aes;
     let mut create_cipher_explicit = false;
     let mut parsed_args = Vec::new();
@@ -62,6 +64,23 @@ where
     while index < raw_args.len() {
         let current = raw_args[index].to_string_lossy();
         match current.as_ref() {
+            "--unprivileged" | "--privileged" => {
+                let chosen = if current == "--unprivileged" {
+                    lurker_core::PrivilegeMode::Unprivileged
+                } else {
+                    lurker_core::PrivilegeMode::Privileged
+                };
+                if privilege_mode_explicit && chosen != privilege_mode {
+                    return Err(usage_failure(
+                        &script_name,
+                        color_mode,
+                        "Choose either --privileged or --unprivileged.",
+                    ));
+                }
+                privilege_mode = chosen;
+                privilege_mode_explicit = true;
+                index += 1;
+            }
             "--color" => {
                 let value = raw_args.get(index + 1).ok_or_else(|| ParseFailure {
                     message: Some("Option --color requires an argument.".into()),
@@ -349,6 +368,11 @@ where
                         color_mode,
                     });
                 }
+                (VolumeType::Auto, false)
+                    if privilege_mode == lurker_core::PrivilegeMode::Unprivileged =>
+                {
+                    VolumeType::Veracrypt
+                }
                 (VolumeType::Auto, false) => VolumeType::default_create(),
                 (value, _) => value,
             };
@@ -389,6 +413,7 @@ where
             Ok(ParseOutcome::Run(Cli {
                 color_mode,
                 command: CommandAction::Create(CreateCommand {
+                    privilege_mode,
                     target,
                     size_gb,
                     source_kind,
@@ -445,7 +470,11 @@ where
             let _ = source_kind;
 
             let mountpoint = PathBuf::from(&action_args[1]);
-            if !mountpoint.is_dir() && !(cfg!(target_os = "macos") && !mountpoint.exists()) {
+            if !mountpoint.is_dir()
+                && !((cfg!(target_os = "macos")
+                    || privilege_mode == lurker_core::PrivilegeMode::Unprivileged)
+                    && !mountpoint.exists())
+            {
                 return Err(ParseFailure {
                     message: Some(format!(
                         "Directory does not exist: {}",
@@ -462,6 +491,7 @@ where
             Ok(ParseOutcome::Run(Cli {
                 color_mode,
                 command: CommandAction::Mount(MountCommand {
+                    privilege_mode,
                     source,
                     mountpoint,
                     tag,
@@ -505,6 +535,7 @@ where
             Ok(ParseOutcome::Run(Cli {
                 color_mode,
                 command: CommandAction::Unmount(UnmountCommand {
+                    privilege_mode,
                     target: PathBuf::from(&action_args[0]),
                     tag,
                     volume_type,
@@ -548,7 +579,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     }
 
     format!(
-        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), apple (macOS default), veracrypt; auto for mount/unmount\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n"
+        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--unprivileged{reset}    Linux VeraCrypt files without elevation (userspace helpers required)\n  {accent}--privileged{reset}      Use the existing kernel-backed route (default)\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), apple (macOS default), veracrypt; auto for mount/unmount\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n"
     )
 }
 
@@ -687,6 +718,41 @@ mod tests {
     use super::{parse_env_args, CommandAction, ParseOutcome};
     use lurker_core::{CreateCipher, SourceKind, VolumeType};
     use std::ffi::OsString;
+
+    #[test]
+    fn unprivileged_create_selects_veracrypt_without_changing_cipher() {
+        let input = [
+            "lurker",
+            "create",
+            "--unprivileged",
+            "--cipher",
+            "twofish",
+            "vault.hc",
+            "1",
+        ]
+        .map(OsString::from);
+        let ParseOutcome::Run(cli) = parse_env_args(input).unwrap() else {
+            panic!()
+        };
+        let CommandAction::Create(c) = cli.command else {
+            panic!()
+        };
+        assert_eq!(c.privilege_mode, lurker_core::PrivilegeMode::Unprivileged);
+        assert_eq!(c.volume_type, VolumeType::Veracrypt);
+        assert_eq!(c.cipher, CreateCipher::Twofish);
+        assert!(parse_env_args(
+            [
+                "lurker",
+                "create",
+                "--privileged",
+                "--unprivileged",
+                "vault",
+                "1"
+            ]
+            .map(OsString::from)
+        )
+        .is_err());
+    }
 
     #[test]
     fn parses_createvc_alias() {

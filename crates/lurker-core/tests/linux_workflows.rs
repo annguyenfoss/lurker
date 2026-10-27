@@ -113,6 +113,7 @@ fn bad(action: CommandAction) -> OperationResponse {
 const PASSWORD: &str = "Lurker integration p@ssphrase 你好 123456789!";
 fn create(target: &Path, kind: SourceKind, ty: VolumeType, cipher: CreateCipher) -> CommandAction {
     CommandAction::Create(CreateCommand {
+        privilege_mode: lurker_core::PrivilegeMode::Privileged,
         target: target.into(),
         size_gb: (kind == SourceKind::File).then(|| "0.25".into()),
         force: kind == SourceKind::Block,
@@ -130,6 +131,7 @@ fn mount(
     tag: Option<&str>,
 ) -> CommandAction {
     CommandAction::Mount(MountCommand {
+        privilege_mode: lurker_core::PrivilegeMode::Privileged,
         source: source.into(),
         mountpoint: at.into(),
         volume_type: ty,
@@ -140,6 +142,7 @@ fn mount(
 }
 fn unmount(target: &Path, ty: VolumeType, tag: Option<&str>) -> CommandAction {
     CommandAction::Unmount(UnmountCommand {
+        privilege_mode: lurker_core::PrivilegeMode::Privileged,
         target: target.into(),
         volume_type: ty,
         tag: tag.map(String::from),

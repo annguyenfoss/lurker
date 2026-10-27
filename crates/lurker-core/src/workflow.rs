@@ -114,6 +114,30 @@ fn cipher_profile(cipher: CreateCipher) -> &'static CreateCipherProfile {
     }
 }
 
+// Both Linux routes create the same VeraCrypt header and Btrfs filesystem.
+// The userspace route changes the transport, never the crypto profile.
+#[cfg(target_os = "linux")]
+pub(crate) fn userspace_veracrypt_create_args(
+    cipher: CreateCipher,
+    size_mib: u64,
+) -> Vec<OsString> {
+    let mut args: Vec<OsString> = VERACRYPT_CREATE_ARGS_COMMON
+        .iter()
+        .map(OsString::from)
+        .collect();
+    args.extend(["--stdin", "--non-interactive"].map(OsString::from));
+    args.extend(VERACRYPT_CREATE_ARGS_NO_KEYFILES.iter().map(OsString::from));
+    args.push(
+        format!(
+            "--encryption={}",
+            cipher_profile(cipher).veracrypt_encryption
+        )
+        .into(),
+    );
+    args.push(format!("--size={size_mib}M").into());
+    args
+}
+
 #[cfg(target_os = "linux")]
 #[path = "linux_workflow.rs"]
 mod linux_backend;

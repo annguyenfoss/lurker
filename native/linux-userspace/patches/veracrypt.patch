@@ -1,0 +1,119 @@
+diff --git a/src/Core/Unix/CoreService.cpp b/src/Core/Unix/CoreService.cpp
+index 2e71c9c..490a3f1 100644
+--- a/src/Core/Unix/CoreService.cpp
++++ b/src/Core/Unix/CoreService.cpp
+@@ -198,6 +198,8 @@ namespace VeraCrypt
+ 
+ 	static void CheckPrivilegeElevationAllowed ()
+ 	{
++		// Lurker userspace policy: any attempt to invoke sudo/doas is a hard failure.
++		throw ElevationBlocked (SRC_POS);
+ #ifdef TC_LINUX
+ 		// NoNewPrivs is inherited across fork/exec and prevents sudo or doas
+ 		// from gaining privileges. A password cannot remove this restriction.
+diff --git a/src/Core/Unix/CoreServiceRequest.cpp b/src/Core/Unix/CoreServiceRequest.cpp
+index 5dde6ce..566a0d3 100644
+--- a/src/Core/Unix/CoreServiceRequest.cpp
++++ b/src/Core/Unix/CoreServiceRequest.cpp
+@@ -281,6 +281,10 @@ namespace VeraCrypt
+ 
+ 	bool MountVolumeRequest::RequiresElevation () const
+ 	{
++#ifdef TC_LINUX
++		if (Options->NoFilesystem && Options->NoKernelCrypto && !Options->Path->IsDevice())
++			return false;
++#endif
+ #ifdef TC_MACOSX
+ 		if (Options->Path->IsDevice())
+ 		{
+diff --git a/src/Core/Unix/CoreUnix.cpp b/src/Core/Unix/CoreUnix.cpp
+index 9e0dc9f..905a335 100644
+--- a/src/Core/Unix/CoreUnix.cpp
++++ b/src/Core/Unix/CoreUnix.cpp
+@@ -1290,7 +1290,7 @@ namespace VeraCrypt
+ 					if (fsPath.IsDirectory())
+ 						fsPath.Delete();
+ 
+-					throw_sys_sub_if (mkdir (path.str().c_str(), S_IRUSR | S_IXUSR) == -1, path.str());
++					throw_sys_sub_if (mkdir (path.str().c_str(), S_IRUSR | S_IWUSR | S_IXUSR) == -1, path.str());
+ 
+ 					fuseMountPoint = fsPath;
+ 					break;
+@@ -1509,6 +1509,15 @@ namespace VeraCrypt
+ 
+ 	DevicePath CoreUnix::MountAuxVolumeImage (const DirectoryPath &auxMountPoint, const MountOptions &options) const
+ 	{
++#ifdef TC_LINUX
++		// Lurker file-only backend: expose the decrypted FUSE image instead of creating a loop.
++		if (options.NoFilesystem && options.NoKernelCrypto && !options.Path->IsDevice())
++		{
++			DevicePath image (string (auxMountPoint) + FuseService::GetVolumeImagePath());
++			FuseService::SendAuxDeviceInfo (auxMountPoint, image, DevicePath());
++			return image;
++		}
++#endif
+ 		DevicePath loopDev = AttachFileToLoopDevice (string (auxMountPoint) + FuseService::GetVolumeImagePath(), options.Protection == VolumeProtection::ReadOnly);
+ 
+ 		try
+diff --git a/src/Driver/Fuse/FuseService.cpp b/src/Driver/Fuse/FuseService.cpp
+index 055eb1d..dcfbcc2 100644
+--- a/src/Driver/Fuse/FuseService.cpp
++++ b/src/Driver/Fuse/FuseService.cpp
+@@ -1093,7 +1093,24 @@ namespace VeraCrypt
+ 
+ 			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
+ 			{
+-				FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);
++				// Userspace image adapter: filesystem tools issue sub-sector writes to files.
++				static Mutex rawWriteMutex;
++				ScopeLock rawWriteLock (rawWriteMutex);
++				const uint64 sectorSize = FuseService::GetVolumeSectorSize();
++				const uint64 volumeSize = FuseService::GetVolumeSize();
++				if (offset < 0 || (uint64)offset > volumeSize || size > volumeSize - (uint64)offset)
++					return -EINVAL;
++				if (offset % sectorSize || size % sectorSize)
++				{
++					const uint64 first = offset - offset % sectorSize;
++					const uint64 end = ((offset + size + sectorSize - 1) / sectorSize) * sectorSize;
++					Buffer aligned (end - first);
++					FuseService::ReadVolumeSectors (aligned, first);
++					aligned.GetRange (offset - first, size).CopyFrom (ConstBufferPtr ((const uint8 *)buf, size));
++					FuseService::WriteVolumeSectors (aligned, first);
++				}
++				else
++					FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);
+ 				return size;
+ 			}
+ 
+@@ -1331,8 +1348,8 @@ namespace VeraCrypt
+ 		args.push_back ("rwsize=262144");
+ #endif
+ 
+-		if (getuid() == 0 || geteuid() == 0)
+ #endif
++		if (getuid() == 0 || geteuid() == 0)
+ 		{
+ 			args.push_back ("-o");
+ 			args.push_back ("allow_other");
+diff --git a/src/Main/Unix/Main.cpp b/src/Main/Unix/Main.cpp
+index 247eca7..052974a 100644
+--- a/src/Main/Unix/Main.cpp
++++ b/src/Main/Unix/Main.cpp
+@@ -30,6 +30,17 @@ using namespace VeraCrypt;
+ 
+ int main (int argc, char **argv)
+ {
++	if (argc == 2 && strcmp (argv[1], "--lurker-userspace-version") == 0)
++	{
++		std::cout << "lurker-userspace-2" << std::endl;
++		return 0;
++	}
++	if (geteuid() == 0)
++	{
++		std::cerr << "The Lurker userspace helper must run as the login user." << std::endl;
++		return 1;
++	}
++
+ #ifdef TC_LINUX
+ 	// The requester helper must never initialize a core service or handle secrets.
+ 	if (argc > 1 && strcmp (argv[1], TC_REQUESTER_HELPER_CMDLINE_OPTION) == 0)

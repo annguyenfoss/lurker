@@ -12,6 +12,8 @@ import { MountView } from "mount.slint";
 
 export component ManageView inherits Rectangle {
     in property <bool> is-macos: false;
+    in property <bool> unprivileged: false;
+    in property <bool> busy: false;
     in property <[VolumeRowData]> volumes;
     in-out property <int> selected-index: -1;
 
@@ -103,6 +105,7 @@ export component ManageView inherits Rectangle {
 
                     for data[i] in root.volumes: VolumeRow {
                         data: data;
+                        enabled: !root.busy && (!root.unprivileged || data.unprivileged);
                         expanded: root.selected-index == i;
                         clicked => {
                             if (root.selected-index == i) {
@@ -152,6 +155,8 @@ export component ManageView inherits Rectangle {
         // ── Inlined MountView ────────────────────────────────────────
         MountView {
             is-macos: root.is-macos;
+            unprivileged: root.unprivileged;
+            busy: root.busy;
             source-kind <=> root.mount-source-kind;
             source <=> root.mount-source;
             source-label <=> root.mount-source-label;

@@ -8,8 +8,13 @@ license.workspace = true
 serde.workspace = true
 libc = "0.2"
 
+[dev-dependencies]
+serde_json.workspace = true
+
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1", features = ["fs"] }
+serde_json.workspace = true
+rpassword = "7.5"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"

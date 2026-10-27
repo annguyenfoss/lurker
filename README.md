@@ -13,7 +13,7 @@ lurker/
 ├── crates/
 │   ├── lurker-core/    # shared Rust domain + Linux/macOS integration
 │   ├── lurker-cli/     # `lurker` terminal binary
-│   └── lurker-helper/  # internal privileged helper used by the desktop app
+│   └── lurker-helper/  # internal helper used by the desktop app
 ├── apps/
 │   └── lurker-desktop/ # Slint desktop app
 ├── legacy/
@@ -72,11 +72,12 @@ The desktop app is intentionally simple for now:
 - active `lurker_*` volume list
 - inline status and errors only
 - built-in zoom controls for larger displays
+- Linux Privileged / Unprivileged selector; unprivileged mode handles VeraCrypt files without administrator prompts
 
 It uses:
 
 - `lurker-core` for all shared logic
-- `lurker-helper` for privileged desktop operations
+- `lurker-helper` for desktop operations, elevating only in privileged Linux mode
 - Slint + winit + software renderer for the GUI shell
 
 Run the desktop app in development:
@@ -101,7 +102,35 @@ install -m 755 ./target/release/lurker-helper /usr/local/bin/lurker-helper
 
 For system packaging, keep `lurker-desktop` and `lurker-helper` together.
 
+## Linux Without Administrator Prompts
+
+Choose **Unprivileged** in the desktop header. It supports VeraCrypt file containers with AES, Serpent or Twofish, the same SHA-512/PIM defaults, and Btrfs with zstd compression. LUKS and physical devices remain available under **Privileged**. Both modes' volumes appear in Manage; unprivileged sessions keep their original mode when unmounted.
+
+Build the additional helpers as your normal user:
+
+```bash
+python scripts/build-linux-userspace.py
+cargo build --release --workspace --locked
+./target/release/lurker-desktop
+```
+
+The script downloads fixed upstream VeraCrypt and Linux Kernel Library revisions, applies the tracked integration patches, and places two ordinary executables in `target/release/userspace/`. It never installs packages, invokes sudo, or modifies system configuration. It needs a C/C++ toolchain, Python 3.12+, make, patch, pkg-config, wxWidgets base, FUSE3 development files, flex, bison, bc and Perl. For a debug desktop, set `LURKER_USERSPACE_DIR="$PWD/target/release/userspace"` when launching it. Packaged builds include the helpers under `/usr/lib/lurker/userspace`.
+
+The CLI exposes the same route:
+
+```bash
+./target/release/lurker create --unprivileged ./vault.hc 1
+./target/release/lurker mount --unprivileged ./vault.hc ~/Lurker-mount
+./target/release/lurker unmount --unprivileged ~/Lurker-mount
+```
+
+Mount points must be empty. A missing final directory is created when its parent exists. New containers belong to your user. Existing containers preserve their permissions. Read-only mounts protect both the encryption and filesystem layers. Standard user FUSE support, including access to `/dev/fuse` and the installed `fusermount3` helper, is required; that system helper performs the restricted FUSE mount without prompting for administrator credentials.
+
+This mode is experimental. It supports ordinary file access rather than kernel Btrfs management ioctls such as snapshots or scrub. See `docs/linux-userspace.md` for architecture, supported filesystems, recovery, and tests. macOS keeps its existing native workflows.
+
 ## Linux Runtime Requirements
+
+Privileged mode uses these system tools; unprivileged requirements are listed above.
 
 - `cryptsetup`
 - `mkfs.btrfs`
@@ -111,7 +140,7 @@ For system packaging, keep `lurker-desktop` and `lurker-helper` together.
 - `pkexec` for preferred desktop privilege escalation
 - `sudo` for desktop fallback when launched from a terminal
 - optional `blkid`
-- optional `veracrypt` (required for VeraCrypt creation; Linux mounting and unmounting use cryptsetup)
+- optional `veracrypt` (required for privileged VeraCrypt creation; privileged mounts use cryptsetup)
 
 ## macOS Drag-and-Drop Installer
 
@@ -174,7 +203,7 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - Twofish uses the `CIPHER.md` sector-size tuning and automatically applies the documented open-time perf flags when a Twofish LUKS header is detected.
 - VeraCrypt create supports the same three single-cipher choices and keeps `SHA-512` fixed. Device creation uses the full device size detected by VeraCrypt, with quick format.
 - On Linux, `mount` recognizes LUKS metadata first; other sources are authenticated as VeraCrypt when opening. Encrypted VeraCrypt headers cannot be identified without the passphrase. `unmount` reads the active mapper type. Use `--type` to pin the format.
-- Linux VeraCrypt mounts use `cryptsetup --type tcrypt --veracrypt`, with the same `lurker_*` mapper naming, active-volume listing, filesystem handling, and cleanup as LUKS.
+- Privileged Linux VeraCrypt mounts use `cryptsetup --type tcrypt --veracrypt`, with the same `lurker_*` mapper naming, active-volume listing, filesystem handling, and cleanup as LUKS. Unprivileged mode uses the file-only userspace helpers.
 - `mount --readonly` opens the mapper and mounts the filesystem read-only. The desktop readonly checkbox does the same.
 - VeraCrypt supports normal password-only volumes with the default PIM. Keyfiles, hidden-volume controls, and custom PIM are not exposed.
 - VeraCrypt passphrases supplied through the helper cannot be empty or contain NUL or line breaks. Leading/trailing spaces and Unicode are preserved.
@@ -185,7 +214,7 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - The desktop app uses passphrase entry inside the app. Create passphrase confirmation is enforced by the UI. The Generate button uses system randomness (128 bits).
 - The desktop app does not call the CLI binary. It talks to `lurker-helper` over a local stdin/stdout JSON contract.
 - The CLI supports interactive terminal prompting; macOS create also confirms the passphrase. Passphrases are passed to crypto tools through terminal input or stdin, never command-line arguments.
-- New Btrfs filesystems initially have root-owned directories. After mounting a new personal volume, set its ownership once with `sudo chown "$(id -u):$(id -g)" /your/mountpoint` if needed.
+- Privileged creates initially produce root-owned Btrfs directories. After mounting a new personal volume, set its ownership once with `sudo chown "$(id -u):$(id -g)" /your/mountpoint` if needed. Unprivileged creates assign the filesystem to your login user directly.
 - The archived Bash implementation in `legacy/bash-cli/` was updated to match the same three create cipher profiles.
 
 ## Verification
@@ -197,6 +226,8 @@ Current verification target:
 ```bash
 cargo check --workspace --locked
 cargo test --workspace --locked
+# Linux: run as your normal user after building the userspace helpers
+./scripts/test-linux-userspace.sh
 # macOS: native create/mount/read-only/remount/error tests using disposable files
 cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 cargo test -p lurker-helper --test macos_native -- --include-ignored --test-threads=1
@@ -206,9 +237,15 @@ python3 tests/macos_cli.py
 
 Real Linux tests create fresh `/tmp` images and dedicated loop devices. They never target an existing vault. See `docs/linux-validation.md` for the full matrix and commands.
 
-## Local Arch/AUR Package
+## Arch/AUR Package
 
-`packaging/aur/PKGBUILD` builds the CLI, desktop app, and internal helper together. The Git recipe targets https://github.com/annguyenfoss/lurker.git and needs the changes upstream before publication.
+The `lurker-git` AUR package builds the latest `main` from https://github.com/annguyenfoss/lurker.git. It includes the CLI, desktop app, internal helper, and pinned userspace VeraCrypt/LKL helpers. Package page: https://aur.archlinux.org/packages/lurker-git
+
+```bash
+git clone https://aur.archlinux.org/lurker-git.git
+cd lurker-git
+makepkg -si
+```
 
 Build the current worktree locally, including uncommitted changes:
 
@@ -216,7 +253,7 @@ Build the current worktree locally, including uncommitted changes:
 ./scripts/build-local-aur.sh
 ```
 
-The package, `.SRCINFO`, source snapshot, and logs are written under a fresh `dist/aur-build-*` directory. Nothing is uploaded or installed. Building requires the dependencies listed in the PKGBUILD; VeraCrypt remains optional for mounting existing containers.
+The package, `.SRCINFO`, source snapshot, and logs are written under a fresh `dist/aur-build-*` directory. Nothing is uploaded or installed. Building requires the dependencies listed in `packaging/aur/PKGBUILD`; system VeraCrypt is optional and needed only to create VeraCrypt volumes in privileged mode.
 
 ## License
 

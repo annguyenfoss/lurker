@@ -11,6 +11,7 @@ export struct VolumeRowData {
     readonly: bool,
     cipher: string,
     source-kind: string,
+    unprivileged: bool,
 }
 
 export component VolumeRow inherits Rectangle {
@@ -160,7 +161,7 @@ export component VolumeRow inherits Rectangle {
                         min-width: 56px * UiTheme.scale;
                     }
                     Text {
-                        text: root.data.readonly ? "read-only" : "read/write";
+                        text: (root.data.readonly ? "read-only" : "read/write") + (root.data.unprivileged ? " · unprivileged" : "");
                         font-size: 11.5px * UiTheme.scale;
                         font-family: "JetBrains Mono";
                         color: UiTheme.fg-1;
@@ -170,6 +171,7 @@ export component VolumeRow inherits Rectangle {
 
             ActionButton {
                 text: "Unmount & lock";
+                enabled: root.enabled;
                 tone: "primary";
                 icon: @image-url("../icons/eject.svg");
                 has-icon: true;

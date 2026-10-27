@@ -1,6 +1,26 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
+/// Linux operations either use the kernel's privileged device stack or a
+/// file-backed userspace stack. Existing requests retain their original mode.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PrivilegeMode {
+    #[default]
+    Privileged,
+    Unprivileged,
+}
+
+impl PrivilegeMode {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "privileged" => Some(Self::Privileged),
+            "unprivileged" => Some(Self::Unprivileged),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ColorMode {
     Auto,

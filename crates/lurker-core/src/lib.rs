@@ -11,6 +11,8 @@ mod sha256;
 mod size;
 #[cfg(target_os = "linux")]
 mod system;
+#[cfg(target_os = "linux")]
+mod userspace;
 mod workflow;
 
 pub use api::{
@@ -18,7 +20,9 @@ pub use api::{
     ToolStatus, UnmountCommand,
 };
 pub use error::{AppError, AppResult};
-pub use model::{ColorMode, CreateCipher, ResolvedTargetKind, SourceKind, VolumeType};
+pub use model::{
+    ColorMode, CreateCipher, PrivilegeMode, ResolvedTargetKind, SourceKind, VolumeType,
+};
 pub use output::{Output, OutputBuffer, OutputEntry, OutputLevel};
 
 #[cfg(target_os = "linux")]
@@ -31,12 +35,29 @@ use std::path::Path;
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     #[cfg(target_os = "macos")]
     {
+        if command.privilege_mode() == PrivilegeMode::Unprivileged {
+            return Err(AppError::new("The privilege mode selector is Linux-only. macOS already runs in your user session."));
+        }
         macos::run(command, output)
     }
     #[cfg(target_os = "linux")]
     {
+        if command.privilege_mode() == PrivilegeMode::Unprivileged {
+            return userspace::run(command, output);
+        }
+        validate_request(&command)?;
         workflow::run(command, output)
     }
+}
+
+/// Called before a desktop helper elevates, so a privileged request cannot
+/// overwrite a container already served by the login user's userspace backend.
+pub fn validate_request(command: &CommandAction) -> AppResult<()> {
+    #[cfg(target_os = "linux")]
+    if command.privilege_mode() == PrivilegeMode::Privileged {
+        userspace::check_privileged_conflicts(command)?;
+    }
+    Ok(())
 }
 
 pub fn run_buffered(command: CommandAction) -> OperationResponse {
@@ -84,7 +105,7 @@ pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 #[cfg(target_os = "linux")]
 fn list_linux_volumes() -> AppResult<Vec<ActiveVolume>> {
     let mounts = read_mountinfo()?;
-    let mut volumes = Vec::new();
+    let mut volumes = userspace::list_active_volumes()?;
     let entries = match fs::read_dir("/dev/mapper") {
         Ok(entries) => entries,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(volumes),
@@ -114,8 +135,9 @@ fn list_linux_volumes() -> AppResult<Vec<ActiveVolume>> {
         });
 
         volumes.push(ActiveVolume {
+            privilege_mode: crate::PrivilegeMode::Privileged,
             source_path: None,
-            readonly: false,
+            readonly: mount.is_some_and(|m| m.readonly),
             mapper_name: mapper_name.to_string(),
             mapper_path: path,
             mountpoint: mount.map(|item| item.mount_point.clone()),

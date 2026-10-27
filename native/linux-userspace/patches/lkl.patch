@@ -1,0 +1,220 @@
+diff --git a/arch/lkl/configs/defconfig b/arch/lkl/configs/defconfig
+index 45332b692..d676948d1 100644
+--- a/arch/lkl/configs/defconfig
++++ b/arch/lkl/configs/defconfig
+@@ -45,7 +45,7 @@ CONFIG_XFS_FS=y
+ CONFIG_XFS_POSIX_ACL=y
+ CONFIG_BTRFS_FS=y
+ CONFIG_BTRFS_FS_POSIX_ACL=y
+-# CONFIG_FILE_LOCKING is not set
++CONFIG_FILE_LOCKING=y
+ # CONFIG_DNOTIFY is not set
+ # CONFIG_INOTIFY_USER is not set
+ CONFIG_VFAT_FS=y
+@@ -101,3 +101,8 @@ CONFIG_NLS_UTF8=y
+ CONFIG_CRYPTO_ANSI_CPRNG=y
+ CONFIG_PRINTK_TIME=y
+ CONFIG_DEBUG_INFO_DWARF4=y
++
++CONFIG_EXFAT_FS=y
++CONFIG_NTFS3_FS=y
++CONFIG_NTFS3_LZX_XPRESS=y
++CONFIG_NTFS3_FS_POSIX_ACL=y
+diff --git a/tools/lkl/include/lkl.h b/tools/lkl/include/lkl.h
+index eaf6c4cee..80615eb00 100644
+--- a/tools/lkl/include/lkl.h
++++ b/tools/lkl/include/lkl.h
+@@ -356,6 +356,7 @@ struct lkl_dev_blk_ops;
+  *
+  * @dev - a pointer to 'virtio_blk_dev' structure for this disk
+  * @fd - a POSIX file descriptor that can be used by preadv/pwritev
++ * @read_only - expose the disk as read-only to the userspace kernel
+  * @handle - an NT file handle that can be used by ReadFile/WriteFile
+  */
+ struct lkl_disk {
+@@ -365,6 +366,7 @@ struct lkl_disk {
+ 		void *handle;
+ 	};
+ 	struct lkl_dev_blk_ops *ops;
++	int read_only;
+ };
+ 
+ /**
+diff --git a/tools/lkl/lib/virtio_blk.c b/tools/lkl/lib/virtio_blk.c
+index d8bf38bf8..3615aff0a 100644
+--- a/tools/lkl/lib/virtio_blk.c
++++ b/tools/lkl/lib/virtio_blk.c
+@@ -82,7 +82,7 @@ int lkl_disk_add(struct lkl_disk *disk)
+ 
+ 	dev->dev.device_id = LKL_VIRTIO_ID_BLOCK;
+ 	dev->dev.vendor_id = 0;
+-	dev->dev.device_features = 0;
++	dev->dev.device_features = disk->read_only ? (1ULL << LKL_VIRTIO_BLK_F_RO) : 0;
+ 	dev->dev.config_gen = 0;
+ 	dev->dev.config_data = &dev->config;
+ 	dev->dev.config_len = sizeof(dev->config);
+diff --git a/tools/lkl/lklfuse.c b/tools/lkl/lklfuse.c
+index 446966a12..630acd1f2 100644
+--- a/tools/lkl/lklfuse.c
++++ b/tools/lkl/lklfuse.c
+@@ -708,6 +708,56 @@ static int lklfuse_parse_vfs_flags(bool ro, const char *opts, int *flags,
+ 	return 0;
+ }
+ 
++static int original_root = -1;
++
++static int drain_filesystem(void)
++{
++	int ret;
++	/* Return to the LKL namespace root before unmounting its filesystem. */
++	lkl_sys_setresuid(-1, 0, -1);
++	lkl_sys_setresgid(-1, 0, -1);
++	if (original_root < 0)
++		return -LKL_EBADF;
++	ret = lkl_sys_fchdir(original_root);
++	if (ret < 0)
++		return ret;
++	ret = lkl_sys_chroot(".");
++	if (ret < 0)
++		return ret;
++	lkl_sys_chdir("/");
++	lkl_sys_close(original_root);
++	original_root = -1;
++	lkl_sys_sync();
++	/* Remount read-only to drain journal state before releasing the mount. */
++	char mpoint[32];
++	unsigned int dev;
++	ret = lkl_get_virtio_blkdev(lklfuse.disk_id, lklfuse.part, &dev);
++	if (ret < 0)
++		return ret;
++	snprintf(mpoint, sizeof(mpoint), "/mnt/%08x", dev);
++	ret = lkl_sys_mount(NULL, mpoint, NULL, LKL_MS_REMOUNT | LKL_MS_RDONLY, NULL);
++	if (ret < 0)
++		return ret;
++	ret = lkl_umount_dev(lklfuse.disk_id, lklfuse.part, 0, 10000);
++	if (ret < 0)
++		return ret;
++	return fsync(lklfuse.disk.fd) == 0 ? 0 : -LKL_EIO;
++}
++
++static int write_acknowledgement(const char *name, const char *message)
++{
++	const char *path = getenv(name);
++	if (!path)
++		return 0;
++	int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
++	if (fd < 0)
++		return -1;
++	size_t length = strlen(message);
++	int ok = write(fd, message, length) == (ssize_t)length && fsync(fd) == 0;
++	close(fd);
++	return ok ? 0 : -1;
++}
++
+ static int start_lkl(void)
+ {
+ 	long ret;
+@@ -745,6 +795,12 @@ static int start_lkl(void)
+ 		goto out_halt;
+ 	}
+ 
++	original_root = lkl_sys_open("/", LKL_O_RDONLY | LKL_O_DIRECTORY, 0);
++	if (original_root < 0) {
++		ret = original_root;
++		goto out_halt;
++	}
++
+ 	ret = lkl_mount_dev(lklfuse.disk_id, lklfuse.part, lklfuse.type,
+ 			    mount_flags, remaining_mopts,
+ 			    mpoint, sizeof(mpoint));
+@@ -769,10 +825,24 @@ static int start_lkl(void)
+ 		goto out_umount;
+ 	}
+ 
++	/* New containers belong to the caller. Existing images retain ownership. */
++	if (getenv("LURKER_INIT_OWNER") && !lklfuse.ro) {
++		ret = lkl_sys_chown("/", getuid(), getgid());
++		if (ret < 0)
++			goto out_umount;
++	}
++	/* Filesystem permission checks and newly created files use the login uid.
++	 * Saved namespace uid 0 is needed only to cleanly unmount the LKL kernel. */
++	ret = lkl_sys_setresgid(getgid(), getgid(), 0);
++	if (ret < 0)
++		goto out_umount;
++	ret = lkl_sys_setresuid(getuid(), getuid(), 0);
++	if (ret < 0)
++		goto out_umount;
+ 	return 0;
+ 
+ out_umount:
+-	lkl_umount_dev(lklfuse.disk_id, lklfuse.part, 0, 1000);
++	drain_filesystem();
+ 
+ out_halt:
+ 	lkl_sys_halt();
+@@ -781,22 +851,26 @@ static int start_lkl(void)
+ 	return ret;
+ }
+ 
+-static void stop_lkl(void)
++static int stop_lkl(void)
+ {
+-	int ret;
+-
+-	ret = lkl_sys_chdir("/");
++	int ret = drain_filesystem();
+ 	if (ret)
+-		fprintf(stderr, "can't chdir to /: %s\n", lkl_strerror(ret));
+-	ret = lkl_sys_umount("/", 0);
+-	if (ret)
+-		fprintf(stderr, "failed to umount disk: %d: %s\n",
+-			lklfuse.disk_id, lkl_strerror(ret));
++		fprintf(stderr, "failed to drain filesystem: %s\n", lkl_strerror(ret));
+ 	lkl_sys_halt();
++	return ret;
+ }
+ 
+ int main(int argc, char **argv)
+ {
++	if (argc == 2 && !strcmp(argv[1], "--lurker-userspace-version")) {
++		puts("lurker-userspace-2");
++		return 0;
++	}
++	if (geteuid() == 0) {
++		fputs("Lurker userspace filesystems must run as the login user.\n", stderr);
++		return 1;
++	}
++
+ 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+ 	struct fuse_cmdline_opts cli_opts;
+ 	struct fuse *fuse;
+@@ -844,6 +918,7 @@ int main(int argc, char **argv)
+ 	}
+ 
+ 	lklfuse.disk.fd = ret;
++	lklfuse.disk.read_only = lklfuse.ro;
+ 
+ 	ret = lkl_init(&lkl_host_ops);
+ 	if (ret < 0) {
+@@ -888,9 +963,18 @@ int main(int argc, char **argv)
+ 	if (!cli_opts.singlethread)
+ 		fprintf(stderr, "warning: multithreaded mode not supported\n");
+ 
++	/* Acknowledge both startup and durable shutdown to the parent. */
++	if (write_acknowledgement("LURKER_READY_FILE", "ready\n")) {
++		ret = -1;
++		stop_lkl();
++		goto out_fuse_unmount;
++	}
+ 	ret = fuse_loop(fuse);
+-
+-	stop_lkl();
++	int drained = stop_lkl();
++	if (ret >= 0 && drained < 0)
++		ret = drained;
++	if (ret >= 0 && write_acknowledgement("LURKER_STOPPED_FILE", "stopped\n"))
++		ret = -1;
+ 
+ out_fuse_unmount:
+ 	fuse_unmount(fuse);

@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MountInfo {
+    pub mount_id: u64,
+    pub readonly: bool,
     pub mount_point: PathBuf,
     pub source: Option<PathBuf>,
     pub fs_type: String,
@@ -442,6 +444,10 @@ fn parse_mountinfo_line(line: &str) -> Option<MountInfo> {
     }
 
     Some(MountInfo {
+        mount_id: left_parts[0].parse().ok()?,
+        readonly: left_parts
+            .get(5)
+            .is_some_and(|options| options.split(',').any(|o| o == "ro")),
         mount_point: PathBuf::from(unescape_mount_field(left_parts[4])),
         source: Some(PathBuf::from(unescape_mount_field(right_parts[1]))),
         fs_type: right_parts[0].to_string(),

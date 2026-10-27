@@ -17,6 +17,16 @@ fn run() -> i32 {
     }
 
     match action.as_deref() {
+        Some("capabilities") => {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "protocol_version": 2,
+                    "unprivileged_veracrypt": cfg!(target_os = "linux"),
+                })
+            );
+            0
+        }
         Some("run") => {
             let response = handle_run(as_root);
             let mut stdout = std::io::stdout().lock();
@@ -26,7 +36,7 @@ fn run() -> i32 {
             0
         }
         _ => {
-            eprintln!("usage: lurker-helper [--as-root] run");
+            eprintln!("usage: lurker-helper [--as-root] run | capabilities");
             64
         }
     }
@@ -37,14 +47,29 @@ fn handle_run(as_root: bool) -> OperationResponse {
         Ok(payload) => payload,
         Err(message) => return operation_error(message),
     };
+    handle_payload(&payload, as_root)
+}
+
+fn handle_payload(payload: &[u8], as_root: bool) -> OperationResponse {
+    let command = match serde_json::from_slice::<CommandAction>(payload) {
+        Ok(command) => command,
+        Err(error) => return operation_error(format!("Failed to decode helper request: {error}")),
+    };
+    if let Err(error) = lurker_core::validate_request(&command) {
+        return operation_error(error.message);
+    }
 
     // macOS disk images and VeraCrypt run in the login user session.
     // VeraCrypt owns any platform authorization it needs.
-    if cfg!(target_os = "macos") || as_root || is_root() {
-        return run_direct(&payload);
+    if command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged
+        || cfg!(target_os = "macos")
+        || as_root
+        || is_root()
+    {
+        return run_direct(payload);
     }
 
-    rerun_with_elevation(&payload)
+    rerun_with_elevation(payload)
 }
 
 fn run_direct(payload: &[u8]) -> OperationResponse {
@@ -175,6 +200,20 @@ mod tests {
         let response = run_direct(b"{bad json}");
         assert!(!response.ok);
         assert!(response.error.unwrap().contains("decode helper request"));
+    }
+
+    #[test]
+    fn unprivileged_requests_fail_directly_without_trying_elevation() {
+        let response = handle_payload(br#"{"action":"create","privilege_mode":"unprivileged","target":"unused","size_gb":"1","force":false,"source_kind":"file","volume_type":"luks","cipher":"aes","passphrase":"private"}"#, false);
+        assert!(!response.ok);
+        #[cfg(target_os = "linux")]
+        assert!(response.error.unwrap().contains("supports VeraCrypt"));
+        #[cfg(target_os = "macos")]
+        assert!(response.error.unwrap().contains("Linux-only"));
+        assert!(handle_payload(b"{invalid", false)
+            .error
+            .unwrap()
+            .contains("decode helper request"));
     }
 
     #[test]

@@ -8,11 +8,11 @@ use crate::logic::{
     build_create_command, build_mount_command, build_unmount_command_for_volume, response_error,
     volume_rows,
 };
-use lurker_core::{list_active_volumes, ActiveVolume, CommandAction};
+use lurker_core::{list_active_volumes, ActiveVolume, CommandAction, PrivilegeMode};
 use slint::{BackendSelector, ComponentHandle, ModelRc, Timer, VecModel, Weak};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -29,6 +29,7 @@ struct AppState {
     helper_error: Option<String>,
     active_volumes: Arc<Mutex<Vec<ActiveVolume>>>,
     toasts: Arc<Mutex<Vec<ToastData>>>,
+    operation_busy: Arc<AtomicBool>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,6 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         helper_error: helper_path.err(),
         active_volumes: Arc::new(Mutex::new(Vec::new())),
         toasts: Arc::new(Mutex::new(Vec::new())),
+        operation_busy: Arc::new(AtomicBool::new(false)),
     };
 
     bind_callbacks(&window, &state);
@@ -67,6 +69,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn bind_callbacks(window: &MainWindow, state: &AppState) {
+    let access = state.window.clone();
+    window.on_change_privilege_mode(move |value| {
+        if let Some(window) = access.upgrade() {
+            apply_privilege_mode(&window, value.as_str());
+        }
+    });
     // ── Volumes refresh ──
     let rs = state.clone();
     window.on_refresh_volumes(move || rs.refresh_active_volumes(true));
@@ -102,7 +110,7 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
         ) {
             Ok(command) => cs.run_operation(
                 "Container created",
-                CommandAction::Create(command),
+                CommandAction::Create(command).with_privilege_mode(selected_privilege_mode(&w)),
                 ResetKind::CreateSecrets,
             ),
             Err(message) => {
@@ -127,7 +135,7 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
         ) {
             Ok(command) => ms.run_operation(
                 "Volume mounted",
-                CommandAction::Mount(command),
+                CommandAction::Mount(command).with_privilege_mode(selected_privilege_mode(&w)),
                 ResetKind::MountSecrets,
             ),
             Err(message) => {
@@ -142,7 +150,7 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
     window.on_reset_mount(move || {
         if let Some(w) = rms.upgrade() {
             w.set_mount_source("".into());
-            w.set_mount_point(default_mountpoint().into());
+            w.set_mount_point(mountpoint_for_mode(selected_privilege_mode(&w)).into());
             w.set_mount_passphrase("".into());
             w.set_mount_key_file("".into());
             w.set_mount_auth_method("pass".into());
@@ -225,6 +233,19 @@ impl AppState {
             return;
         };
         drop(guard);
+        if self
+            .window
+            .upgrade()
+            .is_some_and(|w| selected_privilege_mode(&w) == PrivilegeMode::Unprivileged)
+            && volume.privilege_mode == PrivilegeMode::Privileged
+        {
+            self.push_toast(
+                "info",
+                "Privileged volume",
+                "Switch to Privileged mode to unmount this volume.",
+            );
+            return;
+        }
         let command = build_unmount_command_for_volume(&volume);
         self.run_operation(
             "Volume unmounted",
@@ -252,6 +273,21 @@ impl AppState {
         };
 
         let window = self.window.clone();
+        if self
+            .operation_busy
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            self.push_toast(
+                "info",
+                "Operation in progress",
+                "Wait for the current operation to finish.",
+            );
+            return;
+        }
+        if let Some(ui) = window.upgrade() {
+            ui.set_operation_busy(true);
+        }
         let store = Arc::clone(&self.active_volumes);
         let state = self.clone();
         thread::spawn(move || {
@@ -260,8 +296,10 @@ impl AppState {
                 Ok(response) if response.ok => list_active_volumes().ok(),
                 _ => None,
             };
+            state.operation_busy.store(false, Ordering::SeqCst);
 
             let _ = window.upgrade_in_event_loop(move |ui| {
+                ui.set_operation_busy(false);
                 apply_reset(&ui, reset);
                 match helper_result {
                     Ok(response) if response.ok => {
@@ -343,6 +381,7 @@ fn replace_active_volumes(
     let rows = volume_rows(&volumes)
         .into_iter()
         .map(|row| VolumeRowData {
+            unprivileged: row.unprivileged,
             name: row.name.into(),
             source: row.source.into(),
             mount: row.mount.into(),
@@ -404,7 +443,7 @@ mod tests {
 
     thread_local! {
         static TEST_WINDOW: Rc<MinimalSoftwareWindow> =
-            MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
+            MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
     }
 
     static TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -430,6 +469,67 @@ mod tests {
             let mut buffer = vec![Rgb565Pixel::default(); 1280 * 900];
             renderer.render(buffer.as_mut_slice(), 1280);
         });
+    }
+
+    fn snapshot(window: &Rc<MinimalSoftwareWindow>, name: &str) {
+        let Some(directory) = std::env::var_os("LURKER_UI_SNAPSHOT_DIR") else {
+            return;
+        };
+        let directory = std::path::PathBuf::from(directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        window.request_redraw();
+        window.draw_if_needed(|renderer| {
+            let mut pixels = vec![Rgb565Pixel::default(); 1280 * 900];
+            renderer.render(&mut pixels, 1280);
+            let mut ppm = b"P6\n1280 900\n255\n".to_vec();
+            for pixel in pixels {
+                let rgb: slint::Rgb8Pixel = pixel.into();
+                ppm.extend_from_slice(&[rgb.r, rgb.g, rgb.b]);
+            }
+            std::fs::write(directory.join(format!("{name}.ppm")), ppm).unwrap();
+        });
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn linux_privilege_selection_keeps_forms_and_command_routing_consistent() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        ui.set_create_target_kind("partition".into());
+        ui.set_create_passphrase("temporary secret".into());
+        ui.set_mount_source_kind("partition".into());
+        ui.set_mount_source("/dev/not-a-real-device".into());
+        super::apply_privilege_mode(&ui, "unprivileged");
+        assert_eq!(
+            super::selected_privilege_mode(&ui),
+            lurker_core::PrivilegeMode::Unprivileged
+        );
+        assert_eq!(ui.get_create_format(), "vera");
+        assert_eq!(ui.get_create_target_kind(), "file");
+        assert_eq!(ui.get_mount_source_kind(), "file");
+        assert_eq!(ui.get_mount_source(), "");
+        assert_eq!(ui.get_create_passphrase(), "");
+        ui.show().unwrap();
+        ui.set_ui_scale(1.0);
+        render(&window);
+        snapshot(&window, "linux-unprivileged");
+        for scale in [0.8, 1.0, 1.2] {
+            ui.set_ui_scale(scale);
+            for view in ["create", "manage"] {
+                ui.set_current_view(view.into());
+                render(&window);
+            }
+        }
+        super::apply_privilege_mode(&ui, "privileged");
+        assert_eq!(ui.get_create_format(), "luks");
+        assert_eq!(
+            super::selected_privilege_mode(&ui),
+            lurker_core::PrivilegeMode::Privileged
+        );
+        render(&window);
+        snapshot(&window, "linux-privileged");
+        ui.hide().unwrap();
     }
 
     #[test]
@@ -523,4 +623,65 @@ fn default_mountpoint() -> String {
     } else {
         "/mnt/".into()
     }
+}
+
+fn selected_privilege_mode(window: &MainWindow) -> PrivilegeMode {
+    if cfg!(target_os = "linux") && window.get_privilege_mode() == "unprivileged" {
+        PrivilegeMode::Unprivileged
+    } else {
+        PrivilegeMode::Privileged
+    }
+}
+
+fn mountpoint_for_mode(mode: PrivilegeMode) -> String {
+    if mode == PrivilegeMode::Unprivileged {
+        std::env::var("HOME")
+            .map(|home| format!("{home}/Lurker-mount"))
+            .unwrap_or_else(|_| default_mountpoint())
+    } else {
+        default_mountpoint()
+    }
+}
+
+fn apply_privilege_mode(window: &MainWindow, value: &str) {
+    if cfg!(target_os = "macos") {
+        return;
+    }
+    let mode = PrivilegeMode::parse(value).unwrap_or_default();
+    let unprivileged = mode == PrivilegeMode::Unprivileged;
+    window.set_privilege_mode(
+        if unprivileged {
+            "unprivileged"
+        } else {
+            "privileged"
+        }
+        .into(),
+    );
+    window.set_create_target_kind("file".into());
+    window.set_create_format(if unprivileged { "vera" } else { "luks" }.into());
+    let name = window.get_create_file_name();
+    if name == "archive.luks" || name == "archive.hc" {
+        window.set_create_file_name(
+            if unprivileged {
+                "archive.hc"
+            } else {
+                "archive.luks"
+            }
+            .into(),
+        );
+    }
+    if window.get_mount_source_kind() != "file" {
+        window.set_mount_source("".into());
+        window.set_mount_source_label("".into());
+    }
+    window.set_mount_source_kind("file".into());
+    let mountpoint = window.get_mount_point();
+    if mountpoint == default_mountpoint()
+        || mountpoint == mountpoint_for_mode(PrivilegeMode::Unprivileged)
+    {
+        window.set_mount_point(mountpoint_for_mode(mode).into());
+    }
+    clear_create_secrets(window);
+    clear_mount_secrets(window);
+    window.set_mount_selected_index(-1);
 }

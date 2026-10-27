@@ -33,6 +33,21 @@ pub fn resolve_helper_path() -> Result<PathBuf, String> {
 }
 
 pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<OperationResponse, String> {
+    if command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged {
+        let result = Command::new(helper_path)
+            .arg("capabilities")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|error| format!("Failed to check helper capabilities: {error}"))?;
+        let capabilities: serde_json::Value =
+            serde_json::from_slice(&result.stdout).unwrap_or_default();
+        if !result.status.success()
+            || capabilities["protocol_version"] != 2
+            || capabilities["unprivileged_veracrypt"] != true
+        {
+            return Err("Installed lurker-helper does not support unprivileged operation. Update it together with the desktop app.".into());
+        }
+    }
     let payload = serde_json::to_vec(&command)
         .map_err(|err| format!("Failed to encode helper request: {err}"))?;
 
@@ -89,4 +104,35 @@ fn is_executable(path: &Path) -> bool {
     fs::metadata(path)
         .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lurker_core::{PrivilegeMode, UnmountCommand, VolumeType};
+
+    #[test]
+    fn older_helper_is_never_sent_an_unprivileged_operation() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-helper-capabilities-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("old-helper");
+        fs::write(
+            &helper,
+            "#!/bin/sh\nif [ \"$1\" = run ]; then : > \"${0}.ran\"; fi\nexit 64\n",
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let command = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Unprivileged,
+            target: directory.join("unused"),
+            tag: None,
+            volume_type: VolumeType::Auto,
+        });
+        assert!(run_helper(&helper, command)
+            .unwrap_err()
+            .contains("does not support unprivileged"));
+        assert!(!directory.join("old-helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
 }

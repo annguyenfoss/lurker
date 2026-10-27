@@ -12,6 +12,7 @@ pub struct VolumeRowView {
     pub readonly: bool,
     pub cipher: String,
     pub source_kind: String,
+    pub unprivileged: bool,
 }
 
 pub fn build_create_command(
@@ -82,6 +83,7 @@ pub fn build_create_command(
     };
 
     Ok(CreateCommand {
+        privilege_mode: lurker_core::PrivilegeMode::Privileged,
         target: PathBuf::from(target),
         size_gb,
         force: source_kind == SourceKind::Block,
@@ -115,6 +117,7 @@ pub fn build_mount_command(
     let _ = source_kind;
 
     Ok(MountCommand {
+        privilege_mode: lurker_core::PrivilegeMode::Privileged,
         source: PathBuf::from(source),
         mountpoint: PathBuf::from(mountpoint),
         tag: None,
@@ -126,6 +129,7 @@ pub fn build_mount_command(
 
 pub fn build_unmount_command_for_volume(volume: &ActiveVolume) -> UnmountCommand {
     UnmountCommand {
+        privilege_mode: volume.privilege_mode,
         target: volume
             .mountpoint
             .clone()
@@ -158,6 +162,7 @@ pub fn volume_rows(volumes: &[ActiveVolume]) -> Vec<VolumeRowView> {
             }
             .to_string();
             VolumeRowView {
+                unprivileged: volume.privilege_mode == lurker_core::PrivilegeMode::Unprivileged,
                 name: volume.mapper_name.clone(),
                 source: source_display,
                 mount: mount_display,
@@ -332,8 +337,28 @@ mod tests {
     }
 
     #[test]
+    fn unmount_keeps_the_volumes_original_privilege_mode() {
+        let volume = ActiveVolume {
+            privilege_mode: lurker_core::PrivilegeMode::Unprivileged,
+            source_path: Some("/tmp/vault.hc".into()),
+            mapper_name: "vault.hc".into(),
+            mapper_path: "/tmp/private/raw/volume".into(),
+            mountpoint: Some("/tmp/mnt".into()),
+            readonly: true,
+            filesystem_type: Some("btrfs".into()),
+        };
+        let command = super::build_unmount_command_for_volume(&volume);
+        assert_eq!(
+            command.privilege_mode,
+            lurker_core::PrivilegeMode::Unprivileged
+        );
+        assert!(super::volume_rows(&[volume])[0].unprivileged);
+    }
+
+    #[test]
     fn volume_rows_projects_active_volumes() {
         let rows = volume_rows(&[ActiveVolume {
+            privilege_mode: lurker_core::PrivilegeMode::Privileged,
             source_path: None,
             readonly: false,
             mapper_name: "lurker_test".into(),
@@ -355,6 +380,7 @@ mod tests {
         assert_eq!(c.volume_type, VolumeType::Apple);
         assert_eq!(c.passphrase.as_deref(), Some(" secret "));
         let v = ActiveVolume {
+            privilege_mode: lurker_core::PrivilegeMode::Privileged,
             mapper_name: "a.dmg".into(),
             mapper_path: "/dev/disk10".into(),
             source_path: Some("/tmp/a.dmg".into()),
