@@ -32,6 +32,10 @@ prepare() {
     cd "$srcdir/lurker"
     export RUSTUP_TOOLCHAIN=stable
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+    # makepkg resets tracked Git sources on extraction but retains untracked
+    # stamps. Recheck/apply the patches against those freshly reset sources.
+    rm -f "$srcdir/veracrypt-userspace/.lurker-patch-sha256" \
+        "$srcdir/lkl-userspace/.lurker-patch-sha256"
     mkdir -p "$srcdir/native"
     ln -sfn "$srcdir/veracrypt-userspace" "$srcdir/native/veracrypt"
     ln -sfn "$srcdir/lkl-userspace" "$srcdir/native/lkl"
