@@ -309,3 +309,199 @@ fn independent_password_keyfile_slots_and_safe_removal() {
         eprintln!("LUKS{version}: all credential combinations, independent unlock and safe removal passed");
     }
 }
+
+#[test]
+#[ignore = "requires cryptsetup; disposable headers only, no root required"]
+fn invalid_and_full_slot_tables_are_preserved() {
+    let f = Fixture::new();
+    let password = "fixture password";
+    for version in [1, 2] {
+        let image = f.path(&format!("full-luks{version}"));
+        setup(&image, version, password.as_bytes());
+        let limit = if version == 1 { 8 } else { 32 };
+        for slot in 1..limit {
+            let result = tool(
+                &[
+                    "luksAddKey",
+                    "--pbkdf",
+                    "pbkdf2",
+                    "--pbkdf-force-iterations",
+                    "1000",
+                    "--key-slot",
+                    &slot.to_string(),
+                    "--key-file",
+                    "-",
+                    "--keyfile-size",
+                    &password.len().to_string(),
+                    "--new-keyfile",
+                    "-",
+                    "--new-keyfile-size",
+                    "3",
+                    image.to_str().unwrap(),
+                ],
+                format!("{password}new").as_bytes(),
+            );
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
+        let before = fs::read(&image).unwrap();
+        bad(
+            request(
+                &image,
+                KeyslotOperation::Add,
+                None,
+                Some(password),
+                None,
+                Some("new"),
+                None,
+            ),
+            "All LUKS keyslots",
+        );
+        bad(
+            request(
+                &image,
+                KeyslotOperation::Add,
+                Some(0),
+                Some(password),
+                None,
+                Some("new"),
+                None,
+            ),
+            "occupied",
+        );
+        if version == 1 {
+            bad(
+                request(
+                    &image,
+                    KeyslotOperation::Add,
+                    Some(8),
+                    Some(password),
+                    None,
+                    Some("new"),
+                    None,
+                ),
+                "out of range",
+            );
+        }
+        bad(
+            request(
+                &image,
+                KeyslotOperation::Add,
+                Some(32),
+                Some(password),
+                None,
+                Some("new"),
+                None,
+            ),
+            "between 0 and 31",
+        );
+        let missing = f.path("missing.key");
+        bad(
+            request(
+                &image,
+                KeyslotOperation::Add,
+                None,
+                None,
+                Some(&missing),
+                Some("new"),
+                None,
+            ),
+            "read keyfile",
+        );
+        bad(
+            request(
+                &image,
+                KeyslotOperation::Add,
+                None,
+                Some(password),
+                Some(&missing),
+                Some("new"),
+                None,
+            ),
+            "never both",
+        );
+        bad(
+            request(
+                &image,
+                KeyslotOperation::Add,
+                None,
+                Some(password),
+                None,
+                Some("new"),
+                Some(&missing),
+            ),
+            "never both",
+        );
+        assert_eq!(fs::read(&image).unwrap(), before);
+    }
+    let image = f.path("unbound-luks2");
+    setup(&image, 2, password.as_bytes());
+    let result = tool(
+        &[
+            "luksAddKey",
+            "--unbound",
+            "--key-size",
+            "512",
+            "--pbkdf",
+            "pbkdf2",
+            "--pbkdf-force-iterations",
+            "1000",
+            "--key-slot",
+            "1",
+            "--new-keyfile",
+            "-",
+            image.to_str().unwrap(),
+        ],
+        b"unbound key",
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let listed = ok(request(
+        &image,
+        KeyslotOperation::List,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ));
+    assert!(listed
+        .logs
+        .iter()
+        .any(|entry| entry.message.contains("1 (unbound)")));
+    let before = fs::read(&image).unwrap();
+    bad(
+        request(
+            &image,
+            KeyslotOperation::Remove,
+            Some(0),
+            Some(password),
+            None,
+            None,
+            None,
+        ),
+        "last usable",
+    );
+    assert_eq!(fs::read(&image).unwrap(), before);
+    let plaintext = f.path("plaintext");
+    fs::write(&plaintext, b"ordinary data").unwrap();
+    bad(
+        request(
+            &plaintext,
+            KeyslotOperation::List,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+        "LUKS header",
+    );
+    assert_eq!(fs::read(&plaintext).unwrap(), b"ordinary data");
+}
