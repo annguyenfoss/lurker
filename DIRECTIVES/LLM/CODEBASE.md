@@ -57,7 +57,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 - Linux Btrfs mounts use `compress=zstd`.
 - VeraCrypt tags are unsupported.
 - Do not implement VeraCrypt authentication requiring a password and keyfile together: losing either required credential can lose access to the data. This decision does not prohibit keyfile-only authentication; see the authentication decision in `CIPHER.md`.
-- The desktop app never invokes the installed CLI binary.
+- The desktop app never invokes the installed CLI binary. Check helper capability flags before sending keyfile or keyslot requests so older helpers cannot ignore credential fields.
 - The helper is an implementation detail for desktop privilege escalation.
 - File-backed create uses same-directory temp files, atomic no-clobber publication without force, and atomic rename with force.
 - Privileged Linux mounts use cryptsetup-managed `lurker_*` mappings; the installed VeraCrypt application is required only for creation on that route.
@@ -87,7 +87,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 
 ## UI Rules
 
-- Keep the desktop app narrow: create, mount, unmount, active volumes.
+- Keep the desktop app narrow: create, mount, unmount, active volumes and LUKS credentials. Linux Privileged mode exposes the LUKS keys screen; other modes hide it.
 - Hide hardcoded expert defaults instead of exposing more knobs.
 - Linux offers Privileged/Unprivileged in the main header. Unprivileged selects VeraCrypt files, hides LUKS/devices, and cannot unmount privileged rows. Each row retains its own backend mode across selector changes.
 - Keep the custom Slint controls unless you re-verify text zoom behavior.

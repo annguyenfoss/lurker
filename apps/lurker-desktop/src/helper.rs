@@ -33,7 +33,15 @@ pub fn resolve_helper_path() -> Result<PathBuf, String> {
 }
 
 pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<OperationResponse, String> {
-    if command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged {
+    let unprivileged = command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged;
+    let keyfile = match &command {
+        CommandAction::Create(c) => c.keyfile.is_some(),
+        CommandAction::Mount(c) => c.keyfile.is_some(),
+        CommandAction::Keyslots(c) => c.keyfile.is_some() || c.new_keyfile.is_some(),
+        CommandAction::Unmount(_) => false,
+    };
+    let keyslots = matches!(&command, CommandAction::Keyslots(_));
+    if unprivileged || keyfile || keyslots {
         let result = Command::new(helper_path)
             .arg("capabilities")
             .stdin(Stdio::null())
@@ -41,11 +49,16 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
             .map_err(|error| format!("Failed to check helper capabilities: {error}"))?;
         let capabilities: serde_json::Value =
             serde_json::from_slice(&result.stdout).unwrap_or_default();
-        if !result.status.success()
-            || capabilities["protocol_version"] != 2
-            || capabilities["unprivileged_veracrypt"] != true
-        {
+        if !result.status.success() || capabilities["protocol_version"] != 2 {
+            return Err("Installed lurker-helper does not support unprivileged or credential operations. Update it together with the desktop app.".into());
+        }
+        if unprivileged && capabilities["unprivileged_veracrypt"] != true {
             return Err("Installed lurker-helper does not support unprivileged operation. Update it together with the desktop app.".into());
+        }
+        if (keyfile && capabilities["keyfile_authentication"] != true)
+            || (keyslots && capabilities["luks_keyslots"] != true)
+        {
+            return Err("Installed lurker-helper does not support keyfiles or LUKS keyslots. Update it together with the desktop app.".into());
         }
     }
     let payload = serde_json::to_vec(&command)
@@ -133,6 +146,44 @@ mod tests {
             .unwrap_err()
             .contains("does not support unprivileged"));
         assert!(!directory.join("old-helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn helpers_must_advertise_credential_support_before_receiving_secrets() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-helper-credentials-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(&helper, "#!/bin/sh\nif [ \"$1\" = capabilities ]; then printf '%s\\n' '{\"protocol_version\":2,\"unprivileged_veracrypt\":true}'; else : > \"${0}.ran\"; fi\n").unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let keyfile = CommandAction::Mount(lurker_core::MountCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            source: "vault".into(),
+            mountpoint: "mnt".into(),
+            tag: None,
+            volume_type: VolumeType::Auto,
+            passphrase: None,
+            keyfile: Some("key".into()),
+            readonly: false,
+        });
+        assert!(run_helper(&helper, keyfile)
+            .unwrap_err()
+            .contains("does not support keyfiles"));
+        let keyslots = CommandAction::Keyslots(lurker_core::KeyslotsCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            source: "vault".into(),
+            operation: lurker_core::KeyslotOperation::Add,
+            slot: None,
+            passphrase: Some("old".into()),
+            keyfile: None,
+            new_passphrase: Some("new".into()),
+            new_keyfile: None,
+        });
+        assert!(run_helper(&helper, keyslots)
+            .unwrap_err()
+            .contains("does not support keyfiles"));
+        assert!(!directory.join("helper.ran").exists());
         fs::remove_dir_all(directory).unwrap();
     }
 }

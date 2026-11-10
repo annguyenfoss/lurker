@@ -1,6 +1,6 @@
 use lurker_core::{
-    ActiveVolume, CreateCipher, CreateCommand, MountCommand, OperationResponse, SourceKind,
-    UnmountCommand, VolumeType,
+    ActiveVolume, CreateCipher, CreateCommand, KeyslotOperation, KeyslotsCommand, MountCommand,
+    OperationResponse, SourceKind, UnmountCommand, VolumeType,
 };
 use std::path::PathBuf;
 
@@ -26,6 +26,8 @@ pub fn build_create_command(
     cipher: &str,
     passphrase: &str,
     confirm: &str,
+    auth_method: &str,
+    key_file: &str,
 ) -> Result<CreateCommand, String> {
     let source_kind = match target_kind {
         "file" => SourceKind::File,
@@ -60,10 +62,14 @@ pub fn build_create_command(
         SourceKind::Block => required_value("Partition", partition)?.to_string(),
     };
 
-    let passphrase = required_secret("Passphrase", passphrase)?;
-    let confirm = required_secret("Passphrase confirmation", confirm)?;
-    if passphrase != confirm {
-        return Err("Create passphrase confirmation does not match.".into());
+    let (passphrase, keyfile) = selected_credential(auth_method, passphrase, key_file)?;
+    if let Some(passphrase) = &passphrase {
+        if passphrase != required_secret("Passphrase confirmation", confirm)? {
+            return Err("Create passphrase confirmation does not match.".into());
+        }
+    }
+    if volume_type == VolumeType::Apple && keyfile.is_some() {
+        return Err("Keyfile authentication is supported for LUKS and VeraCrypt only.".into());
     }
 
     let size_gb = match source_kind {
@@ -90,8 +96,8 @@ pub fn build_create_command(
         source_kind,
         volume_type,
         cipher,
-        passphrase: Some(passphrase.to_string()),
-        keyfile: None,
+        passphrase,
+        keyfile,
     })
 }
 
@@ -100,17 +106,13 @@ pub fn build_mount_command(
     mount_point: &str,
     auth_method: &str,
     passphrase: &str,
-    _key_file: &str,
+    key_file: &str,
     readonly: bool,
     source_kind: &str,
 ) -> Result<MountCommand, String> {
-    if auth_method == "key" {
-        return Err("Key-file unlock is not yet supported.".into());
-    }
-
     let source = required_value("Source", source)?;
     let mountpoint = required_value("Mount point", mount_point)?;
-    let passphrase = required_secret("Passphrase", passphrase)?;
+    let (passphrase, keyfile) = selected_credential(auth_method, passphrase, key_file)?;
 
     // The platform backend detects the container type.
     // We don't have a UI field for type in the new design, so pass Auto.
@@ -123,10 +125,95 @@ pub fn build_mount_command(
         mountpoint: PathBuf::from(mountpoint),
         tag: None,
         volume_type,
-        passphrase: Some(passphrase.to_string()),
-        keyfile: None,
+        passphrase,
+        keyfile,
         readonly,
     })
+}
+
+fn input_path(value: &str) -> PathBuf {
+    if let Some(suffix) = value.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join(suffix);
+        }
+    }
+    PathBuf::from(value)
+}
+
+fn selected_credential(
+    auth_method: &str,
+    passphrase: &str,
+    key_file: &str,
+) -> Result<(Option<String>, Option<PathBuf>), String> {
+    match auth_method {
+        "pass" | "password" => Ok((
+            Some(required_secret("Passphrase", passphrase)?.to_owned()),
+            None,
+        )),
+        "key" => Ok((
+            None,
+            Some(input_path(required_value("Key file", key_file)?)),
+        )),
+        _ => Err("Choose Passphrase or Key file.".into()),
+    }
+}
+
+pub fn build_keyslots_command(
+    source: &str,
+    operation: &str,
+    slot: &str,
+    auth_method: &str,
+    passphrase: &str,
+    key_file: &str,
+    new_auth_method: &str,
+    new_passphrase: &str,
+    confirm: &str,
+    new_key_file: &str,
+) -> Result<KeyslotsCommand, String> {
+    let operation = match operation {
+        "list" => KeyslotOperation::List,
+        "add" => KeyslotOperation::Add,
+        "remove" => KeyslotOperation::Remove,
+        _ => return Err("Choose List, Add or Remove.".into()),
+    };
+    let source = input_path(required_value("LUKS container", source)?);
+    let mut command = KeyslotsCommand {
+        privilege_mode: lurker_core::PrivilegeMode::Privileged,
+        source,
+        operation,
+        slot: None,
+        passphrase: None,
+        keyfile: None,
+        new_passphrase: None,
+        new_keyfile: None,
+    };
+    if operation == KeyslotOperation::List {
+        return Ok(command);
+    }
+    if !slot.trim().is_empty() {
+        command.slot = Some(
+            slot.trim()
+                .parse::<u8>()
+                .ok()
+                .filter(|id| *id < 32)
+                .ok_or("Keyslot must be between 0 and 31.")?,
+        );
+    } else if operation == KeyslotOperation::Remove {
+        return Err("Choose the keyslot to remove.".into());
+    }
+    (command.passphrase, command.keyfile) = selected_credential(auth_method, passphrase, key_file)?;
+    if operation == KeyslotOperation::Add {
+        (command.new_passphrase, command.new_keyfile) =
+            selected_credential(new_auth_method, new_passphrase, new_key_file)?;
+        if command
+            .new_passphrase
+            .as_deref()
+            .is_some_and(|value| value != confirm)
+        {
+            return Err("New passphrase confirmation does not match.".into());
+        }
+    }
+    Ok(command)
 }
 
 pub fn build_unmount_command_for_volume(volume: &ActiveVolume) -> UnmountCommand {
@@ -209,6 +296,121 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn create_keyfile_authentication_never_carries_a_password() {
+        for format in ["luks", "vera"] {
+            let command = build_create_command(
+                "file",
+                format,
+                "/tmp",
+                "vault",
+                "",
+                "1",
+                "GB",
+                "aes",
+                "stale password",
+                "mismatch",
+                "key",
+                "/tmp/binary.key",
+            )
+            .unwrap();
+            assert!(command.passphrase.is_none());
+            assert_eq!(command.keyfile, Some("/tmp/binary.key".into()));
+        }
+        assert!(build_create_command(
+            "file", "apple", "/tmp", "vault", "", "1", "GB", "aes", "", "", "key", "/tmp/key"
+        )
+        .is_err());
+        assert!(build_create_command(
+            "file", "vera", "/tmp", "vault", "", "1", "GB", "aes", "", "", "key", " "
+        )
+        .is_err());
+        assert!(
+            build_mount_command("vault", "/mnt/v", "invalid", "password", "", false, "file")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn keyslot_forms_build_independent_credentials_and_validate_selection() {
+        for old_method in ["pass", "key"] {
+            for new_method in ["pass", "key"] {
+                let command = super::build_keyslots_command(
+                    "vault", "add", "31", old_method, " old ", "old.key", new_method, " new ",
+                    " new ", "new.key",
+                )
+                .unwrap();
+                assert_eq!(command.slot, Some(31));
+                assert_eq!(command.passphrase.is_some(), old_method == "pass");
+                assert_eq!(command.keyfile.is_some(), old_method == "key");
+                assert_eq!(command.new_passphrase.is_some(), new_method == "pass");
+                assert_eq!(command.new_keyfile.is_some(), new_method == "key");
+                if let Some(password) = command.new_passphrase {
+                    assert_eq!(password, " new ");
+                }
+            }
+        }
+        let listed = super::build_keyslots_command(
+            "vault",
+            "list",
+            "stale",
+            "pass",
+            "stale password",
+            "",
+            "key",
+            "",
+            "",
+            "stale.key",
+        )
+        .unwrap();
+        assert!(
+            listed.slot.is_none() && listed.passphrase.is_none() && listed.new_keyfile.is_none()
+        );
+        let automatic = super::build_keyslots_command(
+            "vault", "add", "", "pass", "old", "", "key", "", "", "new.key",
+        )
+        .unwrap();
+        assert!(automatic.slot.is_none());
+        for slot in ["", "32", "-1", "abc"] {
+            assert!(super::build_keyslots_command(
+                "vault", "remove", slot, "pass", "old", "", "key", "", "", "new.key"
+            )
+            .is_err());
+        }
+        assert!(super::build_keyslots_command(
+            "vault",
+            "add",
+            "1",
+            "pass",
+            "old",
+            "",
+            "pass",
+            "new",
+            "different",
+            ""
+        )
+        .is_err());
+        let removed = super::build_keyslots_command(
+            "vault",
+            "remove",
+            "0",
+            "key",
+            "stale",
+            "remaining.key",
+            "pass",
+            "stale",
+            "stale",
+            "stale.key",
+        )
+        .unwrap();
+        assert!(
+            removed.passphrase.is_none()
+                && removed.new_passphrase.is_none()
+                && removed.new_keyfile.is_none()
+        );
+        assert_eq!(removed.keyfile, Some("remaining.key".into()));
+    }
+
+    #[test]
     fn generated_passphrases_use_system_randomness() {
         let first = super::generate_passphrase().unwrap();
         let second = super::generate_passphrase().unwrap();
@@ -221,7 +423,8 @@ mod tests {
     fn passwords_preserve_leading_and_trailing_whitespace() {
         let password = "  secret 密碼  ";
         let cmd = build_create_command(
-            "file", "vera", "/tmp", "vault.hc", "", "1", "GB", "aes", password, password,
+            "file", "vera", "/tmp", "vault.hc", "", "1", "GB", "aes", password, password, "pass",
+            "",
         )
         .unwrap();
         assert_eq!(cmd.passphrase.as_deref(), Some(password));
@@ -235,7 +438,9 @@ mod tests {
             "GB",
             "aes",
             password,
-            password.trim()
+            password.trim(),
+            "pass",
+            ""
         )
         .is_err());
         let cmd = build_mount_command(
@@ -264,6 +469,8 @@ mod tests {
             "aes",
             "secret",
             "secret",
+            "pass",
+            "",
         )
         .unwrap();
         assert_eq!(cmd.target, PathBuf::from("~/vaults/archive.luks"));
@@ -276,7 +483,7 @@ mod tests {
     #[test]
     fn build_create_command_converts_mb_to_gb() {
         let cmd = build_create_command(
-            "file", "luks", "~/", "a.luks", "", "1024", "MB", "aes", "secret", "secret",
+            "file", "luks", "~/", "a.luks", "", "1024", "MB", "aes", "secret", "secret", "pass", "",
         )
         .unwrap();
         assert_eq!(cmd.size_gb.as_deref(), Some("1"));
@@ -295,6 +502,8 @@ mod tests {
             "twofish",
             "secret",
             "secret",
+            "pass",
+            "",
         )
         .unwrap();
         assert_eq!(cmd.target, PathBuf::from("/dev/sdb1"));
@@ -307,7 +516,7 @@ mod tests {
     #[test]
     fn build_create_command_rejects_mismatched_confirm() {
         let err = build_create_command(
-            "file", "luks", "~/", "a", "", "1", "GB", "aes", "alpha", "bravo",
+            "file", "luks", "~/", "a", "", "1", "GB", "aes", "alpha", "bravo", "pass", "",
         )
         .unwrap_err();
         assert!(err.contains("confirmation"));
@@ -324,8 +533,8 @@ mod tests {
     }
 
     #[test]
-    fn build_mount_command_rejects_key_file_auth() {
-        let err = build_mount_command(
+    fn build_mount_command_accepts_key_file_auth() {
+        let command = build_mount_command(
             "/tmp/v.luks",
             "/mnt/v",
             "key",
@@ -334,8 +543,9 @@ mod tests {
             false,
             "file",
         )
-        .unwrap_err();
-        assert!(err.contains("Key"));
+        .unwrap();
+        assert!(command.passphrase.is_none());
+        assert_eq!(command.keyfile, Some("/tmp/k.key".into()));
     }
 
     #[test]
@@ -377,6 +587,7 @@ mod tests {
     fn apple_create_preserves_passphrase_spaces_and_mac_volume_metadata() {
         let c = build_create_command(
             "file", "apple", "/tmp", "a.dmg", "", "32", "MB", "aes", " secret ", " secret ",
+            "pass", "",
         )
         .unwrap();
         assert_eq!(c.volume_type, VolumeType::Apple);

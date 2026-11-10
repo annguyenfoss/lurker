@@ -5,8 +5,8 @@ mod logic;
 use crate::devices::list_block_devices;
 use crate::helper::{resolve_helper_path, run_helper};
 use crate::logic::{
-    build_create_command, build_mount_command, build_unmount_command_for_volume, response_error,
-    volume_rows,
+    build_create_command, build_keyslots_command, build_mount_command,
+    build_unmount_command_for_volume, response_error, volume_rows,
 };
 use lurker_core::{list_active_volumes, ActiveVolume, CommandAction, PrivilegeMode};
 use slint::{BackendSelector, ComponentHandle, ModelRc, Timer, VecModel, Weak};
@@ -107,6 +107,8 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             &w.get_create_cipher(),
             &w.get_create_passphrase(),
             &w.get_create_confirm(),
+            &w.get_create_auth_method(),
+            &w.get_create_key_file(),
         ) {
             Ok(command) => cs.run_operation(
                 "Container created",
@@ -141,6 +143,43 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             Err(message) => {
                 clear_mount_secrets(&w);
                 ms.push_toast("err", "Mount failed", &message);
+            }
+        }
+    });
+
+    let ks = state.clone();
+    window.on_submit_keyslots(move || {
+        let Some(w) = ks.window.upgrade() else { return };
+        if cfg!(target_os = "macos") || selected_privilege_mode(&w) == PrivilegeMode::Unprivileged {
+            clear_keyslot_secrets(&w);
+            ks.push_toast(
+                "err",
+                "LUKS keys unavailable",
+                "Switch to Linux Privileged mode to manage LUKS credentials.",
+            );
+            return;
+        }
+        match build_keyslots_command(
+            &w.get_keys_source(),
+            &w.get_keys_operation(),
+            &w.get_keys_slot(),
+            &w.get_keys_auth_method(),
+            &w.get_keys_passphrase(),
+            &w.get_keys_key_file(),
+            &w.get_keys_new_auth_method(),
+            &w.get_keys_new_passphrase(),
+            &w.get_keys_confirm(),
+            &w.get_keys_new_key_file(),
+        ) {
+            Ok(command) => ks.run_operation(
+                "LUKS keyslot operation complete",
+                CommandAction::Keyslots(command),
+                ResetKind::KeyslotSecrets,
+            ),
+            Err(message) => {
+                clear_keyslot_secrets(&w);
+                w.set_keys_result(message.clone().into());
+                ks.push_toast("err", "LUKS keys failed", &message);
             }
         }
     });
@@ -260,6 +299,7 @@ impl AppState {
         command: CommandAction,
         reset: ResetKind,
     ) {
+        let keyslots = matches!(&command, CommandAction::Keyslots(_));
         let Some(helper_path) = self.helper_path.clone() else {
             let message = self
                 .helper_error
@@ -303,15 +343,32 @@ impl AppState {
                 apply_reset(&ui, reset);
                 match helper_result {
                     Ok(response) if response.ok => {
+                        if keyslots {
+                            ui.set_keys_result(
+                                response
+                                    .logs
+                                    .iter()
+                                    .map(|entry| entry.message.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                                    .into(),
+                            );
+                        }
                         if let Some(volumes) = refreshed_volumes {
                             replace_active_volumes(&store, &ui, volumes);
                         }
                         state.push_toast("ok", success_message, "");
                     }
                     Ok(response) => {
+                        if keyslots {
+                            ui.set_keys_result(response_error(&response).into());
+                        }
                         state.push_toast("err", "Operation failed", &response_error(&response));
                     }
                     Err(message) => {
+                        if keyslots {
+                            ui.set_keys_result(message.clone().into());
+                        }
                         state.push_toast("err", "Helper error", &message);
                     }
                 }
@@ -371,6 +428,7 @@ enum ResetKind {
     None,
     CreateSecrets,
     MountSecrets,
+    KeyslotSecrets,
 }
 
 fn replace_active_volumes(
@@ -404,12 +462,22 @@ fn apply_reset(window: &MainWindow, reset: ResetKind) {
         ResetKind::None => {}
         ResetKind::CreateSecrets => clear_create_secrets(window),
         ResetKind::MountSecrets => clear_mount_secrets(window),
+        ResetKind::KeyslotSecrets => clear_keyslot_secrets(window),
     }
 }
 
 fn clear_create_secrets(window: &MainWindow) {
     window.set_create_passphrase("".into());
     window.set_create_confirm("".into());
+    window.set_create_key_file("".into());
+}
+
+fn clear_keyslot_secrets(window: &MainWindow) {
+    window.set_keys_passphrase("".into());
+    window.set_keys_key_file("".into());
+    window.set_keys_new_passphrase("".into());
+    window.set_keys_confirm("".into());
+    window.set_keys_new_key_file("".into());
 }
 
 fn clear_mount_secrets(window: &MainWindow) {
@@ -464,11 +532,15 @@ mod tests {
     }
 
     fn render(window: &Rc<MinimalSoftwareWindow>) {
+        slint::platform::update_timers_and_animations();
+        slint::private_unstable_api::re_exports::ChangeTracker::run_change_handlers();
         window.request_redraw();
         let _ = window.draw_if_needed(|renderer| {
             let mut buffer = vec![Rgb565Pixel::default(); 1280 * 900];
             renderer.render(buffer.as_mut_slice(), 1280);
         });
+        slint::platform::update_timers_and_animations();
+        slint::private_unstable_api::re_exports::ChangeTracker::run_change_handlers();
     }
 
     fn snapshot(window: &Rc<MinimalSoftwareWindow>, name: &str) {
@@ -533,6 +605,73 @@ mod tests {
     }
 
     #[test]
+    fn credential_views_render_and_clear_inactive_secrets() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        ui.show().unwrap();
+        render(&window);
+        for format in ["luks", "vera"] {
+            ui.set_create_format(format.into());
+            ui.set_create_passphrase("temporary secret".into());
+            ui.set_create_confirm("temporary secret".into());
+            ui.set_create_auth_method("key".into());
+            render(&window);
+            assert_eq!(ui.get_create_passphrase(), "");
+            assert_eq!(ui.get_create_confirm(), "");
+            ui.set_create_key_file("/tmp/key, with spaces".into());
+            render(&window);
+            snapshot(&window, &format!("create-{format}-keyfile"));
+            ui.set_create_auth_method("pass".into());
+            render(&window);
+            assert_eq!(ui.get_create_key_file(), "");
+        }
+        ui.set_create_auth_method("key".into());
+        ui.set_create_key_file("/tmp/key".into());
+        ui.set_create_format("apple".into());
+        render(&window);
+        assert_eq!(ui.get_create_auth_method(), "pass");
+        assert_eq!(ui.get_create_key_file(), "");
+        ui.set_current_view("manage".into());
+        render(&window);
+        ui.set_mount_passphrase("temporary secret".into());
+        ui.set_mount_auth_method("key".into());
+        render(&window);
+        assert_eq!(ui.get_mount_passphrase(), "");
+        ui.set_mount_source("/tmp/vault".into());
+        ui.set_mount_key_file("/tmp/key".into());
+        ui.set_mount_point("/tmp/mount".into());
+        render(&window);
+        snapshot(&window, "mount-keyfile");
+        ui.set_current_view("keys".into());
+        ui.set_keys_source("/tmp/vault.luks".into());
+        ui.set_keys_result("LUKS2 active keyslots: 0, 1, 31".into());
+        for scale in [0.8, 1.0, 1.2] {
+            ui.set_ui_scale(scale);
+            for operation in ["list", "add", "remove"] {
+                ui.set_keys_operation(operation.into());
+                ui.set_keys_slot("1".into());
+                for method in ["pass", "key"] {
+                    ui.set_keys_auth_method(method.into());
+                    ui.set_keys_new_auth_method(method.into());
+                    render(&window);
+                    snapshot(&window, &format!("keys-{operation}-{method}-{scale}"));
+                }
+            }
+        }
+        ui.set_keys_passphrase("old secret".into());
+        ui.set_keys_new_passphrase("new secret".into());
+        ui.set_keys_confirm("new secret".into());
+        super::apply_reset(&ui, super::ResetKind::KeyslotSecrets);
+        assert_eq!(ui.get_keys_passphrase(), "");
+        assert_eq!(ui.get_keys_new_passphrase(), "");
+        assert_eq!(ui.get_keys_confirm(), "");
+        super::apply_privilege_mode(&ui, "unprivileged");
+        assert_eq!(ui.get_current_view(), "create");
+        ui.hide().unwrap();
+    }
+
+    #[test]
     fn macos_form_switches_between_apple_and_veracrypt() {
         let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let window = setup_test_window();
@@ -555,6 +694,8 @@ mod tests {
             &ui.get_create_cipher(),
             "test password",
             "test password",
+            "pass",
+            "",
         )
         .unwrap();
         assert_eq!(command.cipher, lurker_core::CreateCipher::Aes);
@@ -683,5 +824,9 @@ fn apply_privilege_mode(window: &MainWindow, value: &str) {
     }
     clear_create_secrets(window);
     clear_mount_secrets(window);
+    clear_keyslot_secrets(window);
+    if unprivileged && window.get_current_view() == "keys" {
+        window.set_current_view("create".into());
+    }
     window.set_mount_selected_index(-1);
 }

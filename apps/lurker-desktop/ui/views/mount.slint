@@ -1,7 +1,5 @@
 // MountView — (themes/views.jsx:303-423)
 // Three card sections: Source, Unlock with, Mount. Foot: Reset + Unlock button.
-// NOTE: key-file auth is scaffolded UI only — the Unlock button disables in
-// that mode and the submit callback is suppressed (Rust emits a toast).
 // Zero-trace: no OS file-picker dialog. Users type paths directly (click on
 // the Drop zone reveals an inline text input). Drag-drop future-work.
 
@@ -35,6 +33,11 @@ export component MountView inherits Card {
     callback submit;
     callback reset;
 
+    changed auth-method => {
+        if root.auth-method == "key" { root.passphrase = ""; }
+        else { root.key-file = ""; }
+    }
+
     // When the user clicks the Drop zone, switch to an inline text input so
     // they can type a path. No OS dialog => no recently-used traces on disk.
     private property <bool> typing-source: false;
@@ -47,7 +50,6 @@ export component MountView inherits Card {
         !root.busy &&
         root.source != ""
         && root.has-auth
-        && root.auth-method == "pass"   // key-file is scaffolded only
         && root.mount-point != "/mnt/"
         && root.mount-point != "/mnt"
         && root.mount-point != "/Volumes/"
@@ -150,31 +152,13 @@ export component MountView inherits Card {
                 value <=> root.key-file;
             }
 
-            if root.auth-method == "key": Rectangle {
-                min-height: 32px * UiTheme.scale;
-                border-radius: UiTheme.radius-sm;
-                border-width: 0.5px * UiTheme.scale;
-                border-color: UiTheme.line-strong;
-                background: UiTheme.bg-0;
-                HorizontalLayout {
-                    padding: 10px * UiTheme.scale;
-                    spacing: 8px * UiTheme.scale;
-                    Image {
-                        source: @image-url("../icons/info.svg");
-                        width: 13px * UiTheme.scale;
-                        height: 13px * UiTheme.scale;
-                        y: (parent.height - self.height) / 2;
-                        colorize: UiTheme.fg-3;
-                    }
-                    Text {
-                        text: "Key-file unlock is scaffolded — backend support is coming soon.";
-                        font-size: 11.5px * UiTheme.scale;
-                        font-family: "JetBrains Mono";
-                        color: UiTheme.fg-2;
-                        vertical-alignment: center;
-                    }
-                }
+            if root.auth-method == "key": Text {
+                text: root.is-macos ? "Key files unlock VeraCrypt containers." : "Key files unlock LUKS and VeraCrypt containers.";
+                font-size: UiTheme.fs-sm;
+                color: UiTheme.fg-2;
+                wrap: word-wrap;
             }
+
         }
     }
 

@@ -20,6 +20,7 @@ import { Sidebar, NavItem, NavLabel, SideFoot, MainHeader } from "components/chr
 import { VolumeRow, VolumeRowData } from "components/volume-row.slint";
 
 import { CreateView } from "views/create.slint";
+import { KeyslotsView } from "views/keyslots.slint";
 import { ManageView } from "views/manage.slint";
 
 export { ZoomMetricsWindow } from "zoom-metrics.slint";
@@ -57,6 +58,21 @@ export component MainWindow inherits Window {
     in-out property <string> create-cipher: "aes";
     in-out property <string> create-passphrase: "";
     in-out property <string> create-confirm: "";
+    in-out property <string> create-auth-method: "pass";
+    in-out property <string> create-key-file: "";
+
+    // LUKS credential management
+    in-out property <string> keys-source: "";
+    in-out property <string> keys-operation: "list";
+    in-out property <string> keys-slot: "";
+    in-out property <string> keys-auth-method: "pass";
+    in-out property <string> keys-passphrase: "";
+    in-out property <string> keys-key-file: "";
+    in-out property <string> keys-new-auth-method: "pass";
+    in-out property <string> keys-new-passphrase: "";
+    in-out property <string> keys-confirm: "";
+    in-out property <string> keys-new-key-file: "";
+    in-out property <string> keys-result: "";
 
     // Mount flow
     in-out property <string> mount-source-kind: "file";
@@ -79,6 +95,7 @@ export component MainWindow inherits Window {
 
     // ── Callbacks (only ones with Rust side) ──────────────────────────
     callback submit-create();
+    callback submit-keyslots();
     callback generate-passphrase();
     callback submit-mount();
     callback reset-mount();
@@ -119,6 +136,8 @@ export component MainWindow inherits Window {
                 if (event.text == Key.Return) {
                     if (root.current-view == "create") {
                         root.submit-create();
+                    } else if root.current-view == "keys" {
+                        root.submit-keyslots();
                     } else {
                         root.submit-mount();
                     }
@@ -172,6 +191,13 @@ export component MainWindow inherits Window {
                         active: root.current-view == "manage";
                         clicked => { root.current-view = "manage"; }
                     }
+                    if !root.is-macos && !root.unprivileged: NavItem {
+                        label: "LUKS keys";
+                        icon: @image-url("icons/key.svg");
+                        active: root.current-view == "keys";
+                        clicked => { root.current-view = "keys"; }
+                    }
+
                 }
 
                 Rectangle { vertical-stretch: 1; }
@@ -190,9 +216,10 @@ export component MainWindow inherits Window {
                 MainHeader {
                     title: root.current-view == "create"
                         ? "Create encrypted container"
-                        : "Manage volumes";
+                        : root.current-view == "keys" ? "Manage LUKS credentials" : "Manage volumes";
                     subtitle: root.current-view == "create"
                         ? (root.is-macos ? "Make a new encrypted file container." : root.unprivileged ? "VeraCrypt file containers without administrator prompts." : "Make a new encrypted file or partition.")
+                        : root.current-view == "keys" ? "Each enrolled password or key file unlocks independently."
                         : (root.unprivileged ? "Unlock VeraCrypt files without administrator prompts." : "Mounted volumes, and unlock new ones.");
 
                     if !root.is-macos: Segmented {
@@ -265,11 +292,29 @@ export component MainWindow inherits Window {
                                 cipher <=> root.create-cipher;
                                 passphrase <=> root.create-passphrase;
                                 confirm <=> root.create-confirm;
+                                auth-method <=> root.create-auth-method;
+                                key-file <=> root.create-key-file;
                                 devices: root.devices;
                                 device-picked(info) => { root.device-picked-for-create(info); }
                                 rescan => { root.rescan-devices(); }
                                 submit => { root.submit-create(); }
                                 generate-passphrase => { root.generate-passphrase(); }
+                            }
+
+                            if root.current-view == "keys" && !root.is-macos && !root.unprivileged: KeyslotsView {
+                                busy: root.operation-busy;
+                                source <=> root.keys-source;
+                                operation <=> root.keys-operation;
+                                slot <=> root.keys-slot;
+                                auth-method <=> root.keys-auth-method;
+                                passphrase <=> root.keys-passphrase;
+                                key-file <=> root.keys-key-file;
+                                new-auth-method <=> root.keys-new-auth-method;
+                                new-passphrase <=> root.keys-new-passphrase;
+                                confirm <=> root.keys-confirm;
+                                new-key-file <=> root.keys-new-key-file;
+                                result: root.keys-result;
+                                submit => { root.submit-keyslots(); }
                             }
 
                             if root.current-view == "manage": ManageView {

@@ -7,7 +7,7 @@ import {
     Field, PillSurface
 } from "../components/primitives.slint";
 import {
-    ThemedLineEdit, SelectField, ActionButton, PassphraseInput, DevicePicker, DeviceInfo
+    ThemedLineEdit, SelectField, ActionButton, PassphraseInput, KeyFilePicker, DevicePicker, DeviceInfo
 } from "../components/inputs.slint";
 
 export component CreateView inherits Card {
@@ -25,6 +25,16 @@ export component CreateView inherits Card {
     in-out property <string> cipher: "aes";          // "aes" | "serpent" | "twofish"
     in-out property <string> passphrase: "";
     in-out property <string> confirm: "";
+    in-out property <string> auth-method: "pass";
+    in-out property <string> key-file: "";
+    changed format => {
+        if root.format == "apple" { root.auth-method = "pass"; root.key-file = ""; }
+    }
+    changed auth-method => {
+        root.passphrase = "";
+        root.confirm = "";
+        root.key-file = "";
+    }
 
     in property <[DeviceInfo]> devices;
     callback device-picked(DeviceInfo);
@@ -43,8 +53,9 @@ export component CreateView inherits Card {
     private property <bool> can-submit:
         !root.busy &&
         (root.target-kind == "file" ? root.file-name != "" : root.partition != "")
-        && root.passphrase.character-count >= 8
-        && root.pass-match;
+        && (root.auth-method == "key" && root.format != "apple"
+            ? root.key-file != ""
+            : root.passphrase.character-count >= 8 && root.pass-match);
 
     // ── Format section ────────────────────────────────────────────────
     CardSection {
@@ -178,9 +189,14 @@ export component CreateView inherits Card {
 
     // ── Passphrase section ────────────────────────────────────────────
     CardSection {
-        SectionHead { title: "PASSPHRASE"; hint: "min 8 characters"; }
+        SectionHead { title: "UNLOCK WITH"; hint: root.auth-method == "key" ? "key file alone" : "min 8 characters"; }
+        if root.format != "apple": Segmented {
+            value <=> root.auth-method;
+            options: [{ value: "pass", label: "Passphrase" }, { value: "key", label: "Key file" }];
+        }
+        if root.auth-method == "key" && root.format != "apple": KeyFilePicker { value <=> root.key-file; }
 
-        VerticalLayout {
+        if root.auth-method == "pass" || root.format == "apple": VerticalLayout {
             spacing: UiTheme.s3;
 
             Field {

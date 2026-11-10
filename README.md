@@ -211,7 +211,7 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - VeraCrypt tags are still unsupported.
 - Btrfs volumes are mounted with `compress=zstd`.
 - File-backed create uses same-directory temporary files, atomic publication without overwriting unless forced, and atomic replacement when forced.
-- The desktop app uses passphrase entry inside the app. Create passphrase confirmation is enforced by the UI. The Generate button uses system randomness (128 bits).
+- The desktop app offers passphrase or keyfile authentication for LUKS and VeraCrypt. Passphrase creation requires confirmation; the Generate button uses system randomness (128 bits). Linux Privileged mode also offers a LUKS keys screen to list, add and remove independent credentials.
 - The desktop app does not call the CLI binary. It talks to `lurker-helper` over a local stdin/stdout JSON contract.
 - The CLI supports interactive terminal prompting; macOS create also confirms the passphrase. Passphrases are passed to crypto tools through terminal input or stdin, never command-line arguments.
 - Privileged creates initially produce root-owned Btrfs directories. After mounting a new personal volume, set its ownership once with `sudo chown "$(id -u):$(id -g)" /your/mountpoint` if needed. Unprivileged creates assign the filesystem to your login user directly.

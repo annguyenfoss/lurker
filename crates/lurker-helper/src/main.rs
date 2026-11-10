@@ -23,6 +23,8 @@ fn run() -> i32 {
                 serde_json::json!({
                     "protocol_version": 2,
                     "unprivileged_veracrypt": cfg!(target_os = "linux"),
+                    "keyfile_authentication": true,
+                    "luks_keyslots": cfg!(target_os = "linux"),
                 })
             );
             0

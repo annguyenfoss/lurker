@@ -1,0 +1,83 @@
+import { UiTheme } from "../theme.slint";
+import { Card, CardSection, CardFoot, SectionHead, Segmented, Field } from "../components/primitives.slint";
+import { ThemedLineEdit, ActionButton, PassphraseInput, KeyFilePicker } from "../components/inputs.slint";
+
+export component KeyslotsView inherits Card {
+    in property <bool> busy: false;
+    in-out property <string> source;
+    in-out property <string> operation: "list";
+    in-out property <string> slot;
+    in-out property <string> auth-method: "pass";
+    in-out property <string> passphrase;
+    in-out property <string> key-file;
+    in-out property <string> new-auth-method: "pass";
+    in-out property <string> new-passphrase;
+    in-out property <string> confirm;
+    in-out property <string> new-key-file;
+    in property <string> result;
+    callback submit;
+
+    changed auth-method => { root.passphrase = ""; root.key-file = ""; }
+    changed new-auth-method => { root.new-passphrase = ""; root.confirm = ""; root.new-key-file = ""; }
+    changed operation => {
+        root.passphrase = ""; root.key-file = "";
+        root.new-passphrase = ""; root.confirm = ""; root.new-key-file = "";
+    }
+    private property <bool> has-auth: root.auth-method == "key" ? root.key-file != "" : root.passphrase != "";
+    private property <bool> has-new-auth: root.new-auth-method == "key" ? root.new-key-file != "" : root.new-passphrase != "" && root.new-passphrase == root.confirm;
+
+    CardSection {
+        top-divider: false;
+        SectionHead { title: "LUKS CONTAINER"; hint: "file or partition"; }
+        ThemedLineEdit { text <=> root.source; placeholder-text: "/path/to/vault.luks or /dev/sdX…"; mono: true; }
+        Segmented {
+            value <=> root.operation;
+            options: [{ value: "list", label: "List slots" }, { value: "add", label: "Add credential" }, { value: "remove", label: "Remove slot" }];
+        }
+        if root.operation != "list": Field {
+            label: "Slot number";
+            hint: root.operation == "add" ? "leave empty to select a free slot" : "slot to remove";
+            required: root.operation == "remove";
+            ThemedLineEdit { text <=> root.slot; placeholder-text: "0–7 for LUKS1 · 0–31 for LUKS2"; mono: true; }
+        }
+    }
+    if root.operation != "list": CardSection {
+        SectionHead { title: root.operation == "remove" ? "CREDENTIAL TO KEEP" : "EXISTING CREDENTIAL"; hint: "passphrase or key file"; }
+        if root.operation == "remove": Text {
+            text: "Use a credential from a slot you are keeping. The last usable slot cannot be removed.";
+            color: UiTheme.fg-2; font-size: UiTheme.fs-sm; wrap: word-wrap;
+        }
+        Segmented {
+            value <=> root.auth-method;
+            options: [{ value: "pass", label: "Passphrase" }, { value: "key", label: "Key file" }];
+        }
+        if root.auth-method == "pass": PassphraseInput { text <=> root.passphrase; show-strength-button: false; placeholder-text: "enter an existing passphrase"; }
+        if root.auth-method == "key": KeyFilePicker { value <=> root.key-file; }
+    }
+    if root.operation == "add": CardSection {
+        SectionHead { title: "NEW INDEPENDENT CREDENTIAL"; hint: "either credential will unlock"; }
+        Segmented {
+            value <=> root.new-auth-method;
+            options: [{ value: "pass", label: "Passphrase" }, { value: "key", label: "Key file" }];
+        }
+        if root.new-auth-method == "pass": PassphraseInput { text <=> root.new-passphrase; show-strength-button: false; }
+        if root.new-auth-method == "pass": Field {
+            label: "Confirm new passphrase";
+            ThemedLineEdit { text <=> root.confirm; input-type: InputType.password; }
+        }
+        if root.new-auth-method == "key": KeyFilePicker { value <=> root.new-key-file; }
+    }
+    if root.result != "": CardSection {
+        SectionHead { title: "RESULT"; }
+        Text { text: root.result; color: UiTheme.fg-1; font-family: "JetBrains Mono"; font-size: UiTheme.fs-sm; wrap: word-wrap; }
+    }
+    CardFoot {
+        Rectangle { horizontal-stretch: 1; }
+        ActionButton {
+            text: root.operation == "list" ? "List slots" : root.operation == "add" ? "Add credential" : "Remove slot";
+            tone: root.operation == "remove" ? "danger" : "primary";
+            enabled: !root.busy && root.source != "" && (root.operation == "list" || (root.has-auth && (root.operation != "add" || root.has-new-auth) && (root.operation != "remove" || root.slot != "")));
+            clicked => { root.submit(); }
+        }
+    }
+}

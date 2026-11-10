@@ -217,7 +217,7 @@ export component KeyFilePicker inherits Rectangle {
     in-out property <string> value;
     private property <bool> typing: false;
 
-    min-height: 110px * UiTheme.scale;
+    min-height: (value == "" && !typing) ? 110px * UiTheme.scale : 34px * UiTheme.scale;
     preferred-height: (value == "" && !typing) ? 110px * UiTheme.scale : 34px * UiTheme.scale;
 
     if value == "" && !typing: Drop {
