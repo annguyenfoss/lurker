@@ -162,10 +162,10 @@ fn credential(
             if !std::io::stdin().is_terminal() {
                 return Err(AppError::new("Password entry requires a terminal or the desktop app; alternatively select a keyfile."));
             }
-            let value = rpassword::prompt_password(prompt)
+            let value = crate::credentials::prompt_passphrase(prompt)
                 .map_err(|e| AppError::io("Failed to read password", e))?;
             if confirm {
-                let check = rpassword::prompt_password("Confirm new password: ")
+                let check = crate::credentials::prompt_passphrase("Confirm new password: ")
                     .map_err(|e| AppError::io("Failed to confirm password", e))?;
                 if value != check {
                     return Err(AppError::new("New password confirmation does not match."));

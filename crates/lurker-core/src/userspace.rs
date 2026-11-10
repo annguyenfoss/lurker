@@ -1,5 +1,6 @@
 //! Linux file containers served by unprivileged VeraCrypt and filesystem processes.
 //! No command in this module invokes sudo, pkexec, mount, loop, or device-mapper.
+use crate::credentials::prompt_passphrase;
 use crate::linux::{absolute_path, read_mountinfo, MountInfo};
 use crate::{
     ActiveVolume, AppError, AppResult, CommandAction, CreateCommand, MountCommand, Output,
@@ -383,66 +384,6 @@ fn checked(
         program.file_name().unwrap_or_default().to_string_lossy(),
         detail.trim()
     )))
-}
-
-// Configure the terminal before showing the prompt. rpassword's convenience
-// prompt prints first, which can echo a fast paste before its raw mode starts.
-struct PasswordTerminal {
-    file: File,
-    original: libc::termios,
-}
-
-impl Read for PasswordTerminal {
-    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
-        let count = self.file.read(bytes)?;
-        if bytes[..count].contains(&3) {
-            // Return through the terminal guard instead of raising SIGINT while
-            // echo is disabled. rpassword still handles UTF-8 and line editing.
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "Passphrase entry cancelled",
-            ));
-        }
-        Ok(count)
-    }
-}
-
-impl Drop for PasswordTerminal {
-    fn drop(&mut self) {
-        // SAFETY: the descriptor and saved terminal attributes are still live.
-        unsafe {
-            libc::tcsetattr(self.file.as_raw_fd(), libc::TCSANOW, &self.original);
-        }
-    }
-}
-
-fn prompt_passphrase(prompt: &str) -> std::io::Result<String> {
-    let file = OpenOptions::new().read(true).write(true).open("/dev/tty")?;
-    let mut original = std::mem::MaybeUninit::<libc::termios>::uninit();
-    // SAFETY: tcgetattr initializes the supplied termios on success.
-    if unsafe { libc::tcgetattr(file.as_raw_fd(), original.as_mut_ptr()) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    let original = unsafe { original.assume_init() };
-    let mut input = PasswordTerminal { file, original };
-    let mut hidden = original;
-    hidden.c_lflag &= !(libc::ECHO | libc::ECHONL | libc::ICANON | libc::ISIG);
-    hidden.c_cc[libc::VMIN] = 1;
-    hidden.c_cc[libc::VTIME] = 0;
-    // SAFETY: this descriptor is our controlling terminal, with valid attributes.
-    if unsafe { libc::tcsetattr(input.file.as_raw_fd(), libc::TCSANOW, &hidden) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    let mut output = input.file.try_clone()?;
-    input.file.write_all(prompt.as_bytes())?;
-    input.file.flush()?;
-    let config = rpassword::ConfigBuilder::new()
-        .input_reader(input)
-        .output_discard()
-        .build();
-    let result = rpassword::read_password_with_config(config);
-    let _ = output.write_all(b"\n");
-    result
 }
 
 fn passphrase(supplied: Option<&str>, create: bool) -> AppResult<String> {

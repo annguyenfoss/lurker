@@ -192,10 +192,10 @@ fn secret(supplied: Option<&str>, create: bool) -> AppResult<Vec<u8>> {
                 "Passphrase entry requires a terminal or the desktop app.",
             ));
         }
-        let pass = rpassword::prompt_password("Passphrase: ")
+        let pass = crate::credentials::prompt_passphrase("Passphrase: ")
             .map_err(|e| AppError::io("Failed to read passphrase", e))?;
         if create {
-            let confirm = rpassword::prompt_password("Confirm passphrase: ")
+            let confirm = crate::credentials::prompt_passphrase("Confirm passphrase: ")
                 .map_err(|e| AppError::io("Failed to read confirmation", e))?;
             if pass != confirm {
                 return Err(AppError::new("Passphrase confirmation does not match."));
