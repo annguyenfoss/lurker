@@ -48,6 +48,46 @@ pub(crate) fn validate_request(command: &CommandAction) -> AppResult<()> {
             None,
         ),
         CommandAction::Unmount(_) => return Ok(()),
+        CommandAction::Keyslots(c) => {
+            use crate::KeyslotOperation;
+            if cfg!(target_os = "macos") {
+                return Err(AppError::new("LUKS keyslot management requires Linux."));
+            }
+            if c.privilege_mode == crate::PrivilegeMode::Unprivileged {
+                return Err(AppError::new(
+                    "LUKS keyslot management requires Privileged mode.",
+                ));
+            }
+            if c.slot.is_some_and(|slot| slot > 31) {
+                return Err(AppError::new("Keyslot must be between 0 and 31."));
+            }
+            validate(c.passphrase.as_deref(), c.keyfile.as_deref())?;
+            validate(c.new_passphrase.as_deref(), c.new_keyfile.as_deref())?;
+            if c.operation != KeyslotOperation::Add
+                && (c.new_passphrase.is_some() || c.new_keyfile.is_some())
+            {
+                return Err(AppError::new(
+                    "New credentials are valid only when adding a keyslot.",
+                ));
+            }
+            if c.operation == KeyslotOperation::List
+                && (c.slot.is_some() || c.passphrase.is_some() || c.keyfile.is_some())
+            {
+                return Err(AppError::new(
+                    "Listing keyslots does not take a slot or credentials.",
+                ));
+            }
+            if c.operation == KeyslotOperation::Remove && c.slot.is_none() {
+                return Err(AppError::new("Choose the keyslot to remove."));
+            }
+            for keyfile in [c.keyfile.as_deref(), c.new_keyfile.as_deref()]
+                .into_iter()
+                .flatten()
+            {
+                ensure_distinct_target(&c.source, keyfile)?;
+            }
+            return Ok(());
+        }
     };
     validate(passphrase, keyfile)?;
     if keyfile.is_some() && kind == VolumeType::Apple {

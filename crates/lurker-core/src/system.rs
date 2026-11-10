@@ -339,6 +339,7 @@ impl ToolPaths {
             CommandAction::Unmount(_) => {
                 tools.umount = Some(require_command("umount")?);
             }
+            CommandAction::Keyslots(_) => {}
         }
 
         Ok(tools)

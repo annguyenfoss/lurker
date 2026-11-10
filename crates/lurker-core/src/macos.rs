@@ -400,6 +400,7 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
         CommandAction::Create(c) => create(c, output),
         CommandAction::Mount(c) => mount(c, output),
         CommandAction::Unmount(c) => unmount(c, output),
+        CommandAction::Keyslots(_) => Err(AppError::new("LUKS keyslot management requires Linux.")),
     }
 }
 

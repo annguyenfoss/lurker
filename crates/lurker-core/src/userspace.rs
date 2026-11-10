@@ -66,6 +66,9 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
         CommandAction::Create(c) => create(&runtime, &tools, c, output),
         CommandAction::Mount(c) => mount(&runtime, &tools, c, output),
         CommandAction::Unmount(c) => unmount(&runtime, &tools, c, output),
+        CommandAction::Keyslots(_) => Err(AppError::new(
+            "LUKS keyslot management requires Privileged mode.",
+        )),
     }
 }
 
@@ -79,6 +82,11 @@ fn validate_command(command: &CommandAction) -> AppResult<()> {
         }
         CommandAction::Mount(c) => (c.volume_type, c.tag.as_deref()),
         CommandAction::Unmount(c) => (c.volume_type, c.tag.as_deref()),
+        CommandAction::Keyslots(_) => {
+            return Err(AppError::new(
+                "LUKS keyslot management requires Privileged mode.",
+            ))
+        }
     };
     if !matches!(kind, VolumeType::Veracrypt | VolumeType::Auto)
         || matches!(command, CommandAction::Create(c) if c.volume_type == VolumeType::Auto)
@@ -1097,6 +1105,7 @@ pub fn check_privileged_conflicts(command: &CommandAction) -> AppResult<()> {
         CommandAction::Create(c) => &c.target,
         CommandAction::Mount(c) => &c.source,
         CommandAction::Unmount(_) => return Ok(()),
+        CommandAction::Keyslots(c) => &c.source,
     };
     let source = absolute_path(&expand(source)?)?;
     let identity = fs::metadata(&source).ok().map(|m| (m.dev(), m.ino()));

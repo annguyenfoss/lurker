@@ -20,6 +20,7 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
         CommandAction::Create(c) => c.volume_type,
         CommandAction::Mount(c) => c.volume_type,
         CommandAction::Unmount(c) => c.volume_type,
+        CommandAction::Keyslots(_) => VolumeType::Luks,
     };
     if volume_type == VolumeType::Apple {
         return Err(AppError::new("Apple encrypted disk images require macOS."));
@@ -29,6 +30,7 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
         CommandAction::Create(create) => create_device(&mut ctx, create),
         CommandAction::Mount(mount) => mount_device(&mut ctx, mount),
         CommandAction::Unmount(unmount) => unmount_device(&mut ctx, unmount),
+        CommandAction::Keyslots(command) => crate::keyslots::run(&mut ctx, command),
     }
 }
 

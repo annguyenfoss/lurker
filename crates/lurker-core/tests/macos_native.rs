@@ -111,6 +111,7 @@ fn ok(command: CommandAction) {
         CommandAction::Create(_) => "create",
         CommandAction::Mount(_) => "mount",
         CommandAction::Unmount(_) => "unmount",
+        CommandAction::Keyslots(_) => "keyslots",
     };
     let response = run_buffered(command);
     assert!(response.ok, "{action}: {:?}", response.error);

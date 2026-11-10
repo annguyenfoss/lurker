@@ -2,6 +2,8 @@ mod api;
 mod credentials;
 mod error;
 #[cfg(target_os = "linux")]
+mod keyslots;
+#[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -17,8 +19,8 @@ mod userspace;
 mod workflow;
 
 pub use api::{
-    ActiveVolume, CommandAction, CreateCommand, MountCommand, OperationResponse, SystemProbe,
-    ToolStatus, UnmountCommand,
+    ActiveVolume, CommandAction, CreateCommand, KeyslotOperation, KeyslotsCommand, MountCommand,
+    OperationResponse, SystemProbe, ToolStatus, UnmountCommand,
 };
 pub use error::{AppError, AppResult};
 pub use model::{

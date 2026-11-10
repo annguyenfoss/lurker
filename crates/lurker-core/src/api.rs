@@ -9,6 +9,7 @@ pub enum CommandAction {
     Create(CreateCommand),
     Mount(MountCommand),
     Unmount(UnmountCommand),
+    Keyslots(KeyslotsCommand),
 }
 
 impl CommandAction {
@@ -17,6 +18,7 @@ impl CommandAction {
             Self::Create(c) => c.privilege_mode,
             Self::Mount(c) => c.privilege_mode,
             Self::Unmount(c) => c.privilege_mode,
+            Self::Keyslots(c) => c.privilege_mode,
         }
     }
 
@@ -25,6 +27,7 @@ impl CommandAction {
             Self::Create(c) => c.privilege_mode = mode,
             Self::Mount(c) => c.privilege_mode = mode,
             Self::Unmount(c) => c.privilege_mode = mode,
+            Self::Keyslots(c) => c.privilege_mode = mode,
         }
         self
     }
@@ -68,6 +71,32 @@ pub struct UnmountCommand {
     pub target: PathBuf,
     pub tag: Option<String>,
     pub volume_type: VolumeType,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyslotOperation {
+    List,
+    Add,
+    Remove,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct KeyslotsCommand {
+    #[serde(default)]
+    pub privilege_mode: PrivilegeMode,
+    pub source: PathBuf,
+    pub operation: KeyslotOperation,
+    #[serde(default)]
+    pub slot: Option<u8>,
+    #[serde(default)]
+    pub passphrase: Option<String>,
+    #[serde(default)]
+    pub keyfile: Option<PathBuf>,
+    #[serde(default)]
+    pub new_passphrase: Option<String>,
+    #[serde(default)]
+    pub new_keyfile: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

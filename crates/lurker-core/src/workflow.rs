@@ -113,6 +113,33 @@ fn cipher_profile(cipher: CreateCipher) -> &'static CreateCipherProfile {
     }
 }
 
+// Additional LUKS slots keep the create profile's KDF costs without changing
+// the existing volume cipher, sector size or volume key.
+#[cfg(target_os = "linux")]
+pub(crate) fn luks_keyslot_kdf_args(cipher: CreateCipher, version: u16) -> Vec<OsString> {
+    let profile = cipher_profile(cipher);
+    if version == 1 {
+        let time = profile
+            .format_args
+            .windows(2)
+            .find(|pair| pair[0] == "-i")
+            .unwrap()[1];
+        return ["--pbkdf", "pbkdf2", "--iter-time", time]
+            .map(OsString::from)
+            .into();
+    }
+    let mut result = Vec::new();
+    for pair in profile.format_args.windows(2) {
+        if matches!(
+            pair[0],
+            "--pbkdf" | "--pbkdf-memory" | "--pbkdf-parallel" | "-i"
+        ) {
+            result.extend(pair.iter().map(OsString::from));
+        }
+    }
+    result
+}
+
 // Both Linux routes create the same VeraCrypt header and Btrfs filesystem.
 // The userspace route changes the transport, never the crypto profile.
 #[cfg(target_os = "linux")]

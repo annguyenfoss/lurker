@@ -14,6 +14,8 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 - `crates/lurker-core`
   - `src/api.rs`: shared serde command/response types
   - `src/model.rs`: enums such as `VolumeType`, `CreateCipher`, `SourceKind`
+  - `src/credentials.rs`: password/keyfile exclusivity and keyfile validation
+  - `src/keyslots.rs`: Linux LUKS keyslot inspection, addition and authenticated removal
   - `src/workflow.rs`: source of truth for hardcoded crypto profiles and Linux workflow dispatch
   - `src/macos.rs`: hdiutil/VeraCrypt file-container workflows and native volume discovery
   - `src/linux_workflow.rs`: Linux create/mount/unmount implementation

@@ -55,6 +55,16 @@ Use this file as the source of truth for create-time cipher policy.
     - `--perf-submit_from_crypt_cpus`
   - apply those open args automatically when a Twofish LUKS header is detected
 
+## LUKS Keyslot Management (Linux)
+
+- Each slot accepts either a password or a binary keyfile. Slots are independent alternatives; any one enrolled credential can unlock the volume.
+- List, add and remove slots using the shared core. LUKS1 supports slots 0–7; LUKS2 supports slots 0–31, subject to header space. Adding without a slot selects a free slot.
+- Additional LUKS2 slots use the create cipher profile's Argon2id costs. LUKS1 retains PBKDF2, with the corresponding profile's iteration time. Existing volume keys, ciphers and data remain intact.
+- Keep password bytes on stdin. For addition, send existing and new credential bytes consecutively with explicit `--keyfile-size` and `--new-keyfile-size`; never put secrets in argv or temporary files.
+- Authenticate removal with a credential for a surviving slot. Explicitly enable native passphrase verification: cryptsetup otherwise treats stdin as batch mode and can remove a slot without authentication.
+- Refuse deletion of the last usable slot, including when other slots are unbound. Reject occupied, inactive and out-of-range slot selections.
+- Keyslot management requires Linux Privileged mode; header operations on regular files run without elevation when accessible to the user.
+
 ## VeraCrypt Profiles
 
 - Supported create ciphers map to VeraCrypt encryption names:
