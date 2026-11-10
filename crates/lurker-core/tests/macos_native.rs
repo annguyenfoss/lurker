@@ -32,6 +32,7 @@ impl Fixture {
             volume_type: kind,
             cipher,
             passphrase: Some(PASS.into()),
+            keyfile: None,
         }
     }
     fn mount(&self, path: &Path, pass: &str, readonly: bool, kind: VolumeType) -> CommandAction {
@@ -42,6 +43,7 @@ impl Fixture {
             tag: None,
             volume_type: kind,
             passphrase: Some(pass.into()),
+            keyfile: None,
             readonly,
         })
     }

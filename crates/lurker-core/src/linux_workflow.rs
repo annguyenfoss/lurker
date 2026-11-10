@@ -80,6 +80,7 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
                 &command.source,
                 &command.mountpoint,
                 command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
                 command.readonly,
             )
         }
@@ -89,6 +90,7 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
             &command.mountpoint,
             command.tag.as_deref(),
             command.passphrase.as_deref(),
+            command.keyfile.as_deref(),
             command.readonly,
         ),
         VolumeType::Apple => Err(AppError::new("Apple encrypted disk images require macOS.")),
@@ -252,8 +254,8 @@ fn assert_create_block_target(ctx: &mut AppContext, path: &Path, force: bool) ->
     Ok(())
 }
 
-fn require_passphrase(passphrase: Option<&str>) -> AppResult<()> {
-    if passphrase.is_some() || io::stdin().is_terminal() {
+fn require_passphrase(passphrase: Option<&str>, keyfile: Option<&Path>) -> AppResult<()> {
+    if passphrase.is_some() || keyfile.is_some() || io::stdin().is_terminal() {
         Ok(())
     } else {
         Err(AppError::new(
@@ -263,7 +265,7 @@ fn require_passphrase(passphrase: Option<&str>) -> AppResult<()> {
 }
 
 fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResult<()> {
-    require_passphrase(command.passphrase.as_deref())?;
+    require_passphrase(command.passphrase.as_deref(), command.keyfile.as_deref())?;
     let profile = cipher_profile(command.cipher);
     let mapper_name = mapper_name_for_source(&command.target, None)?;
 
@@ -284,7 +286,13 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
             write_random_file(ctx.output.clone(), &temp_path, size_mib)?;
 
             ctx.output.msg2("Formatting LUKS2 header");
-            luks_format(ctx, &temp_path, command.passphrase.as_deref(), profile)?;
+            luks_format(
+                ctx,
+                &temp_path,
+                command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
+                profile,
+            )?;
 
             ctx.output.msg2(&format!(
                 "Opening mapper {}",
@@ -295,6 +303,7 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
                 &temp_path,
                 &mapper_name,
                 command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
                 Some(profile),
                 false,
             )?;
@@ -322,7 +331,13 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
             ctx.output.msg2("Destructive mode enabled by --force");
 
             ctx.output.msg2("Formatting LUKS2 header");
-            luks_format(ctx, &command.target, command.passphrase.as_deref(), profile)?;
+            luks_format(
+                ctx,
+                &command.target,
+                command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
+                profile,
+            )?;
 
             ctx.output.msg2(&format!(
                 "Opening mapper {}",
@@ -333,6 +348,7 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
                 &command.target,
                 &mapper_name,
                 command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
                 Some(profile),
                 false,
             )?;
@@ -360,7 +376,7 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
 }
 
 fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResult<()> {
-    require_passphrase(command.passphrase.as_deref())?;
+    require_passphrase(command.passphrase.as_deref(), command.keyfile.as_deref())?;
     let profile = cipher_profile(command.cipher);
     let mapper_name = mapper_name_for_source(&command.target, None)?;
 
@@ -380,7 +396,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
             ctx.output
                 .msg2(&format!("Target size: {} GB ({} MiB)", size_gb, size_mib));
             ctx.output.msg2(&format!(
-                "Creating VeraCrypt header (normal, password-only, {}, SHA-512, filesystem=none)",
+                "Creating VeraCrypt header (normal, {}, SHA-512, filesystem=none)",
                 profile.label
             ));
             veracrypt_create(
@@ -390,6 +406,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
                 Some(size_mib),
                 profile,
                 command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
             )?;
             fs::set_permissions(&temp_path, fs::Permissions::from_mode(0o600)).map_err(|err| {
                 AppError::io(format!("Failed to secure {}", temp_path.display()), err)
@@ -404,6 +421,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
                 &temp_path,
                 &mapper_name,
                 command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
                 false,
             )?;
 
@@ -432,7 +450,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
             ctx.output
                 .msg2("Using VeraCrypt quick format for device-hosted creation");
             ctx.output.msg2(&format!(
-                "Creating VeraCrypt header (normal, password-only, {}, SHA-512, filesystem=none)",
+                "Creating VeraCrypt header (normal, {}, SHA-512, filesystem=none)",
                 profile.label
             ));
             veracrypt_create(
@@ -442,6 +460,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
                 None,
                 profile,
                 command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
             )?;
 
             ctx.output.msg2(&format!(
@@ -453,6 +472,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
                 &command.target,
                 &mapper_name,
                 command.passphrase.as_deref(),
+                command.keyfile.as_deref(),
                 false,
             )?;
 
@@ -485,9 +505,10 @@ fn luks_mount_device(
     mountpoint: &Path,
     tag_override: Option<&str>,
     passphrase: Option<&str>,
+    keyfile: Option<&Path>,
     readonly: bool,
 ) -> AppResult<()> {
-    require_passphrase(passphrase)?;
+    require_passphrase(passphrase, keyfile)?;
     let mapper_name = mapper_name_for_source(source_path, tag_override)?;
     let profile = detect_luks_cipher_profile(ctx, source_path)?;
 
@@ -507,6 +528,7 @@ fn luks_mount_device(
         source_path,
         &mapper_name,
         passphrase,
+        keyfile,
         profile,
         readonly,
     )?;
@@ -528,9 +550,10 @@ fn tcrypt_mount_device(
     source_path: &Path,
     mountpoint: &Path,
     passphrase: Option<&str>,
+    keyfile: Option<&Path>,
     readonly: bool,
 ) -> AppResult<()> {
-    require_passphrase(passphrase)?;
+    require_passphrase(passphrase, keyfile)?;
     let mapper_name = mapper_name_for_source(source_path, None)?;
 
     ctx.output.msg(&format!(
@@ -542,7 +565,14 @@ fn tcrypt_mount_device(
         mapper_device_path(&mapper_name).display()
     ));
     assert_mapper_available(&mapper_name)?;
-    tcrypt_open(ctx, source_path, &mapper_name, passphrase, readonly)?;
+    tcrypt_open(
+        ctx,
+        source_path,
+        &mapper_name,
+        passphrase,
+        keyfile,
+        readonly,
+    )?;
     ctx.set_cleanup_mapper(mapper_name.clone());
     mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
@@ -975,13 +1005,30 @@ fn luks_format(
     ctx: &mut AppContext,
     target: &Path,
     passphrase: Option<&str>,
+    keyfile: Option<&Path>,
     profile: &CreateCipherProfile,
 ) -> AppResult<()> {
     let privileged = is_block_device_target(target);
     let mut args = vec![OsString::from("-v")];
     args.extend(profile.format_args.iter().map(OsString::from));
     let cryptsetup = ctx.cryptsetup_path().to_path_buf();
-    if let Some(passphrase) = passphrase {
+    if let Some(keyfile) = keyfile {
+        args.extend([
+            OsString::from("--batch-mode"),
+            OsString::from("luksFormat"),
+            target.as_os_str().into(),
+            fs::canonicalize(keyfile)
+                .map_err(|e| AppError::io("Failed to resolve keyfile", e))?
+                .into_os_string(),
+        ]);
+        ctx.run_command(
+            &cryptsetup,
+            &args,
+            privileged,
+            false,
+            "Failed to format LUKS container",
+        )
+    } else if let Some(passphrase) = passphrase {
         args.push(OsString::from("--batch-mode"));
         args.push(OsString::from("luksFormat"));
         args.push(target.as_os_str().to_os_string());
@@ -1012,6 +1059,7 @@ fn luks_open(
     source: &Path,
     mapper_name: &str,
     passphrase: Option<&str>,
+    keyfile: Option<&Path>,
     profile: Option<&CreateCipherProfile>,
     readonly: bool,
 ) -> AppResult<()> {
@@ -1032,9 +1080,16 @@ fn luks_open(
             ));
         }
     }
-    if passphrase.is_some() {
-        args.push(OsString::from("--key-file"));
-        args.push(OsString::from("-"));
+    if let Some(keyfile) = keyfile {
+        args.push("--key-file".into());
+        args.push(
+            fs::canonicalize(keyfile)
+                .map_err(|e| AppError::io("Failed to resolve keyfile", e))?
+                .into_os_string(),
+        );
+    } else if passphrase.is_some() {
+        args.push("--key-file".into());
+        args.push("-".into());
     }
     args.push(source.as_os_str().to_os_string());
     args.push(OsString::from(mapper_name));
@@ -1063,9 +1118,15 @@ fn tcrypt_open(
     source: &Path,
     mapper_name: &str,
     passphrase: Option<&str>,
+    keyfile: Option<&Path>,
     readonly: bool,
 ) -> AppResult<()> {
     validate_veracrypt_passphrase(passphrase)?;
+    let passphrase = if keyfile.is_some() {
+        Some("")
+    } else {
+        passphrase
+    };
     let mut args = vec![
         OsString::from("open"),
         OsString::from("--type"),
@@ -1074,6 +1135,14 @@ fn tcrypt_open(
     ];
     if readonly {
         args.push(OsString::from("--readonly"));
+    }
+    if let Some(keyfile) = keyfile {
+        args.push("--key-file".into());
+        args.push(
+            fs::canonicalize(keyfile)
+                .map_err(|e| AppError::io("Failed to resolve keyfile", e))?
+                .into_os_string(),
+        );
     }
     // TCRYPT --key-file mixes a keyfile with the password. Read the password
     // directly from stdin instead; it is line based in this mode.
@@ -1090,7 +1159,11 @@ fn tcrypt_open(
             &cryptsetup,
             &args,
             true,
-            passphrase.as_bytes(),
+            if keyfile.is_some() {
+                b"\n"
+            } else {
+                passphrase.as_bytes()
+            },
             "Failed to open VeraCrypt mapper with cryptsetup",
         )
     } else {
@@ -1111,7 +1184,13 @@ fn veracrypt_create(
     size_mib: Option<u64>,
     profile: &CreateCipherProfile,
     passphrase: Option<&str>,
+    keyfile: Option<&Path>,
 ) -> AppResult<()> {
+    let passphrase = if keyfile.is_some() {
+        Some("")
+    } else {
+        passphrase
+    };
     let mut args: Vec<OsString> = VERACRYPT_CREATE_ARGS_COMMON
         .iter()
         .map(OsString::from)
@@ -1124,7 +1203,8 @@ fn veracrypt_create(
         args.push(OsString::from("--stdin"));
         args.push(OsString::from("--non-interactive"));
     }
-    args.extend(VERACRYPT_CREATE_ARGS_NO_KEYFILES.iter().map(OsString::from));
+    args.push("-k".into());
+    args.push(crate::credentials::veracrypt_keyfiles(keyfile)?);
     match target_kind {
         SourceKind::File => {
             let size_mib = size_mib.ok_or_else(|| AppError::new("Missing file container size."))?;
@@ -1141,7 +1221,11 @@ fn veracrypt_create(
             &veracrypt,
             &args,
             target_kind == SourceKind::Block,
-            passphrase.as_bytes(),
+            if keyfile.is_some() {
+                b"\n"
+            } else {
+                passphrase.as_bytes()
+            },
             "Failed to create VeraCrypt container",
         )
     } else {

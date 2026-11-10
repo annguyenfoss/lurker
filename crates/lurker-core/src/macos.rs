@@ -469,6 +469,9 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         return Err(AppError::new("macOS containers must be at least 32 MiB."));
     }
     let target = target_path(&c.target)?;
+    if let Some(keyfile) = c.keyfile.as_deref() {
+        crate::credentials::ensure_distinct_target(&target, keyfile)?;
+    }
     assert_target(&target, c.force)?;
     // Check every attached image, including a plaintext image: overwriting an
     // attached backing file can corrupt data even when --force is supplied.
@@ -487,7 +490,11 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     } else {
         "container.hc"
     });
-    let mut pass = secret(c.passphrase.as_deref(), true)?;
+    let mut pass = if c.keyfile.is_some() {
+        Vec::new()
+    } else {
+        secret(c.passphrase.as_deref(), true)?
+    };
     output.msg2(&format!("Creating {} container", c.volume_type));
     let (program, mut arguments) = if c.volume_type == VolumeType::Apple {
         pass.push(0);
@@ -499,7 +506,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         pass.push(b'\n');
         (
             require_veracrypt()?,
-            crate::workflow::macos_veracrypt_create_args(c.cipher, size),
+            crate::workflow::macos_veracrypt_create_args(c.cipher, size, c.keyfile.as_deref())?,
         )
     };
     arguments.push(temp.as_os_str().into());
@@ -603,7 +610,16 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     }) {
         return Err(AppError::new("Container or mount point is already in use."));
     }
-    let mut pass = secret(c.passphrase.as_deref(), false)?;
+    if kind == VolumeType::Apple && c.keyfile.is_some() {
+        return Err(AppError::new(
+            "Keyfile authentication is supported for LUKS and VeraCrypt only.",
+        ));
+    }
+    let mut pass = if c.keyfile.is_some() {
+        Vec::new()
+    } else {
+        secret(c.passphrase.as_deref(), false)?
+    };
     let (program, mut arguments) = if kind == VolumeType::Apple {
         pass.push(0);
         let mut a = args(&["attach", "-plist", "-stdinpass", "-nobrowse", "-mountpoint"]);
@@ -624,6 +640,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             "",
             "--protect-hidden=no",
         ]);
+        let key_index = a.iter().position(|arg| arg == "-k").unwrap() + 1;
+        a[key_index] = crate::credentials::veracrypt_keyfiles(c.keyfile.as_deref())?;
         if c.readonly {
             a.push("--mount-options=ro".into());
         }

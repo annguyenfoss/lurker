@@ -3,6 +3,8 @@
 # VeraCrypt (same ciphers/SHA-512, exFAT filesystem) live in lurker-core.
 # The Rust Linux userspace route keeps these cipher profiles and Btrfs; this
 # archived script implements only the privileged kernel-backed workflow.
+# Optional keyfile-only authentication is implemented in the active Rust core;
+# this archive retains its original password authentication and cipher defaults.
 
 set -euo pipefail
 

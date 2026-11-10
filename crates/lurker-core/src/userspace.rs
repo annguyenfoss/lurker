@@ -475,7 +475,13 @@ fn raw_path(dir: &Path) -> PathBuf {
     dir.join("raw/.veracrypt_aux_mnt1/volume")
 }
 
-fn open_raw(tools: &Tools, dir: &Path, session: &mut Session, secret: &str) -> AppResult<()> {
+fn open_raw(
+    tools: &Tools,
+    dir: &Path,
+    session: &mut Session,
+    secret: &str,
+    keyfile: Option<&Path>,
+) -> AppResult<()> {
     let mut args: Vec<OsString> = [
         "-t",
         "--mount",
@@ -489,6 +495,8 @@ fn open_raw(tools: &Tools, dir: &Path, session: &mut Session, secret: &str) -> A
     ]
     .map(OsString::from)
     .into();
+    let key_index = args.iter().position(|arg| arg == "-k").unwrap() + 1;
+    args[key_index] = crate::credentials::veracrypt_keyfiles(keyfile)?;
     args.push(
         if session.readonly {
             "--mount-options=nokernelcrypto,ro"
@@ -794,7 +802,11 @@ fn assert_unused(runtime: &Runtime, source: &Path) -> AppResult<()> {
 }
 
 fn mount(runtime: &Runtime, tools: &Tools, c: MountCommand, output: Output) -> AppResult<()> {
-    let secret = passphrase(c.passphrase.as_deref(), false)?;
+    let secret = if c.keyfile.is_some() {
+        String::new()
+    } else {
+        passphrase(c.passphrase.as_deref(), false)?
+    };
     let source = validate_source(&c.source)?;
     assert_unused(runtime, &source)?;
     let mountpoint = absolute_path(&expand(&c.mountpoint)?)?;
@@ -818,7 +830,7 @@ fn mount(runtime: &Runtime, tools: &Tools, c: MountCommand, output: Output) -> A
     }
     let (dir, mut session) = runtime.reserve(&source, &mountpoint, c.readonly, created)?;
     let result = (|| {
-        open_raw(tools, &dir, &mut session, &secret)?;
+        open_raw(tools, &dir, &mut session, &secret, c.keyfile.as_deref())?;
         start_filesystem(tools, &dir, &mut session, false)?;
         Ok(())
     })();
@@ -922,7 +934,11 @@ fn assert_create_target(target: &Path, force: bool) -> AppResult<()> {
 }
 
 fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) -> AppResult<()> {
-    let secret = passphrase(c.passphrase.as_deref(), true)?;
+    let secret = if c.keyfile.is_some() {
+        String::new()
+    } else {
+        passphrase(c.passphrase.as_deref(), true)?
+    };
     let size = crate::size::size_gb_to_mib(
         c.size_gb
             .as_deref()
@@ -945,6 +961,9 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
             .file_name()
             .ok_or_else(|| AppError::new("Target needs a file name."))?,
     );
+    if let Some(keyfile) = c.keyfile.as_deref() {
+        crate::credentials::ensure_distinct_target(&target, keyfile)?;
+    }
     assert_create_target(&target, c.force)?;
     assert_unused(runtime, &target)?;
     let nonce = SystemTime::now()
@@ -960,7 +979,8 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
     let mut live_session = None;
     let result = (|| {
         output.msg2("Creating VeraCrypt container without elevation");
-        let mut args = crate::workflow::userspace_veracrypt_create_args(c.cipher, size);
+        let mut args =
+            crate::workflow::userspace_veracrypt_create_args(c.cipher, size, c.keyfile.as_deref())?;
         args.push(temporary.as_os_str().into());
         checked(&tools.crypto, &args, Some(&secret), Some(&staging))?;
         fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))
@@ -971,7 +991,7 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
         let (dir, mut session) = runtime.reserve(&temporary, &init_mount, false, true)?;
         live_session = Some((dir.clone(), session.clone()));
         let prepared = (|| {
-            open_raw(tools, &dir, &mut session, &secret)?;
+            open_raw(tools, &dir, &mut session, &secret, c.keyfile.as_deref())?;
             let mkfs = find_program("mkfs.btrfs")?;
             checked(
                 &mkfs,

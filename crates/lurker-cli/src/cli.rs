@@ -421,6 +421,7 @@ where
                     volume_type,
                     cipher: create_cipher,
                     passphrase: None,
+                    keyfile: None,
                 }),
             }))
         }
@@ -497,6 +498,7 @@ where
                     tag,
                     volume_type,
                     passphrase: None,
+                    keyfile: None,
                     readonly,
                 }),
             }))

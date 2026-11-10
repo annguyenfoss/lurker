@@ -23,7 +23,6 @@ const VERACRYPT_CREATE_ARGS_COMMON: &[&str] = &[
 #[cfg(target_os = "linux")]
 // VeraCrypt determines the full device size; --size=max is file-only.
 const VERACRYPT_CREATE_ARGS_BLOCK: &[&str] = &["--quick"];
-const VERACRYPT_CREATE_ARGS_NO_KEYFILES: &[&str] = &["-k", ""];
 
 const LUKS_FORMAT_ARGS_AES: &[&str] = &[
     "--type",
@@ -120,13 +119,15 @@ fn cipher_profile(cipher: CreateCipher) -> &'static CreateCipherProfile {
 pub(crate) fn userspace_veracrypt_create_args(
     cipher: CreateCipher,
     size_mib: u64,
-) -> Vec<OsString> {
+    keyfile: Option<&std::path::Path>,
+) -> crate::AppResult<Vec<OsString>> {
     let mut args: Vec<OsString> = VERACRYPT_CREATE_ARGS_COMMON
         .iter()
         .map(OsString::from)
         .collect();
     args.extend(["--stdin", "--non-interactive"].map(OsString::from));
-    args.extend(VERACRYPT_CREATE_ARGS_NO_KEYFILES.iter().map(OsString::from));
+    args.push("-k".into());
+    args.push(crate::credentials::veracrypt_keyfiles(keyfile)?);
     args.push(
         format!(
             "--encryption={}",
@@ -135,7 +136,7 @@ pub(crate) fn userspace_veracrypt_create_args(
         .into(),
     );
     args.push(format!("--size={size_mib}M").into());
-    args
+    Ok(args)
 }
 
 #[cfg(target_os = "linux")]
@@ -147,7 +148,11 @@ pub use linux_backend::run;
 
 // macOS uses VeraCrypt's native formatter instead of Linux's Btrfs step.
 #[cfg(target_os = "macos")]
-pub(crate) fn macos_veracrypt_create_args(cipher: CreateCipher, size_mib: u64) -> Vec<OsString> {
+pub(crate) fn macos_veracrypt_create_args(
+    cipher: CreateCipher,
+    size_mib: u64,
+    keyfile: Option<&std::path::Path>,
+) -> crate::AppResult<Vec<OsString>> {
     let mut args: Vec<OsString> = VERACRYPT_CREATE_ARGS_COMMON
         .iter()
         .filter(|arg| **arg != "--filesystem=none")
@@ -158,7 +163,8 @@ pub(crate) fn macos_veracrypt_create_args(cipher: CreateCipher, size_mib: u64) -
         OsString::from("--stdin"),
         OsString::from("--non-interactive"),
     ]);
-    args.extend(VERACRYPT_CREATE_ARGS_NO_KEYFILES.iter().map(OsString::from));
+    args.push("-k".into());
+    args.push(crate::credentials::veracrypt_keyfiles(keyfile)?);
     args.push(
         format!(
             "--encryption={}",
@@ -167,7 +173,7 @@ pub(crate) fn macos_veracrypt_create_args(cipher: CreateCipher, size_mib: u64) -
         .into(),
     );
     args.push(format!("--size={size_mib}M").into());
-    args
+    Ok(args)
 }
 
 #[cfg(target_os = "macos")]

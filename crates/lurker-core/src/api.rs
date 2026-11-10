@@ -42,6 +42,8 @@ pub struct CreateCommand {
     #[serde(default, alias = "luks_cipher")]
     pub cipher: CreateCipher,
     pub passphrase: Option<String>,
+    #[serde(default)]
+    pub keyfile: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -53,6 +55,8 @@ pub struct MountCommand {
     pub tag: Option<String>,
     pub volume_type: VolumeType,
     pub passphrase: Option<String>,
+    #[serde(default)]
+    pub keyfile: Option<PathBuf>,
     #[serde(default)]
     pub readonly: bool,
 }

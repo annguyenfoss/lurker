@@ -1,4 +1,5 @@
 mod api;
+mod credentials;
 mod error;
 #[cfg(target_os = "linux")]
 mod linux;
@@ -33,6 +34,7 @@ use std::fs;
 use std::path::Path;
 
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
+    credentials::validate_request(&command)?;
     #[cfg(target_os = "macos")]
     {
         if command.privilege_mode() == PrivilegeMode::Unprivileged {
@@ -53,6 +55,7 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
 /// Called before a desktop helper elevates, so a privileged request cannot
 /// overwrite a container already served by the login user's userspace backend.
 pub fn validate_request(command: &CommandAction) -> AppResult<()> {
+    credentials::validate_request(command)?;
     #[cfg(target_os = "linux")]
     if command.privilege_mode() == PrivilegeMode::Privileged {
         userspace::check_privileged_conflicts(command)?;

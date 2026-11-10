@@ -121,6 +121,7 @@ fn create(target: &Path, kind: SourceKind, ty: VolumeType, cipher: CreateCipher)
         volume_type: ty,
         cipher,
         passphrase: Some(PASSWORD.into()),
+        keyfile: None,
     })
 }
 fn mount(
@@ -138,6 +139,7 @@ fn mount(
         readonly,
         tag: tag.map(String::from),
         passphrase: Some(PASSWORD.into()),
+        keyfile: None,
     })
 }
 fn unmount(target: &Path, ty: VolumeType, tag: Option<&str>) -> CommandAction {

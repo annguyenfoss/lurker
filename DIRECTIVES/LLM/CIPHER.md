@@ -72,7 +72,7 @@ Use this file as the source of truth for create-time cipher policy.
   - `--filesystem=exFAT` on macOS (VeraCrypt formats the virtual disk)
   - `--random-source=/dev/urandom`
   - `--pim=0`
-  - `-k ""`
+  - `-k ""` for password authentication, or `-k <keyfile>` with an empty password for keyfile-only authentication
 - If a passphrase is supplied non-interactively, also add:
   - `--stdin`
   - `--non-interactive`
@@ -84,6 +84,7 @@ Use this file as the source of truth for create-time cipher policy.
 
 ## VeraCrypt Authentication Decision
 
+- Support either a password or one non-empty regular keyfile. Keyfile contents are binary and are passed to the native crypto tool without trimming or text conversion.
 - Do not implement combined password-and-keyfile authentication in the CLI or desktop, for either create or mount, on Linux or macOS. This decision does not prohibit keyfile-only authentication or mandate password-only authentication.
 - With combined authentication, both the password and the required keyfile contents are needed to unlock the container. Permanently losing either, without a recoverable copy, means losing access to the data; neither can substitute for the other.
 - This is a deliberate practical choice: requiring both a password and a keyfile adds a second required credential to preserve and back up, increasing the risk of accidental loss of access. Omitting combined authentication is intentional, not an implementation backlog item.
@@ -93,7 +94,7 @@ Use this file as the source of truth for create-time cipher policy.
 - Cipher, hash, PIM and KDF defaults remain as specified above.
 - Mount/open uses `cryptsetup open --type tcrypt --veracrypt`.
 - Supplied TCRYPT passphrases go directly through stdin with `--batch-mode`; do not use `--key-file -`, which mixes a TrueCrypt keyfile with the password.
-- Supplied passphrases cannot be empty or contain NUL or line breaks, because TCRYPT password input is line based.
+- Supplied passwords cannot be empty or contain NUL or line breaks, because TCRYPT password input is line based. Keyfile-only authentication passes the actual keyfile path with `--key-file` and an empty password as a newline on stdin.
 - Mounting does not require the VeraCrypt binary. Creation still does.
 
 ## Opinionated Intent
@@ -105,12 +106,12 @@ Use this file as the source of truth for create-time cipher policy.
 
 ## Linux Unprivileged VeraCrypt
 
-- Same normal-volume AES/Serpent/Twofish, SHA-512, PIM 0, no-keyfile profiles as the privileged route. Full initialization; no quick-format file default.
+- Same normal-volume AES/Serpent/Twofish, SHA-512, PIM 0, password-or-keyfile profiles as the privileged route. Full initialization; no quick-format file default.
 - Create the VeraCrypt file with `--filesystem=none`, expose its decrypted image through the file-only userspace helper, then run `mkfs.btrfs` on that regular FUSE file.
 - Btrfs is mounted through the LKL filesystem helper with `compress=zstd`. New filesystem ownership belongs to the login user; existing container permissions are preserved.
 - The userspace helper reads passwords from stdin with a newline terminator, in a UTF-8 locale. Preserve spaces and reject embedded NUL/newlines.
 - Read-only applies to both the decrypted FUSE image and the filesystem driver.
-- No physical-device creation, LUKS, tags, custom PIM, keyfile or hidden-volume controls are added by this mode.
+- No physical-device creation, LUKS, tags, custom PIM or hidden-volume controls are added by this mode.
 - The archived Bash implementation retains the same crypto profiles but only implements the privileged kernel route.
 
 ## Sync Rules
@@ -137,5 +138,5 @@ If cipher choices change, also update:
 - Encryption protects the virtual disk image; APFS inside is not separately encrypted.
 - AES-256 is fixed. Reject Serpent/Twofish instead of silently ignoring the selected cipher.
 - Mount uses `hdiutil attach -stdinpass`, optionally `-readonly`; unmount detaches the virtual disk without force.
-- macOS VeraCrypt retains the existing cipher names, SHA-512, PIM 0, no keyfiles, and full initialization; it changes only the inner filesystem to exFAT.
+- macOS VeraCrypt retains the existing cipher names, SHA-512, PIM 0, password-or-keyfile authentication, and full initialization; it changes only the inner filesystem to exFAT.
 - Archived Bash is Linux-only and does not implement Apple or macOS workflows.

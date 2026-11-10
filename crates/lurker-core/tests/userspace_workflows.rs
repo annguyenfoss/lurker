@@ -132,6 +132,7 @@ fn create(source: &Path, cipher: CreateCipher, force: bool) -> CommandAction {
         volume_type: VolumeType::Veracrypt,
         cipher,
         passphrase: Some(PASSWORD.into()),
+        keyfile: None,
     })
 }
 fn mount(source: &Path, at: &Path, readonly: bool) -> CommandAction {
@@ -142,6 +143,7 @@ fn mount(source: &Path, at: &Path, readonly: bool) -> CommandAction {
         volume_type: VolumeType::Auto,
         tag: None,
         passphrase: Some(PASSWORD.into()),
+        keyfile: None,
         readonly,
     })
 }

@@ -91,6 +91,7 @@ pub fn build_create_command(
         volume_type,
         cipher,
         passphrase: Some(passphrase.to_string()),
+        keyfile: None,
     })
 }
 
@@ -123,6 +124,7 @@ pub fn build_mount_command(
         tag: None,
         volume_type,
         passphrase: Some(passphrase.to_string()),
+        keyfile: None,
         readonly,
     })
 }
