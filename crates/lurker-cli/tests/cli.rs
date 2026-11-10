@@ -15,7 +15,18 @@ fn help_documents_linux_formats_and_readonly() {
         let out = cli(&args);
         assert!(out.status.success());
         let text = String::from_utf8_lossy(&out.stdout);
-        for word in ["veracrypt", "luks", "serpent", "twofish", "--readonly"] {
+        for word in [
+            "veracrypt",
+            "luks",
+            "serpent",
+            "twofish",
+            "--readonly",
+            "--key-file",
+            "--new-key-file",
+            "keyslots",
+            "add-key",
+            "remove-key",
+        ] {
             assert!(text.contains(word));
         }
     }

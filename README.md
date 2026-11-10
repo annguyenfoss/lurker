@@ -202,11 +202,11 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - Serpent uses the heavier Argon2id profile from `CIPHER.md`.
 - Twofish uses the `CIPHER.md` sector-size tuning and automatically applies the documented open-time perf flags when a Twofish LUKS header is detected.
 - VeraCrypt create supports the same three single-cipher choices and keeps `SHA-512` fixed. Device creation uses the full device size detected by VeraCrypt, with quick format.
-- On Linux, `mount` recognizes LUKS metadata first; other sources are authenticated as VeraCrypt when opening. Encrypted VeraCrypt headers cannot be identified without the passphrase. `unmount` reads the active mapper type. Use `--type` to pin the format.
+- On Linux, `mount` recognizes LUKS metadata first; other sources are authenticated as VeraCrypt when opening. Encrypted VeraCrypt headers cannot be identified without the unlock credential. `unmount` reads the active mapper type. Use `--type` to pin the format.
 - Privileged Linux VeraCrypt mounts use `cryptsetup --type tcrypt --veracrypt`, with the same `lurker_*` mapper naming, active-volume listing, filesystem handling, and cleanup as LUKS. Unprivileged mode uses the file-only userspace helpers.
 - `mount --readonly` opens the mapper and mounts the filesystem read-only. The desktop readonly checkbox does the same.
-- VeraCrypt supports normal password-only volumes with the default PIM. Keyfiles, hidden-volume controls, and custom PIM are not exposed.
-- VeraCrypt passphrases supplied through the helper cannot be empty or contain NUL or line breaks. Leading/trailing spaces and Unicode are preserved.
+- VeraCrypt supports normal volumes with either a password or one keyfile, using the default PIM. Password and keyfile together are deliberately unsupported. Hidden-volume controls and custom PIM are not exposed.
+- Supplied passwords cannot be empty or contain NUL or line breaks. Leading/trailing spaces and Unicode are preserved. VeraCrypt keyfile-only authentication uses an empty native password internally.
 - `-t TAG` is supported for LUKS source-path mount/unmount.
 - VeraCrypt tags are still unsupported.
 - Btrfs volumes are mounted with `compress=zstd`.
@@ -216,6 +216,30 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - The CLI supports interactive terminal prompting; macOS create also confirms the passphrase. Passphrases are passed to crypto tools through terminal input or stdin, never command-line arguments.
 - Privileged creates initially produce root-owned Btrfs directories. After mounting a new personal volume, set its ownership once with `sudo chown "$(id -u):$(id -g)" /your/mountpoint` if needed. Unprivileged creates assign the filesystem to your login user directly.
 - The archived Bash implementation in `legacy/bash-cli/` was updated to match the same three create cipher profiles.
+
+### Credentials and LUKS keyslots
+
+`create` and `mount` accept `--key-file FILE` for LUKS and VeraCrypt. Select an existing, non-empty regular file; its binary contents are used without trimming or text conversion. Without this option, the CLI prompts for a password. Apple disk images retain password authentication.
+
+```bash
+lurker create --type luks --key-file ./vault.key ./vault.img 4
+lurker createvc --key-file ./vault.key ./vault.hc 4
+lurker mount --key-file ./vault.key ./vault.hc /mnt/vault
+```
+
+On Linux, manage independent LUKS credentials with `keyslots`, `add-key`, and `remove-key`. LUKS1 has slots 0–7; LUKS2 has up to 32 slots, numbered 0–31, subject to header space. Each enrolled password or keyfile unlocks independently.
+
+```bash
+lurker keyslots ./vault.img
+lurker add-key ./vault.img --new-key-file ./backup.key  # existing password is prompted
+lurker add-key ./vault.img --key-file ./backup.key     # new password is prompted and confirmed
+lurker add-key ./vault.img --key-file ./backup.key --new-key-file ./second.key
+lurker remove-key ./vault.img --slot 1 --key-file ./second.key
+```
+
+`add-key --slot N` selects a free slot explicitly; omitting it lets cryptsetup choose. Existing slots are never overwritten. `remove-key` requires a credential for a slot you are keeping and refuses to remove the last usable slot. Slot management uses Linux Privileged mode; accessible regular-file headers can be managed by the CLI without elevation or mounting.
+
+VeraCrypt keyfiles are an alternative to a password, not an independent backup slot: a container created with a keyfile requires that keyfile's contents. Lurker does not combine a password with a VeraCrypt keyfile.
 
 ## Verification
 
