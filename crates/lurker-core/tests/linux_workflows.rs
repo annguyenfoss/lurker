@@ -151,6 +151,113 @@ fn unmount(target: &Path, ty: VolumeType, tag: Option<&str>) -> CommandAction {
     })
 }
 
+fn with_keyfile(mut action: CommandAction, keyfile: &Path) -> CommandAction {
+    match &mut action {
+        CommandAction::Create(c) => {
+            c.passphrase = None;
+            c.keyfile = Some(keyfile.into());
+        }
+        CommandAction::Mount(c) => {
+            c.passphrase = None;
+            c.keyfile = Some(keyfile.into());
+        }
+        _ => panic!("expected create or mount"),
+    }
+    action
+}
+
+#[test]
+#[ignore = "requires root, Linux device-mapper, loop devices, cryptsetup, VeraCrypt and btrfs-progs"]
+fn keyfile_round_trips() {
+    let mut sandbox = Sandbox::new();
+    let at = sandbox.path("keyfile mount");
+    fs::create_dir(&at).unwrap();
+    let key = sandbox.path("key, with spaces.bin");
+    let wrong_key = sandbox.path("wrong key.bin");
+    let random = tool("head", &["-c", "256", "/dev/urandom"]);
+    fs::write(&key, random.stdout).unwrap();
+    fs::write(&wrong_key, b"incorrect keyfile").unwrap();
+    fs::set_permissions(&key, fs::Permissions::from_mode(0o600)).unwrap();
+    for ty in [VolumeType::Luks, VolumeType::Veracrypt] {
+        for cipher in [
+            CreateCipher::Aes,
+            CreateCipher::Serpent,
+            CreateCipher::Twofish,
+        ] {
+            for kind in [SourceKind::File, SourceKind::Block] {
+                let name = format!("keyfile-{ty}-{cipher}-{kind:?}");
+                eprintln!("KEYFILE create/unlock/persistence/readonly: {name}");
+                let source = if kind == SourceKind::Block {
+                    sandbox.loop_device(&name)
+                } else {
+                    sandbox.path(&name)
+                };
+                ok(with_keyfile(create(&source, kind, ty, cipher), &key));
+                bad(with_keyfile(
+                    mount(&source, &at, ty, false, None),
+                    &wrong_key,
+                ));
+                bad(mount(&source, &at, ty, false, None)); // password alone cannot unlock
+                ok(with_keyfile(
+                    mount(&source, &at, VolumeType::Auto, false, None),
+                    &key,
+                ));
+                let mapper = sandbox.mapper(&at);
+                fs::write(at.join("persistent"), &name).unwrap();
+                if ty == VolumeType::Luks && cipher == CreateCipher::Aes && kind == SourceKind::File
+                {
+                    // Updating credentials on a mounted volume preserves its data.
+                    ok(CommandAction::Keyslots(KeyslotsCommand {
+                        privilege_mode: PrivilegeMode::Privileged,
+                        source: source.clone(),
+                        operation: KeyslotOperation::Add,
+                        slot: Some(31),
+                        passphrase: None,
+                        keyfile: Some(key.clone()),
+                        new_passphrase: Some(PASSWORD.into()),
+                        new_keyfile: None,
+                    }));
+                    ok(CommandAction::Keyslots(KeyslotsCommand {
+                        privilege_mode: PrivilegeMode::Privileged,
+                        source: source.clone(),
+                        operation: KeyslotOperation::Remove,
+                        slot: Some(0),
+                        passphrase: Some(PASSWORD.into()),
+                        keyfile: None,
+                        new_passphrase: None,
+                        new_keyfile: None,
+                    }));
+                    assert_eq!(fs::read_to_string(at.join("persistent")).unwrap(), name);
+                }
+                ok(unmount(&source, VolumeType::Auto, None));
+                assert!(!mapper.exists());
+                let read = mount(&source, &at, VolumeType::Auto, true, None);
+                let read = if ty == VolumeType::Luks
+                    && cipher == CreateCipher::Aes
+                    && kind == SourceKind::File
+                {
+                    read
+                } else {
+                    with_keyfile(read, &key)
+                };
+                ok(read);
+                let mapper = sandbox.mapper(&at);
+                assert_eq!(fs::read_to_string(at.join("persistent")).unwrap(), name);
+                assert!(fs::write(at.join("forbidden"), b"no").is_err());
+                assert_eq!(
+                    String::from_utf8_lossy(
+                        &tool("blockdev", &["--getro", mapper.to_str().unwrap()]).stdout
+                    )
+                    .trim(),
+                    "1"
+                );
+                ok(unmount(&at, VolumeType::Auto, None));
+                assert!(!mapper.exists());
+            }
+        }
+    }
+}
+
 #[test]
 #[ignore = "requires root, Linux device-mapper, loop devices, cryptsetup, VeraCrypt and btrfs-progs"]
 fn real_linux_workflow_matrix() {

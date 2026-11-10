@@ -11,6 +11,95 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const PASSWORD: &str = "  Userspace 密碼 integration passphrase  ";
+
+fn keyfile_action(mut action: CommandAction, keyfile: &Path) -> CommandAction {
+    match &mut action {
+        CommandAction::Create(c) => {
+            c.passphrase = None;
+            c.keyfile = Some(keyfile.into());
+        }
+        CommandAction::Mount(c) => {
+            c.passphrase = None;
+            c.keyfile = Some(keyfile.into());
+        }
+        _ => panic!("expected create or mount"),
+    }
+    action
+}
+
+#[test]
+#[ignore = "requires /dev/fuse and userspace helpers; run WITHOUT sudo"]
+fn keyfile_only_userspace_workflows() {
+    let f = Fixture::new();
+    let key = f.path("key, with spaces.bin");
+    let wrong = f.path("wrong key");
+    let mut random = [0u8; 256];
+    use std::io::Read;
+    fs::File::open("/dev/urandom")
+        .unwrap()
+        .read_exact(&mut random)
+        .unwrap();
+    fs::write(&key, random).unwrap();
+    fs::write(&wrong, b"wrong keyfile").unwrap();
+    for cipher in [
+        CreateCipher::Aes,
+        CreateCipher::Serpent,
+        CreateCipher::Twofish,
+    ] {
+        let source = f.path(&format!("keyfile-{cipher}.hc"));
+        let at = f.path("keyfile mount");
+        eprintln!("USERSPACE KEYFILE create/unlock/persistence/readonly: {cipher}");
+        ok(keyfile_action(create(&source, cipher, false), &key));
+        bad(keyfile_action(mount(&source, &at, false), &wrong));
+        bad(mount(&source, &at, false));
+        assert!(!at.exists());
+        ok(keyfile_action(mount(&source, &at, false), &key));
+        let volume = f.active(&source);
+        fs::write(at.join("persistent"), b"keyfile userspace data").unwrap();
+        ok(unmount(&source));
+        assert!(!volume.mapper_path.exists());
+        ok(keyfile_action(mount(&source, &at, true), &key));
+        let volume = f.active(&source);
+        assert!(volume.readonly);
+        assert_eq!(
+            fs::read(at.join("persistent")).unwrap(),
+            b"keyfile userspace data"
+        );
+        assert!(fs::write(at.join("forbidden"), b"no").is_err());
+        assert!(fs::OpenOptions::new()
+            .write(true)
+            .open(&volume.mapper_path)
+            .and_then(|mut file| file.write_all(b"x"))
+            .is_err());
+        ok(unmount(&source));
+        // Authenticate the bundled helper's header with stock cryptsetup,
+        // without creating a mapping or requesting administrator privileges.
+        let mut child = Command::new("/usr/bin/cryptsetup")
+            .args([
+                "open",
+                "--type",
+                "tcrypt",
+                "--veracrypt",
+                "--test-passphrase",
+                "--batch-mode",
+                "--key-file",
+            ])
+            .arg(&key)
+            .arg(&source)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(b"\n").unwrap();
+        let result = child.wait_with_output().unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+}
 struct Fixture {
     root: PathBuf,
     old_runtime: Option<std::ffi::OsString>,

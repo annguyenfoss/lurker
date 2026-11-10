@@ -124,6 +124,61 @@ fn bad(command: CommandAction) -> String {
     response.error.unwrap()
 }
 
+#[test]
+#[ignore = "requires native macOS VeraCrypt and its matching FUSE runtime"]
+fn veracrypt_keyfile_only_round_trips() {
+    use std::io::Read;
+    for cipher in [
+        CreateCipher::Aes,
+        CreateCipher::Serpent,
+        CreateCipher::Twofish,
+    ] {
+        let fixture = Fixture::new();
+        let key = fixture.0.join("key, with spaces.bin");
+        let wrong = fixture.0.join("wrong key.bin");
+        let mut random = [0u8; 256];
+        fs::File::open("/dev/urandom")
+            .unwrap()
+            .read_exact(&mut random)
+            .unwrap();
+        fs::write(&key, random).unwrap();
+        fs::write(&wrong, b"wrong keyfile").unwrap();
+        let mut create = fixture.create(VolumeType::Veracrypt, cipher);
+        create.passphrase = None;
+        create.keyfile = Some(key.clone());
+        let source = create.target.clone();
+        ok(CommandAction::Create(create));
+        let keyed_mount = |key: &Path, readonly| {
+            let CommandAction::Mount(mut command) =
+                fixture.mount(&source, PASS, readonly, VolumeType::Auto)
+            else {
+                unreachable!()
+            };
+            command.passphrase = None;
+            command.keyfile = Some(key.into());
+            CommandAction::Mount(command)
+        };
+        bad(keyed_mount(&wrong, false));
+        bad(fixture.mount(&source, PASS, false, VolumeType::Veracrypt));
+        let CommandAction::Mount(mut combined) = keyed_mount(&key, false) else {
+            unreachable!()
+        };
+        combined.passphrase = Some(PASS.into());
+        assert!(bad(CommandAction::Mount(combined)).contains("never both"));
+        ok(keyed_mount(&key, false));
+        let mountpoint = fixture.0.join("mounted vault");
+        fs::write(mountpoint.join("persistent"), b"keyfile-only data").unwrap();
+        ok(unmount(&source));
+        ok(keyed_mount(&key, true));
+        assert_eq!(
+            fs::read(mountpoint.join("persistent")).unwrap(),
+            b"keyfile-only data"
+        );
+        assert!(fs::write(mountpoint.join("forbidden"), b"no").is_err());
+        ok(unmount(&source));
+    }
+}
+
 fn lifecycle(kind: VolumeType, cipher: CreateCipher) {
     eprintln!("Testing {kind}/{cipher}");
     let f = Fixture::new();
