@@ -38,7 +38,7 @@ The frontend runner creates its own independent temporary files and uses a pseud
 | Partitions | Fresh GPT disk/partition; both formats; create/mount/persistence/readonly/unmount; parent disk protected while a child has an active holder |
 | Portable hosts | LUKS file on FAT and VeraCrypt file on exFAT; atomic no-clobber creation and forced replacement; persistence and readonly; secure host permission masks |
 | Frontends | Actual CLI create password/confirmation/open prompts, bare relative filenames, automatic mount, readonly and unmount; helper JSON success, wrong password, missing password and malformed JSON; secrets absent from terminal output/helper logs |
-| Desktop | Live release event loop on isolated Wayland and X11/Xwayland; form-to-command conversions; exact passphrase whitespace preservation; confirmation mismatch; unsupported keyfile auth; software rendering of create/mount/manage views for both formats at 100%, 125% and 150%; text zoom regression |
+| Desktop | Live release event loop on isolated Wayland and X11/Xwayland; form-to-command conversions; exact passphrase whitespace preservation; confirmation mismatch; password/keyfile exclusivity and LUKS credential forms; software rendering of create/mount/manage views for both formats at 100%, 125% and 150%; text zoom regression |
 
 ## Findings fixed
 
@@ -59,7 +59,7 @@ The frontend runner creates its own independent temporary files and uses a pseud
 
 ## Scope and limits
 
-Only Linux x86_64 is validated and declared by the local AUR recipe. Physical hardware is represented by dedicated whole-loop and GPT-partition fixtures; no personal or physical disk is used. Hidden volumes, custom PIM, keyfiles, system-encrypted Windows disks, and unsupported cipher algorithms are outside the exposed product interface. UI rendering is tested headlessly and the real winit/software event loop is smoke-tested in an isolated virtual display; desktop helper operations are tested through their JSON interface with sudo, without requiring an interactive polkit dialog.
+Only Linux x86_64 is validated and declared by the local AUR recipe. Physical hardware is represented by dedicated whole-loop and GPT-partition fixtures; no personal or physical disk is used. Hidden volumes, custom PIM, system-encrypted Windows disks, and unsupported cipher algorithms are outside the exposed product interface. UI rendering is tested headlessly and the real winit/software event loop is smoke-tested in an isolated virtual display; desktop helper operations are tested through their JSON interface with sudo, without requiring an interactive polkit dialog.
 
 LUKS Argon2 profiles retain their configured memory/time costs. The real matrix takes several minutes. Expected negative cases produce busy-unmount or invalid-filesystem messages; the final test process exit status and per-test results determine success.
 
@@ -90,3 +90,36 @@ The newer macOS-support commit `f5f57ad` was integrated before pushing the Linux
 - Upstream macOS backend, installer, platform models, and Slint UI files were preserved. Native macOS operations were not rerun from this Linux host.
 
 Post-integration logs are saved as `dist/validation/rebase-*.log`.
+
+## Credential implementation verification (2026-11-11)
+
+All native operations below used disposable files and loop devices. No physical disk or pre-existing vault was changed.
+
+| Check | Result |
+| --- | --- |
+| `cargo check --workspace` and `cargo test --workspace` | Passed; 56 default tests passed, with 12 native tests explicitly ignored by the default command |
+| Privileged password matrix | All 12 LUKS/VeraCrypt × AES/Serpent/Twofish × file/loop-device cases passed, including persistence, readonly, duplicate/busy guards and cleanup; 489.65 seconds |
+| Privileged keyfile matrix | All 12 equivalent keyfile-only cases passed, including wrong keyfile/password rejection, persistence, crypto/filesystem readonly and mounted LUKS credential addition/removal; 514.61 seconds |
+| Userspace password matrix | All three ciphers passed; 48.91 seconds |
+| Userspace keyfile matrix | All three ciphers passed, including stock cryptsetup header authentication; 138.06 seconds |
+| LUKS1/LUKS2 credential matrix | All four existing/new password/keyfile combinations passed; independent slot authentication, wrong credentials, occupied/inactive slots, authenticated removal and last-slot protection; 380.62 seconds |
+| LUKS slot limits and invalid requests | Full 8-slot and 32-slot headers, version-specific slot bounds, combined credentials, missing files, plaintext sources and last-bound-slot protection with an unbound slot all passed; failed operations preserved header bytes |
+| CLI/helper frontend checks | Real terminal password entry, confirmation mismatch, automatic slot reuse, keyfile enrollment/removal, JSON requests, no password echo/logging, 20 immediate-paste attempts, empty input and cancellation passed |
+| Desktop | Password/keyfile selection, all four credential conversions, secret clearing, old-helper capability rejection and software rendering of credential forms at 80%, 100% and 120% passed |
+| macOS build checks | Core, CLI, helper and their tests cross-checked successfully for `aarch64-apple-darwin`; native macOS runtime cases were added but were not executed on this Linux host |
+
+The terminal checks exposed and fixed a fast-paste echo race: the shared terminal reader now disables echo before writing its prompt. Relative and home-based desktop keyfile paths are resolved before helper elevation.
+
+Additional repeatable commands:
+
+```bash
+cargo test -p lurker-core --test keyslots_native -- --ignored --test-threads=1
+./scripts/test-linux-core.sh keyfile_round_trips
+LURKER_USERSPACE_DIR=/usr/lib/lurker/userspace ./scripts/test-linux-userspace.sh keyfile_only_userspace_workflows
+cargo build -p lurker-cli -p lurker-helper
+python scripts/test-credentials.py target/debug
+python scripts/test-credentials.py target/debug --prompt-only
+cargo check -p lurker-core -p lurker-cli -p lurker-helper --tests --target aarch64-apple-darwin
+```
+
+The installed userspace helpers matched the builder's pinned upstream revisions. After the native runs, a read-only inventory found zero remaining credential-test mounts or loop devices. Native macOS verification requires a Mac with VeraCrypt and its matching FUSE runtime; run the existing `macos_native` suite there, including `veracrypt_keyfile_only_round_trips`.

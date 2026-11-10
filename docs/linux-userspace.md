@@ -35,21 +35,21 @@ Lurker’s Unprivileged route reuses VeraCrypt’s crypto/FUSE implementation, b
 | Updates | Installed VeraCrypt/cryptsetup and host filesystem components | Host FUSE plus bundled, pinned VeraCrypt/LKL helpers, which need maintained revisions and rebuilds |
 | Status | Existing kernel-backed Lurker workflow | Experimental integration with additional native patches and process lifecycle logic |
 
-Both creation routes use the same normal-volume AES/Serpent/Twofish, SHA-512, PIM 0 and no-keyfile profiles, and create Btrfs with zstd mounting. Choosing Unprivileged does not select weaker encryption defaults.
+Both creation routes use the same normal-volume AES/Serpent/Twofish, SHA-512, PIM 0 and password-or-keyfile authentication profiles, and create Btrfs with zstd mounting. Choosing Unprivileged does not select weaker encryption defaults.
 
-The container format is intended to be interchangeable after unmounting, subject to filesystem support and permissions. Tests confirmed that cryptsetup accepts headers/passwords from userspace-created containers using `--test-passphrase`. That check does not prove a full cross-mode filesystem read/write cycle; dedicated mount/write/remount tests in both directions remain useful follow-up work. Never open the same container concurrently through the two routes.
+The container format is intended to be interchangeable after unmounting, subject to filesystem support and permissions. Tests confirmed that cryptsetup accepts both password-only and keyfile-only headers from userspace-created containers using `--test-passphrase`. That check does not prove a full cross-mode filesystem read/write cycle; dedicated mount/write/remount tests in both directions remain useful follow-up work. Never open the same container concurrently through the two routes.
 
 No comparative throughput or latency benchmark has been run. The userspace route adds two FUSE layers and a 192 MiB LKL memory arena per mounted filesystem, plus VeraCrypt buffers. Extra overhead is an architectural expectation, not a measured slowdown.
 
 ## Supported unprivileged operations
 
-- Create normal VeraCrypt file containers with AES, Serpent or Twofish, SHA-512, PIM 0 and no keyfiles. Cipher profiles match the privileged route. Files are fully initialized, protected with mode 0600, and contain Btrfs; minimum size is 128 MiB.
-- Mount existing normal password-only VeraCrypt files, including headers using hashes other than the create default. Validated filesystem drivers are Btrfs, ext4, exFAT, FAT, NTFS3 and XFS. The ext4 driver also supports ext2/3 formats; those variants have not had separate integration runs.
+- Create normal VeraCrypt file containers with AES, Serpent or Twofish, SHA-512, PIM 0 and either a password or one binary keyfile. Cipher profiles match the privileged route. Files are fully initialized, protected with mode 0600, and contain Btrfs; minimum size is 128 MiB.
+- Mount existing normal password- or keyfile-protected VeraCrypt files, including headers using hashes other than the create default. Validated filesystem drivers are Btrfs, ext4, exFAT, FAT, NTFS3 and XFS. The ext4 driver also supports ext2/3 formats; those variants have not had separate integration runs.
 - Read/write, read-only at both layers, Unicode paths and passphrases, preserved spaces, source symlinks, same-directory staged creation, atomic no-clobber publication and forced replacement after successful initialization.
 - Btrfs zstd compression and ordinary file operations, including user ownership, permissions, directories, links, rename, truncate, sparse files, and fsync. The driver uses the login uid inside its userspace kernel; an existing filesystem's stored ownership is not rewritten.
 - Active volume discovery after restarting the desktop/helper, and unmount by source, mountpoint or decrypted image. Busy filesystems and raw images remain open for a later retry. Unmount does not require the crypto or filesystem executables still to be installed.
 
-LUKS, physical-device operations and LUKS tags use Privileged mode. The existing interface still does not expose keyfiles, custom PIM, hidden-volume controls or cipher cascades. Kernel Btrfs ioctls (snapshots, scrub, device management) are not provided by the FUSE filesystem interface.
+LUKS, physical-device operations and LUKS tags use Privileged mode. Keyfile authentication uses an empty native password; combining a password and keyfile is deliberately unsupported. The interface does not expose custom PIM, hidden-volume controls or cipher cascades. Kernel Btrfs ioctls (snapshots, scrub, device management) are not provided by the FUSE filesystem interface.
 
 ## Architecture and privilege boundary
 
@@ -149,3 +149,15 @@ The build script pins VeraCrypt revision `8172bc55f834485f67be271e02c11679814236
   https://veracrypt.io/en/Unencrypted%20Data%20in%20RAM.html
 
 Local implementation references: crates/lurker-core/src/userspace.rs, linux_workflow.rs and workflow.rs; crates/lurker-helper/src/main.rs; apps/lurker-desktop/src/helper.rs; native/linux-userspace/patches; scripts/build-linux-userspace.py; crates/lurker-core/tests/userspace_workflows.rs; scripts/test-linux-frontends.py; scripts/tests/test_linux_userspace_build.py.
+
+## Keyfile verification (2026-11-11)
+
+The `keyfile_only_userspace_workflows` native test passed for AES, Serpent and Twofish using the installed helpers at the same pinned VeraCrypt/LKL revisions as the builder. Each case created a disposable Btrfs container with a binary keyfile whose name contains a comma and spaces, rejected a wrong keyfile and password-only unlock, wrote data, unmounted, remounted read-only, rejected writes at both crypto and filesystem layers, and authenticated the header with stock cryptsetup without a mapper. The run took 138.06 seconds. The existing password matrix also passed for all three ciphers in 48.91 seconds.
+
+Repeat the keyfile cases as the login user, without sudo:
+
+```bash
+LURKER_USERSPACE_DIR=/usr/lib/lurker/userspace ./scripts/test-linux-userspace.sh keyfile_only_userspace_workflows
+```
+
+Use the helper directory produced by the builder when testing a local helper build.

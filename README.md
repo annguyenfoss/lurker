@@ -250,6 +250,12 @@ Current verification target:
 ```bash
 cargo check --workspace --locked
 cargo test --workspace --locked
+# Linux: native keyslot tests on disposable headers, no root needed
+cargo test -p lurker-core --test keyslots_native -- --ignored --test-threads=1
+cargo build -p lurker-cli -p lurker-helper
+python scripts/test-credentials.py target/debug
+# Linux: keyfile create/mount/readonly matrix using disposable loops and files
+./scripts/test-linux-core.sh keyfile_round_trips
 # Linux: run as your normal user after building the userspace helpers
 ./scripts/test-linux-userspace.sh
 # macOS: native create/mount/read-only/remount/error tests using disposable files
