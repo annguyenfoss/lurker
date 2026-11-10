@@ -131,13 +131,21 @@ pub fn build_mount_command(
     })
 }
 
-fn input_path(value: &str) -> PathBuf {
-    if let Some(suffix) = value.strip_prefix("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home).join(suffix);
-        }
+// Resolve typed paths in the desktop session before the helper can elevate
+// and run with a different working directory or HOME.
+fn input_path(value: &str) -> Result<PathBuf, String> {
+    let path = if let Some(suffix) = value.strip_prefix("~/") {
+        PathBuf::from(std::env::var_os("HOME").ok_or("Could not resolve your home directory.")?)
+            .join(suffix)
+    } else {
+        PathBuf::from(value)
+    };
+    if path.is_absolute() {
+        return Ok(path);
     }
-    PathBuf::from(value)
+    std::env::current_dir()
+        .map(|cwd| cwd.join(path))
+        .map_err(|error| format!("Could not resolve the current directory: {error}"))
 }
 
 fn selected_credential(
@@ -152,7 +160,7 @@ fn selected_credential(
         )),
         "key" => Ok((
             None,
-            Some(input_path(required_value("Key file", key_file)?)),
+            Some(input_path(required_value("Key file", key_file)?)?),
         )),
         _ => Err("Choose Passphrase or Key file.".into()),
     }
@@ -176,7 +184,7 @@ pub fn build_keyslots_command(
         "remove" => KeyslotOperation::Remove,
         _ => return Err("Choose List, Add or Remove.".into()),
     };
-    let source = input_path(required_value("LUKS container", source)?);
+    let source = input_path(required_value("LUKS container", source)?)?;
     let mut command = KeyslotsCommand {
         privilege_mode: lurker_core::PrivilegeMode::Privileged,
         source,
@@ -407,7 +415,10 @@ mod tests {
                 && removed.new_passphrase.is_none()
                 && removed.new_keyfile.is_none()
         );
-        assert_eq!(removed.keyfile, Some("remaining.key".into()));
+        assert_eq!(
+            removed.keyfile,
+            Some(std::env::current_dir().unwrap().join("remaining.key"))
+        );
     }
 
     #[test]
