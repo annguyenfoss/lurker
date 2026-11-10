@@ -54,6 +54,7 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 - Linux create uses `btrfs`; macOS Apple images use APFS and VeraCrypt uses exFAT.
 - Linux Btrfs mounts use `compress=zstd`.
 - VeraCrypt tags are unsupported.
+- VeraCrypt authentication stays password-only: do not add password-and-keyfile support. Losing either required credential can lose access to the data; see the authentication decision in `CIPHER.md`.
 - The desktop app never invokes the installed CLI binary.
 - The helper is an implementation detail for desktop privilege escalation.
 - File-backed create uses same-directory temp files, atomic no-clobber publication without force, and atomic rename with force.

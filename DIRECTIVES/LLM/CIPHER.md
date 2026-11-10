@@ -82,6 +82,12 @@ Use this file as the source of truth for create-time cipher policy.
   - `--quick`
   - omit `--size`: VeraCrypt determines the full device size; `--size=max` can fail for device-hosted volumes.
 
+## VeraCrypt Authentication Decision
+
+- Keep VeraCrypt authentication password-only. Do not implement combined password-and-keyfile authentication in the CLI or desktop, for either create or mount, on Linux or macOS.
+- With combined authentication, both the password and the required keyfile contents are needed to unlock the container. Permanently losing either, without a recoverable copy, means losing access to the data; neither can substitute for the other.
+- This is a deliberate practical choice: a keyfile adds another required item to preserve and back up, increasing the risk of accidental loss of access. The omission is intentional, not an implementation backlog item.
+
 ## Linux Privileged VeraCrypt Password Transport
 
 - Cipher, hash, PIM and KDF defaults remain as specified above.
