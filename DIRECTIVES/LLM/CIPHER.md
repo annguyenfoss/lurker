@@ -84,9 +84,9 @@ Use this file as the source of truth for create-time cipher policy.
 
 ## VeraCrypt Authentication Decision
 
-- Keep VeraCrypt authentication password-only. Do not implement combined password-and-keyfile authentication in the CLI or desktop, for either create or mount, on Linux or macOS.
+- Do not implement combined password-and-keyfile authentication in the CLI or desktop, for either create or mount, on Linux or macOS. This decision does not prohibit keyfile-only authentication or mandate password-only authentication.
 - With combined authentication, both the password and the required keyfile contents are needed to unlock the container. Permanently losing either, without a recoverable copy, means losing access to the data; neither can substitute for the other.
-- This is a deliberate practical choice: a keyfile adds another required item to preserve and back up, increasing the risk of accidental loss of access. The omission is intentional, not an implementation backlog item.
+- This is a deliberate practical choice: requiring both a password and a keyfile adds a second required credential to preserve and back up, increasing the risk of accidental loss of access. Omitting combined authentication is intentional, not an implementation backlog item.
 
 ## Linux Privileged VeraCrypt Password Transport
 
