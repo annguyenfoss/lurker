@@ -2,6 +2,8 @@
 
 Research date: 2026-11-12. Platforms: Windows, macOS, Linux, FreeBSD, NetBSD, DragonFly BSD, and OpenBSD. The companion `encryption-methods-matrix.csv` contains the same method records for filtering.
 
+The CSV also records free-integration status, licensing notes and licensing references. Licensing eligibility does not override a method's maintenance or platform-support qualifications.
+
 Lurker can provide useful native encryption management on each OS without requiring a shared format. The native integration paths are BitLocker on Windows, Apple encryption on macOS, LUKS2 on Linux, GELI on FreeBSD, CGD on NetBSD, dm-crypt/LUKS on DragonFly BSD, and softraid CRYPTO on OpenBSD. DragonFly's old bundled cryptsetup requires a separate security/version review before admission. File encryption, encrypted folders, and encrypted backups need different workflows from disk containers.
 
 This inventory covers major general-purpose data-at-rest methods, plus encrypted archives, backups, and specialized file formats that could plausibly fit Lurker. It does not count AES, ChaCha20, KDFs, transport encryption, password managers, or every commercial frontend as separate storage methods. Tomb, SiriKali, Plasma Vault, cryptmount, and systemd-homed manage other backends; they are not additional encryption formats. Age and rage implement one format, as do gocryptfs and cppcryptfs. Separate rows for LUKS1/LUKS2 and EncFS/CryFS generations capture materially different compatibility or maturity.
@@ -52,6 +54,8 @@ These are product assessments, not security certifications. A recent release pro
 | D13 | Self-encrypting drives managed through TCG Opal or Windows encrypted-drive support | N | U | S | U | U | U | U | Optional | S111 S112 S113 |
 
 Third-party readers of BitLocker, APFS, LUKS, and Apple images are not equivalent to an OS-native writable lifecycle. U cells do not establish read/write mounting. Linux libguestfs can expose LUKS through an appliance and FUSE without host-root operation after setup; it is an alternate implementation route for LUKS, not a new format. [S57]
+
+VeraCrypt does not officially support every BSD. Its current list includes FreeBSD x86-64 starting at version 14 and OpenBSD x86-64 starting at version 7.8. NetBSD and DragonFly BSD are not listed; possible unofficial ports must not be advertised as supported without separate validation. [S13]
 
 ### Encrypted directories
 
@@ -209,6 +213,50 @@ These are proposed Lurker priorities. They do not require an OS to read another 
 | DragonFly BSD | Native dm_target_crypt and bundled LUKS tooling, subject to security/version review | vnconfig-backed disk plus the supported LUKS mapping | Mount the encrypted native filesystem at the desired directory; no independent native folder backend admitted | age from DPorts; OpenPGP only with a supported build or verified backports | Validate bundled cryptsetup/header/cipher capabilities and package patch status. Identified scrypt/restic/Kopia ports are unmaintained; do not treat their directory entries as maintained support. |
 | OpenBSD | softraid CRYPTO or RAID1C first | softraid over vnd-backed disk; VeraCrypt on officially supported releases | Use a mounted encrypted filesystem; no fscrypt equivalent admitted | age; OpenPGP or scrypt | bioctl/disklabel privileges, exact device identities, passphrase transport and filesystem support; avoid legacy Blowfish vnd creation. |
 
+## Integration without paid backend licences
+
+Lurker currently declares `GPL-3.0-only` in `Cargo.toml`. Native OS interfaces and separately installed open-source tools can provide a no-paid-backend integration path. This does not make every library directly link-compatible or grant unrestricted binary redistribution. Existing OS licences, eligible editions and hardware still apply; no enterprise licence is required merely because a feature has enterprise management options.
+
+The following fee assessments describe integration through the OS interface or installed backend. They do not establish the right to relicense, embed or bundle every dependency. The broader inventory retains paid products for comparison; they are excluded from this shortlist.
+
+| Methods | Free integration status | Conditions and sources |
+| --- | --- | --- |
+| BitLocker, BitLocker To Go, Device Encryption, EFS | Native on eligible Windows installations | No separate backend/enterprise integration licence. Full BitLocker management and EFS depend on Windows edition and policy; Home Device Encryption is narrower. [S01 S02 S03] |
+| FileVault, APFS encryption, Apple encrypted disk images | Native on macOS | Use OS interfaces such as supported diskutil, hdiutil and FileVault management operations; native authorization and secure-token requirements remain. [S04 S05 S06 S07] |
+| LUKS/dm-crypt, GELI, CGD, softraid, OpenZFS, fscrypt, PEFS | No paid backend licence for the installed-tool/native route | Retain each OS, maintenance and privilege qualification from the matrix. External command integration is distinct from copying or linking implementation code. [S08 S09 S16 S18 S21 S25 S30 S83] |
+| VeraCrypt | No paid backend licence for external-tool integration | Observe its Apache/TrueCrypt-derived licence terms; do not treat it as GPL library code. macOS runtime distribution has separate conditions below. [S133] |
+| gocryptfs/cppcryptfs, securefs, CryFS stable 1.x, rclone crypt | No paid backend licence for installed-tool integration | Preserve component licences and platform limitations. A macOS mounted view can introduce separate runtime conditions; rclone copy/sync encryption does not require a mount runtime. [S31 S32 S34 S39 S89] |
+| Cryptomator CLI and CryptoFS | Free AGPLv3 route, conditional on compliance | A commercial licence is an alternative, not mandatory if the chosen integration satisfies the AGPL. Do not assume a linked combined application can remain GPL-only without evaluating the applicable terms. [S37 S134] |
+| age/rage, GnuPG, OpenSSL CMS, scrypt, current 7-Zip | No paid backend licence for installed-tool integration | Distribution/component licence obligations remain. Use the supported maintained implementation on each OS. [S40 S41 S44 S49 S51 S58] |
+| DiskCryptor | No paid backend licence for installed-tool integration | The maintained fork is GPLv3; driver installation, boot handling and Windows support still need qualification. [S76] |
+| restic, BorgBackup, Kopia | No paid backend licence for local/self-managed storage | Paid storage providers are optional and separate. Do not include unmaintained DragonFly ports as supported merely because the upstream software is free. [S64 S66 S68] |
+| BestCrypt | Paid product; excluded | A commercial container backend, not a no-paid-backend default. [S74] |
+| Current AES Crypt desktop/server product | Paid product; excluded | Current vendor offering is a 30-day trial followed by a perpetual paid licence. The published .aes format and possible other implementations are separate questions; no alternative implementation was qualified here. [S55 S56] |
+| RAR/WinRAR creation backend | Paid product; excluded | Trial use is limited to 40 days, followed by purchase. Free extraction does not provide a free RAR-creation backend. [S131] |
+| Tarsnap service | Paid service; excluded | The service charges for storage and bandwidth. Free client availability does not make the backup service free. [S132] |
+
+### Filesystem runtime licences
+
+| Runtime | Free integration route | Distribution restriction |
+| --- | --- | --- |
+| macFUSE | Work with a separately user-installed runtime under its terms | Its licence prohibits binary bundling with commercial software without prior written permission, including automated download/installation in that context. Do not assume a no-fee bundled commercial installer. [S128] |
+| FUSE-T | Personal use is free; a separately installed compatible runtime is distinct from embedding it | The current site offers a commercial licence for embedding and shipping FUSE-T in a product. That bundled route is outside the no-paid-licence shortlist. [S129] |
+| WinFsp | GPLv3 and its FLOSS exception provide an open-source route | Commercial licensing is an alternative. Lurker's chosen distribution must satisfy the free licence/exception rather than assuming the commercial licence is necessary. [S130] |
+
+### Shortlist by OS without paid backends
+
+| OS | Disk or container | Folder or filesystem | File or archive | Backup |
+| --- | --- | --- | --- | --- |
+| Windows | BitLocker/BitLocker To Go on eligible editions; VeraCrypt; DiskCryptor | EFS on eligible editions; cppcryptfs; securefs; Cryptomator via AGPL; rclone crypt | age/rage; GnuPG; OpenSSL CMS; 7-Zip | restic; Kopia |
+| macOS | FileVault; encrypted APFS; native encrypted disk images; VeraCrypt with a compatible user-installed runtime | securefs; Cryptomator via AGPL; CryFS stable 1.x; rclone crypt, subject to mount-runtime conditions | age/rage; GnuPG; OpenSSL CMS; scrypt; 7-Zip | restic; BorgBackup; Kopia |
+| Linux | LUKS2/dm-crypt; VeraCrypt; plain dm-crypt or Loop-AES for specialized needs | OpenZFS; fscrypt; gocryptfs; securefs; Cryptomator via AGPL; CryFS stable 1.x; rclone crypt | age/rage; GnuPG; OpenSSL CMS; scrypt; 7-Zip | restic; BorgBackup; Kopia |
+| FreeBSD | GELI and GELI file containers; VeraCrypt on supported releases | OpenZFS; PEFS; securefs; rclone crypt | age/rage; GnuPG; OpenSSL CMS; scrypt; 7-Zip | restic; BorgBackup; Kopia |
+| NetBSD | CGD and CGD file containers | rclone crypt | age; GnuPG; OpenSSL CMS; scrypt; 7-Zip | BorgBackup; restic through pkgsrc |
+| DragonFly BSD | Native dm-crypt/LUKS1 and file containers, only after security/version review | rclone crypt through DPorts | age; OpenSSL CMS; 7-Zip, subject to package qualification | No maintained option admitted from the checked ports |
+| OpenBSD | softraid CRYPTO/RAID1C and file containers; VeraCrypt on supported releases | rclone crypt | age; GnuPG; OpenSSL CMS; scrypt; 7-Zip | restic; BorgBackup; Kopia |
+
+This filtered list preserves the earlier runtime qualifications: macOS gocryptfs remains beta, FreeBSD gocryptfs support is basic, and unmaintained DragonFly scrypt/restic/Kopia ports are excluded. SOPS, SQLCipher and git-crypt retain their separate specialized assessments; licensing was not independently audited for those integrations in this follow-up.
+
 ## Implications for Lurker
 
 Keep the shared CLI and desktop behavior in `lurker-core`, with backend-specific operations and capability discovery. Model a backend's capabilities explicitly: create, unlock, lock, encrypt-file, decrypt-file, list, change credential, recover metadata, and manage keys are not universally available or interchangeable. Both frontends should use the same implementation; the desktop should continue using the helper rather than invoking the CLI.
@@ -354,5 +402,12 @@ URLs are primary references inspected during the survey. Current/default manual 
 | S125 | DragonFly restic unmaintained marker | https://github.com/DragonFlyBSD/DPorts/blob/master/sysutils/restic/Makefile.DragonFly |
 | S126 | DragonFly Kopia disabled/unmaintained marker | https://github.com/DragonFlyBSD/DPorts/blob/master/sysutils/kopia/Makefile.DragonFly |
 | S127 | DragonFly scrypt disabled/unmaintained marker | https://github.com/DragonFlyBSD/DPorts/blob/master/security/scrypt/Makefile.DragonFly |
+| S128 | macFUSE licence and commercial bundling restriction | https://github.com/macfuse/macfuse/blob/release/macfuse/LICENSE.txt |
+| S129 | FUSE-T personal-use and commercial embedding/shipping terms | https://www.fuse-t.org/#licensing |
+| S130 | WinFsp GPLv3 and FLOSS exception | https://github.com/winfsp/winfsp/blob/master/License.txt |
+| S131 | RAR and WinRAR trial and purchase terms | https://www.rarlab.com/license.htm |
+| S132 | Tarsnap service pricing | https://www.tarsnap.com/ |
+| S133 | VeraCrypt component and redistribution licence terms | https://github.com/veracrypt/VeraCrypt/blob/master/License.txt |
+| S134 | CryptoFS free AGPL and alternative commercial licensing | https://github.com/cryptomator/cryptofs |
 
 ArchWiki's data-at-rest inventory was used to check coverage, not as the sole authority for an implementation's current support: https://wiki.archlinux.org/title/Data-at-rest_encryption . The older Ubuntu community encrypted-filesystems page now redirects to an archive notice, so it is not current maintenance evidence: https://wiki.ubuntu.com/EncryptedFilesystems .
