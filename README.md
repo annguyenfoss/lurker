@@ -269,7 +269,7 @@ Real Linux tests create fresh `/tmp` images and dedicated loop devices. They nev
 
 ## Arch/AUR Package
 
-The stable `lurker` package recipe in `packaging/aur-release` builds GitHub tag `0.1` as Arch package version `0.1-1`. It includes the CLI, desktop app, internal helper, and pinned userspace VeraCrypt/LKL helpers. All source archives have SHA-256 checksums.
+The stable `lurker` package recipe in `packaging/aur-release` builds GitHub tag `0.1` as Arch package version `0.1-1`. It includes the CLI, desktop app, internal helper, and pinned userspace VeraCrypt/LKL helpers. All source archives have SHA-256 checksums. Package page: https://aur.archlinux.org/packages/lurker
 
 Build and install the release package from this repository:
 
@@ -278,7 +278,13 @@ cd packaging/aur-release
 makepkg -si
 ```
 
-To build without installing, use `makepkg` instead. The stable package conflicts with `lurker-git`; choose one. The release recipe is ready for submission to AUR as `lurker`.
+To build without installing, use `makepkg` instead. The stable package conflicts with `lurker-git`; choose one. To build directly from AUR:
+
+```bash
+git clone https://aur.archlinux.org/lurker.git
+cd lurker
+makepkg -si
+```
 
 The `lurker-git` AUR package builds the latest `main` from https://github.com/annguyenfoss/lurker.git. It includes the CLI, desktop app, internal helper, and pinned userspace VeraCrypt/LKL helpers. Package page: https://aur.archlinux.org/packages/lurker-git
 
