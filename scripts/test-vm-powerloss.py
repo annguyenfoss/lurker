@@ -487,10 +487,11 @@ def guest_setup(args):
         output.flush()
         os.fsync(output.fileno())
     source, mountpoint = directory / "encrypted data", directory / "open data"
+    size_gb = "0.125" if args.backend in ("geli", "cgd", "softraid") else "0.35"
     mountpoint.mkdir(mode=0o700)
     manifest = {"schema": 1, "run": args.run, "cli": str(cli), "source_commit": args.commit,
                 "cli_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(), "backend": args.backend,
-                "cipher": args.cipher, "unprivileged": args.unprivileged, "source": str(source),
+                "cipher": args.cipher, "size_gb": size_gb, "unprivileged": args.unprivileged, "source": str(source),
                 "mountpoint": str(mountpoint), "os": platform.system(), "kernel": platform.release(),
                 "architecture": platform.machine(), "persistent_home_confirmed": True,
                 "mount_table": run(["mount"]), "repair": False}
@@ -499,7 +500,7 @@ def guest_setup(args):
     if args.backend not in ("gocryptfs", "cryfs", "cryptomator", "pefs"):
         if args.backend in ("luks", "luks1", "veracrypt"):
             create += ["--cipher", args.cipher]
-        create += [str(source), "0.35"]
+        create += [str(source), size_gb]
     else:
         create += [str(source)]
     guest_cli(directory, create, secret)
