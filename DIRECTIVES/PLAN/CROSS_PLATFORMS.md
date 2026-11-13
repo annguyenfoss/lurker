@@ -183,6 +183,7 @@ Retain existing same-directory staged file creation, private permissions and ato
 3. Define a common backend build manifest and private component resolver. Migrate the existing pinned Linux helper build without changing crypto behavior.
 4. Add complete release staging and dependency inspection; preserve separate developer Cargo builds.
 5. Update the agent/codebase directives to distinguish system facilities from bundled third-party backends before replacing discovery behavior.
+6. Implement the scripted remote-job workflow in section 8 before expanding manual SSH testing across the VM matrix. Qualify job deployment, result collection and reconnection with a small existing check first.
 
 Exit: current workflows still pass; missing unrelated tools do not block independent backends; stale helpers cannot execute new operations; release artifacts contain identified, reproducibly sourced private components.
 
@@ -264,6 +265,53 @@ Use **five primary OS development VMs and ten total KVM build/functional-test VM
 Develop shared features and the Linux adapter primarily on one Linux distribution, and native adapters on their respective BSDs. Then build and run functional tests on all ten guests for each applicable selected backend. Testing the other Linux distributions means exercising the installed artifacts and operations, not compilation alone. Maintain the same source revision and record each guest's toolchain, dependency and kernel/FUSE versions so failures can be attributed correctly.
 
 The ten guests cover Linux and the four BSDs. macOS remains a separate native Mac build/test target under the approved matrix. BSD CLI/core and desktop qualification remain separate; no guest may be marked fully supported merely because its CLI compiles.
+
+### Scripted remote build and test workflow
+
+Future agents must use repeatable remote jobs with saved results for matrix testing. Avoid reconstructing a test session through many interactive SSH commands or streaming complete compiler/test logs into agent context. Scripts and artifacts are the durable record; the agent normally reads the summary and only the evidence needed to diagnose failures. This section specifies tooling to implement, not tooling already available.
+
+#### Source deployment and script responsibilities
+
+- Use one feature/integration branch and deploy the **same exact Git commit** to every host in a matrix run. Keep OS-specific scripts in that shared revision; do not maintain separate permanent OS branches. Platform fixes return to the shared branch. A changed revision starts a new run; never combine old passing results with a new revision to claim a complete matrix pass.
+- Deploy into isolated remote worktrees/checkouts identified by run ID and commit. Preserve existing remote development trees and uncommitted changes. Fetch the commit or transfer a verified Git bundle/source payload when the guest cannot fetch it; do not copy private SSH credentials into guests for deployment.
+- Add one local coordinator, a common remote runner and small platform adapters. Suggested locations are `scripts/remote-test.py` and `scripts/remote-test/`; final names may follow repository conventions. Share stage execution, timeouts, log capture and result serialization. Adapters provide native build/test commands and OS integration, while Linux distribution metadata supplies package/dependency differences.
+- Keep a host inventory containing SSH alias, OS/distribution, architecture and expected capabilities. Resolve actual host aliases from the environment when implementing it; do not invent hostnames. Keep credentials and mutable run state out of tracked inventory.
+- Separate explicit bootstrap scripts from ordinary test runs. Bootstrap prepares prerequisites according to project toolchain policies. Test jobs check prerequisite versions and report missing components; they do not repeatedly refresh repositories, install packages, alter sudo policy or change the host configuration.
+- Resolve required toolchains explicitly for noninteractive SSH execution. Record the selected executables/versions; do not depend on an interactive shell's incidental PATH or switch to another language installation silently.
+
+#### Test selection and execution
+
+Provide named stages: prerequisite check, source verification, backend build, Rust checks, packaging, installed-artifact tests and cleanup. Each stage has a timeout, exit status and log file. Respect dependencies: a failed build blocks tests requiring its artifact, but does not erase completed evidence.
+
+Use two testing levels:
+
+1. Development checks run the affected backend/adapter tests and relevant regressions on the primary OS VM. Shared core, protocol or build-system changes broaden checks to all affected primary OS targets.
+2. Milestone/release checks build, package and exercise applicable selected backends across all ten guests at one revision. A successful compile alone never substitutes for installed-artifact functional testing. Keep macOS on its separate native runner using the same reporting contract where practical.
+
+Derive backend applicability from the approved matrix and implemented capabilities. Record unsupported combinations as skipped with a reason. A missing prerequisite, unimplemented required operation or unavailable host is blocked/incomplete, not a successful skip. Required tests must actually execute before their target can pass.
+
+Run remote jobs independently of the SSH connection and track them by job ID. Launch once, query status and collect results; reconnecting must not launch a duplicate build. Use a native supervisor or a verified detached runner per OS. Persist stage state and publish final results atomically. A disconnected or crashed runner remains incomplete/unknown until reconciled, never implicitly successful.
+
+Bound concurrency by the KVM host's available CPU, RAM and storage, with per-guest build/test-space checks and serialization of conflicting storage tests. Reuse compiler/dependency caches keyed by target, toolchain, backend revision/patches and relevant build flags. Keep job artifacts separate from reusable caches. Do not rebuild unchanged native dependencies or download them repeatedly without cause.
+
+Timeout/cancellation cleanup targets only the job's verified processes and disposable resources. An ordinary build run must not kill a VM, close unrelated mounts, force unmount or repair filesystems. Abrupt-shutdown/fault-injection suites are explicitly selected runs on disposable test environments, separate from the normal fast suite.
+
+#### Concise results and retained evidence
+
+Each job writes a versioned `result.json`, stage logs and artifact references under its run directory. The coordinator collects the small result files and produces one aggregate JSON report plus a short table. Keep full logs and artifacts in ignored run directories; do not commit generated reports or dump them into chat.
+
+The result contract must include:
+
+- Run/job ID, exact source commit, host alias, OS/release/kernel, architecture and runner schema version.
+- Toolchain, backend and FUSE versions; selected suite, privilege route and relevant inner filesystem.
+- Stage status, duration, exit code, test pass/fail/skip counts and explicit skip/block reasons.
+- Failing stage, a bounded diagnostic excerpt, and locations/digests for logs and built/tested artifacts.
+
+Remote runner stdout should contain a small machine-readable status/result reference. Send verbose tool output to files. The coordinator's default output is one row per host with commit, build/test status, counts, duration and failure/artifact reference. Successful jobs need no log excerpt. For failures, return only the first actionable diagnostic with a configurable cap, initially 40 lines / 8 KiB per failed job; fetch a specific additional stage log only when needed. Disable shell tracing around credentials and never persist secrets in logs or results.
+
+Provide coordinator operations to start, inspect, resume collection and cancel a run by ID, plus retrieve a named stage's diagnostic excerpt. Use bounded/backoff status queries with no repeated unchanged output. Reruns have new job IDs and preserve previous failures; cached results are reusable only for an identical verified run specification and are labeled as reused. The aggregate command exits nonzero for required failures, timeouts, blocked or incomplete targets.
+
+Retain the run manifest, result summary and artifact locations so a later agent can resume from the run ID instead of repeating SSH discovery or rereading whole logs. Apply explicit retention/cleanup to owned old run artifacts, without deleting active worktrees, valuable failure evidence or unrelated files. A release still requires the clean-machine and absent-external-backend checks below; a successful build on a prepared development VM alone does not prove runtime dependency independence.
 
 ### Required checks
 
