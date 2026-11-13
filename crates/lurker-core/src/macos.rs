@@ -9,7 +9,7 @@ use std::ffi::{CString, OsString};
 use std::fs::{self, OpenOptions};
 use std::io::{IsTerminal, Write};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output as ProcessOutput, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -610,6 +610,11 @@ fn publish(temp: &Path, target: &Path, force: bool) -> AppResult<()> {
 }
 
 fn same_path(left: &Path, right: &Path) -> bool {
+    if let (Ok(left), Ok(right)) = (fs::metadata(left), fs::metadata(right)) {
+        if left.dev() == right.dev() && left.ino() == right.ino() {
+            return true;
+        }
+    }
     fs::canonicalize(left).unwrap_or_else(|_| left.into())
         == fs::canonicalize(right).unwrap_or_else(|_| right.into())
 }
@@ -810,6 +815,19 @@ fn detach(volume: &Volume) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn source_identity_includes_hardlink_aliases() {
+        let stage = Staging::new(&std::env::temp_dir()).unwrap();
+        let source = stage.0.join("container");
+        let alias = stage.0.join("hardlink alias");
+        let separate = stage.0.join("copy");
+        fs::write(&source, b"source data").unwrap();
+        fs::hard_link(&source, &alias).unwrap();
+        fs::copy(&source, &separate).unwrap();
+        assert!(same_path(&source, &alias));
+        assert!(!same_path(&source, &separate));
+    }
+
     #[test]
     fn generic_raw_img_is_not_misidentified_as_plaintext() {
         let raw = br#"<plist version="1.0"><dict><key>Class Name</key><string>CRawDiskImage</string><key>Properties</key><dict><key>Partitioned</key><false/></dict></dict></plist>"#;
