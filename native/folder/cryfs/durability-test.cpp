@@ -15,6 +15,10 @@
 #include <stdexcept>
 #include <system_error>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <sstream>
+#include <iomanip>
 
 namespace bf = boost::filesystem;
 using blockstore::ondisk::OnDiskBlockStore2;
@@ -68,6 +72,26 @@ int main(int argc, char** argv) {
     require(failed && *store.load(id) == replacement, "Failed write destroyed committed ciphertext or hid EFBIG");
     require(store.numBlocks() == 1, "Failed write left a temporary block behind");
 
+    // Distinct encrypted blocks can share a prefix directory. Namespace
+    // durability must tolerate concurrent creation/removal in that directory.
+    std::atomic<unsigned int> errors{0};
+    std::vector<std::thread> workers;
+    for (unsigned int worker = 1; worker <= 8; ++worker) {
+      workers.emplace_back([&, worker] {
+        std::ostringstream name;
+        name << "001" << std::hex << std::setw(29) << std::setfill('0') << worker;
+        const auto concurrentId = blockstore::BlockId::FromString(name.str());
+        try {
+          for (unsigned int iteration = 0; iteration < 20; ++iteration) {
+            require(store.tryCreate(concurrentId, filled(256, worker)), "Concurrent create failed");
+            require(store.remove(concurrentId), "Concurrent remove failed");
+          }
+        } catch (const std::exception&) { ++errors; }
+      });
+    }
+    for (auto& worker : workers) worker.join();
+    require(errors == 0 && store.numBlocks() == 1, "Concurrent prefix-directory mutation failed");
+
     if (argc == 3) {
       // Refuse to fill an ordinary host filesystem. A tiny administrator-created
       // tmpfs mounted at this private fixture is the only accepted ENOSPC target.
@@ -91,7 +115,7 @@ int main(int argc, char** argv) {
       require(store.numBlocks() == 1, "ENOSPC left a temporary block behind");
       require(::unlink(filler.c_str()) == 0, "Cannot remove owned tmpfs filler");
     }
-    std::cout << "{\"status\":\"passed\",\"checks\":[\"no-clobber\",\"atomic-replace\",\"short-write-retains-committed-block\",\"temporary-cleanup\"],\"enospc\":"
+    std::cout << "{\"status\":\"passed\",\"checks\":[\"no-clobber\",\"atomic-replace\",\"short-write-retains-committed-block\",\"temporary-cleanup\",\"concurrent-prefix-mutations\"],\"enospc\":"
               << (argc == 3 ? "true" : "false") << "}\n";
     return 0;
   } catch (const std::exception& error) {
