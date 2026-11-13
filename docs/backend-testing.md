@@ -35,8 +35,9 @@ The suite checks create, protection of an existing destination, unlock, Unicode
 and spaces, fsync, atomic rename/truncation, SQLite WAL and integrity, duplicate and aliased-source
 attachment refusal, busy close refusal, close, wrong credentials, reopen and
 persisted contents, and read-only storage. Passwords are generated only in memory
-and sent through a controlling PTY; logs redact credentials and echoing fails the
-suite. The script never supplies sudo/administrator passwords. Native container
+and sent through a controlling PTY only after terminal echo is disabled; missing
+no-echo readiness fails within a bounded wait. Logs redact credentials and echoing
+fails the suite. The script never supplies sudo/administrator passwords. Native container
 suites outside macOS require running the suite with administrator privileges;
 userspace directory engines must run as the login user.
 
@@ -69,48 +70,44 @@ mounts:
 python -m unittest discover -s scripts/tests -p test_backend_conformance.py
 ```
 
-## Captured native CLI evidence
+## Captured packaged CLI evidence
 
-Development run `cli-5d1ec6ec-20261113T203635Z` used exact source
-`5d1ec6ec0de20642b7fad20224cc25f2c1bd75d5`, verified archive transfer and a
-hash-verified CLI copy in private root-owned guest directories. All operations
-used new `/tmp` fixtures. The following 91 cases passed with no skips:
+The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected
+FreeBSD folder runtime is `a16cd18b8462293c670e66803fc4e37fc4a9c59f`. All runs used
+harness `8bf9f0ee0ee31599f00c8244ca547c692712560e` (22 synthetic harness tests passed
+on Arch Linux and all four BSDs). These revision identities are separate.
 
-| Native guest | Backend/profile | Passed cases | CLI SHA-256 prefix |
+| Guest / packaged backend | Runtime | Passed cases | CLI SHA-256 prefix |
 | --- | --- | --- | --- |
-| FreeBSD 15.1-RELEASE-p6 / amd64 | GELI AES; PEFS AES | 13 each | `5eb00ed4d73a9852` |
-| NetBSD 11.1 / amd64 | CGD AES | 13 | `86534dd97bb18c22` |
-| DragonFly 6.4-RELEASE / x86_64 | LUKS1 AES, Serpent, Twofish | 13 each | `3212c803314c6973` |
-| OpenBSD 8.0 / amd64 | softraid CRYPTO | 13 | `6756804932e93a64` |
+| FreeBSD 15.1: VeraCrypt, GELI, PEFS | `76f05fb` | 104 | `30825cbc222980a8` |
+| OpenBSD 8.0: VeraCrypt, softraid CRYPTO | `76f05fb` | 78 | `43ba5ab59c5d13ce` |
+| NetBSD 11.1: CGD | `76f05fb` | 26 | `3b345f237b8c4175` |
+| DragonFly 6.4: LUKS1 | `76f05fb` | 52 | `07b682605ba75122` |
+| FreeBSD 15.1: gocryptfs, UID 1300 | `a16cd18` | 26 | `3fcaf0d86ffd07a3` |
 
-OpenBSD's read-only case exercised **safe rejection**, not read-only support.
-All seven suite result files were reread and their binary hashes and absent
-mounts independently checked after completion. An additional six PEFS CLI
-keyfile commands passed with binary NUL/FF/newline bytes, incorrect-key
-rejection, fsync and reopen persistence; its mount was closed normally.
+All 286 cases passed without skips or backend overrides. VeraCrypt and DragonFly
+LUKS1 covered AES/Serpent/Twofish explicitly plus AES Auto; other formats covered
+explicit selection and Auto. OpenBSD read-only cases verified **safe rejection**,
+not read-only support. All encrypted data used private `/tmp` fixtures; packages
+were installed in administrator-controlled `/var/run` prefixes. Package payload
+hashes were checked before and after tests. No owned mounts, sessions or crypto
+streams remained; temporary FreeBSD FUSE permissions/sysctl were restored exactly.
 
-Controller manifests, full hashes, test scripts and collected results are under
-`/tmp/lurker-bsd-cli-runs/cli-5d1ec6ec-20261113T203635Z/`; guest result paths are
-recorded there. Failed earlier runs remain separate evidence. These are native
-build-artifact tests, **not** clean-machine package, fault-injection or release
-qualification, and they do not establish results for subsequent code revisions.
-The 18 host-independent harness tests also passed on Arch Linux and all four
-BSDs without encryption or mount operations.
+The initial `76f05fb` gocryptfs run failed closed after detaching its filesystem:
+FreeBSD returned ESRCH for an exited process. That failure remains separate;
+`a16cd18` added a native live-to-reaped process regression and passed fresh
+explicit/Auto suites. The BSD native adapters and shared dispatch/model/profile
+sources are unchanged between these runtime revisions; the folder fix is covered
+by its new package tests. Do not present these rows as one identical binary build.
 
-A later **prepared-guest package prototype** used exact source
-`66e8f9c4bee044d0bb0af8d8649118e4b985dc51`, with administrator-owned prefixes
-under `/var/run/lurker-package-66e8f9c-{freebsd,openbsd}/lurker`:
+Full hashes, package manifests and collected result files are under:
 
-| Guest | Packaged CLI cases passed | CLI SHA-256 prefix |
-| --- | --- | --- |
-| FreeBSD | VeraCrypt AES/Serpent/Twofish 39; GELI/PEFS 26; gocryptfs 13 | `d1bb2beb1d640a6c` |
-| OpenBSD | VeraCrypt AES/Serpent/Twofish 39 | `2a0a75adf984dd67` |
+- `/tmp/lurker-bsd-package-runs/pkg-76f05fbd-20261113T230230Z/` (FreeBSD/OpenBSD).
+- `/tmp/lurker-bsd-package-runs/pkg-76f05fbd-20261113T231047Z/` (NetBSD/DragonFly).
+- `/tmp/lurker-bsd-package-runs/pkg-a16cd18b-gocryptfs-20261113T232858Z/` (fixed FreeBSD gocryptfs).
 
-All 117 explicit-format cases passed without backend overrides. Package payload
-hashes were checked before and after execution; no owned mounts, session records
-or listed crypto streams remained. FreeBSD gocryptfs ran as UID 1300; temporary
-`vfs.usermount` and `/dev/fuse` access were restored exactly. Full package proofs
-and results are under `/tmp/lurker-bsd-package-runs/pkg-66e8f9c4-20261113T210122Z/`
-and `pkg-66e8f9c4-20261113T210809Z/`. These prepared-host results do not establish
-clean-machine independence, Auto detection, subsequent alias-guard changes or a
-final common-revision release matrix.
+Earlier development/prototype evidence remains in the `cli-5d1ec6ec` and
+`pkg-66e8f9c4` run directories; closed successful prototype image payloads were
+reclaimed with retained hash/provenance markers. Failed evidence was preserved.
+These prepared-guest checks do not establish clean-machine independence,
+fault-injection, desktop or release-signing qualification.
