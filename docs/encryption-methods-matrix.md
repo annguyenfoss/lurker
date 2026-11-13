@@ -10,33 +10,23 @@ This inventory covers major general-purpose data-at-rest methods, plus encrypted
 
 ## Selected scope and availability (2026-11-14)
 
-✅ selected; ⬜ available but unselected. Selection is intent, not implementation or security approval. age/rage, EncFS, archives, backups, rclone crypt and database/Git-specific encryption are outside the selected scope. Linux scope is LUKS, VeraCrypt, CryFS stable and gocryptfs. The authoritative scope is `../DIRECTIVES/LLM/CIPHER.md`.
-
-Availability: **N** native OS facility; **S** upstream-supported; **P** existing package/port; **E** existing beta/basic platform support; **T** proposed source-porting candidate, not a verified working port; **U** availability/effort unverified; **O** OS-specific facility absent on this OS; **L** existing port explicitly unmaintained/disabled. O does not rule out compatible readers or a major reimplementation; U never means impossible. Porting estimates are separate from security qualification.
+✅ integrated; 🟦 picked for future integration; — outside picked scope, not proof of impossibility. The authoritative scope is `../DIRECTIVES/LLM/CIPHER.md`. Selection does not establish runtime or security qualification.
 
 | Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD |
 | --- | --- | --- | --- | --- | --- | --- |
-| FileVault / native APFS encryption | ⬜ N | O | O | O | O | O |
-| Apple encrypted disk images | ✅ N | U | U | U | U | U |
-| LUKS2 / dm-crypt | U | ✅ N | U | U | U | U |
-| LUKS1 / dm-crypt | U | ⬜ N | U | ⬜ N | U | U |
-| Plain dm-crypt | O | ⬜ N | U | ⬜ N | U | U |
-| VeraCrypt | ✅ S | ✅ S | ✅ S | T | T | ✅ S |
-| age | ⬜ S | ⬜ S | ⬜ S | ⬜ P | ⬜ P | ⬜ P |
-| CryFS stable 1.x | ⬜ S | ✅ S | T | T | T | T |
-| gocryptfs | ✅ E | ✅ S | ✅ E | T | T | T |
-| GELI | O | O | ⬜ N | O | O | O |
-| CGD | O | O | O | O | ⬜ N | O |
-| softraid CRYPTO / RAID1C | O | O | O | O | O | ⬜ N |
-| OpenZFS native encryption | U | ⬜ S | ⬜ N | U | U | U |
-| fscrypt | O | ⬜ N | O | O | O | O |
-| PEFS | O | O | ⬜ P | O | O | O |
-| Cryptomator | ⬜ S | ⬜ S | T | T | T | T |
-| securefs | ⬜ S | ⬜ S | ⬜ S | T | T | T |
-| OpenPGP / GnuPG | ⬜ S | ⬜ S | ⬜ P | ⬜ P | ⬜ P | ⬜ P |
-| OpenSSL CMS | ⬜ S | ⬜ S | ⬜ P | ⬜ P | ⬜ P | ⬜ P |
-| scrypt encrypted-file format | ⬜ P | ⬜ P | ⬜ P | L | ⬜ P | ⬜ P |
-| Loop-AES | O | ⬜ S | O | O | O | O |
+| Apple encrypted disk images | ✅ | — | — | — | — | — |
+| LUKS2 | — | ✅ | — | — | — | — |
+| VeraCrypt | ✅ | ✅ | 🟦 | — | — | 🟦 |
+| CryFS stable 1.x | 🟦 | 🟦 | — | — | — | — |
+| gocryptfs | 🟦 | 🟦 | 🟦 | — | — | — |
+| GELI | — | — | 🟦 | — | — | — |
+| CGD | — | — | — | — | 🟦 | — |
+| softraid CRYPTO / RAID1C | — | — | — | — | — | 🟦 |
+| PEFS | — | — | 🟦 | — | — | — |
+| Cryptomator | 🟦 | 🟦 | — | — | — | — |
+| LUKS1 | — | 🟦 | — | 🟦 | — | — |
+
+The broader availability matrices below retain all research records. EncFS, age/rage, securefs, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, archives, backups, rclone crypt and database/Git-specific encryption remain outside picked scope. LUKS uses dm-crypt internally.
 
 Qualification notes:
 
