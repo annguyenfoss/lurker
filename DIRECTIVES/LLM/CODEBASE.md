@@ -11,9 +11,11 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 
 ## Planned Cross-platform Architecture
 
-Before implementing another platform or bundled backend, read `DIRECTIVES/PLAN/CROSS_PLATFORMS.md`, especially its reuse boundaries and KVM validation topology. The current implementation described below remains Linux/macOS; BSD support and the bundled-backend transition are planned work.
+Before implementing another platform or bundled backend, read `DIRECTIVES/PLAN/CROSS_PLATFORMS.md`, especially its reuse boundaries and KVM validation topology. The established implementation described below is Linux/macOS; BSD adapters and additional backends are being implemented. The selected matrix records scope, not successful native qualification. Keep unfinished or untested pairs labeled accordingly.
 
 Use one shared core and reusable backend integrations with small OS-specific adapters. Share upstream encryption code and backend policy; isolate native mounts, devices, authorization and discovery. All six Linux distributions use the same Linux integration code, with differences handled through packaging and demonstrated tool capabilities. Do not copy entire workflows per OS or reimplement encryption primitives. The plan defines five primary KVM OS development targets and ten build/functional-test guests; macOS is tested separately on a Mac.
+
+Bundled third-party engines replace a separately installed VeraCrypt requirement as their native package is qualified. System facilities remain responsible for kernel crypto, filesystems and native Apple/BSD formats. Elevated code must execute only administrator-controlled backend paths; development backend overrides are unprivileged. macOS FUSE is installed separately. Build/test jobs use isolated `/tmp/lurker-*` directories on the named remote hosts; endeavour may build code but must not run storage tests or touch its installed Lurker sessions.
 
 ## Workspace Map
 
