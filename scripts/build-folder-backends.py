@@ -107,6 +107,18 @@ def go_runtime_notices(src: Path, destination: Path) -> dict[str, str]:
             for path in sorted(destination.rglob("*")) if path.is_file()}
 
 
+def source_notices(src: Path, destination: Path) -> None:
+    # Inspect tracked paths rather than build output; CryFS vendors Crypto++
+    # under its own source pin, outside the Conan dependency graph.
+    names = capture(["git", "ls-files", "-z"], src).split("\0")
+    for name in filter(None, names):
+        relative = Path(name)
+        if relative.name.upper().startswith(("LICENSE", "COPYING", "NOTICE", "PATENTS")):
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            copy_notice(src / relative, target)
+
+
 def source(name: str, cache: Path, log) -> Path:
     url, revision, version = PINS[name]
     path = cache / f"{name}-{revision}"
@@ -172,12 +184,14 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             shutil.copy2(binary, output / name)
             run([str(output / name), "--version"], src, log, env)
             toolchain = capture(["cmake", "--version"], src).splitlines()[0]
-            license_paths = [src / "LICENSE"]
+            license_paths = [src / "LICENSE.txt"]
         license_dir = output / "licenses" / name
         license_dir.mkdir(parents=True, exist_ok=True)
+        if not all(path.is_file() for path in license_paths):
+            raise RuntimeError(f"Required {name} upstream license missing")
         for path in license_paths:
-            if path.is_file():
-                shutil.copy2(path, license_dir / path.name)
+            copy_notice(path, license_dir / path.name)
+        source_notices(src, license_dir / "source")
         # Record Go dependency pins or CryFS Conan recipe/submodule identities.
         dependency_files = [p for p in (src / "go.mod", src / "go.sum", src / "conanfile.py") if p.is_file()]
         for path in dependency_files:
@@ -209,6 +223,8 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
                 "toolchain": toolchain, "sha256": sha256(output / name),
                 "dependencies": {p.name: sha256(p) for p in dependency_files},
                 "dependency_identities": dependencies,
+                "license_files": {str(path.relative_to(license_dir)): sha256(path)
+                                  for path in sorted(license_dir.rglob("*")) if path.is_file()},
                 "native_dependencies": native_dependencies, "log": str(logpath)}
 
 
