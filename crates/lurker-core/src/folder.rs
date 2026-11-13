@@ -151,8 +151,10 @@ struct Identity {
 }
 impl Identity {
     fn read(path: &Path) -> AppResult<Self> {
-        let m =
-            fs::metadata(path).map_err(|e| AppError::io("Cannot inspect directory identity", e))?;
+        Self::read_io(path).map_err(|e| AppError::io("Cannot inspect directory identity", e))
+    }
+    fn read_io(path: &Path) -> std::io::Result<Self> {
+        let m = fs::metadata(path)?;
         Ok(Self {
             device: m.dev(),
             inode: m.ino(),
@@ -280,18 +282,30 @@ fn nonce() -> u128 {
         .as_nanos()
 }
 
-fn process_identity(pid: u32) -> Option<Process> {
+// Distinguish a confirmed exit from an inspection/permission failure. An
+// unreadable process must never authorize recovery of an unreadable mount.
+fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
     #[cfg(target_os = "linux")]
     {
-        let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-        let fields: Vec<_> = stat.rsplit_once(") ")?.1.split_whitespace().collect();
-        if fields.first() == Some(&"Z") {
-            return None;
+        let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(AppError::io("Cannot verify backend process", error)),
+        };
+        let (_, fields) = stat
+            .rsplit_once(") ")
+            .ok_or_else(|| AppError::new("Invalid backend process identity."))?;
+        let fields: Vec<_> = fields.split_whitespace().collect();
+        if matches!(fields.first(), Some(&"Z" | &"X" | &"x")) {
+            return Ok(None);
         }
-        Some(Process {
+        let birth = fields
+            .get(19)
+            .ok_or_else(|| AppError::new("Incomplete backend process identity."))?;
+        Ok(Some(Process {
             pid,
-            birth: fields.get(19)?.to_string(),
-        })
+            birth: birth.to_string(),
+        }))
     }
     #[cfg(target_os = "macos")]
     {
@@ -307,16 +321,24 @@ fn process_identity(pid: u32) -> Option<Process> {
             )
         };
         if result != size as i32 {
-            return None;
+            // kill(pid, 0) performs an existence/permission query, no signal.
+            if unsafe { libc::kill(pid as i32, 0) } == -1
+                && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+            {
+                return Ok(None);
+            }
+            return Err(AppError::new(
+                "Cannot verify native backend process; preserve its session.",
+            ));
         }
         let info = unsafe { info.assume_init() };
         if info.pbi_status == libc::SZOMB {
-            return None;
+            return Ok(None);
         }
-        Some(Process {
+        Ok(Some(Process {
             pid,
             birth: format!("{}:{}", info.pbi_start_tvsec, info.pbi_start_tvusec),
-        })
+        }))
     }
     #[cfg(target_os = "freebsd")]
     {
@@ -338,26 +360,75 @@ fn process_identity(pid: u32) -> Option<Process> {
                 0,
             )
         };
+        if result == 0 && size == 0 {
+            return Ok(None);
+        }
         if result != 0 || size != std::mem::size_of::<libc::kinfo_proc>() {
-            return None;
+            return Err(AppError::new(
+                "Cannot verify native backend process; preserve its session.",
+            ));
         }
         let info = unsafe { info.assume_init() };
-        if info.ki_pid != pid as i32 || info.ki_stat == libc::SZOMB {
-            return None;
+        if info.ki_pid != pid as i32 {
+            return Err(AppError::new(
+                "Native backend process identity changed unexpectedly.",
+            ));
         }
-        Some(Process {
+        if info.ki_stat == libc::SZOMB {
+            return Ok(None);
+        }
+        Ok(Some(Process {
             pid,
             birth: format!("{}:{}", info.ki_start.tv_sec, info.ki_start.tv_usec),
-        })
+        }))
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
     {
         let _ = pid;
-        None // No selected folder backend on the other BSD targets.
+        Err(AppError::new(
+            "No directory backend is selected for this OS.",
+        ))
     }
 }
-fn alive(process: &Process) -> bool {
-    process_identity(process.pid).is_some_and(|p| p.birth == process.birth)
+fn process_identity(pid: u32) -> Option<Process> {
+    process_snapshot(pid).ok().flatten()
+}
+fn alive(process: &Process) -> AppResult<bool> {
+    Ok(process_snapshot(process.pid)?.is_some_and(|p| p.birth == process.birth))
+}
+
+fn validate_directory_identity(
+    expected: &Identity,
+    observed: std::io::Result<Identity>,
+    process_verified_dead: impl FnOnce() -> AppResult<bool>,
+) -> AppResult<()> {
+    match observed {
+        Ok(identity) if &identity == expected => Ok(()),
+        Ok(_) => Err(AppError::new(
+            "Mount directory identity changed; refusing to unmount its replacement.",
+        )),
+        Err(error) if matches!(error.raw_os_error(), Some(libc::EIO | libc::ENOTCONN)) => {
+            if process_verified_dead()? {
+                Ok(())
+            } else {
+                Err(AppError::new(
+                    "Mount directory is unreadable while its backend is live; preserve the session.",
+                ))
+            }
+        }
+        Err(error) => Err(AppError::io("Cannot inspect directory identity", error)),
+    }
+}
+
+fn confirmed_mount_directory<'a>(session: &'a Session, current: &str) -> AppResult<&'a Identity> {
+    if session.mount_identity.as_deref() != Some(current) {
+        return Err(AppError::new(
+            "Mount identity changed or was never confirmed; refusing to unmount an unverified filesystem.",
+        ));
+    }
+    session.mounted_directory.as_ref().ok_or_else(|| {
+        AppError::new("Mount directory identity was never confirmed; preserve the session.")
+    })
 }
 
 fn unescape(value: &str) -> String {
@@ -865,13 +936,16 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output) -> AppResult<()
     }
     let current = mount_identity(&session.mountpoint)?;
     if let Some(ref identity) = current {
-        if session.mount_identity.as_ref() != Some(identity)
-            || session.mounted_directory.as_ref() != Some(&Identity::read(&session.mountpoint)?)
-        {
-            return Err(AppError::new(
-                "Mount identity changed or was never confirmed; refusing to unmount an unverified filesystem.",
-            ));
-        }
+        let expected = confirmed_mount_directory(&session, identity)?;
+        // A confirmed kernel mount ID remains available after a FUSE daemon
+        // dies, although stat of its root returns ENOTCONN/EIO. Recover only
+        // this exact recorded mount after independently proving daemon exit.
+        validate_directory_identity(expected, Identity::read_io(&session.mountpoint), || {
+            let process = session.process.as_ref().ok_or_else(|| {
+                AppError::new("Backend identity is missing; cannot authorize dead-mount recovery.")
+            })?;
+            Ok(!alive(process)?)
+        })?;
         native_unmount(&session.mountpoint)?;
     }
     if mount_identity(&session.mountpoint)?.is_some() {
@@ -887,13 +961,13 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output) -> AppResult<()
         // flush has necessarily finished. gocryptfs/CryFS exit naturally;
         // signalling them here can discard buffered root metadata. The private
         // Java helper uses a shutdown hook and stays alive awaiting a signal.
-        if session.backend == VolumeType::Cryptomator && alive(process) {
+        if session.backend == VolumeType::Cryptomator && alive(process)? {
             unsafe {
                 libc::kill(process.pid as i32, libc::SIGTERM);
             }
         }
         let start = Instant::now();
-        while alive(process) {
+        while alive(process)? {
             if start.elapsed() > Duration::from_secs(15) {
                 return Err(AppError::new(
                     "Filesystem detached but backend has not exited; session retained for retry.",
@@ -915,7 +989,11 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
     let mut result = Vec::new();
     for (dir, s) in runtime.sessions()? {
         let mounted = mount_identity(&s.mountpoint)?.is_some();
-        if mounted || s.process.as_ref().is_some_and(alive) {
+        let running = match s.process.as_ref() {
+            Some(process) => alive(process)?,
+            None => false,
+        };
+        if mounted || running {
             result.push(ActiveVolume {
                 privilege_mode: PrivilegeMode::Unprivileged,
                 source_path: Some(s.source),
@@ -937,6 +1015,87 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dead_fuse_recovery_requires_confirmed_exit_and_only_known_io_errors() {
+        let expected = Identity {
+            device: 1,
+            inode: 2,
+        };
+        for errno in [libc::ENOTCONN, libc::EIO] {
+            assert!(
+                validate_directory_identity(
+                    &expected,
+                    Err(std::io::Error::from_raw_os_error(errno)),
+                    || Ok(true)
+                )
+                .is_ok()
+            );
+            assert!(
+                validate_directory_identity(
+                    &expected,
+                    Err(std::io::Error::from_raw_os_error(errno)),
+                    || Ok(false)
+                )
+                .is_err()
+            );
+            assert!(
+                validate_directory_identity(
+                    &expected,
+                    Err(std::io::Error::from_raw_os_error(errno)),
+                    || Err(AppError::new("process inspection denied"))
+                )
+                .is_err()
+            );
+        }
+        for errno in [libc::EPERM, libc::EACCES, libc::ENOENT] {
+            assert!(
+                validate_directory_identity(
+                    &expected,
+                    Err(std::io::Error::from_raw_os_error(errno)),
+                    || panic!("Permissions cannot use the dead-daemon exception")
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            validate_directory_identity(
+                &expected,
+                Ok(Identity {
+                    device: 1,
+                    inode: 3
+                }),
+                || panic!("Replaced inode cannot use the dead-daemon exception")
+            )
+            .is_err()
+        );
+    }
+    #[test]
+    fn mount_replacement_and_unconfirmed_mounts_cannot_authorize_recovery() {
+        let mut session = Session {
+            schema: SCHEMA,
+            backend: VolumeType::Gocryptfs,
+            source: "source".into(),
+            source_identity: Identity {
+                device: 1,
+                inode: 2,
+            },
+            mountpoint: "mountpoint".into(),
+            readonly: false,
+            mount_identity: Some("confirmed mount".into()),
+            mounted_directory: Some(Identity {
+                device: 3,
+                inode: 4,
+            }),
+            process: None,
+        };
+        assert!(confirmed_mount_directory(&session, "confirmed mount").is_ok());
+        assert!(confirmed_mount_directory(&session, "replacement mount").is_err());
+        session.mount_identity = None;
+        assert!(confirmed_mount_directory(&session, "confirmed mount").is_err());
+        session.mount_identity = Some("confirmed mount".into());
+        session.mounted_directory = None;
+        assert!(confirmed_mount_directory(&session, "confirmed mount").is_err());
+    }
     #[test]
     fn readonly_and_secret_transport_are_backend_specific() {
         let source = Path::new("/tmp/encrypted vault");

@@ -44,6 +44,12 @@ uncertain sessions remain recoverable. Changed mount identities refuse detach;
 reused PIDs refuse signalling. Mount timeout does not kill an uncertain mounted
 filesystem. If a mount appeared after its readiness timeout without a confirmed
 identity, manual native inspection is required. No forced/lazy unmount is used.
+After a daemon exits, a confirmed mount may return ENOTCONN/EIO for stat. Normal
+unmount can recover that case only when the original kernel mount identity still
+matches, its mounted-directory identity was previously confirmed, the source is
+unchanged and native process inspection proves the recorded daemon has exited.
+Permission errors, unknown process state, live daemons and replaced mounts retain
+their sessions rather than relaxing identity checks.
 Boot-time removal of `/tmp` state intentionally prevents speculative recovery of
 unrecognized mounts. Concurrent access from another machine or outside Lurker is
 not coordinated by this local registry.
@@ -58,6 +64,18 @@ These tests do not claim crash/ENOSPC qualification or substitute for native tes
 on each selected platform. CryFS retains its upstream power-loss/full-storage
 limitations. macOS and FreeBSD FUSE and application semantics need independent
 qualification.
+
+`scripts/test-folder-crash.py /path/to/lurker BACKEND... --runtime-tests` is an
+opt-in Linux daemon-crash suite. It writes a FULL/WAL transaction and an atomic
+rename, fsyncs files and the directory, and uses pidfd to SIGKILL only its verified
+recorded daemon. A separate blocked application worker keeps SQLite's writable
+descriptors open until the kill and exits without SQLite cleanup afterwards;
+this avoids SIGBUS on dead FUSE shared-memory mappings while preserving an
+uncheckpointed WAL. The suite then uses ordinary CLI unmount, reopens, verifies
+data/integrity and closes normally. It retains failed fixtures and raw synthetic
+database evidence; it never repairs data or forces detach. It tests daemon death,
+not whole-machine power loss. A passing graceful-close suite cannot substitute
+for these checks, and backend durability failures remain explicit failures.
 
 Upstream references:
 
