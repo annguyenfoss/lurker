@@ -139,3 +139,10 @@ close both succeeded. No test-container repair was requested. The copied guest
 used its normal boot process, which announced background checks of its root
 filesystem. Evidence remains under `/mnt/virt/lurker-fault-b202611140`; the clone
 and its verified isolated network were cleanly stopped after collection.
+
+Native GELI/CGD/softraid fixtures now default to 128 MiB; Linux container fixtures
+use 0.35 GiB. Check the actual persistent root/home free space before installing
+a package or starting a case, especially on the smaller OpenBSD root filesystem.
+The guest manifest records the selected image size and exact runner/credential
+transport digests separately from the immutable product candidate. Directory
+backends take no size and record a null container size.
