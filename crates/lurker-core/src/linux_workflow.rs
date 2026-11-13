@@ -5,7 +5,7 @@ use crate::linux::{
     absolute_path, is_block_device_target, mapper_device_path, mapper_name_for_source,
     read_mountinfo, resolve_umount_target, size_gb_to_mib, source_kind_for_path,
 };
-use crate::linux_source::lock_file_source;
+use crate::linux_source::{lock_file_source, publish_locked_container as publish_container};
 use crate::model::{CreateCipher, SourceKind, VolumeType};
 use crate::output::Output;
 use crate::system::{trim_stdout, AppContext};
@@ -46,7 +46,7 @@ fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> 
         validate_veracrypt_passphrase(command.passphrase.as_deref())?;
     }
     assert_create_target(ctx, &command)?;
-    let _source_guard = if command.source_kind == SourceKind::File && command.target.exists() {
+    let source_guard = if command.source_kind == SourceKind::File && command.target.exists() {
         let source = lock_file_source(&command.target)?;
         assert_file_not_attached(ctx, &source)?;
         Some(source)
@@ -55,8 +55,10 @@ fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> 
     };
     assert_mapper_available(&mapper_name_for_source(&command.target, None)?)?;
     match command.volume_type {
-        VolumeType::Veracrypt => veracrypt_create_device(ctx, &command),
-        VolumeType::Luks | VolumeType::Luks1 => luks_create_device(ctx, &command),
+        VolumeType::Veracrypt => veracrypt_create_device(ctx, &command, source_guard.as_ref()),
+        VolumeType::Luks | VolumeType::Luks1 => {
+            luks_create_device(ctx, &command, source_guard.as_ref())
+        }
         VolumeType::Apple => Err(AppError::new("Apple encrypted disk images require macOS.")),
         VolumeType::Auto => Err(AppError::new(
             "Option --type auto is not valid with create.",
@@ -302,7 +304,11 @@ fn require_passphrase(passphrase: Option<&str>, keyfile: Option<&Path>) -> AppRe
     }
 }
 
-fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResult<()> {
+fn luks_create_device(
+    ctx: &mut AppContext,
+    command: &CreateCommand,
+    existing_source: Option<&File>,
+) -> AppResult<()> {
     require_passphrase(command.passphrase.as_deref(), command.keyfile.as_deref())?;
     let profile = cipher_profile(command.cipher);
     let mapper_name = mapper_name_for_source(&command.target, None)?;
@@ -368,7 +374,7 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
             crypt_close(ctx, &mapper_name)?;
             ctx.clear_cleanup_mapper();
 
-            publish_container(&temp_path, &command.target, command.force)?;
+            publish_container(&temp_path, &command.target, command.force, existing_source)?;
             temp_guard.persist();
         }
         SourceKind::Block => {
@@ -430,7 +436,11 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
     Ok(())
 }
 
-fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResult<()> {
+fn veracrypt_create_device(
+    ctx: &mut AppContext,
+    command: &CreateCommand,
+    existing_source: Option<&File>,
+) -> AppResult<()> {
     require_passphrase(command.passphrase.as_deref(), command.keyfile.as_deref())?;
     let profile = cipher_profile(command.cipher);
     let mapper_name = mapper_name_for_source(&command.target, None)?;
@@ -496,7 +506,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
             crypt_close(ctx, &mapper_name)?;
             ctx.clear_cleanup_mapper();
 
-            publish_container(&temp_path, &command.target, command.force)?;
+            publish_container(&temp_path, &command.target, command.force, existing_source)?;
             temp_guard.persist();
         }
         SourceKind::Block => {
@@ -1602,23 +1612,6 @@ fn command_success(
     Ok(status.success())
 }
 
-fn publish_container(temp: &Path, target: &Path, force: bool) -> AppResult<()> {
-    if force {
-        fs::rename(temp, target)
-    } else {
-        // Atomic no-clobber publication also works on filesystems without hard links.
-        rustix::fs::renameat_with(
-            rustix::fs::CWD,
-            temp,
-            rustix::fs::CWD,
-            target,
-            rustix::fs::RenameFlags::NOREPLACE,
-        )
-        .map_err(io::Error::from)
-    }
-    .map_err(|err| AppError::io(format!("Failed to publish {}", target.display()), err))
-}
-
 fn temp_container_path(target: &Path) -> AppResult<PathBuf> {
     let parent = target
         .parent()
@@ -1836,14 +1829,15 @@ mod tests {
         let target = dir.join("target");
         fs::write(&temp, "new").unwrap();
         fs::write(&target, "original").unwrap();
-        assert!(publish_container(&temp, &target, false).is_err());
+        assert!(publish_container(&temp, &target, false, None).is_err());
         assert_eq!(fs::read_to_string(&target).unwrap(), "original");
-        publish_container(&temp, &target, true).unwrap();
+        let original = lock_file_source(&target).unwrap();
+        publish_container(&temp, &target, true, Some(&original)).unwrap();
         assert_eq!(fs::read_to_string(&target).unwrap(), "new");
         assert!(!temp.exists());
         fs::write(&temp, "another").unwrap();
         fs::remove_file(&target).unwrap();
-        publish_container(&temp, &target, false).unwrap();
+        publish_container(&temp, &target, false, None).unwrap();
         assert_eq!(fs::read_to_string(&target).unwrap(), "another");
         assert!(!temp.exists());
         fs::remove_dir_all(dir).unwrap();

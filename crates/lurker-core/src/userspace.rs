@@ -918,7 +918,7 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
         crate::credentials::ensure_distinct_target(&target, keyfile)?;
     }
     assert_create_target(&target, c.force)?;
-    let _existing_source_guard = if target.exists() {
+    let existing_source_guard = if target.exists() {
         Some(crate::linux_source::lock_file_source(&target)?)
     } else {
         None
@@ -969,19 +969,12 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
         File::open(&temporary)
             .and_then(|f| f.sync_all())
             .map_err(|e| AppError::io("Failed to sync new container", e))?;
-        if c.force {
-            fs::rename(&temporary, &target)
-                .map_err(|e| AppError::io("Failed to publish new container", e))?;
-        } else {
-            rustix::fs::renameat_with(
-                rustix::fs::CWD,
-                &temporary,
-                rustix::fs::CWD,
-                &target,
-                rustix::fs::RenameFlags::NOREPLACE,
-            )
-            .map_err(|e| AppError::io("Failed to publish new container", e.into()))?;
-        }
+        crate::linux_source::publish_locked_container(
+            &temporary,
+            &target,
+            c.force,
+            existing_source_guard.as_ref(),
+        )?;
         Ok(())
     })();
     let mut clean = true;

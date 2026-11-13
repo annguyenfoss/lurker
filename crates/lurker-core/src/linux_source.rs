@@ -32,12 +32,38 @@ pub(crate) fn verify_path_identity(source: &File, path: &Path) -> AppResult<()> 
     let original = source
         .metadata()
         .map_err(|error| AppError::io("Cannot inspect locked container", error))?;
-    let current = fs::metadata(path)
+    let current = fs::symlink_metadata(path)
         .map_err(|error| AppError::io("Container path changed during startup", error))?;
-    if (current.dev(), current.ino()) != (original.dev(), original.ino()) {
+    if !current.is_file() || (current.dev(), current.ino()) != (original.dev(), original.ino()) {
         return Err(AppError::new("Container identity changed during startup."));
     }
     Ok(())
+}
+
+// Force authorizes replacing only the destination inode locked at startup.
+// An initially absent destination always uses atomic no-clobber publication.
+// The identity check protects cooperative Lurker operations; it is not an
+// atomic compare-and-rename against malicious changes to the parent directory.
+pub(crate) fn publish_locked_container(
+    temporary: &Path,
+    target: &Path,
+    force: bool,
+    existing: Option<&File>,
+) -> AppResult<()> {
+    if let Some(existing) = existing.filter(|_| force) {
+        verify_path_identity(existing, target)?;
+        fs::rename(temporary, target)
+    } else {
+        rustix::fs::renameat_with(
+            rustix::fs::CWD,
+            temporary,
+            rustix::fs::CWD,
+            target,
+            rustix::fs::RenameFlags::NOREPLACE,
+        )
+        .map_err(std::io::Error::from)
+    }
+    .map_err(|error| AppError::io(format!("Failed to publish {}", target.display()), error))
 }
 
 #[cfg(test)]
@@ -45,6 +71,77 @@ mod tests {
     use super::*;
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
+
+    fn publication_fixture(
+        name: &str,
+    ) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
+        let root =
+            std::env::temp_dir().join(format!("lurker-publication-{name}-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let target = root.join("target");
+        let temporary = root.join("incoming");
+        fs::write(&temporary, b"new encrypted container").unwrap();
+        (root, target, temporary)
+    }
+
+    #[test]
+    fn forced_create_cannot_replace_a_destination_that_appeared_after_startup() {
+        let (root, target, temporary) = publication_fixture("appeared");
+        // Startup observed no destination. Another creator publishes and mounts
+        // it while this operation is still preparing its incoming container.
+        fs::write(&target, b"another published container").unwrap();
+        let mounted = lock_file_source(&target).unwrap();
+        assert!(publish_locked_container(&temporary, &target, true, None).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"another published container");
+        assert_eq!(fs::read(&temporary).unwrap(), b"new encrypted container");
+        drop(mounted);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn forced_create_preserves_a_replacement_for_the_originally_locked_path() {
+        let (root, target, temporary) = publication_fixture("replaced");
+        fs::write(&target, b"original").unwrap();
+        let original = lock_file_source(&target).unwrap();
+        fs::rename(&target, root.join("retained-original")).unwrap();
+        fs::write(&target, b"external replacement").unwrap();
+        assert!(publish_locked_container(&temporary, &target, true, Some(&original)).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"external replacement");
+        assert!(temporary.exists());
+        drop(original);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn forced_create_replaces_only_the_unchanged_locked_destination() {
+        let (root, target, temporary) = publication_fixture("unchanged");
+        fs::write(&target, b"original").unwrap();
+        let original = lock_file_source(&target).unwrap();
+        assert!(
+            lock_file_source(&target).is_err(),
+            "rival startup must be excluded"
+        );
+        publish_locked_container(&temporary, &target, true, Some(&original)).unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"new encrypted container");
+        assert!(!temporary.exists());
+        drop(original);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_symlink_to_the_locked_inode_cannot_substitute_for_the_destination() {
+        let (root, target, temporary) = publication_fixture("symlink");
+        fs::write(&target, b"original").unwrap();
+        let original = lock_file_source(&target).unwrap();
+        let renamed = root.join("retained-original");
+        fs::rename(&target, &renamed).unwrap();
+        std::os::unix::fs::symlink(&renamed, &target).unwrap();
+        assert!(publish_locked_container(&temporary, &target, true, Some(&original)).is_err());
+        assert!(target.is_symlink());
+        assert_eq!(fs::read(&renamed).unwrap(), b"original");
+        drop(original);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn nonregular_sources_are_rejected_without_blocking_on_a_fifo() {

@@ -103,6 +103,8 @@ An externally delivered `SIGKILL` during kernel startup can leave an attached lo
 
 The private userspace crypto driver holds the same exclusive inode lock for the mounted volume's entire lifetime, including read-only opens. It checks active loop backing identities again **after** taking that lock, closing the kernel-first startup race. Unprivileged startup refuses deleted or inaccessible active loop backing paths when it cannot establish their identity. It does not elevate to bypass that check. Forced replacement also locks an existing destination before staging the new volume.
 
+Forced creation in either Linux route replaces only the unchanged regular-file inode locked at startup. If no destination existed at startup, publication uses atomic no-clobber even with `--force`; a destination appearing during encryption is preserved. Replacing or removing an originally locked path aborts publication. This identity check coordinates cooperative Lurker operations; it does not make check-and-rename atomic against malicious changes to a writable parent directory.
+
 Native bundle protocol 3 is required. Before upgrading a protocol-2 installation, close its existing userspace volumes using the old installed Lurker; already-running old drivers do not acquire the new locks merely because files on disk were updated. Do not kill mounted drivers as an upgrade procedure. This work does not install or replace the production Lurker on endeavour.
 
 ## Unprivileged session safety and recovery
