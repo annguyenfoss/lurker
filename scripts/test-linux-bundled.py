@@ -96,6 +96,7 @@ def main():
                         raise RuntimeError("Readonly filesystem permitted writes")
                     run(["unmount", "--type", kind, mountpoint])
                     opened.remove(mountpoint)
+                    source.unlink()  # Reclaim tmpfs after verified close, before the next case.
                     case["status"] = "passed"
                 except Exception as error:
                     case["error"] = str(error)
