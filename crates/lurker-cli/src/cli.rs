@@ -466,8 +466,10 @@ where
                     "LUKS keyslot management requires Linux Privileged mode.",
                 ));
             }
-            if !matches!(volume_type, VolumeType::Auto | VolumeType::Luks)
-                || create_cipher_explicit
+            if !matches!(
+                volume_type,
+                VolumeType::Auto | VolumeType::Luks | VolumeType::Luks1
+            ) || create_cipher_explicit
                 || force
                 || tag.is_some()
             {
@@ -1019,6 +1021,18 @@ mod tests {
             assert_eq!(c.slot, (verb != "keyslots").then_some(31));
             assert_eq!(c.new_keyfile, (verb == "add-key").then(|| "new".into()));
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn explicit_luks1_is_accepted_for_header_detected_keyslot_actions() {
+        let ParseOutcome::Run(cli) =
+            parse_env_args(["lurker", "keyslots", "--type=luks1", "vault"].map(OsString::from))
+                .unwrap()
+        else {
+            panic!()
+        };
+        assert!(matches!(cli.command, CommandAction::Keyslots(_)));
     }
 
     #[test]
