@@ -177,9 +177,14 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             conan = ["uv", "tool", "run", "--from", "conan==2.32.0", "conan"]
             run(conan + ["profile", "detect", "--exist-ok"], src, log, env)
             lock = ROOT / "native/folder/cryfs/conan.lock"
+            build_options = []
+            if platform.system() == "Linux":
+                # Conan's build-tree paths must never become runtime search
+                # paths in a distributed executable (including empty entries).
+                build_options = ["-c", 'tools.cmake.cmaketoolchain:extra_variables={"CMAKE_SKIP_RPATH":True}']
             run(conan + ["build", ".", "-s", "build_type=Release", "--build=missing",
                          "-o", "&:build_tests=False", "-o", "&:update_checks=False",
-                         "--lockfile", str(lock)], src, log, env)
+                         "--lockfile", str(lock)] + build_options, src, log, env)
             binary = src / "build/Release/src/cryfs-cli/cryfs"
             shutil.copy2(binary, output / name)
             run([str(output / name), "--version"], src, log, env)
@@ -216,6 +221,10 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         if platform.system() == "Linux":
             probe = subprocess.run(["ldd", str(output / name)], capture_output=True, text=True)
             native_dependencies = probe.stdout + probe.stderr
+            if name == "cryfs":
+                dynamic = capture(["readelf", "-d", str(output / name)], src)
+                if "(RPATH)" in dynamic or "(RUNPATH)" in dynamic:
+                    raise RuntimeError("CryFS still embeds runtime search paths; distribution is blocked")
         elif platform.system() == "Darwin":
             native_dependencies = capture(["otool", "-L", str(output / name)], src)
         return {"schema": 1, "backend": name, "source": url, "revision": revision,
