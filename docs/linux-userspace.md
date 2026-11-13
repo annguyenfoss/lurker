@@ -43,7 +43,7 @@ No comparative throughput or latency benchmark has been run. The userspace route
 
 ## Bundled privileged-route creator
 
-The privileged route discovers `lurker-veracrypt-create` beside the application under `backends/` or `userspace/`, then under `/usr/lib/lurker/{backends,userspace}`. It does not search PATH for a separate VeraCrypt application. Normal-user developer runs may set `LURKER_BACKEND_DIR`; root ignores that override. Missing creator disables only VeraCrypt creation, not LUKS or mounting existing VeraCrypt files.
+The privileged route discovers `lurker-veracrypt-create` beside the application under `backends/` or `userspace/`, in the package prefix at `../libexec/lurker/backends`, then under `/usr/lib/lurker/{backends,userspace}`. It does not search PATH for a separate VeraCrypt application. Normal-user developer runs may set `LURKER_BACKEND_DIR`; root ignores that override. Missing creator disables only VeraCrypt creation, not LUKS or mounting existing VeraCrypt files.
 
 The creator is built separately from the same pinned upstream source as the root-refusing userspace helper. Its entry-point whitelist allows only Lurker's create profile arguments, one target and upstream's in-memory build self-test; it rejects mount, formatter, service/elevation and general VeraCrypt operations. Keyfile operands must be canonical absolute paths or the empty password-mode operand, preventing an option from hiding inside a keyfile argument. The existing userspace helper remains unprivileged-only. No cipher primitive is replaced.
 

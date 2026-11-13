@@ -364,6 +364,7 @@ fn creator_candidates(root: bool) -> Vec<PathBuf> {
     if let Ok(executable) = env::current_exe() {
         if let Some(parent) = executable.parent() {
             candidates.push(parent.join("backends/lurker-veracrypt-create"));
+            candidates.push(parent.join("../libexec/lurker/backends/lurker-veracrypt-create"));
             candidates.push(parent.join("userspace/lurker-veracrypt-create"));
         }
     }

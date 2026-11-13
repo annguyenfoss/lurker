@@ -300,6 +300,8 @@ impl Tools {
             if let Ok(exe) = std::env::current_exe() {
                 if let Some(parent) = exe.parent() {
                     paths.push(parent.join("userspace"));
+                    paths.push(parent.join("backends"));
+                    paths.push(parent.join("../libexec/lurker/backends"));
                 }
             }
             paths.push("/usr/lib/lurker/userspace".into());
