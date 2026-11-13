@@ -34,11 +34,12 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def source(name, cache, offline=False):
+def source(name, cache, offline=False, *, patch=None):
     url, digest = SOURCES[name]
     archive = cache / f"{name}-{digest[:16]}.archive"
-    destination = cache / f"{name}-{digest[:16]}"
-    manifest = cache / f"{name}-{digest[:16]}-inputs.json"
+    tag = f"{name}-{digest[:16]}" + (f"-patch-{sha256(patch)[:16]}" if patch else "")
+    destination = cache / tag
+    manifest = cache / f"{tag}-inputs.json"
     cache.mkdir(parents=True, exist_ok=True)
     if not archive.exists():
         if offline:
@@ -64,11 +65,15 @@ def source(name, cache, offline=False):
             if len(entries) != 1 or not entries[0].is_dir():
                 raise RuntimeError(f"Unexpected source archive layout: {name}")
             entries[0].rename(destination)
+            if patch is not None:
+                run("patch", "-p1", "--forward", "--force", "--batch", "-i", Path(patch).resolve(), cwd=destination)
             write_json(manifest, {str(path.relative_to(destination)): sha256(path)
                                  for path in destination.rglob("*") if path.is_file()})
         finally:
             shutil.rmtree(temporary)
     if not manifest.is_file():
+        if patch is not None:
+            raise RuntimeError(f"Unverified patched source cache: {destination}; use a fresh --cache-dir")
         # Also verify caches created before input manifests were introduced;
         # derive expected bytes from the checked archive, never cached sources.
         expected_inputs = {}

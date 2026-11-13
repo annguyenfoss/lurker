@@ -5,6 +5,9 @@ static wxWidgets under `target/`, without installing either application. Source
 archives are SHA-256 checked. The build records target, compiler, SDK, FUSE
 version, source URLs/hashes and staged artifact hashes in `provenance.json`.
 Its text interface uses the existing VeraCrypt profiles and stdin credentials.
+The shared `native/veracrypt/utf8-console.patch` preserves complete Unicode paths
+in libc++ volume listings; its digest and patched input hashes are recorded and
+checked on cache reuse. It changes no encryption or storage format.
 
 Build on a Mac using the user's Rust and Python toolchains, Xcode command-line
 tools, GNU-compatible make and pkg-config. Install FUSE-T separately, including

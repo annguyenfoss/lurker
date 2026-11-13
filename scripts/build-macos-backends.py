@@ -24,31 +24,40 @@ def main():
         parser.error("Build on macOS as the login user, without sudo.")
     if args.jobs < 1:
         parser.error("--jobs must be positive")
-    for tool in ["make", "clang", "xcrun", "pkg-config", "otool", "lipo", "install_name_tool", "codesign"]:
+    for tool in ["make", "clang", "xcrun", "pkg-config", "otool", "lipo", "install_name_tool", "codesign", "patch"]:
         if not shutil.which(tool):
             parser.error(f"Missing build prerequisite: {tool}")
     run("pkg-config", "--exists", "fuse-t")
     fuse_version = run("pkg-config", "--modversion", "fuse-t", capture=True).strip()
     cache = args.cache_dir.resolve()
-    vc, wx = (source(name, cache, args.offline) for name in ["veracrypt", "wxwidgets"])
+    patch = ROOT / "native/veracrypt/utf8-console.patch"
+    vc = source("veracrypt", cache, args.offline, patch=patch)
+    wx = source("wxwidgets", cache, args.offline)
     # Use the supported native Cocoa build with a static wxWidgets dependency;
     # Lurker calls only its text interface. Console-only and reduced GUI builds
     # have incomplete wx feature guards on this Mac toolchain.
-    flags = ["WXSTATIC=FULL", f"WX_ROOT={wx}", "WITHFUSET=1", "LOCAL_DEVELOPMENT_BUILD=true",
+    flags = ["WXSTATIC=FULL", f"WX_ROOT={wx}", f"WX_BUILD_DIR={cache / 'wx-build'}",
+             "WITHFUSET=1", "LOCAL_DEVELOPMENT_BUILD=true",
              "WX_CONFIGURE_EXTRA_FLAGS=--with-regex=builtin"]
     specification = {"schema": 1, "sources": SOURCES, "architecture": platform.machine(),
+                     "patches": {"native/veracrypt/utf8-console.patch": sha256(patch)},
                      "flags": flags, "fuse_t": fuse_version,
                      "sdk": run("xcrun", "--show-sdk-version", capture=True).strip(),
                      "compiler": run("clang", "--version", capture=True).splitlines()[0]}
-    stamp = cache / "build-spec.json"
+    stamp = vc / ".lurker-native-build-spec.json"
     serialized = json.dumps(specification, sort_keys=True)
     if stamp.exists() and stamp.read_text() != serialized:
         raise RuntimeError("Native build inputs changed; use a new --cache-dir to avoid stale objects.")
     stamp.write_text(serialized)
+    wx_specification = {key: specification[key] for key in ["architecture", "flags", "sdk", "compiler"]}
+    wx_specification.update(wxwidgets=SOURCES["wxwidgets"], veracrypt_build_revision=VC_REVISION)
+    wx_serialized = json.dumps(wx_specification, sort_keys=True)
     wx_stamp = cache / "wx-built.json"
+    if wx_stamp.exists() and wx_stamp.read_text() != wx_serialized:
+        raise RuntimeError("wxWidgets build inputs changed; use a new --cache-dir.")
     if not wx_stamp.exists():
         run("make", f"-j{args.jobs}", *flags, "wxbuild", cwd=vc / "src")
-        wx_stamp.write_text(serialized)
+        wx_stamp.write_text(wx_serialized)
     run("make", f"-j{args.jobs}", *flags, cwd=vc / "src")
     output = args.output_dir.resolve()
     # Replace only our generated staging directory after the complete build.

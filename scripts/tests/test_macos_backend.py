@@ -1,6 +1,8 @@
 """Tests for source verification and private Mach-O dependency boundaries."""
 import importlib.util
+import io
 from pathlib import Path
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -26,6 +28,29 @@ class MacBackendTests(unittest.TestCase):
             (cache / f"veracrypt-{digest[:16]}").mkdir()
             with self.assertRaisesRegex(RuntimeError, "checksum mismatch"):
                 backend.source("veracrypt", cache, offline=True)
+
+    def test_approved_patch_has_a_separate_verified_source_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary)
+            archive = cache / "fixture.tar"
+            with tarfile.open(archive, "w") as stream:
+                info = tarfile.TarInfo("project/input.txt")
+                contents = b"original\n"
+                info.size = len(contents)
+                stream.addfile(info, io.BytesIO(contents))
+            digest = backend.sha256(archive)
+            archive.rename(cache / f"fixture-{digest[:16]}.archive")
+            approved_patch = cache / "approved.patch"
+            approved_patch.write_text("--- a/input.txt\n+++ b/input.txt\n@@ -1 +1 @@\n-original\n+approved\n")
+            with patch.dict(backend.SOURCES, {"fixture": ("unused", digest)}):
+                original = backend.source("fixture", cache, offline=True)
+                modified = backend.source("fixture", cache, offline=True, patch=approved_patch)
+                self.assertNotEqual(original, modified)
+                self.assertEqual((original / "input.txt").read_text(), "original\n")
+                self.assertEqual((modified / "input.txt").read_text(), "approved\n")
+                (modified / "input.txt").write_text("unapproved\n")
+                with self.assertRaisesRegex(RuntimeError, "source input changed"):
+                    backend.source("fixture", cache, offline=True, patch=approved_patch)
 
     def test_private_dependency_closure_is_rewritten_and_fuse_stays_external(self):
         with tempfile.TemporaryDirectory() as temporary:
