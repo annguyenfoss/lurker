@@ -5,7 +5,9 @@ use crate::{AppError, AppResult, CreateCipher};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Read;
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::fd::AsRawFd;
+use std::os::raw::{c_int, c_ulong};
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 const VNCONFIG: &str = "/usr/sbin/vnconfig";
@@ -118,44 +120,79 @@ pub(super) fn make_filesystem(device: &str) -> AppResult<()> {
     Ok(())
 }
 
-fn backing_record(output: &str, device: &str) -> Option<(String, u64)> {
-    let name = vnode_name(device).ok()?;
-    let prefix = format!("{name}: covering ");
-    let mut lines = output.lines().filter_map(|line| line.strip_prefix(&prefix));
-    let rest = lines.next()?;
-    if lines.next().is_some() {
-        return None;
+// Native ABI from DragonFly sys/vnioctl.h: dev_t is u32, ino_t is u64,
+// PATH_MAX is 1024, and both unions have u64 size/alignment. Keep these
+// narrow definitions here; they do not model the encryption format.
+#[repr(C)]
+union VnodeDevice {
+    dev: u32,
+    size: u64,
+}
+
+#[repr(C)]
+union VnodeInode {
+    ino: u64,
+    sector_size: c_int,
+}
+
+#[repr(C)]
+struct VnodeUser {
+    unit: c_int,
+    file: [u8; 1024],
+    device: VnodeDevice,
+    inode: VnodeInode,
+}
+
+// _IOWR('F', 6, struct vn_user), sys/ioccom.h. Layout and request were
+// qualified against the installed DragonFly headers; regression tests retain
+// those expected ABI values.
+const VNIOCGET: c_ulong = 0xc0000000
+    | (((std::mem::size_of::<VnodeUser>() as c_ulong) & 0x1fff) << 16)
+    | ((b'F' as c_ulong) << 8)
+    | 6;
+
+unsafe extern "C" {
+    #[link_name = "ioctl"]
+    fn vnode_ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
+}
+
+fn vnode_identity(device: &str) -> AppResult<(u64, u64)> {
+    let name = vnode_name(device)?;
+    let expected_unit = name[2..]
+        .parse::<c_int>()
+        .map_err(|_| AppError::new("DragonFly vnode unit is out of range."))?;
+    let descriptor = File::open(format!("/dev/{name}"))
+        .map_err(|e| AppError::io("Failed to open DragonFly vnode identity", e))?;
+    // All members are integer or byte-array values; zero initializes the unions
+    // as well as padding before the kernel copies the complete structure back.
+    let mut info: VnodeUser = unsafe { std::mem::zeroed() };
+    info.unit = -1; // query this exact descriptor's unit, never another unit
+    // SAFETY: descriptor is live, request encodes the repr(C) buffer's size,
+    // and the writable buffer remains valid for the duration of the ioctl.
+    let result = unsafe { vnode_ioctl(descriptor.as_raw_fd(), VNIOCGET, &mut info) };
+    if result != 0 {
+        return Err(AppError::io(
+            "Failed to query DragonFly vnode identity",
+            std::io::Error::last_os_error(),
+        ));
     }
-    // vnconfig reconstructs the filename from the vnode's namecache. A
-    // later hard-link lookup can change that display name without changing
-    // the attached file. Filesystem device plus inode is the authority.
-    let (_, location) = rest.rsplit_once(" on ")?;
-    let (filesystem, inode) = location.rsplit_once(", inode ")?;
-    if filesystem.is_empty()
-        || !filesystem
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
-        || filesystem == "."
-        || filesystem == ".."
-    {
-        return None;
+    if info.unit != expected_unit || info.file[0] == 0 || info.file.starts_with(b"swap\0") {
+        return Err(AppError::new(
+            "DragonFly vnode is not this attached file; preserving the session.",
+        ));
     }
-    Some((filesystem.to_owned(), inode.trim().parse::<u64>().ok()?))
+    // SAFETY: VNIOCGET succeeded for a file-backed vnode; sys/vnioctl.h
+    // specifies the dev/ino arms for this configuration (not size/secsize).
+    Ok(unsafe { (u64::from(info.device.dev), info.inode.ino) })
 }
 
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
-    let name = vnode_name(device)?;
     let metadata = std::fs::metadata(path)
         .map_err(|e| AppError::io("Failed to inspect DragonFly backing file", e))?;
-    let output = exec(VNCONFIG, &args(&["-l", name]), None)?;
-    let matches = backing_record(&output, device).is_some_and(|(filesystem, inode)| {
-        inode == metadata.ino()
-            && std::fs::metadata(Path::new("/dev").join(filesystem)).is_ok_and(|fs_device| {
-                (fs_device.file_type().is_char_device() || fs_device.file_type().is_block_device())
-                    && fs_device.rdev() == metadata.dev()
-            })
-    });
-    if !matches {
+    // Kernel device/inode identity is independent of reconstructed pathnames
+    // and does not require the backing filesystem to have a /dev entry.
+    let (dev, inode) = vnode_identity(device)?;
+    if !metadata.is_file() || dev != metadata.dev() || inode != metadata.ino() {
         return Err(AppError::new(
             "DragonFly vnode no longer identifies this container; preserving the session.",
         ));
@@ -225,25 +262,12 @@ mod tests {
     }
 
     #[test]
-    fn kernel_backing_identity_uses_filesystem_and_inode_not_cached_alias() {
-        let original = "vn4: covering /tmp/path on disk/container on ad0s1, inode 1234\n";
-        let alias = "vn4: covering /tmp/different hard link on ad0s1, inode 1234\n";
-        assert_eq!(
-            backing_record(original, "/dev/vn4"),
-            Some(("ad0s1".into(), 1234))
-        );
-        assert_eq!(
-            backing_record(original, "/dev/vn4"),
-            backing_record(alias, "/dev/vn4")
-        );
-        assert!(backing_record(original, "/dev/vn5").is_none());
-        assert!(
-            backing_record("vn4: covering /tmp/x on ../ad0s1, inode 1234", "/dev/vn4").is_none()
-        );
-        assert!(
-            backing_record("vn4: covering /tmp/x on /dev/ad0s1, inode 1234", "/dev/vn4").is_none()
-        );
-        assert!(backing_record(&format!("{original}{alias}"), "/dev/vn4").is_none());
+    fn native_vnode_abi_and_key_free_mapping_dependencies() {
+        assert_eq!(std::mem::size_of::<VnodeUser>(), 1048);
+        assert_eq!(std::mem::align_of::<VnodeUser>(), 8);
+        assert_eq!(std::mem::offset_of!(VnodeUser, device), 1032);
+        assert_eq!(std::mem::offset_of!(VnodeUser, inode), 1040);
+        assert_eq!(VNIOCGET, 0xc4184606);
         assert!(dependency_matches(
             "1 dependencies\t: (0, 504430631)\n",
             504432679
