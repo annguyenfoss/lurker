@@ -19,7 +19,8 @@ import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
-PATCH_SHA256 = "1b277bbadd77663d098a40a3cc83ade4febcd0088b92e061d49b2014c772164a"
+PATCH_SHA256 = "ab7d91fca203805dcd4b2708c995416f2acbe2354bd3b0585518a9718a64f730"
+COMMON_PATCH_SHA256 = "3d945f1ed832ffa61d7fb1ab817b36d5b15de858cd864a65ea181567cf6986e0"
 PATCH_TARGET = "src/Main/UserInterface.cpp"
 PINS = {
     "veracrypt": {
@@ -46,31 +47,37 @@ def digest(path):
 
 
 def patched_input(archive):
-    patch = ROOT / "native/bsd-veracrypt/auxiliary-path.patch"
-    if digest(patch) != PATCH_SHA256:
-        raise RuntimeError("BSD auxiliary identity patch failed SHA-256 verification")
-    lines = patch.read_bytes().splitlines(keepends=True)
-    if (lines[0].rstrip() != b"--- a/" + PATCH_TARGET.encode()
-            or lines[1].rstrip() != b"+++ b/" + PATCH_TARGET.encode()
-            or not lines[2].startswith(b"@@ ")
-            or any(not line.startswith((b" ", b"+", b"-", b"@@ ")) for line in lines[3:])):
-        raise RuntimeError("Expected reviewed BSD auxiliary identity patch hunks")
     with tarfile.open(archive) as tar:
         top = tar.getmembers()[0].name.split("/")[0]
         original = tar.extractfile(top + "/" + PATCH_TARGET).read()
-    hunks = []
-    for line in lines[2:]:
-        if line.startswith(b"@@ "):
-            hunks.append([])
-        else:
-            hunks[-1].append(line)
-    for hunk in hunks:
-        before = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"-"))
-        after = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"+"))
-        if original.count(before) != 1:
-            raise RuntimeError("Reviewed BSD auxiliary identity patch does not match pinned upstream")
-        original = original.replace(before, after, 1)
+    for entry in patch_inventory():
+        patch = ROOT / entry["path"]
+        if digest(patch) != entry["sha256"]:
+            raise RuntimeError("BSD private backend patch failed SHA-256 verification")
+        lines = patch.read_bytes().splitlines(keepends=True)
+        if (lines[0].rstrip() != b"--- a/" + PATCH_TARGET.encode()
+                or lines[1].rstrip() != b"+++ b/" + PATCH_TARGET.encode()
+                or not lines[2].startswith(b"@@ ")
+                or any(not line.startswith((b" ", b"+", b"-", b"@@ ")) for line in lines[3:])):
+            raise RuntimeError("Expected reviewed private backend patch hunks")
+        hunks = []
+        for line in lines[2:]:
+            if line.startswith(b"@@ "):
+                hunks.append([])
+            else:
+                hunks[-1].append(line)
+        for hunk in hunks:
+            before = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"-"))
+            after = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"+"))
+            if original.count(before) != 1:
+                raise RuntimeError("Reviewed BSD private backend patch does not match pinned upstream")
+            original = original.replace(before, after, 1)
     return original
+
+
+def patch_inventory():
+    return [{"path": "native/veracrypt/utf8-console.patch", "sha256": COMMON_PATCH_SHA256},
+            {"path": "native/bsd-veracrypt/auxiliary-path.patch", "sha256": PATCH_SHA256}]
 
 
 def prepare(name, cache, offline=False):
@@ -233,7 +240,7 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
         "schema": 1, "backend": "veracrypt", "platform": target,
         "os_release": platform.release(), "architecture": platform.machine(),
         "sources": {name: pin for name, pin in PINS.items() if name != "libiconv" or iconv_source is not None},
-        "patches": [{"path": "native/bsd-veracrypt/auxiliary-path.patch", "sha256": PATCH_SHA256}], "build_options": build_options,
+        "patches": patch_inventory(), "build_options": build_options,
         "version": version, "binary": destination.name, "binary_sha256": digest(destination),
         "private_libraries": private,
         "system_libraries": [p.name for p in dependencies if str(p).startswith(("/lib/", "/usr/lib/", "/usr/libexec/"))],

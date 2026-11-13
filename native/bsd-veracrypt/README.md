@@ -15,9 +15,9 @@ inputs are checked against pinned SHA-256 values before cache reuse. Use
 The reviewed BSD-only `auxiliary-path.patch` adds the private auxiliary mount
 directory to verbose volume metadata. Lurker uses it to verify that the native
 device still backs this volume's FUSE image before cleanup. No encryption or
-format primitive is changed. It also fixes libc++ wide-stream UTF-8 listing
-output so a Unicode path cannot truncate the identity record. The manifest
-records the patch digest.
+format primitive is changed. The shared `native/veracrypt/utf8-console.patch`
+fixes libc++ wide-stream listing output on BSD/macOS so a Unicode path cannot
+truncate the identity record. The manifest records both patch digests.
 
 The staged executable uses upstream's text/stdin interface. It is intended for
 Lurker's trusted, administrator-controlled private backend directory; a normal
