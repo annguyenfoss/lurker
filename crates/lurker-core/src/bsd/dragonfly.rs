@@ -1,11 +1,11 @@
 //! DragonFly's native LUKS1/dm-crypt adapter. The base cryptsetup 1.1.2
 //! interface deliberately receives neither LUKS2 nor Argon2 arguments.
-use super::{args, exec, Credential};
+use super::{Credential, args, exec};
 use crate::{AppError, AppResult, CreateCipher};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Read;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 
 const VNCONFIG: &str = "/usr/sbin/vnconfig";
@@ -118,32 +118,29 @@ pub(super) fn make_filesystem(device: &str) -> AppResult<()> {
     Ok(())
 }
 
-fn backing_matches(output: &str, device: &str, path: &Path, inode: u64) -> bool {
-    let Ok(name) = vnode_name(device) else {
-        return false;
-    };
-    let Some(path) = path.to_str() else {
-        return false;
-    };
-    if path.contains(['\n', '\r']) {
-        return false;
-    }
-    // The filesystem device name is the final " on " field; splitting at
-    // the final delimiter preserves a filename that itself contains " on ".
+fn backing_record(output: &str, device: &str) -> Option<(String, u64)> {
+    let name = vnode_name(device).ok()?;
     let prefix = format!("{name}: covering ");
-    output.lines().any(|line| {
-        let Some(rest) = line.strip_prefix(&prefix) else {
-            return false;
-        };
-        let Some((reported_path, location)) = rest.rsplit_once(" on ") else {
-            return false;
-        };
-        reported_path == path
-            && location
-                .rsplit_once(", inode ")
-                .and_then(|(_, value)| value.trim().parse::<u64>().ok())
-                == Some(inode)
-    })
+    let mut lines = output.lines().filter_map(|line| line.strip_prefix(&prefix));
+    let rest = lines.next()?;
+    if lines.next().is_some() {
+        return None;
+    }
+    // vnconfig reconstructs the filename from the vnode's namecache. A
+    // later hard-link lookup can change that display name without changing
+    // the attached file. Filesystem device plus inode is the authority.
+    let (_, location) = rest.rsplit_once(" on ")?;
+    let (filesystem, inode) = location.rsplit_once(", inode ")?;
+    if filesystem.is_empty()
+        || !filesystem
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
+        || filesystem == "."
+        || filesystem == ".."
+    {
+        return None;
+    }
+    Some((filesystem.to_owned(), inode.trim().parse::<u64>().ok()?))
 }
 
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
@@ -151,7 +148,14 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     let metadata = std::fs::metadata(path)
         .map_err(|e| AppError::io("Failed to inspect DragonFly backing file", e))?;
     let output = exec(VNCONFIG, &args(&["-l", name]), None)?;
-    if !backing_matches(&output, device, path, metadata.ino()) {
+    let matches = backing_record(&output, device).is_some_and(|(filesystem, inode)| {
+        inode == metadata.ino()
+            && std::fs::metadata(Path::new("/dev").join(filesystem)).is_ok_and(|fs_device| {
+                (fs_device.file_type().is_char_device() || fs_device.file_type().is_block_device())
+                    && fs_device.rdev() == metadata.dev()
+            })
+    });
+    if !matches {
         return Err(AppError::new(
             "DragonFly vnode no longer identifies this container; preserving the session.",
         ));
@@ -221,18 +225,25 @@ mod tests {
     }
 
     #[test]
-    fn kernel_backing_identity_requires_exact_path_unit_and_inode() {
-        let output = "vn4: covering /tmp/path on disk/container on ad0s1, inode 1234\n";
-        let path = Path::new("/tmp/path on disk/container");
-        assert!(backing_matches(output, "/dev/vn4", path, 1234));
-        assert!(!backing_matches(output, "/dev/vn5", path, 1234));
-        assert!(!backing_matches(output, "/dev/vn4", path, 1235));
-        assert!(!backing_matches(
-            output,
-            "/dev/vn4",
-            Path::new("/tmp/path"),
-            1234
-        ));
+    fn kernel_backing_identity_uses_filesystem_and_inode_not_cached_alias() {
+        let original = "vn4: covering /tmp/path on disk/container on ad0s1, inode 1234\n";
+        let alias = "vn4: covering /tmp/different hard link on ad0s1, inode 1234\n";
+        assert_eq!(
+            backing_record(original, "/dev/vn4"),
+            Some(("ad0s1".into(), 1234))
+        );
+        assert_eq!(
+            backing_record(original, "/dev/vn4"),
+            backing_record(alias, "/dev/vn4")
+        );
+        assert!(backing_record(original, "/dev/vn5").is_none());
+        assert!(
+            backing_record("vn4: covering /tmp/x on ../ad0s1, inode 1234", "/dev/vn4").is_none()
+        );
+        assert!(
+            backing_record("vn4: covering /tmp/x on /dev/ad0s1, inode 1234", "/dev/vn4").is_none()
+        );
+        assert!(backing_record(&format!("{original}{alias}"), "/dev/vn4").is_none());
         assert!(dependency_matches(
             "1 dependencies\t: (0, 504430631)\n",
             504432679
@@ -245,5 +256,48 @@ mod tests {
             "2 dependencies: (0, 504430631) (0, 42)\n",
             504432679
         ));
+    }
+
+    #[test]
+    #[ignore = "requires root on DragonFly; creates only disposable /tmp vnode files"]
+    fn native_vnode_hardlinks_retain_backing_identity() {
+        use std::os::unix::fs::DirBuilderExt;
+        let root = std::env::temp_dir().join(format!(
+            "lurker-vnode-alias-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&root)
+            .unwrap();
+        let source = root.join("original container");
+        let alias = root.join("source alias");
+        let other = root.join("different container");
+        File::create(&source).unwrap().set_len(1024 * 1024).unwrap();
+        File::create(&other).unwrap().set_len(1024 * 1024).unwrap();
+        std::fs::hard_link(&source, &alias).unwrap();
+        let device = attach_file(&source, false).unwrap();
+        let checked = (|| -> AppResult<()> {
+            verify_backing(&device, &source)?;
+            // Namecache lookups through the alias must not invalidate the
+            // original session, and an unrelated inode must still be rejected.
+            std::fs::metadata(&alias).unwrap();
+            verify_backing(&device, &alias)?;
+            verify_backing(&device, &source)?;
+            if verify_backing(&device, &other).is_ok() {
+                return Err(AppError::new("Accepted a different vnode backing inode."));
+            }
+            Ok(())
+        })();
+        let detached = detach_file(&device);
+        if detached.is_ok() {
+            std::fs::remove_dir_all(&root).unwrap();
+        }
+        detached.unwrap();
+        checked.unwrap();
     }
 }
