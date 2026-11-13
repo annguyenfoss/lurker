@@ -62,6 +62,37 @@ def go_module_notices(src: Path, destination: Path) -> list[dict]:
             for module in modules]
 
 
+def go_runtime_notices(src: Path, destination: Path) -> dict[str, str]:
+    goroot = Path(capture(["go", "env", "GOROOT"], src))
+    # Binary distro packages may relocate the top-level Go license.
+    candidates = [goroot, goroot.parent.parent / "share/licenses/go",
+                  Path("/usr/share/doc/golang-go")]
+    if os.environ.get("LURKER_GO_LICENSE_DIR"):
+        candidates.insert(0, Path(os.environ["LURKER_GO_LICENSE_DIR"]))
+    destination.mkdir(parents=True, exist_ok=True)
+    for directory in candidates:
+        license = next((directory / name for name in ("LICENSE", "LICENSE.txt", "copyright")
+                        if (directory / name).is_file()), None)
+        if license:
+            shutil.copy2(license, destination / "LICENSE")
+            for name in ("PATENTS", "NOTICE", "COPYRIGHT"):
+                if (directory / name).is_file():
+                    shutil.copy2(directory / name, destination / name)
+            break
+    else:
+        raise RuntimeError("Go runtime license missing; set LURKER_GO_LICENSE_DIR to the toolchain's license directory")
+    # The standard library carries separately licensed vendored code. Retaining
+    # all source-tree notices is conservative and avoids dropping a notice when
+    # a Go update changes its internal dependency closure.
+    for path in (goroot / "src").rglob("*"):
+        if path.is_file() and path.name.upper().startswith(("LICENSE", "PATENTS", "NOTICE", "COPYING")):
+            target = destination / path.relative_to(goroot)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+    return {str(path.relative_to(destination)): sha256(path)
+            for path in sorted(destination.rglob("*")) if path.is_file()}
+
+
 def source(name: str, cache: Path, log) -> Path:
     url, revision, version = PINS[name]
     path = cache / f"{name}-{revision}"
@@ -143,6 +174,8 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             dependencies = go_module_notices(src, license_dir / "modules")
             target = {key: capture(["go", "env", key], src) for key in ("GOOS", "GOARCH")}
             (license_dir / "modules.json").write_text(json.dumps(dependencies, indent=2) + "\n")
+            runtime_notices = go_runtime_notices(src, license_dir / "go-runtime")
+            (license_dir / "go-runtime.json").write_text(json.dumps(runtime_notices, indent=2) + "\n")
         else:
             shutil.copy2(ROOT / "native/folder/cryfs/conan.lock", license_dir / "conan.lock")
             dependencies = json.loads((license_dir / "conan.lock").read_text())
