@@ -7,7 +7,8 @@ use super::{args, exec, Credential};
 use crate::{AppError, AppResult, CreateCipher};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 fn device_name<'a>(value: &'a str, prefix: &str) -> AppResult<&'a str> {
@@ -60,50 +61,64 @@ pub(super) fn attach_file(path: &Path, readonly: bool) -> AppResult<String> {
     Ok(device)
 }
 
+// OpenBSD dev/vndioctl.h. This is an OS ABI binding, not a cryptographic
+// implementation. Keep native scalar aliases: dev_t is signed on OpenBSD.
+#[repr(C)]
+struct VndUser {
+    file: [libc::c_char; 1024],
+    unit: libc::c_int,
+    device: libc::dev_t,
+    inode: libc::ino_t,
+}
+
+const VNDIOCGET: libc::c_ulong = 0xc0000000
+    | (((std::mem::size_of::<VndUser>() as libc::c_ulong) & 0x1fff) << 16)
+    | ((b'F' as libc::c_ulong) << 8)
+    | 3;
+
+fn backing_identity_matches(query: &VndUser, unit: i32, device: u64, inode: u64) -> bool {
+    query.unit == unit
+        && (query.device != 0 || query.inode != 0)
+        && query.device as u64 == device
+        && query.inode as u64 == inode
+}
+
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     let name = device_name(device, "vnd")?;
-    let canonical = fs::canonicalize(path).map_err(|e| AppError::io("Resolve vnode source", e))?;
-    let metadata = fs::metadata(&canonical).map_err(|e| AppError::io("Inspect vnode source", e))?;
-    let output = exec("/sbin/vnconfig", &args(&["-l", name]), None)?;
-    let (filesystem_device, inode) = parse_backing(&output, name)?;
-    let filesystem = fs::metadata(format!("/dev/{filesystem_device}"))
-        .map_err(|e| AppError::io("Inspect vnode backing filesystem device", e))?;
-    // The printed covering pathname can change when the same vnode is reached
-    // through a hard link. Kernel-reported filesystem device + inode identify
-    // the backing object without trusting this diagnostic pathname.
-    if !filesystem.file_type().is_block_device()
-        || filesystem.rdev() != metadata.dev()
-        || inode != metadata.ino()
-        || !metadata.is_file()
-    {
+    let unit = name[3..]
+        .parse::<i32>()
+        .map_err(|_| AppError::new("OpenBSD vnode unit is outside its native range."))?;
+    let metadata = fs::metadata(path).map_err(|e| AppError::io("Inspect vnode source", e))?;
+    if !metadata.is_file() {
+        return Err(AppError::new("Vnode backing must be a regular file."));
+    }
+    let control = File::open(format!("/dev/r{name}c"))
+        .map_err(|e| AppError::io("Open vnode identity control", e))?;
+    let mut query = VndUser {
+        file: [0; 1024],
+        unit: -1,
+        device: 0,
+        inode: 0,
+    };
+    // SAFETY: VNDIOCGET receives the exact repr(C) native structure with valid
+    // initialized scalar fields and writable storage. The live descriptor was
+    // opened read-only on the named vnode; this GET command does not configure
+    // or detach storage. -1 asks the kernel for this descriptor's actual unit.
+    if unsafe { libc::ioctl(control.as_raw_fd(), VNDIOCGET, &mut query) } == -1 {
+        return Err(AppError::io(
+            "Read vnode backing identity",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    // Do not trust vnconfig's cached display pathname or a /dev name for the
+    // backing filesystem: hard links can change the displayed path, and FUSE
+    // filesystems do not necessarily have a corresponding block-device node.
+    if !backing_identity_matches(&query, unit, metadata.dev(), metadata.ino()) {
         return Err(AppError::new(
             "Vnode backing identity changed; refusing storage operation.",
         ));
     }
     Ok(())
-}
-
-fn parse_backing(output: &str, name: &str) -> AppResult<(String, u64)> {
-    let prefix = format!("{name}: covering ");
-    let line = output.trim_end().strip_prefix(&prefix).ok_or_else(|| {
-        AppError::new("Vnode is absent or its backing identity cannot be verified.")
-    })?;
-    let (_, rest) = line
-        .rsplit_once(" on ")
-        .ok_or_else(|| AppError::new("Unrecognized vnode identity response."))?;
-    let (filesystem_device, inode) = rest
-        .rsplit_once(", inode ")
-        .ok_or_else(|| AppError::new("Unrecognized vnode inode response."))?;
-    if filesystem_device.is_empty() || !filesystem_device.bytes().all(|b| b.is_ascii_alphanumeric())
-    {
-        return Err(AppError::new(
-            "Unrecognized vnode backing filesystem device.",
-        ));
-    }
-    let inode = inode
-        .parse()
-        .map_err(|_| AppError::new("Unrecognized vnode inode response."))?;
-    Ok((filesystem_device.into(), inode))
 }
 
 pub(super) fn detach_file(device: &str) -> AppResult<()> {
@@ -262,16 +277,7 @@ mod tests {
         }
     }
     #[test]
-    fn identity_parsers_preserve_spaces_and_reject_other_crypto_volumes() {
-        let line = "vnd1: covering /tmp/lurker with on spaces/file.img on sd0a, inode 42\n";
-        assert_eq!(parse_backing(line, "vnd1").unwrap(), ("sd0a".into(), 42));
-        for invalid in ["../sd0a", "/dev/sd0a", "sd0a\nignored", "sd0a, unexpected"] {
-            assert!(parse_backing(
-                &line.replace(" on sd0a,", &format!(" on {invalid},")),
-                "vnd1"
-            )
-            .is_err());
-        }
+    fn mapping_parser_rejects_other_crypto_volumes() {
         let listing = "Volume Status Size Device\nsoftraid0 0 Online 1000 sd2 CRYPTO\n 0 Online 1000 0:0.0 noencl <vnd1a>\n";
         assert!(mapping_matches(listing, "sd2", "vnd1"));
         assert!(!mapping_matches(listing, "sd1", "vnd1"));
@@ -287,6 +293,33 @@ mod tests {
         );
         assert!(parse_attached("softraid0: CRYPTO volume attached as sd2;evil").is_err());
     }
+    #[test]
+    fn native_vnode_query_requires_unit_device_and_inode_identity() {
+        let mut query = VndUser {
+            file: [0; 1024],
+            unit: 2,
+            device: 1024,
+            inode: 42,
+        };
+        assert!(backing_identity_matches(&query, 2, 1024, 42));
+        assert!(!backing_identity_matches(&query, 1, 1024, 42));
+        assert!(!backing_identity_matches(&query, 2, 2048, 42));
+        assert!(!backing_identity_matches(&query, 2, 1024, 43));
+        query.device = 0;
+        query.inode = 0;
+        assert!(!backing_identity_matches(&query, 2, 0, 0));
+    }
+
+    #[cfg(all(target_os = "openbsd", target_pointer_width = "64"))]
+    #[test]
+    fn native_vnode_query_matches_qualified_openbsd_header_abi() {
+        assert_eq!(std::mem::size_of::<VndUser>(), 1040);
+        assert_eq!(std::mem::offset_of!(VndUser, unit), 1024);
+        assert_eq!(std::mem::offset_of!(VndUser, device), 1028);
+        assert_eq!(std::mem::offset_of!(VndUser, inode), 1032);
+        assert_eq!(VNDIOCGET, 0xc4104603);
+    }
+
     #[test]
     fn incomplete_or_other_metadata_cannot_trigger_initialization_on_unlock() {
         let mut header = [0u8; 56];
