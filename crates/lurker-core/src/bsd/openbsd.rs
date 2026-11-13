@@ -7,7 +7,7 @@ use super::{args, exec, Credential};
 use crate::{AppError, AppResult, CreateCipher};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 
 fn device_name<'a>(value: &'a str, prefix: &str) -> AppResult<&'a str> {
@@ -65,8 +65,17 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     let canonical = fs::canonicalize(path).map_err(|e| AppError::io("Resolve vnode source", e))?;
     let metadata = fs::metadata(&canonical).map_err(|e| AppError::io("Inspect vnode source", e))?;
     let output = exec("/sbin/vnconfig", &args(&["-l", name]), None)?;
-    let (covered, inode) = parse_backing(&output, name)?;
-    if covered != canonical || inode != metadata.ino() || !metadata.is_file() {
+    let (filesystem_device, inode) = parse_backing(&output, name)?;
+    let filesystem = fs::metadata(format!("/dev/{filesystem_device}"))
+        .map_err(|e| AppError::io("Inspect vnode backing filesystem device", e))?;
+    // The printed covering pathname can change when the same vnode is reached
+    // through a hard link. Kernel-reported filesystem device + inode identify
+    // the backing object without trusting this diagnostic pathname.
+    if !filesystem.file_type().is_block_device()
+        || filesystem.rdev() != metadata.dev()
+        || inode != metadata.ino()
+        || !metadata.is_file()
+    {
         return Err(AppError::new(
             "Vnode backing identity changed; refusing storage operation.",
         ));
@@ -74,19 +83,27 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-fn parse_backing(output: &str, name: &str) -> AppResult<(std::path::PathBuf, u64)> {
+fn parse_backing(output: &str, name: &str) -> AppResult<(String, u64)> {
     let prefix = format!("{name}: covering ");
     let line = output.trim_end().strip_prefix(&prefix).ok_or_else(|| {
         AppError::new("Vnode is absent or its backing identity cannot be verified.")
     })?;
-    let (path, rest) = line
+    let (_, rest) = line
         .rsplit_once(" on ")
         .ok_or_else(|| AppError::new("Unrecognized vnode identity response."))?;
-    let inode = rest
+    let (filesystem_device, inode) = rest
         .rsplit_once(", inode ")
-        .and_then(|(_, n)| n.parse().ok())
         .ok_or_else(|| AppError::new("Unrecognized vnode inode response."))?;
-    Ok((path.into(), inode))
+    if filesystem_device.is_empty() || !filesystem_device.bytes().all(|b| b.is_ascii_alphanumeric())
+    {
+        return Err(AppError::new(
+            "Unrecognized vnode backing filesystem device.",
+        ));
+    }
+    let inode = inode
+        .parse()
+        .map_err(|_| AppError::new("Unrecognized vnode inode response."))?;
+    Ok((filesystem_device.into(), inode))
 }
 
 pub(super) fn detach_file(device: &str) -> AppResult<()> {
@@ -247,10 +264,14 @@ mod tests {
     #[test]
     fn identity_parsers_preserve_spaces_and_reject_other_crypto_volumes() {
         let line = "vnd1: covering /tmp/lurker with on spaces/file.img on sd0a, inode 42\n";
-        assert_eq!(
-            parse_backing(line, "vnd1").unwrap(),
-            ("/tmp/lurker with on spaces/file.img".into(), 42)
-        );
+        assert_eq!(parse_backing(line, "vnd1").unwrap(), ("sd0a".into(), 42));
+        for invalid in ["../sd0a", "/dev/sd0a", "sd0a\nignored", "sd0a, unexpected"] {
+            assert!(parse_backing(
+                &line.replace(" on sd0a,", &format!(" on {invalid},")),
+                "vnd1"
+            )
+            .is_err());
+        }
         let listing = "Volume Status Size Device\nsoftraid0 0 Online 1000 sd2 CRYPTO\n 0 Online 1000 0:0.0 noencl <vnd1a>\n";
         assert!(mapping_matches(listing, "sd2", "vnd1"));
         assert!(!mapping_matches(listing, "sd1", "vnd1"));
@@ -277,6 +298,41 @@ mod tests {
         assert!(is_crypto_header(&header));
         header[52] ^= 1;
         assert!(!is_crypto_header(&header));
+    }
+
+    /// A hard-link alias is the same object, while a reused vnode number is not.
+    #[cfg(target_os = "openbsd")]
+    #[test]
+    #[ignore = "requires root and a disposable native OpenBSD test host"]
+    fn native_backing_identity_accepts_hardlinks_and_rejects_reused_vnodes() {
+        assert_eq!(crate::effective_uid(), 0);
+        let root =
+            std::env::temp_dir().join(format!("lurker-softraid-identity-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("source.img");
+        let alias = root.join("hardlink alias.img");
+        let replacement = root.join("replacement.img");
+        for path in [&source, &replacement] {
+            let file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+                .unwrap();
+            file.set_len(32 * 1024 * 1024).unwrap();
+        }
+        fs::hard_link(&source, &alias).unwrap();
+        let device = attach_file(&source, false).unwrap();
+        verify_backing(&device, &alias).unwrap();
+        assert!(verify_backing(&device, &replacement).is_err());
+        verify_backing(&device, &source).unwrap();
+        detach_file(&device).unwrap();
+        let next_device = attach_file(&replacement, false).unwrap();
+        // Probe the actual newly allocated unit, which may reuse the old name.
+        // Its new inode must fail the old source's ownership check either way.
+        assert!(verify_backing(&next_device, &source).is_err());
+        verify_backing(&next_device, &replacement).unwrap();
+        detach_file(&next_device).unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     /// Opt in as root on the OpenBSD test guest. All storage belongs to this
