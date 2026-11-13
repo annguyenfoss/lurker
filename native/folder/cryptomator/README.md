@@ -17,7 +17,7 @@ unlock where the Java API permits; this does not promise that the JVM has no
 temporary copies. Plaintext is accessible to processes running as the user while
 mounted.
 
-Build with JDK 25 and Maven (build prerequisites only):
+Build with a full JDK 25 or later (including `jmods`) and Maven (build prerequisites only):
 
 ```sh
 python scripts/build-cryptomator.py --java-home /path/to/jdk25 --maven /path/to/mvn
@@ -67,4 +67,11 @@ retains a concise result with evidence. As with ordinary SQLite WAL databases,
 read-only access may need existing shared-memory files or SQLite immutable mode;
 the smoke suite uses immutable mode only after the sole writable connection has
 closed/checkpointed. This is not a claim of concurrent-writer or crash safety.
-macOS native qualification is still pending.
+macOS arm64 builds and the two CryptoFS-level native integration tests pass using
+a private reduced Java 27 runtime. macFUSE is absent on the available Mac, so its
+mounted lifecycle remains unqualified. An experiment using the upstream FUSE-T
+provider with FUSE-T 1.2.9 mounted and wrote files but failed the SQLite WAL check
+with a disk I/O error. FUSE-T is consequently not enabled; do not bypass that
+decision with library symlinks. Signing/notarization of a Mac package must account
+for the bundled JVM's JIT and external native FUSE loading, with appropriately
+scoped Java entitlements; an unsigned build is not a release package.

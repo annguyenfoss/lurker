@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build Lurker's private Cryptomator module and reduced, target-native Java runtime.
 
-JDK 25 and Maven are build prerequisites only. Nothing is installed on the host.
+JDK 25+ and Maven are build prerequisites only. Nothing is installed on the host.
 Runtime artifacts must match the reviewed dependency lock before publication.
 """
 from __future__ import annotations
@@ -46,6 +46,8 @@ def main() -> None:
     for tool in ("java", "javac", "jlink"):
         if not (java_home / "bin" / tool).is_file():
             raise SystemExit(f"JDK tool missing: {tool}")
+    if not (java_home / "jmods/java.base.jmod").is_file():
+        raise SystemExit("A full build JDK with jmods is required; an IDE runtime is insufficient")
     maven = shutil.which(args.maven)
     if not maven:
         raise SystemExit("Maven build prerequisite missing")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in packaged-backend smoke test. Run on a dedicated Linux test guest only."""
+"""Opt-in packaged-backend smoke test. Run on a dedicated Linux/macOS test host."""
 from __future__ import annotations
 
 import argparse
@@ -19,8 +19,8 @@ def main() -> None:
     parser.add_argument("--backend", type=Path, required=True)
     parser.add_argument("--runtime-tests", action="store_true", required=True)
     args = parser.parse_args()
-    if os.geteuid() == 0 or os.uname().sysname != "Linux":
-        raise SystemExit("This smoke suite requires a normal user on a dedicated Linux test guest")
+    if os.geteuid() == 0 or os.uname().sysname not in {"Linux", "Darwin"}:
+        raise SystemExit("This smoke suite requires a normal user on a dedicated Linux/macOS test host")
     if os.uname().nodename.split(".")[0] == "endeavour":
         raise SystemExit("Runtime encryption testing is disabled on endeavour")
     backend = str(args.backend.resolve(strict=True))
@@ -51,7 +51,8 @@ def main() -> None:
         raise RuntimeError("Mount readiness timed out")
 
     def unmount(child):
-        result = subprocess.run(["fusermount3", "-u", str(mountpoint)], capture_output=True, timeout=20)
+        command = (["fusermount3", "-u"] if os.uname().sysname == "Linux" else ["/sbin/umount"])
+        result = subprocess.run(command + [str(mountpoint)], capture_output=True, timeout=20)
         if result.returncode != 0 or os.path.ismount(mountpoint):
             raise RuntimeError("Graceful unmount failed; process and evidence retained")
         child.send_signal(signal.SIGTERM)
