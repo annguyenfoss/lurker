@@ -66,15 +66,17 @@ The desktop app is intentionally simple for now:
 
 - one main window
 - create / mount / unmount tabs
-- active `lurker_*` volume list
-- inline status and errors only
+- active volumes from the shared backend discovery
+- backend choices and create defaults from the approved OS matrix
+- file, directory and Linux physical-device targets, with backend-specific fields
+- status and errors in the application
 - built-in zoom controls for larger displays
-- Linux Privileged / Unprivileged selector; unprivileged mode handles VeraCrypt files without administrator prompts
+- Linux Privileged / Unprivileged selector; unprivileged mode handles VeraCrypt files and directory engines without administrator prompts
 
 It uses:
 
 - `lurker-core` for all shared logic
-- `lurker-helper` for desktop operations, elevating only in privileged Linux mode
+- `lurker-helper` for desktop operations; native operations authorize when required, while portable directory engines run as the login user
 - Slint + winit + software renderer for the GUI shell
 
 Run the desktop app in development:
@@ -98,6 +100,8 @@ install -m 755 ./target/release/lurker-helper /usr/local/bin/lurker-helper
 ```
 
 For system packaging, keep `lurker-desktop` and `lurker-helper` together.
+BSD form defaults and backend choices are implemented; native BSD desktop
+runtime qualification remains separate from the tested CLI backends.
 
 ## Linux Without Administrator Prompts
 

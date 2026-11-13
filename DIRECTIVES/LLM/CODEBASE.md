@@ -100,7 +100,8 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 
 - Keep the desktop app narrow: create, mount, unmount, active volumes and LUKS credentials. Linux Privileged mode exposes the LUKS keys screen; other modes hide it.
 - Hide hardcoded expert defaults instead of exposing more knobs.
-- Linux offers Privileged/Unprivileged in the main header. Unprivileged selects VeraCrypt files, hides LUKS/devices, and cannot unmount privileged rows. Each row retains its own backend mode across selector changes.
+- Derive create choices from the core's approved OS matrix and use the native OS default. Directory targets hide size and generic cipher fields; fixed native profiles hide alternate ciphers. Show keyfiles only for backends that support them. Physical-device creation remains Linux-only.
+- Linux offers Privileged/Unprivileged in the main header. Unprivileged offers VeraCrypt files and portable directory engines, hides LUKS/devices, and cannot unmount privileged rows. Each row retains its own backend mode across selector changes. BSD/macOS hide the Linux selector and keyslot screen.
 - Keep the custom Slint controls unless you re-verify text zoom behavior.
 - `apps/lurker-desktop/build.rs` intentionally uses Slint `material`; `fluent` previously broke runtime text zoom/layout in this app.
 
