@@ -15,6 +15,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = {
@@ -41,6 +42,19 @@ def capture(args: list[str], cwd: Path) -> str:
     return subprocess.check_output(args, cwd=cwd, text=True, stderr=subprocess.STDOUT).strip()
 
 
+def copy_notice(source: Path, destination: Path) -> None:
+    """Module caches use readonly licenses; replace old copies atomically."""
+    descriptor, name = tempfile.mkstemp(prefix=".notice-", dir=destination.parent)
+    os.close(descriptor)
+    temporary = Path(name)
+    try:
+        shutil.copyfile(source, temporary)
+        temporary.chmod(0o644)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def go_module_notices(src: Path, destination: Path) -> list[dict]:
     """Keep exact transitive identities and original license/notice files."""
     text = capture(["go", "list", "-m", "-json", "all"], src)
@@ -57,7 +71,7 @@ def go_module_notices(src: Path, destination: Path) -> list[dict]:
         for path in Path(directory).iterdir():
             if path.is_file() and path.name.upper().startswith(("LICENSE", "COPYING", "NOTICE", "AUTHORS")):
                 notices.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, notices / path.name)
+                copy_notice(path, notices / path.name)
     return [{key: value for key, value in module.items() if key in {"Path", "Version", "Sum", "GoModSum"}}
             for module in modules]
 
@@ -74,10 +88,10 @@ def go_runtime_notices(src: Path, destination: Path) -> dict[str, str]:
         license = next((directory / name for name in ("LICENSE", "LICENSE.txt", "copyright")
                         if (directory / name).is_file()), None)
         if license:
-            shutil.copy2(license, destination / "LICENSE")
+            copy_notice(license, destination / "LICENSE")
             for name in ("PATENTS", "NOTICE", "COPYRIGHT"):
                 if (directory / name).is_file():
-                    shutil.copy2(directory / name, destination / name)
+                    copy_notice(directory / name, destination / name)
             break
     else:
         raise RuntimeError("Go runtime license missing; set LURKER_GO_LICENSE_DIR to the toolchain's license directory")
@@ -88,7 +102,7 @@ def go_runtime_notices(src: Path, destination: Path) -> dict[str, str]:
         if path.is_file() and path.name.upper().startswith(("LICENSE", "PATENTS", "NOTICE", "COPYING")):
             target = destination / path.relative_to(goroot)
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, target)
+            copy_notice(path, target)
     return {str(path.relative_to(destination)): sha256(path)
             for path in sorted(destination.rglob("*")) if path.is_file()}
 
