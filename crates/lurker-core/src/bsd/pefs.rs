@@ -5,9 +5,9 @@ use super::{Credential, args, exec};
 use crate::{AppError, AppResult, CreateCipher};
 use std::ffi::OsString;
 use std::fs;
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const PEFS: &str = "/usr/local/sbin/pefs";
 const MODULE: &str = "/boot/modules/pefs.ko";
@@ -131,8 +131,10 @@ pub(super) fn detach(mountpoint: &Path) -> AppResult<()> {
 }
 
 pub(super) fn verify_mapping(source: &Path, mountpoint: &Path) -> AppResult<()> {
-    let mounts = exec("/sbin/mount", &args(&["-p"]), None)?;
-    if !mount_matches(&mounts, source, mountpoint) {
+    // FreeBSD mount -p prints literal spaces in paths, so its text cannot be
+    // split into fields safely. Use the same native snapshot as the session
+    // identity layer; its path boundaries and UTF-8 bytes remain intact.
+    if !mount_matches(&super::mounts()?, source, mountpoint) {
         return Err(AppError::new(
             "The recorded PEFS mount changed; refusing cleanup.",
         ));
@@ -201,40 +203,14 @@ fn credential_arguments(argv: &mut Vec<OsString>, credential: &Credential) -> Op
     }
 }
 
-fn mount_matches(mounts: &str, source: &Path, mountpoint: &Path) -> bool {
-    mounts.lines().any(|line| {
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        fields.len() >= 3
-            && fields[2] == "pefs"
-            && unescape_mount(fields[0]).as_deref() == Some(source)
-            && unescape_mount(fields[1]).as_deref() == Some(mountpoint)
-    })
-}
-
-fn unescape_mount(value: &str) -> Option<PathBuf> {
-    let bytes = value.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'\\' {
-            let octal = bytes.get(index + 1..index + 4)?;
-            if !octal.iter().all(|b| (b'0'..=b'7').contains(b)) {
-                return None;
-            }
-            let value = (octal[0] - b'0') as u16 * 64
-                + (octal[1] - b'0') as u16 * 8
-                + (octal[2] - b'0') as u16;
-            if value == 0 || value > 255 {
-                return None;
-            }
-            decoded.push(value as u8);
-            index += 4;
-        } else {
-            decoded.push(bytes[index]);
-            index += 1;
-        }
-    }
-    Some(PathBuf::from(OsString::from_vec(decoded)))
+fn mount_matches(mounts: &[super::Mounted], source: &Path, mountpoint: &Path) -> bool {
+    mounts
+        .iter()
+        .filter(|entry| {
+            entry.filesystem == "pefs" && entry.source == source && entry.target == mountpoint
+        })
+        .count()
+        == 1
 }
 
 #[cfg(test)]
@@ -251,24 +227,22 @@ mod tests {
     }
 
     #[test]
-    fn mount_identity_includes_type_and_both_escaped_paths() {
-        let line = "/tmp/cipher\\040dir /tmp/plain\\040dir pefs rw 0 0\n";
-        assert!(mount_matches(
-            line,
-            Path::new("/tmp/cipher dir"),
-            Path::new("/tmp/plain dir")
-        ));
-        assert!(!mount_matches(
-            &line.replace("pefs", "nullfs"),
-            Path::new("/tmp/cipher dir"),
-            Path::new("/tmp/plain dir")
-        ));
-        assert!(!mount_matches(
-            line,
-            Path::new("/tmp/cipher"),
-            Path::new("/tmp/plain dir")
-        ));
-        assert!(unescape_mount("/tmp/bad\\777").is_none());
-        assert!(unescape_mount("/tmp/bad\\000").is_none());
+    fn mount_identity_preserves_native_unicode_and_spaces() {
+        let source = Path::new("/tmp/密碼 cipher dir");
+        let target = Path::new("/tmp/密碼 plain dir");
+        let mut mounts = vec![super::super::Mounted {
+            source: source.into(),
+            target: target.into(),
+            filesystem: "pefs".into(),
+            fsid: vec![1, 2],
+            readonly: false,
+        }];
+        assert!(mount_matches(&mounts, source, target));
+        assert!(!mount_matches(&mounts, Path::new("/tmp/cipher"), target));
+        mounts[0].filesystem = "nullfs".into();
+        assert!(!mount_matches(&mounts, source, target));
+        mounts[0].filesystem = "pefs".into();
+        mounts.push(mounts[0].clone());
+        assert!(!mount_matches(&mounts, source, target));
     }
 }
