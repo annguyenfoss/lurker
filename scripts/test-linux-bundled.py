@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--types", nargs="+", choices=["luks", "luks1", "veracrypt"], default=["luks", "luks1", "veracrypt"])
     parser.add_argument("--ciphers", nargs="+", choices=["aes", "serpent", "twofish"], default=["aes", "serpent", "twofish"])
     parser.add_argument("--result", type=Path, required=True)
+    parser.add_argument("--timeout", type=float, default=300, help="Per CLI operation deadline in seconds")
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.error("Run as root inside a disposable test VM.")
@@ -37,14 +38,19 @@ def main():
     results = []
     opened = set()
     counter = 0
+    uncertain = False
 
     def run(arguments, success=True):
-        nonlocal counter
+        nonlocal counter, uncertain
         counter += 1
         log = root / f"command-{counter:03}.log"
         with log.open("wb") as output:
-            process = subprocess.run([str(cli), *map(str, arguments)], stdin=subprocess.DEVNULL,
-                                     stdout=output, stderr=subprocess.STDOUT, timeout=300)
+            try:
+                process = subprocess.run([str(cli), *map(str, arguments)], stdin=subprocess.DEVNULL,
+                                         stdout=output, stderr=subprocess.STDOUT, timeout=args.timeout)
+            except subprocess.TimeoutExpired:
+                uncertain = True  # A surviving backend may still own a staged file.
+                raise
         if (process.returncode == 0) != success:
             raise RuntimeError(f"Unexpected CLI exit {process.returncode}; log={log}")
 
@@ -101,9 +107,9 @@ def main():
                 except Exception as error:
                     case["error"] = str(error)
                 case["duration_seconds"] = round(time.monotonic() - started, 3)
-                if opened:
+                if opened or uncertain:
                     break  # Preserve an unhealthy stack rather than piling on storage work.
-            if opened:
+            if opened or uncertain:
                 break
     finally:
         for mountpoint in list(opened):
@@ -112,16 +118,30 @@ def main():
                 opened.remove(mountpoint)
             except Exception:
                 pass
-        all_passed = len(results) == len(args.types) * len(args.ciphers) and all(item["status"] == "passed" for item in results)
+        # Check actual native resources as well as our last acknowledged CLI step.
+        # A timeout can occur after mount/open but before its success was recorded.
+        retained = []
+        try:
+            for line in Path("/proc/self/mountinfo").read_text().splitlines():
+                mountpoint = line.split()[4]
+                if mountpoint.startswith(str(root) + "/"):
+                    retained.append(mountpoint)
+            for backing in Path("/sys/class/block").glob("loop*/loop/backing_file"):
+                if backing.read_text().strip().startswith(str(root) + "/"):
+                    retained.append(str(backing.parent.parent))
+        except OSError as error:
+            uncertain = True
+            retained.append("Resource inspection failed: " + str(error))
+        all_passed = not uncertain and not retained and len(results) == len(args.types) * len(args.ciphers) and all(item["status"] == "passed" for item in results)
         result = {"schema_version": 1, "status": "passed" if all_passed else "failed",
-                  "cases": results, "logs": str(root), "retained_mounts": list(map(str, opened)),
+                  "cases": results, "logs": str(root), "retained_mounts": list(map(str, opened)), "retained_resources": retained, "cleanup_uncertain": uncertain,
                   "separate_veracrypt_on_path": shutil.which("veracrypt")}
         args.result.parent.mkdir(parents=True, exist_ok=True)
         args.result.write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps({"status": result["status"], "passed": sum(item["status"] == "passed" for item in results),
                           "total": len(args.types) * len(args.ciphers), "result": str(args.result)}))
         # Keep concise logs, but remove only this job's unmounted large containers/keys.
-        if not opened:
+        if not opened and not retained and not uncertain:
             for path in [*root.glob("*.img"), key, wrong]:
                 path.unlink(missing_ok=True)
     return 0 if all_passed else 1
