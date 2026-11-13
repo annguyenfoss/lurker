@@ -12,6 +12,10 @@ names are `gmake yasm pkgconf fusefs-libs pcsc-lite libiconv`; OpenBSD has FUSE
 in base and offers `gmake yasm pcsc-lite`. Source archives and original source
 inputs are checked against pinned SHA-256 values before cache reuse. Use
 `--offline` after archives have been cached; build logs stay beside the output.
+The reviewed BSD-only `auxiliary-path.patch` adds the private auxiliary mount
+directory to verbose volume metadata. Lurker uses it to verify that the native
+device still backs this volume's FUSE image before cleanup. No encryption or
+format primitive is changed. The manifest records the patch digest.
 
 The staged executable uses upstream's text/stdin interface. It is intended for
 Lurker's trusted, administrator-controlled private backend directory; a normal

@@ -84,6 +84,30 @@ class SourceProvenance(unittest.TestCase):
         artifact.write_bytes(b"stale build")
         self.assertFalse(builder.wx_cached(stamp, spec))
 
+    def test_reviewed_patch_is_repeatable_and_rejects_extra_source_changes(self):
+        # A reduced real upstream fixture retains the complete reviewed hunk.
+        original = ('prefix\n#ifndef TC_WINDOWS\n'
+            '\t\t\tprop << LangString["VIRTUAL_DEVICE"] << L": " << wstring (volume.VirtualDevice) << L\'\\n\';\n'
+            '#endif\n'
+            '\t\t\tprop << LangString["MOUNT_POINT"] << L": " << wstring (volume.MountPoint) << L\'\\n\';\n'
+            '\t\t\tprop << LangString["SIZE"] << L": " << SizeToString (volume.Size) << L\'\\n\';\n'
+            '\t\t\tprop << LangString["TYPE"] << L": " << VolumeTypeToString (volume.Type, volume.Protection) << L\'\\n\';\n'
+            'suffix\n').encode()
+        archive = self.cache / "veracrypt-fixed.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            member = tarfile.TarInfo("upstream/" + builder.PATCH_TARGET)
+            member.size = len(original)
+            tar.addfile(member, io.BytesIO(original))
+        pin = {"revision": "fixed", "url": "https://example.invalid/source", "sha256": builder.digest(archive)}
+        with patch.dict(builder.PINS, {"veracrypt": pin}):
+            source = builder.prepare("veracrypt", self.cache, offline=True)
+            self.assertIn(b"Lurker Auxiliary Directory:", (source / builder.PATCH_TARGET).read_bytes())
+            self.assertEqual(builder.prepare("veracrypt", self.cache, offline=True), source)
+            with (source / builder.PATCH_TARGET).open("ab") as stream:
+                stream.write(b"unreviewed source modification")
+            with self.assertRaisesRegex(RuntimeError, "Modified source input"):
+                builder.prepare("veracrypt", self.cache, offline=True)
+
 
 if __name__ == "__main__":
     unittest.main()

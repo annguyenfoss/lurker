@@ -1,0 +1,12 @@
+--- a/src/Main/UserInterface.cpp
++++ b/src/Main/UserInterface.cpp
+@@ -378,6 +378,9 @@
+ #ifndef TC_WINDOWS
+ 			prop << LangString["VIRTUAL_DEVICE"] << L": " << wstring (volume.VirtualDevice) << L'\n';
+ #endif
++#ifdef TC_BSD
++			prop << L"Lurker Auxiliary Directory: " << wstring (volume.AuxMountPoint) << L'\n';
++#endif
+ 			prop << LangString["MOUNT_POINT"] << L": " << wstring (volume.MountPoint) << L'\n';
+ 			prop << LangString["SIZE"] << L": " << SizeToString (volume.Size) << L'\n';
+ 			prop << LangString["TYPE"] << L": " << VolumeTypeToString (volume.Type, volume.Protection) << L'\n';

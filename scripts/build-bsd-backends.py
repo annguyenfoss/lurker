@@ -19,6 +19,8 @@ import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
+PATCH_SHA256 = "ab7d91fca203805dcd4b2708c995416f2acbe2354bd3b0585518a9718a64f730"
+PATCH_TARGET = "src/Main/UserInterface.cpp"
 PINS = {
     "veracrypt": {
         "url": "https://codeload.github.com/veracrypt/VeraCrypt/tar.gz/8172bc55f834485f67be271e02c1167981423621",
@@ -41,6 +43,26 @@ PINS = {
 def digest(path):
     with Path(path).open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def patched_input(archive):
+    patch = ROOT / "native/bsd-veracrypt/auxiliary-path.patch"
+    if digest(patch) != PATCH_SHA256:
+        raise RuntimeError("BSD auxiliary identity patch failed SHA-256 verification")
+    lines = patch.read_bytes().splitlines(keepends=True)
+    if (lines[0].rstrip() != b"--- a/" + PATCH_TARGET.encode()
+            or lines[1].rstrip() != b"+++ b/" + PATCH_TARGET.encode()
+            or not lines[2].startswith(b"@@ ")
+            or any(not line.startswith((b" ", b"+", b"-")) for line in lines[3:])):
+        raise RuntimeError("Expected one reviewed BSD auxiliary identity patch hunk")
+    before = b"".join(line[1:] for line in lines[3:] if line[:1] in (b" ", b"-"))
+    after = b"".join(line[1:] for line in lines[3:] if line[:1] in (b" ", b"+"))
+    with tarfile.open(archive) as tar:
+        top = tar.getmembers()[0].name.split("/")[0]
+        original = tar.extractfile(top + "/" + PATCH_TARGET).read()
+    if original.count(before) != 1:
+        raise RuntimeError("Reviewed BSD auxiliary identity patch does not match pinned upstream")
+    return original.replace(before, after, 1)
 
 
 def prepare(name, cache, offline=False):
@@ -82,10 +104,17 @@ def prepare(name, cache, offline=False):
     recorded = json.loads(stamp.read_text())
     if recorded.get("archive") != pin["sha256"]:
         raise RuntimeError(f"Stale source cache {source}; use an empty --source-dir")
+    patched = patched_input(archive) if name == "veracrypt" else None
+    patched_hash = hashlib.sha256(patched).hexdigest() if patched is not None else None
     for relative, expected in recorded["inputs"].items():
         path = source / relative
-        if path.is_symlink() or not path.is_file() or digest(path) != expected:
+        permitted = {expected}
+        if relative == PATCH_TARGET and patched_hash is not None:
+            permitted.add(patched_hash)
+        if path.is_symlink() or not path.is_file() or digest(path) not in permitted:
             raise RuntimeError(f"Modified source input {name}/{relative}; use an empty --source-dir")
+    if patched is not None and digest(source / PATCH_TARGET) != patched_hash:
+        (source / PATCH_TARGET).write_bytes(patched)
     return source.resolve()
 
 
@@ -196,7 +225,7 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
         "schema": 1, "backend": "veracrypt", "platform": target,
         "os_release": platform.release(), "architecture": platform.machine(),
         "sources": {name: pin for name, pin in PINS.items() if name != "libiconv" or iconv_source is not None},
-        "patches": [], "build_options": build_options,
+        "patches": [{"path": "native/bsd-veracrypt/auxiliary-path.patch", "sha256": PATCH_SHA256}], "build_options": build_options,
         "version": version, "binary": destination.name, "binary_sha256": digest(destination),
         "private_libraries": private,
         "system_libraries": [p.name for p in dependencies if str(p).startswith(("/lib/", "/usr/lib/", "/usr/libexec/"))],
