@@ -111,5 +111,32 @@ class Ownership(unittest.TestCase):
         call.assert_not_called()
 
 
+class GuestFixture(unittest.TestCase):
+    def test_owned_persistent_home_marker_and_permissions(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(VM.Path, "home", return_value=Path(temporary)), patch.object(VM.platform, "system", return_value="FreeBSD"):
+            directory = VM.guest_directory("test1234", create=True)
+            self.assertEqual(VM.guest_directory("test1234"), directory)
+            VM.write_json(directory / "owner.json", {"run": "other123", "uid": os.geteuid()})
+            with self.assertRaises(RuntimeError):
+                VM.guest_directory("test1234")
+
+    def test_cache_symlink_rejected_before_fixture_creation(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as other:
+            home = Path(temporary)
+            (home / ".cache").symlink_to(other)
+            with patch.object(VM.Path, "home", return_value=home):
+                with self.assertRaises(RuntimeError):
+                    VM.guest_directory("test1234", create=True)
+            self.assertFalse((Path(other) / "lurker").exists())
+
+    def test_linux_tmpfs_fixture_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(VM.Path, "home", return_value=Path(temporary)):
+            with patch.object(VM.platform, "system", return_value="Linux"), patch.object(VM.Path, "read_text", return_value="1 0 0:1 / / rw - tmpfs tmpfs rw"):
+                # read_text is reached first for owner.json, so provide both.
+                with patch.object(VM.json, "loads", return_value={"run": "test1234", "uid": os.geteuid()}):
+                    with self.assertRaisesRegex(RuntimeError, "persistent"):
+                        VM.guest_directory("test1234", create=True)
+
+
 if __name__ == "__main__":
     unittest.main()

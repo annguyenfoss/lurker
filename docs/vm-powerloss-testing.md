@@ -69,3 +69,19 @@ revision, package digest, OS/kernel/backend/filesystem, phase, poweroff method,
 durable checks and any blockers. Cleanup may discard only verified owned clone
 resources after evidence collection; never force unmount or repair unrelated
 storage.
+
+Inside the verified clone, copy this script and `test-backends.py` beside each
+other. Run `guest-setup --run RUN --cli ABSOLUTE_PACKAGE_CLI --backend BACKEND
+--commit FULL_COMMIT --persistent-home-confirmed` using the native privilege
+route (root for native containers, login user for directory backends). Add
+`--unprivileged` only for Linux's VeraCrypt user route. Check the guest's mount
+table before confirming persistent home storage; Linux tmpfs/ramfs is rejected
+by the script as well. Setup starts a detached worker and returns its PID and
+persistent directory. A returned PID alone is not readiness: read and retain
+`ready.json`, whose status must be `ready-for-abrupt-poweroff`, before using
+the coordinator's guarded `poweroff` and `boot` operations. Keep the worker
+alive at the power cut. After boot, `guest-verify --run RUN` reopens through the
+same hash-checked candidate CLI and writes `result.json`. Preserve the separate
+hypervisor poweroff/boot evidence alongside the guest result; invoking a guest
+verification command alone does not prove a power cut happened. Setup and
+verification retain fixtures and never run filesystem repair.

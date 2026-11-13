@@ -9,12 +9,17 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import hashlib
+import importlib.util
 import ipaddress
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import secrets
+import shutil
+import sqlite3
+import sys
 import subprocess
 import time
 import uuid
@@ -234,6 +239,7 @@ def prepare(os_name, run_id, subnet, bandwidth):
     # Traverse-only access allows libvirt's QEMU uid to use its relabeled image;
     # all manifests, XML and logs remain private to the invoking user.
     directory.mkdir(mode=0o711)
+    directory.chmod(0o711)
     write_json(directory / "manifest.json", manifest)
     for name, text in (("source-inactive.xml", inactive), ("source-live.xml", live),
                        ("clone.xml", clone_xml(inactive, manifest)), ("network.xml", network_xml(manifest))):
@@ -271,7 +277,197 @@ def copy_and_boot(clone):
     print(json.dumps({"status": "booting", "directory": str(clone.directory), "name": m["name"]}), flush=True)
 
 
+
+def fsync_path(path):
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def guest_directory(run_id, create=False):
+    require(re.fullmatch(r"[a-z0-9]{8,20}", run_id), "Invalid guest run ID")
+    home = Path.home()
+    # Resolve before creating anything: a redirected cache could be tmpfs or an
+    # unrelated directory. Do not follow symlinks in the owned fixture ancestry.
+    parent = home / ".cache" / "lurker"
+    for path in (home, home / ".cache", parent):
+        require(not path.is_symlink(), "Guest fixture ancestry contains symlink")
+        if create:
+            path.mkdir(mode=0o700, exist_ok=True)
+        require(path.is_dir() and path.stat().st_uid == os.geteuid(), "Guest cache is not owned")
+    directory = parent / ("fault-" + run_id)
+    if create:
+        directory.mkdir(mode=0o700)
+        write_json(directory / "owner.json", {"run": run_id, "uid": os.geteuid()})
+    require(not directory.is_symlink(), "Guest fixture symlink forbidden")
+    state = directory.stat()
+    require(state.st_uid == os.geteuid() and not state.st_mode & 0o077, "Guest fixture owner/mode changed")
+    require(json.loads((directory / "owner.json").read_text()) == {"run": run_id, "uid": os.geteuid()},
+            "Guest fixture ownership marker changed")
+    # A home cache path alone does not establish persistent backing storage.
+    # Require a mount-table assertion by the caller and record it in evidence;
+    # Linux tmpfs/ramfs are additionally rejected automatically.
+    if platform.system() == "Linux":
+        path = str(directory.resolve())
+        matches = []
+        for line in Path("/proc/self/mountinfo").read_text().splitlines():
+            before, after = line.split(" - ", 1)
+            mountpoint = before.split()[4].replace("\\040", " ")
+            if path == mountpoint or path.startswith(mountpoint.rstrip("/") + "/"):
+                matches.append((len(mountpoint), after.split()[0]))
+        require(matches and max(matches)[1] not in ("tmpfs", "ramfs"), "Guest fixtures must be persistent")
+    return directory
+
+
+def guest_cli(directory, arguments, secret):
+    specification = importlib.util.spec_from_file_location("powerloss_cli", Path(__file__).with_name("test-backends.py"))
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    manifest = json.loads((directory / "guest.json").read_text())
+    cli = Path(manifest["cli"])
+    require(hashlib.sha256(cli.read_bytes()).hexdigest() == manifest["cli_sha256"], "Candidate CLI changed")
+    log = directory / ("cli-" + str(time.time_ns()) + ".log")
+    args = [str(cli), "--color=never", str(arguments[0])]
+    if manifest["unprivileged"]:
+        args.append("--unprivileged")
+    args += list(map(str, arguments[1:]))
+    result = module.terminal(args, secret, 600, log)
+    require(result["exit_code"] == 0 and not result["timed_out"], "Candidate CLI failed; retained log=" + str(log))
+    return result
+
+
+def guest_setup(args):
+    require(args.persistent_home_confirmed, "Confirm the home filesystem is persistent, not tmpfs")
+    require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Exact candidate Git commit required")
+    directory = guest_directory(args.run, create=True)
+    cli = args.cli.resolve(strict=True)
+    require(args.backend in ("gocryptfs", "cryfs", "cryptomator", "pefs") or args.unprivileged or os.geteuid() == 0,
+            "Native container workloads require root inside the disposable clone")
+    secret = secrets.token_urlsafe(48)
+    password = directory / "test-password"
+    with open(password, "w", opener=lambda p, f: os.open(p, f, 0o600)) as output:
+        output.write(secret)
+        output.flush()
+        os.fsync(output.fileno())
+    source, mountpoint = directory / "encrypted data", directory / "open data"
+    mountpoint.mkdir(mode=0o700)
+    manifest = {"schema": 1, "run": args.run, "cli": str(cli), "source_commit": args.commit,
+                "cli_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(), "backend": args.backend,
+                "cipher": args.cipher, "unprivileged": args.unprivileged, "source": str(source),
+                "mountpoint": str(mountpoint), "os": platform.system(), "kernel": platform.release(),
+                "architecture": platform.machine(), "persistent_home_confirmed": True,
+                "mount_table": run(["mount"]), "repair": False}
+    write_json(directory / "guest.json", manifest)
+    create = ["create", "--type", args.backend]
+    if args.backend not in ("gocryptfs", "cryfs", "cryptomator", "pefs"):
+        if args.backend in ("luks", "luks1", "veracrypt"):
+            create += ["--cipher", args.cipher]
+        create += [str(source), "0.35"]
+    else:
+        create += [str(source)]
+    guest_cli(directory, create, secret)
+    guest_cli(directory, ["mount", "--type", args.backend, str(source), str(mountpoint)], secret)
+    # Persist only test credentials/recovery metadata before the measured
+    # workload. No global sync and no clean detach occurs before poweroff.
+    fsync_path(directory)
+    with (directory / "worker.log").open("wb") as output:
+        worker = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "guest-worker", "--run", args.run],
+                                  stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
+                                  start_new_session=True)
+    write_json(directory / "worker-process.json", {"pid": worker.pid, "run": args.run})
+    print(json.dumps({"status": "workload-started", "directory": str(directory), "pid": worker.pid}), flush=True)
+
+
+def guest_worker(run_id):
+    directory = guest_directory(run_id)
+    manifest = json.loads((directory / "guest.json").read_text())
+    mountpoint = Path(manifest["mountpoint"])
+    require(mountpoint == directory / "open data", "Mountpoint ownership changed")
+    payload = secrets.token_bytes(65536)
+    temporary = mountpoint / "atomic.tmp"
+    with temporary.open("wb") as output:
+        output.write(payload)
+        output.flush()
+        os.fsync(output.fileno())
+    temporary.rename(mountpoint / "durable record")
+    fsync_path(mountpoint)
+    connection = sqlite3.connect(mountpoint / "profile.sqlite")
+    require(connection.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal", "SQLite WAL unavailable")
+    connection.execute("PRAGMA synchronous=FULL")
+    connection.execute("PRAGMA wal_autocheckpoint=0")
+    require(connection.execute("PRAGMA synchronous").fetchone()[0] == 2, "SQLite FULL unavailable")
+    connection.execute("CREATE TABLE committed (id INTEGER PRIMARY KEY, value BLOB)")
+    connection.execute("INSERT INTO committed VALUES (1, ?)", (payload,))
+    connection.commit()
+    for name in ("profile.sqlite", "profile.sqlite-wal"):
+        fsync_path(mountpoint / name)
+    fsync_path(mountpoint)
+    sizes = {path.name: path.stat().st_size for path in mountpoint.iterdir()}
+    # Start an intentionally uncommitted transaction. Its visibility after
+    # recovery is characterized separately and never counted as durable data.
+    connection.execute("INSERT INTO committed VALUES (2, ?)", (secrets.token_bytes(8192),))
+    dirty = (mountpoint / "unacknowledged writes").open("wb", buffering=0)
+    dirty.write(secrets.token_bytes(32768))
+    write_json(directory / "ready.json", {"status": "ready-for-abrupt-poweroff", "schema": 1,
+               "run": run_id, "sha256": hashlib.sha256(payload).hexdigest(), "sizes": sizes,
+               "durable": ["file-fsync", "rename-directory-fsync", "sqlite-FULL-WAL-commit"],
+               "sqlite_connection_open": True, "global_sync": False, "clean_unmount": False,
+               "created_ns": time.time_ns()})
+    # Keep SQLite's connection, SHM and WAL alive. Never close/checkpoint in a
+    # finally block: only abrupt destruction of this disposable VM ends it.
+    while True:
+        dirty.write(secrets.token_bytes(4096))
+        dirty.seek(0)
+        time.sleep(0.05)
+
+
+def guest_verify(run_id):
+    directory = guest_directory(run_id)
+    manifest = json.loads((directory / "guest.json").read_text())
+    ready = json.loads((directory / "ready.json").read_text())
+    require(ready["status"] == "ready-for-abrupt-poweroff" and ready["run"] == run_id, "No durable acknowledgement")
+    secret = (directory / "test-password").read_text()
+    source, mountpoint = Path(manifest["source"]), Path(manifest["mountpoint"])
+    require(source == directory / "encrypted data" and mountpoint == directory / "open data", "Fixture paths changed")
+    result = {"schema": 1, "status": "failed", "suite": "isolated-vm-abrupt-poweroff", **manifest,
+              "ready": ready, "repair": False, "poweroff_method": "libvirt-destroy"}
+    phase = "reopen-through-candidate-cli"
+    try:
+        guest_cli(directory, ["mount", "--type", manifest["backend"], str(source), str(mountpoint)], secret)
+        phase = "capture-raw-WAL-evidence"
+        evidence = directory / "recovered-evidence"
+        evidence.mkdir(mode=0o700)
+        for name in ("profile.sqlite", "profile.sqlite-wal", "profile.sqlite-shm"):
+            path = mountpoint / name
+            if path.exists():
+                shutil.copyfile(path, evidence / name)
+        phase = "durable-record-and-SQLite-recovery"
+        payload = (mountpoint / "durable record").read_bytes()
+        require(hashlib.sha256(payload).hexdigest() == ready["sha256"], "Acknowledged durable record changed")
+        connection = sqlite3.connect((mountpoint / "profile.sqlite").as_uri() + "?mode=rw", uri=True)
+        try:
+            require(connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok", "SQLite integrity failed")
+            require(connection.execute("SELECT value FROM committed WHERE id=1").fetchone()[0] == payload,
+                    "Acknowledged SQLite row changed")
+            result["uncommitted_row_visible"] = connection.execute("SELECT count(*) FROM committed WHERE id=2").fetchone()[0]
+            require(result["uncommitted_row_visible"] == 0, "Uncommitted SQLite row became visible")
+        finally:
+            connection.close()
+        result["unacknowledged_file_size"] = (mountpoint / "unacknowledged writes").stat().st_size if (mountpoint / "unacknowledged writes").exists() else None
+        phase = "normal-cli-close"
+        guest_cli(directory, ["unmount", str(mountpoint)], secret)
+        result.update(status="passed", checks=5)
+    except Exception as error:
+        result.update(status="failed", failed_stage=phase, error=str(error).replace(secret, "<redacted>")[:2048])
+    write_json(directory / "result.json", result)
+    print(json.dumps({"status": result["status"], "result": str(directory / "result.json"),
+                      "failed_stage": result.get("failed_stage")}), flush=True)
+    return 0 if result["status"] == "passed" else 1
+
 def main():
+    os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True)
     plan = commands.add_parser("prepare", help="Read-only hypervisor preflight; save concrete private plan")
@@ -285,7 +481,26 @@ def main():
         if action == "ssh":
             command.add_argument("command")
             command.add_argument("--user", default="adjutant", choices=("adjutant", "root"))
+    setup = commands.add_parser("guest-setup", help="Inside an owned clone only; prepare persistent workload")
+    setup.add_argument("--run", required=True)
+    setup.add_argument("--cli", type=Path, required=True)
+    setup.add_argument("--backend", choices=("luks", "luks1", "veracrypt", "geli", "cgd", "softraid", "gocryptfs", "cryfs", "cryptomator", "pefs"), required=True)
+    setup.add_argument("--cipher", choices=("aes", "serpent", "twofish"), default="aes")
+    setup.add_argument("--commit", required=True)
+    setup.add_argument("--unprivileged", action="store_true")
+    setup.add_argument("--persistent-home-confirmed", action="store_true")
+    for action in ("guest-worker", "guest-verify"):
+        guest = commands.add_parser(action)
+        guest.add_argument("--run", required=True)
     args = parser.parse_args()
+    if args.action == "guest-setup":
+        guest_setup(args)
+        return 0
+    if args.action == "guest-worker":
+        guest_worker(args.run)
+        return 0
+    if args.action == "guest-verify":
+        return guest_verify(args.run)
     if args.action == "prepare":
         require(1 <= args.bandwidth <= 64, "Bandwidth must be 1–64 MiB/s")
         clone = prepare(args.os, args.run, args.subnet, args.bandwidth)
