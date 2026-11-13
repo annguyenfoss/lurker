@@ -9,9 +9,22 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import subprocess
 import tempfile
 import time
+
+
+def is_mounted(path):
+    # Root cannot stat another user's FUSE mount without allow_root. The native
+    # mount table identifies it without reading the mounted plaintext.
+    expected = os.fsencode(str(path))
+    for line in Path("/proc/self/mountinfo").read_bytes().splitlines():
+        field = line.split()[4]
+        decoded = re.sub(rb"\\([0-7]{3})", lambda match: bytes([int(match.group(1), 8)]), field)
+        if decoded == expected:
+            return True
+    return False
 
 
 def main():
@@ -80,20 +93,20 @@ def main():
     def mount(route, path=source, readonly=False):
         execute(command(route, "mount", path, readonly))
         point = user_mount if route == "user" else kernel_mount
-        if not os.path.ismount(point): raise RuntimeError("CLI succeeded without attaching its fixture")
+        if not is_mounted(point): raise RuntimeError("CLI succeeded without attaching its fixture")
         opened.append((route, point))
 
     def close():
         while opened:
             route, point = opened[-1]
             execute(command(route, "unmount", point))
-            if os.path.ismount(point): raise RuntimeError("Fixture remained mounted after close")
+            if is_mounted(point): raise RuntimeError("Fixture remained mounted after close")
             opened.pop()
 
     def rejected(route, path=source, readonly=False):
         execute(command(route, "mount", path, readonly), expected=False)
         point = user_mount if route == "user" else kernel_mount
-        if os.path.ismount(point): raise RuntimeError("Rejected duplicate attached storage")
+        if is_mounted(point): raise RuntimeError("Rejected duplicate attached storage")
 
     def case(name, function):
         started = time.monotonic()
@@ -127,7 +140,7 @@ def main():
             with (root / "direct-native.log").open("wb") as log:
                 process = subprocess.run(arguments, input=b"\n", stdout=log, stderr=subprocess.STDOUT, env=direct_env, timeout=60)
             if process.returncode == 0: raise RuntimeError("Native driver bypassed a deleted kernel backing inode")
-            if any(os.path.ismount(path) for path in auxiliary.iterdir()):
+            if any(is_mounted(path) for path in auxiliary.iterdir()):
                 raise RuntimeError("Rejected direct native request left a decrypted mount")
         finally: os.link(alias, source)
         close()
@@ -149,7 +162,7 @@ def main():
                     except subprocess.TimeoutExpired:
                         process.kill(); process.wait()
             for log in logs: log.close()
-        mounted = [(route, point) for route, point in [("kernel", kernel_mount), ("user", user_mount)] if os.path.ismount(point)]
+        mounted = [(route, point) for route, point in [("kernel", kernel_mount), ("user", user_mount)] if is_mounted(point)]
         opened.extend(mounted)
         if sum(code == 0 for code in codes) != 1 or len(mounted) != 1:
             raise RuntimeError(f"Concurrent startup did not have exactly one winner: exits={codes}, mounts={len(mounted)}")
@@ -167,6 +180,8 @@ def main():
     except Exception as error:
         report.update(status="failed", diagnostic=str(error))
     finally:
+        for route, point in [("kernel", kernel_mount), ("user", user_mount)]:
+            if is_mounted(point) and (route, point) not in opened: opened.append((route, point))
         try: close()
         except Exception as error: report["cleanup_error"] = str(error)
         report["retained_mounts"] = [str(point) for _, point in opened]

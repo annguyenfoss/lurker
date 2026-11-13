@@ -72,6 +72,7 @@ def main():
     parser.add_argument("--route", choices=["kernel", "user"], required=True)
     parser.add_argument("--result", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=240)
+    parser.add_argument("--all-ciphers", action="store_true", help="Run all AES/Serpent/Twofish variants in addition to directory backends")
     parser.add_argument("--allow-external-tools", action="store_true", help="Record prepared-host results without claiming absent external runtimes")
     args = parser.parse_args()
     if (args.route == "kernel") != (os.geteuid() == 0):
@@ -81,8 +82,10 @@ def main():
     external = {name: shutil.which(name) for name in ["veracrypt", "java", "go"]}
     if any(external.values()) and not args.allow_external_tools:
         parser.error("External VeraCrypt/Java/Go present; use a clean runtime VM or explicitly label a prepared-host run")
-    cases = [("luks", False), ("luks1", False), ("veracrypt", False)] if args.route == "kernel" else [
-        ("veracrypt", True), ("gocryptfs", False), ("cryfs", False), ("cryptomator", False)]
+    ciphers = ["aes", "serpent", "twofish"] if args.all_ciphers else ["aes"]
+    cases = [(backend, cipher, False) for backend in ["luks", "luks1", "veracrypt"] for cipher in ciphers] if args.route == "kernel" else [
+        *[("veracrypt", cipher, True) for cipher in ciphers],
+        ("gocryptfs", None, False), ("cryfs", None, False), ("cryptomator", None, False)]
     job = Path(tempfile.mkdtemp(prefix="lurker-package-qualification-", dir="/tmp"))
     report = {"schema": 1, "source_commit": args.commit, "route": args.route, "prefix": str(prefix),
               "status": "running", "started": time.time(), "external_applications": external,
@@ -94,16 +97,16 @@ def main():
         env.pop(key, None)
     env["LC_ALL"] = "C.UTF-8"
     try:
-        for backend, unprivileged in cases:
+        for backend, cipher, unprivileged in cases:
             if backend not in manifest["selected_backends"]:
                 raise RuntimeError("Required selected Linux backend missing: " + backend)
             command = [sys.executable, str(args.suite.resolve(strict=True)), "--binary", str(prefix / "bin/lurker"),
                        "--backend", backend, "--commit", args.commit, "--root", str(job), "--size-gb", "0.15", "--timeout", str(args.timeout)]
             if backend in {"luks", "luks1", "veracrypt"}:
-                command.extend(["--cipher", "aes"])
+                command.extend(["--cipher", cipher])
             if unprivileged:
                 command.append("--unprivileged")
-            label = backend + ("-userspace" if unprivileged else "")
+            label = backend + ("-" + cipher if cipher else "") + ("-userspace" if unprivileged else "")
             log = job / (label + ".log")
             with log.open("wb") as stream:
                 process = subprocess.run(command, env=env, stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,
@@ -117,7 +120,7 @@ def main():
             if "result" not in output:
                 raise RuntimeError(f"{label} blocked: {output.get('diagnostic', output)}; {log}")
             result = json.loads(Path(output["result"]).read_text())
-            entry = {"backend": backend, "unprivileged": unprivileged, "status": result["status"],
+            entry = {"backend": backend, "cipher": cipher, "unprivileged": unprivileged, "status": result["status"],
                      "counts": result["counts"], "result": output["result"], "log": str(log), "exit_code": process.returncode}
             report["suites"].append(entry)
             if process.returncode or result["status"] != "passed":

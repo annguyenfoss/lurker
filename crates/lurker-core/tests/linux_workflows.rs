@@ -167,7 +167,7 @@ fn with_keyfile(mut action: CommandAction, keyfile: &Path) -> CommandAction {
 }
 
 #[test]
-#[ignore = "requires root, Linux device-mapper, loop devices, cryptsetup, VeraCrypt and btrfs-progs"]
+#[ignore = "requires root, Linux device-mapper, loop devices, cryptsetup, private VeraCrypt creator and btrfs-progs"]
 fn keyfile_round_trips() {
     let mut sandbox = Sandbox::new();
     let at = sandbox.path("keyfile mount");
@@ -259,7 +259,7 @@ fn keyfile_round_trips() {
 }
 
 #[test]
-#[ignore = "requires root, Linux device-mapper, loop devices, cryptsetup, VeraCrypt and btrfs-progs"]
+#[ignore = "requires root, Linux device-mapper, loop devices, cryptsetup, private VeraCrypt creator and btrfs-progs"]
 fn real_linux_workflow_matrix() {
     assert!(
         probe_system().unwrap().is_root,
@@ -385,8 +385,11 @@ fn real_linux_workflow_matrix() {
                     bad(mount(&source, &at, ty, false, Some("unsupported")));
                 }
                 fs::remove_file(alias).unwrap();
-                // Cross-tool password verification proves interoperability of created headers.
-                if ty == VolumeType::Veracrypt {
+                // Optional golden-reference interoperability is separate from
+                // qualifying Lurker without a separately installed VeraCrypt.
+                if ty == VolumeType::Veracrypt
+                    && std::env::var_os("LURKER_TEST_STOCK_VERACRYPT").is_some()
+                {
                     let mut child = Command::new("veracrypt")
                         .args([
                             "-t",
