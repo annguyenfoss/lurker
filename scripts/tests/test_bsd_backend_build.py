@@ -73,6 +73,17 @@ class SourceProvenance(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unresolved"):
                 builder.linked_libraries(Path("backend"))
 
+    def test_wx_cache_requires_exact_specification_and_artifact_hashes(self):
+        artifact = self.cache / "libwx.a"
+        artifact.write_bytes(b"compiled wx")
+        stamp = self.cache / "wx-build.json"
+        spec = {"compiler": "qualified compiler"}
+        stamp.write_text(json.dumps({"specification": spec, "files": {str(artifact): builder.digest(artifact)}}))
+        self.assertTrue(builder.wx_cached(stamp, spec))
+        self.assertFalse(builder.wx_cached(stamp, {"compiler": "different"}))
+        artifact.write_bytes(b"stale build")
+        self.assertFalse(builder.wx_cached(stamp, spec))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -115,6 +115,32 @@ def linked_libraries(binary):
     return sorted(libraries)
 
 
+def wx_specification(source, wx):
+    return {"source": str(source), "wx_source": str(wx), "wx_pin": PINS["wxwidgets"],
+            "vc_pin": PINS["veracrypt"], "configure": ["NOGUI=1", "WXSTATIC=1", "--disable-tests"],
+            "system": platform.system(), "release": platform.release(),
+            "compiler": subprocess.check_output(["c++", "--version"], text=True)}
+
+
+def wx_cached(stamp, specification):
+    if not stamp.is_file():
+        return False
+    try:
+        recorded = json.loads(stamp.read_text())
+        return (recorded["specification"] == specification and bool(recorded["files"])
+                and all(Path(p).is_file() and digest(p) == value for p, value in recorded["files"].items()))
+    except (KeyError, ValueError, OSError):
+        return False
+
+
+def record_wx(stamp, specification, source):
+    build = source / "src/wxrelease"
+    files = [build / "wx-config", *build.glob("lib/*.a"), *build.glob("lib/wx/include/*/wx/setup.h")]
+    if len(files) < 3 or not all(p.is_file() for p in files):
+        raise RuntimeError("Static wx build is incomplete")
+    stamp.write_text(json.dumps({"specification": specification, "files": {str(p): digest(p) for p in files}}, sort_keys=True) + "\n")
+
+
 def stage(binary, output, source, wx, target, build_options, iconv_source=None):
     output.mkdir(parents=True, exist_ok=True)
     (output / "bsd-veracrypt-source.json").unlink(missing_ok=True)
@@ -126,19 +152,28 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
     dependencies = linked_libraries(temporary)
     private = []
     for library in dependencies:
-        if str(library).startswith(("/lib/", "/usr/lib/")):
+        if str(library).startswith(("/lib/", "/usr/lib/", "/usr/libexec/")):
             continue
-        if target != "FreeBSD" or not str(library).startswith("/usr/local/lib/"):
+        if target != "FreeBSD" or library.parent not in (Path("/usr/local/lib"), output / "lib"):
             raise RuntimeError(f"Unqualified runtime library path: {library}")
+        if library.name not in ("libfuse.so.2", "libiconv.so.2"):
+            raise RuntimeError(f"Unqualified private library/license inventory: {library.name}")
         libdir = output / "lib"
         libdir.mkdir(exist_ok=True)
         copied = libdir / library.name
-        shutil.copy2(library.resolve(), copied)
+        # A repeated stage already resolves ORIGIN to the previous private copy.
+        # Refresh from the known installed build dependency rather than trusting
+        # that prior generated artifact as its own provenance.
+        shutil.copy2((Path("/usr/local/lib") / library.name).resolve(), copied)
         private.append({"name": copied.name, "sha256": digest(copied)})
     if private:
         dynamic = subprocess.check_output(["readelf", "-d", str(temporary)], text=True)
         if "$ORIGIN/lib" not in dynamic:
             raise RuntimeError("FreeBSD private libraries require the qualified $ORIGIN/lib runpath")
+        resolved = {p.name: p.resolve() for p in linked_libraries(temporary)}
+        for item in private:
+            if resolved.get(item["name"]) != (output / "lib" / item["name"]).resolve():
+                raise RuntimeError(f"Private runtime library resolves outside the staged package: {item['name']}")
     version = subprocess.check_output([str(temporary), "--text", "--version"], text=True).strip()
     if "VeraCrypt" not in version:
         raise RuntimeError("Built backend failed its version check")
@@ -164,10 +199,19 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
         "patches": [], "build_options": build_options,
         "version": version, "binary": destination.name, "binary_sha256": digest(destination),
         "private_libraries": private,
-        "system_libraries": [p.name for p in dependencies if str(p).startswith(("/lib/", "/usr/lib/"))],
+        "system_libraries": [p.name for p in dependencies if str(p).startswith(("/lib/", "/usr/lib/", "/usr/libexec/"))],
         "fuse_version": subprocess.check_output(["pkg-config", "--modversion", "fuse"], text=True).strip(),
         "runtime": {"external_fuse_kernel": True, "separate_veracrypt": False, "privilege": "root", "source_kind": "regular_file"},
     }
+    members = [destination, *[output / "lib" / item["name"] for item in private],
+               licenses / "VeraCrypt.txt", licenses / "wxWidgets.txt"]
+    if iconv_source is not None:
+        members.append(licenses / "libiconv-LGPL-2.1.txt")
+    for name in ("libiconv", "fusefs-libs"):
+        owned = licenses / name
+        if owned.is_dir():
+            members.extend(p for p in owned.rglob("*") if p.is_file())
+    manifest["files"] = {str(p.relative_to(output)): digest(p) for p in sorted(members)}
     (output / "bsd-veracrypt-source.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return manifest
 
@@ -182,6 +226,9 @@ def main():
     target = platform.system()
     if target not in ("FreeBSD", "OpenBSD") or platform.machine() not in ("amd64", "x86_64"):
         parser.error("Build natively on FreeBSD/OpenBSD amd64; other targets are outside the approved matrix")
+    release = tuple(int(x) for x in platform.release().split("-", 1)[0].split(".")[:2])
+    if release < ((14,) if target == "FreeBSD" else (7, 8)):
+        parser.error("Pinned VeraCrypt requires FreeBSD 14+ or OpenBSD 7.8+")
     if os.geteuid() == 0:
         parser.error("Build as a normal user; this script never installs or elevates")
     if options.jobs < 1:
@@ -196,10 +243,15 @@ def main():
     logs = options.output_dir.resolve() / "build-logs"
     flags = ["NOGUI=1", "WXSTATIC=1"]
     if target == "FreeBSD":
-        # GNU make consumes $$, then the recipe shell preserves quoted ORIGIN.
+        # The top-level immediate variable and exported submake each consume
+        # one $$ layer; the recipe shell then preserves quoted ORIGIN.
         # Base wx is static; bundle libiconv/libfuse as private shared objects.
-        flags.append("TC_EXTRA_LFLAGS=-Wl,-rpath,'$$ORIGIN/lib'")
-    command(["gmake", f"-j{options.jobs}", *flags, f"WX_ROOT={wx}", "WX_CONFIGURE_EXTRA_FLAGS=--disable-tests", "wxbuild"], logs, "wxwidgets", cwd=source / "src")
+        flags.append("TC_EXTRA_LFLAGS=-Wl,-rpath,'$$$$ORIGIN/lib'")
+    wx_stamp = options.source_dir.resolve() / "wx-build.json"
+    wx_spec = wx_specification(source, wx)
+    if not wx_cached(wx_stamp, wx_spec):
+        command(["gmake", f"-j{options.jobs}", *flags, f"WX_ROOT={wx}", "WX_CONFIGURE_EXTRA_FLAGS=--disable-tests", "wxbuild"], logs, "wxwidgets", cwd=source / "src")
+        record_wx(wx_stamp, wx_spec, source)
     # Changed link flags must not reuse an executable linked by a prior recipe.
     (source / "src/Main/veracrypt").unlink(missing_ok=True)
     command(["gmake", f"-j{options.jobs}", *flags], logs, "veracrypt", cwd=source / "src")
