@@ -59,13 +59,13 @@ The frontend runner creates its own independent temporary files and uses a pseud
 
 ## Scope and limits
 
-Only Linux x86_64 is validated and declared by the local AUR recipe. Physical hardware is represented by dedicated whole-loop and GPT-partition fixtures; no personal or physical disk is used. Hidden volumes, custom PIM, system-encrypted Windows disks, and unsupported cipher algorithms are outside the exposed product interface. UI rendering is tested headlessly and the real winit/software event loop is smoke-tested in an isolated virtual display; desktop helper operations are tested through their JSON interface with sudo, without requiring an interactive polkit dialog.
+Only Linux x86_64 is validated. Physical hardware is represented by dedicated whole-loop and GPT-partition fixtures; no personal or physical disk is used. Hidden volumes, custom PIM, system-encrypted Windows disks, and unsupported cipher algorithms are outside the exposed product interface. UI rendering is tested headlessly and the real winit/software event loop is smoke-tested in an isolated virtual display; desktop helper operations are tested through their JSON interface with sudo, without requiring an interactive polkit dialog.
 
 LUKS Argon2 profiles retain their configured memory/time costs. The real matrix takes several minutes. Expected negative cases produce busy-unmount or invalid-filesystem messages; the final test process exit status and per-test results determine success.
 
 `cargo clippy --workspace --all-targets` also runs as an advisory check. Current toolchain warnings in the existing SHA-256 chunk loop and desktop form argument count are unrelated to crypto behavior; strict `-D warnings` is not a project verification gate.
 
-## Results and local package
+## Results
 
 Validated on 2026-10-22 (Asia/Saigon):
 
@@ -74,10 +74,10 @@ Validated on 2026-10-22 (Asia/Saigon):
 - `scripts/test-linux-core.sh`: all six privileged suites passed, including all 12 cipher/source combinations; 726.18 seconds; zero failures.
 - Release CLI/helper frontend suite: passed for LUKS and VeraCrypt.
 - Release desktop virtual-display smoke tests: passed on Wayland and X11/Xwayland.
-- Shell syntax, desktop-entry validation, PKGBUILD metadata and installed build/runtime dependency checks: passed.
+- Shell syntax, desktop-entry validation and installed build/runtime dependency checks: passed.
 - Post-test inventory: no loop devices or mounted filesystems backed by the disposable test directories remained.
 
-Evidence is saved in `dist/validation/`. The local package is built from the current worktree snapshot with `scripts/build-local-aur.sh`; its fresh output directory contains the PKGBUILD, `.SRCINFO`, source snapshot, build/check/package logs and package archive. No AUR publication or system installation is performed.
+Evidence is saved in `dist/validation/`.
 
 ## Verification after upstream integration
 

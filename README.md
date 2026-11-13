@@ -111,7 +111,7 @@ cargo build --release --workspace --locked
 ./target/release/lurker-desktop
 ```
 
-The script downloads fixed upstream VeraCrypt and Linux Kernel Library revisions, applies the tracked integration patches, and places two ordinary executables in `target/release/userspace/`. It never installs packages, invokes sudo, or modifies system configuration. It needs a C/C++ toolchain, Python 3.12+, make, patch, pkg-config, wxWidgets base, FUSE3 development files, flex, bison, bc and Perl. For a debug desktop, set `LURKER_USERSPACE_DIR="$PWD/target/release/userspace"` when launching it. Packaged builds include the helpers under `/usr/lib/lurker/userspace`.
+The script downloads fixed upstream VeraCrypt and Linux Kernel Library revisions, applies the tracked integration patches, and places two ordinary executables in `target/release/userspace/`. It never installs packages, invokes sudo, or modifies system configuration. It needs a C/C++ toolchain, Python 3.12+, make, patch, pkg-config, wxWidgets base, FUSE3 development files, flex, bison, bc and Perl. For a debug desktop, set `LURKER_USERSPACE_DIR="$PWD/target/release/userspace"` when launching it. For a system-wide installation, place the helpers under `/usr/lib/lurker/userspace`.
 
 The CLI exposes the same route:
 
@@ -262,42 +262,6 @@ python3 tests/macos_cli.py
 ```
 
 Real Linux tests create fresh `/tmp` images and dedicated loop devices. They never target an existing vault. See `docs/linux-validation.md` for the full matrix and commands.
-
-## Arch/AUR Package
-
-The stable `lurker` package recipe in `packaging/aur-release` builds GitHub tag `0.1` as Arch package version `0.1-1`. It includes the CLI, desktop app, internal helper, and pinned userspace VeraCrypt/LKL helpers. All source archives have SHA-256 checksums. Package page: https://aur.archlinux.org/packages/lurker
-
-Build and install the release package from this repository:
-
-```bash
-cd packaging/aur-release
-makepkg -si
-```
-
-To build without installing, use `makepkg` instead. The stable package conflicts with `lurker-git`; choose one. To build directly from AUR:
-
-```bash
-git clone https://aur.archlinux.org/lurker.git
-cd lurker
-makepkg -si
-```
-
-The `lurker-git` AUR package builds the latest `main` from https://github.com/annguyenfoss/lurker.git. It includes the CLI, desktop app, internal helper, and pinned userspace VeraCrypt/LKL helpers. Package page: https://aur.archlinux.org/packages/lurker-git
-
-```bash
-git clone https://aur.archlinux.org/lurker-git.git
-cd lurker-git
-makepkg -si
-```
-
-`packaging/aur` is a Git submodule of ssh://aur@aur.archlinux.org/lurker-git.git. Initialize it before building the current worktree locally, including uncommitted changes:
-
-```bash
-git submodule update --init packaging/aur
-./scripts/build-local-aur.sh
-```
-
-The package, `.SRCINFO`, source snapshot, and logs are written under a fresh `dist/aur-build-*` directory. Nothing is uploaded or installed. Building requires the dependencies listed in `packaging/aur/PKGBUILD`; system VeraCrypt is optional and needed only to create VeraCrypt volumes in privileged mode.
 
 ## License
 

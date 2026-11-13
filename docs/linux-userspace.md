@@ -60,7 +60,7 @@ LUKS, physical-device operations and LUKS tags use Privileged mode. Keyfile auth
 
 Normal user FUSE mounting uses the distribution's installed setuid `fusermount3` helper. There is no sudo, polkit dialog, administrator password, new setuid executable or system configuration change per operation. This is distinct from a claim that no system service/helper has any privileges. Systems which disable unprivileged FUSE cannot use this route.
 
-Native revisions and integration patches are fixed in `scripts/build-linux-userspace.py` and `native/linux-userspace/patches`. Helpers identify their protocol version before use; an ordinary upstream VeraCrypt executable cannot accidentally substitute for the file-only helper. Build outputs and source caches live under ignored `target/` directories. The builder verifies patch content even for stamped caches and regenerates the fixed filesystem configuration. Each mounted filesystem uses a 192 MiB LKL memory arena in addition to VeraCrypt buffers; performance differs from the kernel route. The AUR recipe includes the helpers and their upstream licenses.
+Native revisions and integration patches are fixed in `scripts/build-linux-userspace.py` and `native/linux-userspace/patches`. Helpers identify their protocol version before use; an ordinary upstream VeraCrypt executable cannot accidentally substitute for the file-only helper. Build outputs and source caches live under ignored `target/` directories. The builder verifies patch content even for stamped caches and regenerates the fixed filesystem configuration. Each mounted filesystem uses a 192 MiB LKL memory arena in addition to VeraCrypt buffers; performance differs from the kernel route.
 
 ## Security findings and remaining hardening
 
