@@ -22,6 +22,22 @@ SOURCES = {
     "lkl": ("lkl/linux", "d0f76a77e8c2ca68bd7d96190b8da09040eab072"),
 }
 
+# Checksums of GitHub codeload archives for the pinned commits, verified before
+# extraction and before accepting an existing archive cache. Mutable generated
+# build trees are not a substitute for these immutable source inputs.
+SOURCE_ARCHIVE_SHA256 = {
+    "veracrypt": "fc286de07d0ac88b48c65cade34bac932b30a93cd1719a22f9fef3b69feedfc4",
+    "veracrypt-create": "fc286de07d0ac88b48c65cade34bac932b30a93cd1719a22f9fef3b69feedfc4",
+    "lkl": "ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e168",
+}
+
+
+def verify_archive(name, archive):
+    with archive.open("rb") as source:
+        digest = hashlib.file_digest(source, "sha256").hexdigest()
+    if digest != SOURCE_ARCHIVE_SHA256[name]:
+        raise RuntimeError(f"Pinned source archive checksum mismatch: {archive}")
+
 
 def run(command, **kwargs):
     print("+", " ".join(map(str, command)), flush=True)
@@ -31,11 +47,15 @@ def run(command, **kwargs):
 def prepare(name, cache, offline):
     repository, revision = SOURCES[name]
     source = cache / name
+    archive = cache / f"{name}-{revision}.tar.gz"
+    if archive.exists():
+        verify_archive(name, archive)
+    elif source.exists() and not (source / ".git").exists():
+        raise RuntimeError(f"Missing pinned source archive {archive}. Restore the archive or remove generated sources and download again.")
     if not source.exists():
-        if offline:
-            raise RuntimeError(f"Missing source {source}; run once without --offline.")
+        if offline and not archive.exists():
+            raise RuntimeError(f"Missing source archive {archive}; run once without --offline.")
         cache.mkdir(parents=True, exist_ok=True)
-        archive = cache / f"{name}-{revision}.tar.gz"
         if not archive.exists():
             url = f"https://codeload.github.com/{repository}/tar.gz/{revision}"
             print(f"Downloading pinned source: {url}", flush=True)
@@ -46,6 +66,7 @@ def prepare(name, cache, offline):
                 temporary.replace(archive)
             finally:
                 temporary.unlink(missing_ok=True)
+        verify_archive(name, archive)
         with tarfile.open(archive) as tar:
             top = tar.getmembers()[0].name.split("/")[0]
             tar.extractall(cache, filter="data")
@@ -88,6 +109,7 @@ def publish_creator(source, output):
     shutil.copy2(source / "License.txt", licenses / "VeraCrypt.txt")
     (output / "creator-source.json").write_text(json.dumps({
         "source": SOURCES["veracrypt-create"],
+        "source_archive_sha256": SOURCE_ARCHIVE_SHA256["veracrypt-create"],
         "patch_sha256": hashlib.sha256((ROOT / "native/linux-userspace/patches/veracrypt-create.patch").read_bytes()).hexdigest(),
         "binary_sha256": hashlib.sha256((output / "lurker-veracrypt-create").read_bytes()).hexdigest(),
     }, indent=2) + "\n")
@@ -152,6 +174,7 @@ def main():
     shutil.copy2(vc / "License.txt", licenses / "VeraCrypt.txt")
     shutil.copy2(lkl / "COPYING", licenses / "Linux.txt")
     shutil.copytree(lkl / "LICENSES", licenses / "Linux", dirs_exist_ok=True)
+    (output / "source-archives.json").write_text(json.dumps(SOURCE_ARCHIVE_SHA256, indent=2) + "\n")
     (output / "sources.json").write_text(json.dumps(SOURCES, indent=2) + "\n")
     print(f"Userspace helpers built in {output}. Nothing was installed.")
 

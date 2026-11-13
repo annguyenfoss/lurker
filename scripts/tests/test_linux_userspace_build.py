@@ -1,5 +1,8 @@
 """Regression tests for native-source preparation; no download/build is needed."""
 import importlib.util
+import hashlib
+import io
+import tarfile
 from pathlib import Path
 import tempfile
 import unittest
@@ -25,6 +28,12 @@ class NativeSourcePreparation(unittest.TestCase):
         self.source = self.cache / 'example'
         self.source.mkdir(parents=True)
         (self.source / 'example.c').write_text('upstream\n')
+        self.archive = self.cache / 'example-fixed-revision.tar.gz'
+        with tarfile.open(self.archive, 'w:gz') as archive:
+            member = tarfile.TarInfo('example-fixed/example.c')
+            member.size = len(b'upstream\n')
+            archive.addfile(member, io.BytesIO(b'upstream\n'))
+        self.builder.SOURCE_ARCHIVE_SHA256 = {'example': hashlib.sha256(self.archive.read_bytes()).hexdigest()}
 
     def prepare(self):
         return self.builder.prepare('example', self.cache, offline=True)
@@ -47,6 +56,17 @@ class NativeSourcePreparation(unittest.TestCase):
         self.source.symlink_to(actual, target_is_directory=True)
         self.assertEqual(self.prepare(), actual)
         self.assertEqual((actual / 'example.c').read_text(), 'patched\n')
+
+    def test_corrupt_archive_is_rejected_even_when_source_cache_exists(self):
+        self.archive.write_bytes(b'not the pinned source archive')
+        with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
+            self.prepare()
+
+    def test_unpack_uses_a_verified_archive(self):
+        import shutil
+        shutil.rmtree(self.source)
+        self.assertEqual(self.prepare(), self.source.resolve())
+        self.assertEqual((self.source / 'example.c').read_text(), 'patched\n')
 
     def test_changed_patches_refuse_reusing_old_generated_sources(self):
         self.prepare()
