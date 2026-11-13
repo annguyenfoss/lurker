@@ -6,7 +6,8 @@
 use super::{Credential, args, exec};
 use crate::{AppError, AppResult, CreateCipher};
 use std::fs;
-use std::os::unix::fs::MetadataExt;
+use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::Path;
 
 const MDCONFIG: &str = "/sbin/mdconfig";
@@ -19,9 +20,135 @@ const FORMAT_ARGS: &[&str] = &[
     "init", "-B", "none", "-e", "AES-XTS", "-l", "256", "-s", "4096",
 ];
 const PASSPHRASE_ITERATIONS: &str = "600000";
+const BACKING_SECTORS: &[u32] = &[512, 1024, 2048, 4096, 8192, 16384, 32768, 65536];
+
+/// Inspect at most 64 KiB without attaching a device. GELI metadata starts at
+/// the final *provider* sector, which differs from its encrypted sector size.
+/// This identifies the format and geometry only; native GELI must still verify
+/// the metadata checksum and authenticate the credential before exposing data.
+/// Layout: https://github.com/freebsd/freebsd-src/blob/releng/15.1/sys/geom/eli/g_eli.h
+pub(super) fn probe_image(path: &Path) -> AppResult<Option<u32>> {
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|e| AppError::io("Failed to inspect image format", e))?;
+    let metadata = file
+        .metadata()
+        .map_err(|e| AppError::io("Failed to inspect image metadata", e))?;
+    if !metadata.is_file() {
+        return Err(AppError::new(
+            "GELI image detection requires a regular file.",
+        ));
+    }
+    let length = metadata.len();
+    let count = length.min(65536) as usize;
+    let mut tail = vec![0; count];
+    file.seek(SeekFrom::Start(length - count as u64))
+        .and_then(|_| file.read_exact(&mut tail))
+        .map_err(|e| AppError::io("Failed to read image metadata", e))?;
+    probe_tail(&tail, length)
+}
+
+fn probe_tail(tail: &[u8], image_length: u64) -> AppResult<Option<u32>> {
+    if image_length < 512 {
+        return if tail.starts_with(b"GEOM::ELI\0") {
+            Err(AppError::new("Truncated GELI image metadata."))
+        } else {
+            Ok(None)
+        };
+    }
+    let mut matched = None;
+    for &sector in BACKING_SECTORS {
+        let offset = sector as usize;
+        if offset > tail.len() {
+            continue;
+        }
+        let header = &tail[tail.len() - offset..];
+        if !header.starts_with(b"GEOM::ELI\0") {
+            continue;
+        }
+        validate_metadata(header, image_length, sector)?;
+        if matched.replace(sector).is_some() {
+            return Err(AppError::new(
+                "Ambiguous GELI backing-sector metadata; specify a qualified image instead.",
+            ));
+        }
+    }
+    Ok(matched)
+}
+
+fn validate_metadata(header: &[u8], image_length: u64, backing_sector: u32) -> AppResult<()> {
+    fn invalid() -> AppError {
+        AppError::new("Invalid or unsupported GELI image metadata.")
+    }
+    if header.len() < 20 || &header[..16] != b"GEOM::ELI\0\0\0\0\0\0\0" {
+        return Err(invalid());
+    }
+    let version = u32::from_le_bytes(header[16..20].try_into().unwrap());
+    if version > 7 {
+        return Err(invalid());
+    }
+    // Version 0 predates md_aalgo; versions 1 through 7 share one disk layout.
+    let shift = if version == 0 { 0 } else { 2 };
+    if header.len() < 509 + shift {
+        return Err(invalid());
+    }
+    let flags = u32::from_le_bytes(header[20..24].try_into().unwrap());
+    let algorithm = u16::from_le_bytes(header[24..26].try_into().unwrap());
+    let key_bits = u16::from_le_bytes(header[26..28].try_into().unwrap());
+    let provider = u64::from_le_bytes(header[28 + shift..36 + shift].try_into().unwrap());
+    let encrypted_sector = u32::from_le_bytes(header[36 + shift..40 + shift].try_into().unwrap());
+    let keys = header[40 + shift];
+    let iterations = i32::from_le_bytes(header[41 + shift..45 + shift].try_into().unwrap());
+    // Values are the stable on-disk opencrypto identifiers, not CLI options.
+    let encryption_valid = match algorithm {
+        11 | 21 => matches!(key_bits, 128 | 192 | 256), // AES/Camellia CBC
+        22 => version >= 5 && matches!(key_bits, 128 | 256), // AES-XTS
+        _ => false, // In particular, never treat NULL encryption as supported.
+    };
+    if flags & !0x3ff != 0
+        || flags & 1 != 0
+        || !encryption_valid
+        || provider != image_length
+        || image_length % backing_sector as u64 != 0
+        || !encrypted_sector.is_power_of_two()
+        || encrypted_sector < backing_sector
+        || encrypted_sector > 1024 * 1024
+        || image_length <= encrypted_sector as u64 + backing_sector as u64
+        || keys == 0
+        || keys & !3 != 0
+        || iterations < -1
+    {
+        return Err(invalid());
+    }
+    if flags & 0x10 != 0 {
+        if version == 0 {
+            return Err(invalid());
+        }
+        let authentication = u16::from_le_bytes(header[28..30].try_into().unwrap());
+        if !matches!(authentication, 7 | 8 | 18 | 19 | 20) {
+            return Err(invalid());
+        }
+    }
+    Ok(())
+}
 
 pub(super) fn attach_file(path: &Path, readonly: bool) -> AppResult<String> {
-    let mut argv = args(&["-a", "-t", "vnode"]);
+    attach_file_with_sector(path, readonly, 512)
+}
+
+pub(super) fn attach_file_with_sector(
+    path: &Path,
+    readonly: bool,
+    sector: u32,
+) -> AppResult<String> {
+    if !BACKING_SECTORS.contains(&sector) {
+        return Err(AppError::new(
+            "Unsupported FreeBSD image backing-sector size.",
+        ));
+    }
+    let mut argv = args(&["-a", "-t", "vnode", "-S", &sector.to_string()]);
     if readonly {
         argv.extend(args(&["-o", "readonly"]));
     }
@@ -199,6 +326,73 @@ fn password_line(password: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn metadata_tail(backing_sector: u32, logical_sector: u32, length: u64) -> Vec<u8> {
+        let mut tail = vec![0; 65536];
+        let offset = tail.len() - backing_sector as usize;
+        let header = &mut tail[offset..];
+        header[..16].copy_from_slice(b"GEOM::ELI\0\0\0\0\0\0\0");
+        header[16..20].copy_from_slice(&7u32.to_le_bytes());
+        header[20..24].copy_from_slice(&0x200u32.to_le_bytes());
+        header[24..26].copy_from_slice(&22u16.to_le_bytes());
+        header[26..28].copy_from_slice(&256u16.to_le_bytes());
+        header[30..38].copy_from_slice(&length.to_le_bytes());
+        header[38..42].copy_from_slice(&logical_sector.to_le_bytes());
+        header[42] = 1;
+        header[43..47].copy_from_slice(&600000i32.to_le_bytes());
+        tail
+    }
+
+    #[test]
+    fn detects_backing_geometry_without_confusing_encrypted_sector_size() {
+        let length = 128 * 1024 * 1024;
+        assert_eq!(
+            probe_tail(&metadata_tail(512, 4096, length), length).unwrap(),
+            Some(512)
+        );
+        assert_eq!(
+            probe_tail(&metadata_tail(4096, 4096, length), length).unwrap(),
+            Some(4096)
+        );
+        assert_eq!(probe_tail(&[0; 65536], length).unwrap(), None);
+        assert_eq!(probe_tail(&[], 0).unwrap(), None);
+    }
+
+    #[test]
+    fn rejects_truncated_invalid_and_ambiguous_metadata() {
+        let length = 128 * 1024 * 1024;
+        assert!(probe_tail(b"GEOM::ELI\0", 10).is_err());
+        let tail = metadata_tail(512, 4096, length);
+        assert!(validate_metadata(&tail[65536 - 512..65536 - 12], length, 512).is_err());
+        assert!(probe_tail(&tail, length + 512).is_err());
+        assert!(probe_tail(&metadata_tail(4096, 512, length), length).is_err());
+        let mut unsupported = tail.clone();
+        unsupported[65536 - 512 + 16..65536 - 512 + 20].copy_from_slice(&8u32.to_le_bytes());
+        assert!(probe_tail(&unsupported, length).is_err());
+        let mut null_encryption = tail.clone();
+        null_encryption[65536 - 512 + 24..65536 - 512 + 26].copy_from_slice(&16u16.to_le_bytes());
+        assert!(probe_tail(&null_encryption, length).is_err());
+        let mut ambiguous = metadata_tail(4096, 4096, length);
+        ambiguous[65536 - 512..].copy_from_slice(&tail[65536 - 512..]);
+        assert!(probe_tail(&ambiguous, length).is_err());
+    }
+
+    #[test]
+    fn image_probe_is_bounded_and_does_not_open_devices_as_images() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("lurker-geli-probe-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("vault 密碼 with spaces");
+        let mut file = fs::File::create(&path).unwrap();
+        let length = 1024 * 1024 * 1024u64;
+        file.set_len(length).unwrap();
+        file.seek(SeekFrom::End(-65536)).unwrap();
+        file.write_all(&metadata_tail(4096, 4096, length)).unwrap();
+        drop(file);
+        assert_eq!(probe_image(&path).unwrap(), Some(4096));
+        assert!(probe_image(Path::new("/dev/null")).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn only_md_device_names_reach_native_tools() {
