@@ -160,10 +160,11 @@ pub(crate) fn validate_request(command: &CommandAction) -> AppResult<()> {
                 | VolumeType::Luks1
                 | VolumeType::Veracrypt
                 | VolumeType::Geli
+                | VolumeType::Pefs
         )
     {
         return Err(AppError::new(
-            "Keyfile authentication is supported for LUKS, VeraCrypt and GELI only.",
+            "Keyfile authentication is supported for LUKS, VeraCrypt, GELI and PEFS only.",
         ));
     }
     if let (Some(keyfile), Some(target)) = (keyfile, target) {

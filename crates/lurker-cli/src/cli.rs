@@ -446,12 +446,13 @@ where
                 | VolumeType::Luks1
                 | VolumeType::Veracrypt
                 | VolumeType::Geli
+                | VolumeType::Pefs
         )
     {
         return Err(usage_failure(
             &script_name,
             color_mode,
-            "Keyfile authentication is supported for LUKS, VeraCrypt and GELI only.",
+            "Keyfile authentication is supported for LUKS, VeraCrypt, GELI and PEFS only.",
         ));
     }
     match action.as_str() {
@@ -921,12 +922,30 @@ mod tests {
             };
             assert_eq!(c.source_kind, SourceKind::Directory);
             assert!(c.size_gb.is_none());
-            for flag in ["--cipher=aes", "--force", "--key-file=Cargo.toml", "1"] {
+            for flag in ["--cipher=aes", "--force", "1"] {
                 assert!(parse_env_args(
                     ["lurker", "create", "--type", kind, "new-vault", flag].map(OsString::from)
                 )
                 .is_err());
             }
+        }
+    }
+
+    #[test]
+    fn only_native_pefs_directory_backend_accepts_a_keyfile() {
+        for kind in ["gocryptfs", "cryfs", "cryptomator", "pefs"] {
+            let result = parse_env_args(
+                [
+                    "lurker",
+                    "create",
+                    "--type",
+                    kind,
+                    "new-vault",
+                    "--key-file=Cargo.toml",
+                ]
+                .map(OsString::from),
+            );
+            assert_eq!(result.is_ok(), kind == "pefs");
         }
     }
 

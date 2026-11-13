@@ -3,6 +3,7 @@
 // DragonFly LUKS1 XTS512/PBKDF2-SHA256. They never inherit Linux LUKS2 flags.
 // Directory engines use fixed upstream authenticated formats: gocryptfs
 // AES-GCM/EME+scryptN16, CryFS AES-GCM/16KiB, Cryptomator format8 SIV_GCM.
+// Native FreeBSD PEFS uses AES-256-XTS/PBKDF2-600000 and verifier-chain metadata.
 // CIPHER.md records the complete profiles; generic --cipher is container-only.
 use crate::model::CreateCipher;
 use std::ffi::OsString;

@@ -48,7 +48,7 @@ use std::path::Path;
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     credentials::validate_request(&command)?;
     validate_platform(&command)?;
-    if folder::handles(&command)? {
+    if !native_directory_request(&command) && folder::handles(&command)? {
         return folder::run(command, output);
     }
     #[cfg(target_os = "macos")]
@@ -81,7 +81,32 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
 /// older frontend sends the default privileged mode. PEFS uses its native BSD
 /// authorization route and is intentionally excluded by the folder adapter.
 pub fn request_requires_user_session(command: &CommandAction) -> AppResult<bool> {
+    if native_directory_request(command) {
+        return Ok(false);
+    }
     folder::handles(command)
+}
+
+fn native_directory_request(command: &CommandAction) -> bool {
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    {
+        bsd::handles_directory(command)
+    }
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    {
+        let _ = command;
+        false
+    }
 }
 
 fn validate_platform(command: &CommandAction) -> AppResult<()> {
