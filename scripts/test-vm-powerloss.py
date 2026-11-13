@@ -397,6 +397,7 @@ def guest_setup(args):
         create += [str(source)]
     guest_cli(directory, create, secret)
     guest_cli(directory, ["mount", "--type", args.backend, str(source), str(mountpoint)], secret)
+    require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
     # Persist only test credentials/recovery metadata before the measured
     # workload. No global sync and no clean detach occurs before poweroff.
     fsync_path(directory)
@@ -413,6 +414,7 @@ def guest_worker(run_id):
     manifest = json.loads((directory / "guest.json").read_text())
     mountpoint = Path(manifest["mountpoint"])
     require(mountpoint == directory / "open data", "Mountpoint ownership changed")
+    require(os.path.ismount(mountpoint), "Workload must execute inside the encrypted mount")
     payload = secrets.token_bytes(65536)
     temporary = mountpoint / "atomic.tmp"
     with temporary.open("wb") as output:
@@ -464,6 +466,7 @@ def guest_verify(run_id):
     phase = "reopen-through-candidate-cli"
     try:
         guest_cli(directory, ["mount", "--type", manifest["backend"], str(source), str(mountpoint)], secret)
+        require(os.path.ismount(mountpoint), "Recovery CLI did not expose the encrypted filesystem")
         phase = "capture-raw-WAL-evidence"
         evidence = directory / "recovered-evidence"
         evidence.mkdir(mode=0o700)
