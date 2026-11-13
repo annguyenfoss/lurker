@@ -30,7 +30,8 @@ fn macos_helper_returns_errors_without_linux_elevation() {
         &json!({"action":"create", "target":"unused", "size_gb":"1", "force":false, "source_kind":"file", "volume_type":"luks", "cipher":"aes", "passphrase":"private"}),
     );
     assert!(!response.ok);
-    assert!(response.error.unwrap().contains("LUKS requires Linux"));
+    let error = response.error.unwrap();
+    assert!(error.contains("luks") && error.contains("not supported on macos"));
     assert!(!request(&json!({"action":"unknown"})).ok);
 }
 

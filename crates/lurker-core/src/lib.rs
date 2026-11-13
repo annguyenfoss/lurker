@@ -115,7 +115,7 @@ fn validate_platform(command: &CommandAction) -> AppResult<()> {
     let backend = command.volume_type();
     if !backend.supports_platform(std::env::consts::OS) {
         return Err(AppError::new(format!(
-            "Backend {backend} is outside the approved scope on {}.",
+            "Backend {backend} is not supported on {}.",
             std::env::consts::OS
         )));
     }

@@ -224,7 +224,7 @@ mod tests {
         #[cfg(target_os = "linux")]
         assert!(response.error.unwrap().contains("supports VeraCrypt"));
         #[cfg(target_os = "macos")]
-        assert!(response.error.unwrap().contains("Linux-only"));
+        assert!(response.error.unwrap().contains("not supported on macos"));
         assert!(handle_payload(b"{invalid", false)
             .error
             .unwrap()
