@@ -211,6 +211,14 @@ class Ownership(unittest.TestCase):
         with patch.object(VM.OwnedClone, "verify_domain"), patch.object(VM, "run", side_effect=[json.dumps([route]), json.dumps([neighbor])]), patch.object(VM.subprocess, "run"):
             self.assertEqual(clone.static_address(), "192.168.231.10")
 
+    def test_network_stop_rejects_active_connections(self):
+        clone = VM.OwnedClone.load(self.directory)
+        xml = ET.fromstring(VM.network_xml(self.m));xml.set("connections", "1")
+        with patch.object(VM.OwnedClone, "verify_network", return_value=xml), patch.object(VM, "virsh") as call:
+            with self.assertRaisesRegex(RuntimeError, "connected"):
+                clone.stop_network()
+        call.assert_not_called()
+
 
 class GuestFixture(unittest.TestCase):
     def test_owned_persistent_home_marker_and_permissions(self):

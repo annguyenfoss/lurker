@@ -171,6 +171,12 @@ class OwnedClone:
                 hosts[0].get("ip") == str(subnet[10]), "Clone DHCP identity changed")
         return xml
 
+    def stop_network(self):
+        network = self.verify_network()
+        require(int(network.get("connections", "0")) == 0, "Owned network still has connected guests")
+        virsh("net-destroy", self.manifest["network_uuid"])
+        self.event("network-stop", method="libvirt-net-destroy", network_uuid=self.manifest["network_uuid"])
+
     def verify_domain(self):
         domain = ET.fromstring(virsh("dumpxml", self.manifest["uuid"]))
         require(domain.findtext("uuid") == self.manifest["uuid"], "Clone UUID changed")
@@ -604,7 +610,7 @@ def main():
     plan.add_argument("--run", required=True)
     plan.add_argument("--subnet", required=True)
     plan.add_argument("--bandwidth", type=int, default=32)
-    for action in ("copy-boot", "finish-copy-boot", "static-transport", "inspect", "poweroff", "boot", "ssh"):
+    for action in ("copy-boot", "finish-copy-boot", "static-transport", "network-stop", "inspect", "poweroff", "boot", "ssh"):
         command = commands.add_parser(action)
         command.add_argument("directory", type=Path)
         if action == "ssh":
@@ -642,6 +648,8 @@ def main():
         finish_copy_and_boot(clone)
     elif args.action == "static-transport":
         clone.register_static_transport()
+    elif args.action == "network-stop":
+        clone.stop_network()
     elif args.action == "poweroff":
         clone.poweroff()
     elif args.action == "boot":
