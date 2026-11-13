@@ -37,14 +37,16 @@ pub(crate) fn handles(command: &CommandAction) -> AppResult<bool> {
     match command {
         CommandAction::Mount(c) if c.source.is_dir() => Ok(is_folder(detect_type(&c.source)?)),
         CommandAction::Unmount(c) => {
-            if !runtime_path().exists() {
+            let sessions = session_snapshot(&runtime_path())?;
+            if sessions.is_empty() {
                 return Ok(false);
             }
-            let target = fs::canonicalize(&c.target)
-                .map_err(|e| AppError::io("Cannot resolve unmount target", e))?;
-            let runtime = Runtime::lock()?;
-            Ok(runtime
-                .sessions()?
+            let target = match fs::canonicalize(&c.target) {
+                Ok(target) => target,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+                Err(error) => return Err(AppError::io("Cannot resolve unmount target", error)),
+            };
+            Ok(sessions
                 .iter()
                 .any(|(_, s)| s.source == target || s.mountpoint == target))
         }
@@ -188,6 +190,10 @@ fn secure_dir(path: &Path) -> AppResult<()> {
     }
     let m = fs::symlink_metadata(path)
         .map_err(|e| AppError::io("Cannot inspect private folder state", e))?;
+    validate_private_directory(&m)
+}
+
+fn validate_private_directory(m: &fs::Metadata) -> AppResult<()> {
     if !m.is_dir() || m.uid() != crate::effective_uid() || m.mode() & 0o077 != 0 {
         return Err(AppError::new(
             "Folder state must be a private directory owned by the login user.",
@@ -226,31 +232,85 @@ impl Runtime {
         Ok(Self { path, _lock: lock })
     }
     fn sessions(&self) -> AppResult<Vec<(PathBuf, Session)>> {
-        let mut result = Vec::new();
-        for entry in fs::read_dir(&self.path)
-            .map_err(|e| AppError::io("Cannot inspect folder sessions", e))?
-        {
-            let entry = entry.map_err(|e| AppError::io("Cannot inspect folder session", e))?;
-            if !entry.file_name().to_string_lossy().starts_with("session-") {
-                continue;
-            }
-            let dir = entry.path();
-            secure_dir(&dir)?;
-            let file = OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_NOFOLLOW)
-                .open(dir.join("session.json"))
-                .map_err(|e| AppError::io("Cannot read folder session", e))?;
-            let session: Session = serde_json::from_reader(file.take(65536)).map_err(|_| {
-                AppError::new("Malformed folder session; preserve it for manual recovery.")
-            })?;
-            if session.schema != SCHEMA {
-                return Err(AppError::new("Unsupported folder session schema."));
-            }
-            result.push((dir, session));
-        }
-        Ok(result)
+        session_snapshot(&self.path)
     }
+}
+
+// Records are published atomically. Read-only discovery must neither acquire
+// the mutation lock nor recreate a directory concurrently removed by cleanup.
+fn session_snapshot(path: &Path) -> AppResult<Vec<(PathBuf, Session)>> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(AppError::io("Cannot inspect folder state", error)),
+    };
+    validate_private_directory(&metadata)?;
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(AppError::io("Cannot inspect folder sessions", error)),
+    };
+    let mut result = Vec::new();
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(AppError::io("Cannot inspect folder session", error)),
+        };
+        if !entry.file_name().to_string_lossy().starts_with("session-") {
+            continue;
+        }
+        let directory = entry.path();
+        let metadata = match fs::symlink_metadata(&directory) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(AppError::io("Cannot inspect folder session", error)),
+        };
+        validate_private_directory(&metadata)?;
+        let file = match OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+            .open(directory.join("session.json"))
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(AppError::io("Cannot read folder session", error)),
+        };
+        let metadata = file
+            .metadata()
+            .map_err(|error| AppError::io("Cannot inspect open folder session", error))?;
+        if !metadata.is_file()
+            || metadata.uid() != crate::effective_uid()
+            || metadata.mode() & 0o077 != 0
+            || metadata.nlink() > 1
+        {
+            return Err(AppError::new(
+                "Folder session record must be a private regular file owned by the login user.",
+            ));
+        }
+        if metadata.len() > 65536 {
+            return Err(AppError::new(
+                "Folder session exceeds the 64 KiB record limit.",
+            ));
+        }
+        let mut bytes = Vec::new();
+        file.take(65537)
+            .read_to_end(&mut bytes)
+            .map_err(|error| AppError::io("Cannot read open folder session", error))?;
+        if bytes.len() > 65536 {
+            return Err(AppError::new(
+                "Folder session exceeds the 64 KiB record limit.",
+            ));
+        }
+        let session: Session = serde_json::from_slice(&bytes).map_err(|_| {
+            AppError::new("Malformed folder session; preserve it for manual recovery.")
+        })?;
+        if session.schema != SCHEMA {
+            return Err(AppError::new("Unsupported folder session schema."));
+        }
+        result.push((directory, session));
+    }
+    Ok(result)
 }
 
 fn save(dir: &Path, session: &Session) -> AppResult<()> {
@@ -982,13 +1042,13 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output) -> AppResult<()
 }
 
 pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
-    if crate::effective_uid() == 0 || !runtime_path().exists() {
+    if crate::effective_uid() == 0 {
         return Ok(Vec::new());
     }
-    let runtime = Runtime::lock()?;
     let mut result = Vec::new();
-    for (dir, s) in runtime.sessions()? {
-        let mounted = mount_identity(&s.mountpoint)?.is_some();
+    for (dir, s) in session_snapshot(&runtime_path())? {
+        let mounted = mount_identity(&s.mountpoint)?
+            .is_some_and(|identity| s.mount_identity.as_ref() == Some(&identity));
         let running = match s.process.as_ref() {
             Some(process) => alive(process)?,
             None => false,
@@ -1015,6 +1075,82 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn snapshot_record() -> Session {
+        Session {
+            schema: SCHEMA,
+            backend: VolumeType::Gocryptfs,
+            source: "source".into(),
+            source_identity: Identity {
+                device: 1,
+                inode: 2,
+            },
+            mountpoint: "mountpoint".into(),
+            readonly: false,
+            mount_identity: None,
+            mounted_directory: None,
+            process: None,
+        }
+    }
+    #[test]
+    fn readonly_snapshot_ignores_operation_lock_and_never_recreates_state() {
+        let root = std::env::temp_dir().join(format!("lurker-folder-snapshot-{}", nonce()));
+        assert!(session_snapshot(&root).unwrap().is_empty());
+        assert!(!root.exists());
+        secure_dir(&root).unwrap();
+        let directory = root.join("session-test");
+        secure_dir(&directory).unwrap();
+        // An operation may reserve its private directory before publishing JSON.
+        assert!(session_snapshot(&root).unwrap().is_empty());
+        let lock = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(root.join("lock"))
+            .unwrap();
+        // SAFETY: this test owns the live descriptor, released when lock drops.
+        assert_eq!(
+            unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            0
+        );
+        save(&directory, &snapshot_record()).unwrap();
+        assert_eq!(session_snapshot(&root).unwrap().len(), 1);
+        fs::remove_dir_all(&root).unwrap();
+        assert!(session_snapshot(&root).unwrap().is_empty());
+        assert!(!root.exists());
+    }
+    #[test]
+    fn readonly_snapshot_keeps_malformed_private_and_oversized_records_explicit() {
+        let root = std::env::temp_dir().join(format!("lurker-folder-invalid-snapshot-{}", nonce()));
+        secure_dir(&root).unwrap();
+        let directory = root.join("session-test");
+        secure_dir(&directory).unwrap();
+        save(&directory, &snapshot_record()).unwrap();
+        let record = directory.join("session.json");
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(
+            session_snapshot(&root)
+                .unwrap_err()
+                .message
+                .contains("private regular file")
+        );
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::write(&record, b"invalid JSON").unwrap();
+        assert!(
+            session_snapshot(&root)
+                .unwrap_err()
+                .message
+                .contains("Malformed")
+        );
+        fs::write(&record, vec![b' '; 65537]).unwrap();
+        assert!(
+            session_snapshot(&root)
+                .unwrap_err()
+                .message
+                .contains("64 KiB")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn dead_fuse_recovery_requires_confirmed_exit_and_only_known_io_errors() {
         let expected = Identity {
