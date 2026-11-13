@@ -41,6 +41,27 @@ def capture(args: list[str], cwd: Path) -> str:
     return subprocess.check_output(args, cwd=cwd, text=True, stderr=subprocess.STDOUT).strip()
 
 
+def go_module_notices(src: Path, destination: Path) -> list[dict]:
+    """Keep exact transitive identities and original license/notice files."""
+    text = capture(["go", "list", "-m", "-json", "all"], src)
+    decoder = json.JSONDecoder()
+    modules = []
+    while text.strip():
+        module, offset = decoder.raw_decode(text.lstrip())
+        text = text.lstrip()[offset:]
+        modules.append(module)
+        directory = module.get("Dir")
+        if not directory or module.get("Main"):
+            continue
+        notices = destination / module["Path"] / module.get("Version", "unknown")
+        for path in Path(directory).iterdir():
+            if path.is_file() and path.name.upper().startswith(("LICENSE", "COPYING", "NOTICE", "AUTHORS")):
+                notices.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, notices / path.name)
+    return [{key: value for key, value in module.items() if key in {"Path", "Version", "Sum", "GoModSum"}}
+            for module in modules]
+
+
 def source(name: str, cache: Path, log) -> Path:
     url, revision, version = PINS[name]
     path = cache / f"{name}-{revision}"
@@ -82,7 +103,14 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             run(["go", "build", "-mod=readonly", "-trimpath", "-ldflags="
                  f"-X main.GitVersion={version} -X main.BuildDate=2026-11-11",
                  "-o", str(output / name), "."], src, log, env)
-            run([str(output / name), "-version"], src, log, env)
+            target_os, target_arch = (capture(["go", "env", key], src) for key in ("GOOS", "GOARCH"))
+            host_os = {"Linux": "linux", "Darwin": "darwin", "FreeBSD": "freebsd"}.get(platform.system())
+            host_arch = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
+            if (target_os, target_arch) == (host_os, host_arch):
+                run([str(output / name), "-version"], src, log, env)
+            else:
+                # Cross-compiled pure-Go artifacts still require native tests.
+                run(["go", "version", "-m", str(output / name)], src, log, env)
             license_paths = [src / "LICENSE"]
         else:
             if not shutil.which("uv"):
@@ -91,8 +119,10 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             env["CONAN_HOME"] = str(cache / "conan")
             conan = ["uv", "tool", "run", "--from", "conan==2.32.0", "conan"]
             run(conan + ["profile", "detect", "--exist-ok"], src, log, env)
+            lock = ROOT / "native/folder/cryfs/conan.lock"
             run(conan + ["build", ".", "-s", "build_type=Release", "--build=missing",
-                         "-o", "&:build_tests=False", "-o", "&:update_checks=False"], src, log, env)
+                         "-o", "&:build_tests=False", "-o", "&:update_checks=False",
+                         "--lockfile", str(lock)], src, log, env)
             binary = src / "build/Release/src/cryfs-cli/cryfs"
             shutil.copy2(binary, output / name)
             run([str(output / name), "--version"], src, log, env)
@@ -107,6 +137,20 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         dependency_files = [p for p in (src / "go.mod", src / "go.sum", src / "conanfile.py") if p.is_file()]
         for path in dependency_files:
             shutil.copy2(path, license_dir / path.name)
+        dependencies = None
+        target = {"os": platform.system(), "machine": platform.machine()}
+        if name == "gocryptfs":
+            dependencies = go_module_notices(src, license_dir / "modules")
+            target = {key: capture(["go", "env", key], src) for key in ("GOOS", "GOARCH")}
+            (license_dir / "modules.json").write_text(json.dumps(dependencies, indent=2) + "\n")
+        else:
+            shutil.copy2(ROOT / "native/folder/cryfs/conan.lock", license_dir / "conan.lock")
+            dependencies = json.loads((license_dir / "conan.lock").read_text())
+            # Conan packages preserve dependency licenses separately from their
+            # compiled archives. Retain those notices for the static linkage.
+            for path in (cache / "conan/p").glob("**/p/licenses"):
+                dest = license_dir / "dependencies" / path.parent.parent.name
+                shutil.copytree(path, dest, dirs_exist_ok=True)
         native_dependencies = ""
         if platform.system() == "Linux":
             probe = subprocess.run(["ldd", str(output / name)], capture_output=True, text=True)
@@ -114,9 +158,10 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         elif platform.system() == "Darwin":
             native_dependencies = capture(["otool", "-L", str(output / name)], src)
         return {"schema": 1, "backend": name, "source": url, "revision": revision,
-                "version": version, "platform": platform.platform(), "machine": platform.machine(),
+                "version": version, "build_platform": platform.platform(), "target": target,
                 "toolchain": toolchain, "sha256": sha256(output / name),
                 "dependencies": {p.name: sha256(p) for p in dependency_files},
+                "dependency_identities": dependencies,
                 "native_dependencies": native_dependencies, "log": str(logpath)}
 
 

@@ -1,0 +1,15 @@
+{
+  "version": "0.5",
+  "requires": [
+    "spdlog/1.14.1#0c58e5559d0409d1fadfc39f51393c11",
+    "range-v3/cci.20240905#e81f7e06e0638107631749c568c80062",
+    "fmt/10.2.1#15db2a3ea0646365bf05a6f50369ac59",
+    "boost/1.84.0#fc2fd00e54dffc953c94ea842ef95f35"
+  ],
+  "build_requires": [
+    "cmake/3.25.3#586c962fa58ccc886a7b2667f7c19ab9",
+    "b2/5.6.1#41ae5699a0588de1202afe5b675cc86d"
+  ],
+  "python_requires": [],
+  "config_requires": []
+}
