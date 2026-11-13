@@ -146,3 +146,12 @@ a package or starting a case, especially on the smaller OpenBSD root filesystem.
 The guest manifest records the selected image size and exact runner/credential
 transport digests separately from the immutable product candidate. Directory
 backends take no size and record a null container size.
+
+Packaged NetBSD CGD/AES also passed the same five checks at candidate `76f05fb`,
+using NetBSD `11.1`, persistent outer FFS and a 128 MiB FFSv2 container. Archive
+SHA-256: `0b461b383ee6367e12a656a382bd26006db0347cdc2ee0e31cea65447dbcbea2`.
+The mandatory `.cgdparams` sidecar was retained and hashed before the cut.
+Normal writable CLI reopen and close succeeded without test-container repair;
+acknowledged data and the FULL/WAL commit survived. Exact runner and credential
+transport hashes are in the guest result. Private evidence is under
+`/mnt/virt/lurker-fault-b202611141`.
