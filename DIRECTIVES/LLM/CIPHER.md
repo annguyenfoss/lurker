@@ -87,6 +87,22 @@ Use this file as the source of truth for selected encryption backends and create
 - Iteration times remain 5000 ms (AES/Twofish) and 10000 ms (Serpent). No Argon2, memory/parallelism options or LUKS2-only format arguments.
 - DragonFly's native cryptsetup and kernel algorithms require independent qualification; its adapter must document any compatible fixed profile differences before advertising support.
 
+## Native BSD create profiles
+
+- FreeBSD GELI: AES-XTS with 256-bit component keys (512-bit combined XTS), 4096-byte sectors, PBKDF2 with 600000 iterations for passwords, UFS inside. Password or binary keyfile, never both.
+- NetBSD CGD: AES-XTS512, Argon2id v19 (262144 KiB, 3 iterations, parallelism 2), FFSv2 inside. Password only. The mandatory `<image>.cgdparams` sidecar contains salt/KDF/recovery parameters; back it up with the image. Only the strict generated profile is accepted; arbitrary executable `shell_cmd` parameters are rejected.
+- OpenBSD softraid CRYPTO: native AES-XTS disk format and native password KDF; FFS inside. Password only; native keydisks are not regular keyfiles. The current single-source API does not implement multi-source RAID1C. Read-only crypto attachment is unavailable and must fail rather than fall back to writable attachment.
+- DragonFly LUKS1: AES/Serpent/Twofish XTS/plain64 with 512-bit keys, PBKDF2/SHA-256 and 5000 ms iteration time, native UFS inside. Its cryptsetup 1.1.2-derived implementation has different compatibility constraints from modern Linux; native functional tests do not replace security/maintenance qualification.
+- Native BSD disk adapters initially accept regular file containers only, through root-authorized native file devices. No physical-device creation or automatic filesystem repair.
+
+## Directory create profiles
+
+- gocryptfs 2.7: native AES-256-GCM contents, EME names and HKDF; explicit scrypt `N=2^16` for password wrapping.
+- CryFS stable 1.0.3: AES-256-GCM, 16384-byte blocks and the stable upstream scrypt configuration. CryFS 2.x alpha is excluded.
+- Cryptomator format 8: upstream `SIV_GCM` suite (AES-SIV names, AES-GCM contents), with upstream scrypt key wrapping.
+- These directory backends accept a password and their fixed format profile. They take no size, keyfile, alternate `--cipher` or destructive replacement option. PEFS has a separate native FreeBSD profile and module qualification.
+- Profiles describe implementation policy, not completed platform qualification. Keep matrix entries marked selected until packaged native lifecycle tests pass.
+
 ## LUKS Keyslot Management (Linux)
 
 - Each slot accepts either a password or a binary keyfile. Slots are independent alternatives; any one enrolled credential can unlock the volume.

@@ -1,6 +1,7 @@
 mod api;
 mod credentials;
 mod error;
+mod folder;
 #[cfg(target_os = "linux")]
 mod keyslots;
 #[cfg(target_os = "linux")]
@@ -38,6 +39,9 @@ use std::path::Path;
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     credentials::validate_request(&command)?;
     validate_platform(&command)?;
+    if folder::handles(&command)? {
+        return folder::run(command, output);
+    }
     #[cfg(target_os = "macos")]
     {
         if command.privilege_mode() == PrivilegeMode::Unprivileged {
@@ -53,6 +57,13 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
         validate_request(&command)?;
         workflow::run(command, output)
     }
+}
+
+/// Directory engines must remain in the login user's session even when an
+/// older frontend sends the default privileged mode. PEFS uses its native BSD
+/// authorization route and is intentionally excluded by the folder adapter.
+pub fn request_requires_user_session(command: &CommandAction) -> AppResult<bool> {
+    folder::handles(command)
 }
 
 fn validate_platform(command: &CommandAction) -> AppResult<()> {
@@ -101,18 +112,24 @@ pub fn run_buffered(command: CommandAction) -> OperationResponse {
 pub fn probe_system() -> AppResult<SystemProbe> {
     #[cfg(target_os = "macos")]
     {
-        macos::probe_system()
+        let mut probe = macos::probe_system()?;
+        probe.tools.extend(folder::tool_statuses());
+        Ok(probe)
     }
     #[cfg(target_os = "linux")]
     {
-        system::probe_system()
+        let mut probe = system::probe_system()?;
+        probe.tools.extend(folder::tool_statuses());
+        Ok(probe)
     }
 }
 
 pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
     #[cfg(target_os = "macos")]
     {
-        macos::list_active_volumes()
+        let mut volumes = macos::list_active_volumes()?;
+        volumes.extend(folder::list_active_volumes()?);
+        Ok(volumes)
     }
     #[cfg(target_os = "linux")]
     {
@@ -124,6 +141,7 @@ pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 fn list_linux_volumes() -> AppResult<Vec<ActiveVolume>> {
     let mounts = read_mountinfo()?;
     let mut volumes = userspace::list_active_volumes()?;
+    volumes.extend(folder::list_active_volumes()?);
     let entries = match fs::read_dir("/dev/mapper") {
         Ok(entries) => entries,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(volumes),

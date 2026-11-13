@@ -33,6 +33,8 @@ pub fn resolve_helper_path() -> Result<PathBuf, String> {
 }
 
 pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<OperationResponse, String> {
+    let directory_backend =
+        lurker_core::request_requires_user_session(&command).map_err(|e| e.message)?;
     let unprivileged = command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged;
     let keyfile = match &command {
         CommandAction::Create(c) => c.keyfile.is_some(),
@@ -41,7 +43,7 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
         CommandAction::Unmount(_) => false,
     };
     let keyslots = matches!(&command, CommandAction::Keyslots(_));
-    if unprivileged || keyfile || keyslots {
+    if directory_backend || unprivileged || keyfile || keyslots {
         let result = Command::new(helper_path)
             .arg("capabilities")
             .stdin(Stdio::null())
@@ -49,8 +51,15 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
             .map_err(|error| format!("Failed to check helper capabilities: {error}"))?;
         let capabilities: serde_json::Value =
             serde_json::from_slice(&result.stdout).unwrap_or_default();
-        if !result.status.success() || capabilities["protocol_version"] != 2 {
+        if !result.status.success()
+            || !matches!(capabilities["protocol_version"].as_u64(), Some(2 | 3))
+        {
             return Err("Installed lurker-helper does not support unprivileged or credential operations. Update it together with the desktop app.".into());
+        }
+        if directory_backend
+            && (capabilities["protocol_version"] != 3 || capabilities["directory_backends"] != true)
+        {
+            return Err("Installed lurker-helper does not support directory backends. Update it together with the desktop app.".into());
         }
         if unprivileged && capabilities["unprivileged_veracrypt"] != true {
             return Err("Installed lurker-helper does not support unprivileged operation. Update it together with the desktop app.".into());
@@ -123,6 +132,27 @@ fn is_executable(path: &Path) -> bool {
 mod tests {
     use super::*;
     use lurker_core::{PrivilegeMode, UnmountCommand, VolumeType};
+
+    #[test]
+    fn directory_requests_require_the_new_helper_contract() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-folder-helper-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(&helper, "#!/bin/sh\nif [ \"$1\" = capabilities ]; then printf '%s\\n' '{\"protocol_version\":2}'; else : > \"${0}.ran\"; fi\n").unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let command = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            target: directory.join("unused"),
+            tag: None,
+            volume_type: VolumeType::Gocryptfs,
+        });
+        assert!(run_helper(&helper, command)
+            .unwrap_err()
+            .contains("does not support directory backends"));
+        assert!(!directory.join("helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn older_helper_is_never_sent_an_unprivileged_operation() {

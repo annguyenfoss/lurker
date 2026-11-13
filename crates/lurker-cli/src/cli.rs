@@ -441,13 +441,17 @@ where
     if keyfile.is_some()
         && !matches!(
             volume_type,
-            VolumeType::Auto | VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
+            VolumeType::Auto
+                | VolumeType::Luks
+                | VolumeType::Luks1
+                | VolumeType::Veracrypt
+                | VolumeType::Geli
         )
     {
         return Err(usage_failure(
             &script_name,
             color_mode,
-            "Keyfile authentication is supported for LUKS and VeraCrypt only.",
+            "Keyfile authentication is supported for LUKS, VeraCrypt and GELI only.",
         ));
     }
     match action.as_str() {

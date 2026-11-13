@@ -21,7 +21,8 @@ fn run() -> i32 {
             println!(
                 "{}",
                 serde_json::json!({
-                    "protocol_version": 2,
+                    "protocol_version": 3,
+                    "directory_backends": true,
                     "unprivileged_veracrypt": cfg!(target_os = "linux"),
                     "keyfile_authentication": true,
                     "luks_keyslots": cfg!(target_os = "linux"),
@@ -61,9 +62,14 @@ fn handle_payload(payload: &[u8], as_root: bool) -> OperationResponse {
         return operation_error(error.message);
     }
 
+    let user_session = match lurker_core::request_requires_user_session(&command) {
+        Ok(value) => value,
+        Err(error) => return operation_error(error.message),
+    };
     // macOS disk images and VeraCrypt run in the login user session.
     // VeraCrypt owns any platform authorization it needs.
-    if command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged
+    if user_session
+        || command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged
         || cfg!(target_os = "macos")
         || as_root
         || is_root()

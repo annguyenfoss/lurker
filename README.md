@@ -277,6 +277,12 @@ claim of native qualification. CLI directory creation uses
 cipher option. These backends retain their native fixed encryption profiles.
 Explicit Linux `--type luks1` uses XTS/PBKDF2-SHA-512; the `luks` default remains
 LUKS2/Argon2id. Backend/OS combinations outside the approved matrix are rejected.
+BSD native containers use GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD),
+softraid CRYPTO/FFS (OpenBSD), and LUKS1/UFS (DragonFly). Run native container
+operations through the OS administrator authorization tool. NetBSD images must
+be kept together with their `.cgdparams` recovery sidecars. OpenBSD read-only
+crypto mappings and multi-source RAID1C are not implemented. Native integration
+and package qualification are tracked separately from the selected matrix.
 Native packages carry private third-party engines; host kernel tools and FUSE
 remain prerequisites, with macOS FUSE installed separately. A Cargo-only build
 does not include every private native engine.
