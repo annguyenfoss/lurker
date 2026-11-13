@@ -11,6 +11,7 @@ use crate::output::Output;
 use crate::system::{trim_stdout, AppContext};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, IsTerminal, Read, Write};
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -91,13 +92,22 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
     {
         return Err(AppError::new("Mountpoint is already mounted."));
     }
-    let detected_type = detect_source_volume_type(ctx, &command.source, command.volume_type)?;
+    // cryptsetup flocks regular-file metadata itself. Keep our exclusive source
+    // lock and give it a pinned loop block device, whose metadata lock is a
+    // separate resource. This also prevents reopening a replaced pathname.
+    let crypto_source = if let Some(source) = source_guard.as_ref() {
+        attach_locked_source(ctx, source, &command.source, command.readonly)?
+    } else {
+        command.source.clone()
+    };
+    let detected_type = detect_source_volume_type(ctx, &crypto_source, command.volume_type)?;
     match detected_type {
         VolumeType::Veracrypt => {
             require_supported_veracrypt_tag(command.tag.as_deref())?;
             tcrypt_mount_device(
                 ctx,
                 &command.source,
+                &crypto_source,
                 &command.mountpoint,
                 command.passphrase.as_deref(),
                 command.keyfile.as_deref(),
@@ -108,6 +118,7 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
         VolumeType::Luks | VolumeType::Luks1 => luks_mount_device(
             ctx,
             &command.source,
+            &crypto_source,
             &command.mountpoint,
             command.tag.as_deref(),
             command.passphrase.as_deref(),
@@ -551,6 +562,7 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
 fn luks_mount_device(
     ctx: &mut AppContext,
     source_path: &Path,
+    crypto_source: &Path,
     mountpoint: &Path,
     tag_override: Option<&str>,
     passphrase: Option<&str>,
@@ -560,7 +572,7 @@ fn luks_mount_device(
 ) -> AppResult<()> {
     require_passphrase(passphrase, keyfile)?;
     let mapper_name = mapper_name_for_source(source_path, tag_override)?;
-    let profile = detect_luks_cipher_profile(ctx, source_path)?;
+    let profile = detect_luks_cipher_profile(ctx, crypto_source)?;
 
     ctx.output
         .msg(&format!("Mounting source {}", source_path.display()));
@@ -575,7 +587,7 @@ fn luks_mount_device(
     assert_mapper_available(&mapper_name)?;
     luks_open(
         ctx,
-        source_path,
+        crypto_source,
         &mapper_name,
         passphrase,
         keyfile,
@@ -586,6 +598,7 @@ fn luks_mount_device(
     if let Some(source) = locked_source {
         verify_mapper_source(ctx, &mapper_name, source, source_path)?;
     }
+    ctx.release_cleanup_loop()?;
     mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
 
@@ -601,6 +614,7 @@ fn luks_mount_device(
 fn tcrypt_mount_device(
     ctx: &mut AppContext,
     source_path: &Path,
+    crypto_source: &Path,
     mountpoint: &Path,
     passphrase: Option<&str>,
     keyfile: Option<&Path>,
@@ -621,7 +635,7 @@ fn tcrypt_mount_device(
     assert_mapper_available(&mapper_name)?;
     tcrypt_open(
         ctx,
-        source_path,
+        crypto_source,
         &mapper_name,
         passphrase,
         keyfile,
@@ -631,6 +645,7 @@ fn tcrypt_mount_device(
     if let Some(source) = locked_source {
         verify_mapper_source(ctx, &mapper_name, source, source_path)?;
     }
+    ctx.release_cleanup_loop()?;
     mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
 
@@ -770,6 +785,50 @@ fn assert_file_not_attached(ctx: &mut AppContext, source: &File) -> AppResult<()
         return Err(AppError::new("Container is already attached to a kernel loop device. Unmount it before opening it again."));
     }
     Ok(())
+}
+
+fn attach_locked_source(
+    ctx: &mut AppContext,
+    source: &File,
+    path: &Path,
+    readonly: bool,
+) -> AppResult<PathBuf> {
+    crate::linux_source::verify_path_identity(source, path)?;
+    let program = crate::trusted_privileged_executable(ctx.losetup_path()?)?;
+    let pinned = format!("/proc/{}/fd/{}", std::process::id(), source.as_raw_fd());
+    let mut args = vec!["--find".into(), "--show".into()];
+    if readonly {
+        args.push("--read-only".into());
+    }
+    args.push(OsString::from(pinned));
+    let result = ctx.capture_command(&program, &args, true, "Failed to attach locked container")?;
+    if !result.status.success() {
+        return Err(AppError::new(format!(
+            "Cannot attach the locked container: {}",
+            String::from_utf8_lossy(&result.stderr).trim()
+        )));
+    }
+    let device = trim_stdout(&result);
+    if !device.strip_prefix("/dev/loop").is_some_and(|suffix| {
+        !suffix.is_empty() && suffix.bytes().all(|byte| byte.is_ascii_digit())
+    }) {
+        return Err(AppError::new(
+            "Cannot identify newly attached source loop. Refusing an ambiguous device.",
+        ));
+    }
+    let device = PathBuf::from(device);
+    ctx.set_cleanup_loop(device.clone());
+    let expected = file_source_identity(source)?;
+    if !native_loop_sources(ctx)?
+        .iter()
+        .any(|(name, backing)| Path::new(name) == device && *backing == expected)
+    {
+        return Err(AppError::new(
+            "New source loop does not match the locked container.",
+        ));
+    }
+    crate::linux_source::verify_path_identity(source, path)?;
+    Ok(device)
 }
 
 fn verify_mapper_source(

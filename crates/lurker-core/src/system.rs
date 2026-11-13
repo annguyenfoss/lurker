@@ -29,6 +29,7 @@ pub struct AppContext {
     is_root: bool,
     sudo_ready: bool,
     cleanup_mapper: Option<String>,
+    cleanup_loop: Option<PathBuf>,
 }
 
 impl AppContext {
@@ -41,6 +42,7 @@ impl AppContext {
             is_root,
             sudo_ready: false,
             cleanup_mapper: None,
+            cleanup_loop: None,
         })
     }
 
@@ -100,6 +102,28 @@ impl AppContext {
 
     pub fn clear_cleanup_mapper(&mut self) {
         self.cleanup_mapper = None;
+    }
+
+    pub fn set_cleanup_loop(&mut self, device: PathBuf) {
+        self.cleanup_loop = Some(device);
+    }
+
+    pub fn release_cleanup_loop(&mut self) -> AppResult<()> {
+        let Some(device) = self.cleanup_loop.as_ref().cloned() else {
+            return Ok(());
+        };
+        let losetup = self.losetup_path()?.to_path_buf();
+        self.run_command(
+            &losetup,
+            &["--detach".into(), device.as_os_str().into()],
+            true,
+            false,
+            "Failed to release the owned source loop device",
+        )?;
+        // An open mapper keeps the loop alive with LO_FLAGS_AUTOCLEAR. Otherwise
+        // detach removes it now, including on failed authentication.
+        self.cleanup_loop = None;
+        Ok(())
     }
 
     pub fn prepare_command(
@@ -282,29 +306,37 @@ impl AppContext {
 
 impl Drop for AppContext {
     fn drop(&mut self) {
-        let Some(mapper_name) = self.cleanup_mapper.take() else {
-            return;
-        };
-        let mapper_path = mapper_device_path(&mapper_name);
-        if !mapper_path.exists() {
-            return;
+        if let Some(mapper_name) = self.cleanup_mapper.take() {
+            if mapper_device_path(&mapper_name).exists() {
+                self.output.warn(&format!(
+                    "Closing mapper {} after failed action.",
+                    mapper_name
+                ));
+                let cryptsetup = self.tools.cryptsetup.clone();
+                if !self.try_run_privileged_silent(
+                    &cryptsetup,
+                    &[OsString::from("close"), OsString::from(&mapper_name)],
+                ) {
+                    self.output.warn(&format!(
+                        "Failed to close mapper {} during cleanup.",
+                        mapper_name
+                    ));
+                }
+            }
         }
-
-        self.output.warn(&format!(
-            "Closing mapper {} after failed action.",
-            mapper_name
-        ));
-
-        let cryptsetup = self.tools.cryptsetup.clone();
-        let closed = self.try_run_privileged_silent(
-            &cryptsetup,
-            &[OsString::from("close"), OsString::from(&mapper_name)],
-        );
-        if !closed {
-            self.output.warn(&format!(
-                "Failed to close mapper {} during cleanup.",
-                mapper_name
-            ));
+        if let Some(device) = self.cleanup_loop.take() {
+            let released = self.tools.losetup.clone().is_some_and(|losetup| {
+                self.try_run_privileged_silent(
+                    &losetup,
+                    &["--detach".into(), device.as_os_str().into()],
+                )
+            });
+            if !released {
+                self.output.warn(&format!(
+                    "Failed to release owned loop {} during cleanup.",
+                    device.display()
+                ));
+            }
         }
     }
 }
@@ -535,6 +567,7 @@ mod tests {
             is_root: false,
             sudo_ready: false,
             cleanup_mapper: None,
+            cleanup_loop: None,
         }
     }
 
