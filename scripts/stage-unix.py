@@ -36,9 +36,9 @@ TOOLS = {
     "Linux": {"luks": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "lsblk"],
               "luks1": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "lsblk"],
               "veracrypt": ["cryptsetup", "mkfs.btrfs", "mount", "umount"],
-              "gocryptfs": ["fusermount3"], "cryfs": ["fusermount3"], "cryptomator": ["fusermount3"]},
+              "gocryptfs": [["fusermount3", "fusermount"]], "cryfs": ["fusermount"], "cryptomator": ["fusermount3"]},
     "FreeBSD": {"geli": ["geli", "mdconfig", "newfs", "mount", "umount"],
-                "pefs": ["pefs", "mount", "umount"]},
+                "pefs": ["pefs", "mount", "umount"], "gocryptfs": ["mount_fusefs"]},
     "NetBSD": {"cgd": ["cgdconfig", "vnconfig", "newfs", "mount", "umount"]},
     "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
     "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "newfs", "mount", "umount"]},
@@ -453,11 +453,13 @@ def stage(args):
     verify_files(binaries, {name: provenance["files"][name] for name in required})
     requirements = {}
     for backend in sorted(selected):
-        for tool in TOOLS.get(system, {}).get(backend, []):
-            path = shutil.which(tool, path=os.environ.get("PATH", "") + ":/sbin:/usr/sbin:/usr/local/sbin:/usr/pkg/sbin")
-            if not path:
-                fail("selected backend host tool missing: " + tool)
-            requirements[tool] = path
+        for requirement in TOOLS.get(system, {}).get(backend, []):
+            choices = requirement if isinstance(requirement, list) else [requirement]
+            found = [(tool, shutil.which(tool, path=os.environ.get("PATH", "") + ":/sbin:/usr/sbin:/usr/local/sbin:/usr/pkg/sbin")) for tool in choices]
+            match = next(((tool, path) for tool, path in found if path), None)
+            if match is None:
+                fail("selected backend host tool missing: " + " or ".join(choices))
+            requirements[match[0]] = match[1]
     if "veracrypt-userspace" in artifacts:
         fuse = shutil.which("fusermount3")
         if not fuse:
@@ -530,10 +532,13 @@ def stage(args):
         manifest = {"schema": 1, "source_commit": source.commit, "os": system, "architecture": platform.machine(),
                     "selected_backends": sorted(selected), "bundled_artifacts": sorted(artifacts),
                     "host_tools": requirements, "native_dependencies": dependencies,
-                    "runtime_requirements": ["matching host kernel/filesystem and mount authorization",
-                        "FUSE device/module and authorized user mount helper where applicable",
-                        "PEFS module must match the FreeBSD kernel" ] if "pefs" in selected else [
-                        "matching host kernel/filesystem and mount authorization", "FUSE where applicable"],
+                    "host_tool_requirements": {backend: TOOLS.get(system, {}).get(backend, []) for backend in sorted(selected)},
+                    "runtime_requirements": ["matching host kernel/filesystem and mount authorization"]
+                        + (["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and fusermount)"] if "cryfs" in selected else [])
+                        + (["gocryptfs requires FUSE; Linux accepts fusermount3 or fusermount, FreeBSD uses mount_fusefs"] if "gocryptfs" in selected else [])
+                        + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])
+                        + (["VeraCrypt userspace/LKL requires the FUSE kernel interface and fusermount3"] if "veracrypt-userspace" in artifacts else [])
+                        + (["PEFS module must match the FreeBSD kernel"] if "pefs" in selected else []),
                     "self_contained": False, "native_operation_qualification": "not performed by staging",
                     "files": file_manifest(prefix)}
         (share / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

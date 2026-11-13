@@ -123,6 +123,12 @@ class PackagingPolicy(unittest.TestCase):
         self.assertTrue(any(item["bundled"] for item in records))
         self.assertTrue(any(not dependency["bundled"] for item in records for dependency in item["dependencies"]))
 
+    def test_fuse_dependencies_distinguish_cryfs2_and_cryptomator3(self):
+        self.assertEqual(["fusermount"], stager.TOOLS["Linux"]["cryfs"])
+        self.assertEqual(["fusermount3"], stager.TOOLS["Linux"]["cryptomator"])
+        self.assertEqual([["fusermount3", "fusermount"]], stager.TOOLS["Linux"]["gocryptfs"])
+        self.assertEqual(["mount_fusefs"], stager.TOOLS["FreeBSD"]["gocryptfs"])
+
     def _stage_fixture(self):
         binaries = self.root / "binaries"
         binaries.mkdir()
