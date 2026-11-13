@@ -4,6 +4,7 @@
 //! The shared lifecycle owns publication, mount identity and recovery records.
 use super::{args, exec_utf8 as exec, Credential};
 use crate::{AppError, AppResult, CreateCipher};
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
 #[cfg(target_os = "openbsd")]
@@ -138,11 +139,7 @@ pub(super) fn format(
 ) -> AppResult<()> {
     source_name(source)?;
     regular_file(source)?;
-    if attached(source)? {
-        return Err(AppError::new(
-            "Refusing to overwrite an attached VeraCrypt container.",
-        ));
-    }
+    ensure_source_available(source)?;
     let keyfile = match credential {
         Credential::Keyfile(path) => Some(path.as_path()),
         _ => None,
@@ -168,6 +165,112 @@ fn not_mounted(error: &AppError) -> bool {
     ]
     .iter()
     .any(|message| error.message.ends_with(message))
+}
+
+/// Acquisition checks every private-engine session by inode, including volumes
+/// attached directly through the engine instead of Lurker's session registry.
+/// Keep this separate from source-scoped recovery: an unrelated missing source
+/// must not prevent closing a positively identified, owned attachment.
+pub(super) fn ensure_source_available(source: &Path) -> AppResult<()> {
+    source_name(source)?;
+    regular_file(source)?;
+    let wanted = fs::metadata(source)
+        .map_err(|e| AppError::io("Cannot inspect requested VeraCrypt source identity", e))?;
+    let text = match invoke(&args(&["--text", "--list", "--verbose"]), None) {
+        Ok(text) => text,
+        Err(error) if not_mounted(&error) => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    ensure_listing_available(&text, wanted.dev(), wanted.ino())
+}
+
+fn ensure_listing_available(text: &str, wanted_dev: u64, wanted_ino: u64) -> AppResult<()> {
+    // Resolve all records first. A matching source is not a reason to silently
+    // overlook an incomplete or unresolved attachment elsewhere in the list.
+    let identities: Vec<_> = attached_sources(text)?
+        .into_iter()
+        .map(|path| {
+            let metadata = fs::metadata(&path).map_err(|e| {
+                AppError::io(
+                    format!(
+                        "Cannot resolve attached VeraCrypt source identity: {}",
+                        path.display()
+                    ),
+                    e,
+                )
+            })?;
+            Ok((metadata.dev(), metadata.ino()))
+        })
+        .collect::<AppResult<_>>()?;
+    if identities.contains(&(wanted_dev, wanted_ino)) {
+        return Err(AppError::new("VeraCrypt source is already attached, possibly through a hard-link alias; refusing acquisition."));
+    }
+    Ok(())
+}
+
+fn attached_sources(text: &str) -> AppResult<Vec<PathBuf>> {
+    let malformed = || {
+        AppError::new(
+            "Malformed or ambiguous private VeraCrypt attachment listing; refusing acquisition.",
+        )
+    };
+    let mut records: Vec<String> = Vec::new();
+    let mut slots = HashSet::new();
+    for line in text.lines() {
+        if let Some(slot) = line.strip_prefix("Slot: ") {
+            let slot: u32 = slot.parse().map_err(|_| malformed())?;
+            if slot == 0 || !slots.insert(slot) {
+                return Err(malformed());
+            }
+            records.push(format!("{line}\n"));
+        } else if line.is_empty() {
+            continue;
+        } else {
+            let record = records.last_mut().ok_or_else(malformed)?;
+            // Unknown properties may be added upstream, but truncated lines
+            // and unscoped output cannot masquerade as complete records.
+            if !line.contains(": ") {
+                return Err(malformed());
+            }
+            record.push_str(line);
+            record.push('\n');
+        }
+    }
+    if records.is_empty() {
+        return Err(malformed());
+    }
+    let mut sources = Vec::new();
+    let mut unique_sources = HashSet::new();
+    let mut devices = HashSet::new();
+    let mut auxiliaries = HashSet::new();
+    for record in records {
+        let fields = |prefix: &str| -> Vec<&str> {
+            record
+                .lines()
+                .filter_map(|line| line.strip_prefix(prefix))
+                .collect()
+        };
+        let source = fields("Volume: ");
+        let device = fields("Virtual Device: ");
+        let auxiliary = fields("Lurker Auxiliary Directory: ");
+        if source.len() != 1 || device.len() != 1 || auxiliary.len() != 1 {
+            return Err(malformed());
+        }
+        let path = Path::new(source[0]);
+        source_name(path)?;
+        source_name(Path::new(auxiliary[0]))?;
+        // Validate the native virtual-device namespace without inspecting or
+        // taking ownership of another session's device.
+        listed_device(&record, path)?;
+        if !unique_sources.insert(source[0].to_owned())
+            || !devices.insert(device[0].to_owned())
+            || !auxiliaries.insert(auxiliary[0].to_owned())
+        {
+            return Err(malformed());
+        }
+        sources.push(path.to_owned());
+    }
+    Ok(sources)
 }
 
 pub(super) fn attached(source: &Path) -> AppResult<bool> {
@@ -285,15 +388,7 @@ pub(super) fn unlock(source: &Path, readonly: bool, credential: &Credential) -> 
     if readonly {
         return Err(AppError::new("OpenBSD VeraCrypt read-only crypto attachment has not been qualified; refusing a writable fallback."));
     }
-    match listing(source) {
-        Ok(_) => {
-            return Err(AppError::new(
-                "VeraCrypt container is already attached; refusing a duplicate mount.",
-            ))
-        }
-        Err(error) if not_mounted(&error) => {}
-        Err(error) => return Err(error),
-    }
+    ensure_source_available(source)?;
     let (keyfile, input) = authentication(credential)?;
     let mut argv = args(&[
         "--text",
@@ -395,6 +490,79 @@ pub(super) fn close(source: &Path) -> AppResult<()> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    fn inventory_record(slot: u32, source: &str, unit: u32) -> String {
+        let device = if cfg!(target_os = "freebsd") {
+            format!("/dev/md{unit}")
+        } else {
+            format!("/dev/vnd{unit}c")
+        };
+        format!("Slot: {slot}\nVolume: {source}\nVirtual Device: {device}\nLurker Auxiliary Directory: /tmp/.veracrypt_aux_mnt{unit}\nMount Directory: \n\n")
+    }
+
+    #[test]
+    fn global_inventory_uses_record_boundaries_and_rejects_ambiguity() {
+        let first = inventory_record(1, "/tmp/External Slot: 99 密碼.hc", 1);
+        let second = inventory_record(2, "/tmp/another.hc", 2);
+        assert_eq!(
+            attached_sources(&(first.clone() + &second)).unwrap(),
+            vec![
+                PathBuf::from("/tmp/External Slot: 99 密碼.hc"),
+                PathBuf::from("/tmp/another.hc")
+            ]
+        );
+        for invalid in [
+            String::new(),
+            first.replace("Slot: 1\n", "Slot: 0\n"),
+            first.clone() + &first,
+            first.replace("Volume: ", "Unrecognized Volume: "),
+            first.replace("Mount Directory: ", "Volume: /tmp/injected.hc"),
+            first.clone() + "Slot: 7\nVolume: /tmp/truncated.hc\n",
+            "unscoped header\n".to_owned() + &first,
+            first.clone()
+                + &second
+                    .replace("/dev/md2", "/dev/md1")
+                    .replace("/dev/vnd2c", "/dev/vnd1c"),
+            first.clone() + &second.replace(".veracrypt_aux_mnt2", ".veracrypt_aux_mnt1"),
+        ] {
+            assert!(attached_sources(&invalid).is_err(), "accepted {invalid}");
+        }
+    }
+
+    #[test]
+    fn inventory_blocks_hardlinks_and_unresolved_sources_without_blocking_unrelated_files() {
+        let root = std::env::temp_dir().join(format!("lurker-vc-inventory-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("External Slot: 8 密碼.hc");
+        let alias = root.join("alias.hc");
+        let other = root.join("unrelated.hc");
+        test_file(&source);
+        test_file(&other);
+        fs::hard_link(&source, &alias).unwrap();
+        let text = inventory_record(1, source.to_str().unwrap(), 1);
+        let identity = fs::metadata(&alias).unwrap();
+        assert!(
+            ensure_listing_available(&text, identity.dev(), identity.ino())
+                .unwrap_err()
+                .message
+                .contains("already attached")
+        );
+        let unrelated = fs::metadata(&other).unwrap();
+        assert!(ensure_listing_available(&text, unrelated.dev(), unrelated.ino()).is_ok());
+        let moved = root.join("moved.hc");
+        fs::rename(&source, &moved).unwrap();
+        assert!(
+            ensure_listing_available(&text, unrelated.dev(), unrelated.ino())
+                .unwrap_err()
+                .message
+                .contains("Cannot resolve attached")
+        );
+        fs::rename(moved, &source).unwrap();
+        fs::remove_file(source).unwrap();
+        fs::remove_file(alias).unwrap();
+        fs::remove_file(other).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
     #[test]
     fn source_scoped_listing_rejects_ambiguous_or_different_attachments() {
         let source = Path::new("/tmp/vault with spaces.hc");
@@ -558,6 +726,94 @@ mod tests {
             }
         }
         fs::remove_file(key).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "root on a designated BSD guest with private backend installed; creates /tmp external-engine fixtures"]
+    fn native_external_aliases_are_rejected_without_modifying_or_closing_the_original() {
+        assert_eq!(crate::effective_uid(), 0);
+        backend().unwrap();
+        let root =
+            std::env::temp_dir().join(format!("lurker-vc-external-alias-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        eprintln!("external-alias fixture: {}", root.display());
+        let source = root.join("External Slot: 99 密碼.hc");
+        let alias = root.join("hard alias.hc");
+        let owned = root.join("owned.hc");
+        let candidate = root.join("candidate.hc");
+        test_file(&source).set_len(96 * 1024 * 1024).unwrap();
+        test_file(&owned).set_len(96 * 1024 * 1024).unwrap();
+        test_file(&candidate);
+        let credential = Credential::Password(b"external alias qualification only".to_vec());
+        format(&source, 96, CreateCipher::Aes, &credential).unwrap();
+        fs::hard_link(&source, &alias).unwrap();
+        let hash_program = if cfg!(target_os = "freebsd") {
+            "/sbin/sha256"
+        } else {
+            "/bin/sha256"
+        };
+        let hash = || {
+            exec(
+                hash_program,
+                &["-q".into(), source.as_os_str().to_owned()],
+                None,
+            )
+            .unwrap()
+        };
+        let before = hash();
+        // Direct private-engine attachment deliberately bypasses the Lurker
+        // registry, reproducing an external manual session through path A.
+        let mut argv = args(&[
+            "--text",
+            "--mount",
+            "--non-interactive",
+            "--stdin",
+            "--pim=0",
+            "--filesystem=none",
+            "--protect-hidden=no",
+            "--keyfiles=",
+        ]);
+        argv.push(source.as_os_str().to_owned());
+        let (_, input) = authentication(&credential).unwrap();
+        invoke(&argv, Some(&input)).unwrap();
+        let mapped = listed_device(&listing(&source).unwrap(), &source).unwrap();
+        verify_mapping(&source, &mapped).unwrap();
+        assert!(ensure_source_available(&alias)
+            .unwrap_err()
+            .message
+            .contains("already attached"));
+        assert!(unlock(&alias, false, &credential)
+            .unwrap_err()
+            .message
+            .contains("already attached"));
+        assert!(format(&alias, 96, CreateCipher::Aes, &credential)
+            .unwrap_err()
+            .message
+            .contains("already attached"));
+        assert_eq!(hash(), before);
+        verify_mapping(&source, &mapped).unwrap();
+        // An unresolved *other* session blocks acquisition, while scoped
+        // recovery of an identified owned session still remains possible.
+        format(&owned, 96, CreateCipher::Aes, &credential).unwrap();
+        let own_mapping = unlock(&owned, false, &credential).unwrap();
+        let moved = root.join("moved-external.hc");
+        fs::rename(&source, &moved).unwrap();
+        assert!(ensure_source_available(&candidate)
+            .unwrap_err()
+            .message
+            .contains("Cannot resolve attached"));
+        assert!(attached(&owned).unwrap());
+        verify_mapping(&owned, &own_mapping).unwrap();
+        close(&owned).unwrap();
+        fs::rename(&moved, &source).unwrap();
+        assert_eq!(hash(), before);
+        verify_mapping(&source, &mapped).unwrap();
+        close(&source).unwrap();
+        for path in [source, alias, owned, candidate] {
+            fs::remove_file(path).unwrap();
+        }
         fs::remove_dir(root).unwrap();
     }
 

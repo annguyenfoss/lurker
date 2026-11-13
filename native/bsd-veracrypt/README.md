@@ -52,6 +52,12 @@ writes, fsync, close/reopen and retained data. FreeBSD read-only attachment was
 also verified for each case. OpenBSD read-only attachment fails explicitly.
 The adapter checks private executable/library ownership, source-scoped listing,
 auxiliary FUSE mount/permissions and native backing identity before cleanup.
+Before acquisition it enumerates all engine attachments and compares source
+device/inode identities, including external hard-link aliases. Malformed or
+unresolved attachment records block new acquisition. Cleanup remains scoped
+to the identified source, so an unrelated missing source cannot block closing
+an owned volume. Native regression tests on both BSDs verified unchanged image
+SHA-256 and the original external attachment after rejected alias operations.
 These are native **backend adapter** results; they do not claim whole CLI,
 desktop or release-package qualification.
 
