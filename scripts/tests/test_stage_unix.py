@@ -21,7 +21,7 @@ class PackagingPolicy(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="lurker-stage-test-")
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
 
     def test_external_symlink_is_rejected_before_copy(self):
         source = self.root / "source"
@@ -111,7 +111,8 @@ class PackagingPolicy(unittest.TestCase):
 
     def test_real_elf_dependency_audit_executes_metadata_tools_only(self):
         binary = self.root / "never-execute-payload"
-        shutil.copyfile("/bin/sh", binary)
+        # OpenBSD /bin/sh is a static PIE; the installed SSH client exercises dependencies.
+        shutil.copyfile(shutil.which("ssh") or "/bin/sh", binary)
         original_run = stager.subprocess.run
         def metadata_only(argv, **kwargs):
             self.assertIn(Path(argv[0]).name, {"readelf", "llvm-readelf", "ldconfig"})
@@ -128,7 +129,7 @@ class PackagingPolicy(unittest.TestCase):
         for name in ("lurker", "lurker-helper"):
             (binaries / name).write_bytes(b"\x7fELFfixture-only-never-executed")
             (binaries / name).chmod(0o755)
-        provenance = {"schema": 1, "backend": "binaries", "source_commit": "a" * 40, "os": stager.platform.system(),
+        provenance = {"schema": 1, "backend": "binaries", "source_commit": "a" * 40, "os": "Linux",
                       "architecture": stager.platform.machine(), "files": {name: {"sha256": stager.digest(binaries / name)} for name in ("lurker", "lurker-helper")}}
         manifest = self.root / "binaries.json"
         manifest.write_text(json.dumps(provenance))
