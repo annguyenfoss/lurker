@@ -63,3 +63,31 @@ mounts:
 ```bash
 python -m unittest discover -s scripts/tests -p test_backend_conformance.py
 ```
+
+## Captured native CLI evidence
+
+Development run `cli-5d1ec6ec-20261113T203635Z` used exact source
+`5d1ec6ec0de20642b7fad20224cc25f2c1bd75d5`, verified archive transfer and a
+hash-verified CLI copy in private root-owned guest directories. All operations
+used new `/tmp` fixtures. The following 91 cases passed with no skips:
+
+| Native guest | Backend/profile | Passed cases | CLI SHA-256 prefix |
+| --- | --- | --- | --- |
+| FreeBSD 15.1-RELEASE-p6 / amd64 | GELI AES; PEFS AES | 13 each | `5eb00ed4d73a9852` |
+| NetBSD 11.1 / amd64 | CGD AES | 13 | `86534dd97bb18c22` |
+| DragonFly 6.4-RELEASE / x86_64 | LUKS1 AES, Serpent, Twofish | 13 each | `3212c803314c6973` |
+| OpenBSD 8.0 / amd64 | softraid CRYPTO | 13 | `6756804932e93a64` |
+
+OpenBSD's read-only case exercised **safe rejection**, not read-only support.
+All seven suite result files were reread and their binary hashes and absent
+mounts independently checked after completion. An additional six PEFS CLI
+keyfile commands passed with binary NUL/FF/newline bytes, incorrect-key
+rejection, fsync and reopen persistence; its mount was closed normally.
+
+Controller manifests, full hashes, test scripts and collected results are under
+`/tmp/lurker-bsd-cli-runs/cli-5d1ec6ec-20261113T203635Z/`; guest result paths are
+recorded there. Failed earlier runs remain separate evidence. These are native
+build-artifact tests, **not** clean-machine package, fault-injection or release
+qualification, and they do not establish results for subsequent code revisions.
+The 18 host-independent harness tests also passed on Arch Linux and all four
+BSDs without encryption or mount operations.
