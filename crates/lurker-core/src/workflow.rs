@@ -148,10 +148,10 @@ pub(crate) fn luks_keyslot_kdf_args(cipher: CreateCipher, version: u16) -> Vec<O
     result
 }
 
-// Both Linux routes create the same VeraCrypt header and Btrfs filesystem.
-// The userspace route changes the transport, never the crypto profile.
-#[cfg(target_os = "linux")]
-pub(crate) fn userspace_veracrypt_create_args(
+// Linux and native BSD routes share the upstream VeraCrypt header profile.
+// Adapters select the native inner filesystem; transport never changes crypto.
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+pub(crate) fn file_veracrypt_create_args(
     cipher: CreateCipher,
     size_mib: u64,
     keyfile: Option<&std::path::Path>,
@@ -172,6 +172,15 @@ pub(crate) fn userspace_veracrypt_create_args(
     );
     args.push(format!("--size={size_mib}M").into());
     Ok(args)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn userspace_veracrypt_create_args(
+    cipher: CreateCipher,
+    size_mib: u64,
+    keyfile: Option<&std::path::Path>,
+) -> crate::AppResult<Vec<OsString>> {
+    file_veracrypt_create_args(cipher, size_mib, keyfile)
 }
 
 #[cfg(target_os = "linux")]
