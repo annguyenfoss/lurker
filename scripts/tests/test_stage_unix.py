@@ -177,6 +177,23 @@ class PackagingPolicy(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "server JVM loader path"):
                 stager.private_jre_preload(runtime / "lib/libjava.so", "libjvm.so", self.root, "readelf")
 
+    def test_cryptomator_helper_runtime_sources_match_selected_commit(self):
+        names = ("src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java", "pom.xml")
+        for name in names:
+            path = self.root / "source" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(name.encode())
+        source = mock.Mock()
+        source.read.side_effect = lambda name: name.removeprefix("native/folder/cryptomator/").encode()
+        stager.verify_cryptomator_sources(self.root, source)
+        for name in names:
+            path = self.root / "source" / name
+            original = path.read_bytes()
+            path.write_bytes(b"older helper")
+            with self.assertRaisesRegex(ValueError, "helper source differs"):
+                stager.verify_cryptomator_sources(self.root, source)
+            path.write_bytes(original)
+
     def _stage_fixture(self):
         binaries = self.root / "binaries"
         binaries.mkdir()

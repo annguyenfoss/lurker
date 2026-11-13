@@ -224,6 +224,16 @@ def verify_bsd_patches(manifest, source):
         fail("BSD VeraCrypt artifact patch provenance differs from exact source")
 
 
+def verify_cryptomator_sources(root, source):
+    # The helper is Lurker code, so a dependency lock alone cannot identify its
+    # runtime behavior. Documentation changes do not require rebuilding Java.
+    for name in ("src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java", "pom.xml"):
+        packaged = root / "source" / name
+        expected = hashlib.sha256(source.read("native/folder/cryptomator/" + name)).hexdigest()
+        if not packaged.is_file() or packaged.is_symlink() or digest(packaged) != expected:
+            fail("Cryptomator helper source differs from exact Lurker commit: " + name)
+
+
 def validate_backend(kind, directory, source):
     root = safe_root(directory)
     list(entries(root))
@@ -250,6 +260,7 @@ def validate_backend(kind, directory, source):
         actual = {str(p.relative_to(root)) for p, _ in entries(root)} - {"manifest.json"}
         if actual != set(manifest["files"]):
             fail("Cryptomator payload contains unmanifested/missing files")
+        verify_cryptomator_sources(root, source)
         lock = json.loads(source.read("native/folder/cryptomator/dependencies.lock.json"))
         if manifest.get("sources") != lock:
             fail("Cryptomator dependency provenance differs from source lock")
