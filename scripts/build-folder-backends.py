@@ -22,6 +22,7 @@ PINS = {
     "gocryptfs": ("https://github.com/rfjakob/gocryptfs.git", "756cd453d7afe69fd2a00a7592fd2d9869a6f756", "v2.7.0"),
     "cryfs": ("https://github.com/cryfs/cryfs.git", "5d0cc36785d93e12250696a3ffc928042f2e8d61", "1.0.3"),
 }
+PATCHES = {"cryfs": ["native/folder/cryfs/fsyncdir.patch"]}
 
 
 def sha256(path: Path) -> str:
@@ -38,8 +39,8 @@ def run(args: list[str], cwd: Path, log, env=None) -> None:
     subprocess.run(args, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
 
 
-def capture(args: list[str], cwd: Path) -> str:
-    return subprocess.check_output(args, cwd=cwd, text=True, stderr=subprocess.STDOUT).strip()
+def capture(args: list[str], cwd: Path, env=None) -> str:
+    return subprocess.check_output(args, cwd=cwd, env=env, text=True, stderr=subprocess.STDOUT).strip()
 
 
 def copy_notice(source: Path, destination: Path) -> None:
@@ -69,7 +70,7 @@ def go_module_notices(src: Path, destination: Path) -> list[dict]:
             continue
         notices = destination / module["Path"] / module.get("Version", "unknown")
         for path in Path(directory).iterdir():
-            if path.is_file() and path.name.upper().startswith(("LICENSE", "COPYING", "NOTICE", "AUTHORS")):
+            if path.is_file() and path.name.upper().startswith(("LICENSE", "COPYING", "NOTICE", "AUTHORS", "PATENTS")):
                 notices.mkdir(parents=True, exist_ok=True)
                 copy_notice(path, notices / path.name)
     return [{key: value for key, value in module.items() if key in {"Path", "Version", "Sum", "GoModSum"}}
@@ -135,7 +136,7 @@ def source(name: str, cache: Path, log) -> Path:
         raise RuntimeError(f"{name} release tag does not match its pinned revision")
     if capture(["git", "rev-parse", "HEAD"], path) != revision:
         raise RuntimeError(f"Unexpected {name} source revision: {path}")
-    if capture(["git", "status", "--porcelain", "--untracked-files=no"], path):
+    if capture(["git", "status", "--porcelain", "--untracked-files=all"], path):
         raise RuntimeError(f"Modified {name} source cache: {path}")
     status = capture(["git", "submodule", "status", "--recursive"], path)
     if any(line.startswith(("+", "-", "U")) for line in status.splitlines()):
@@ -143,11 +144,49 @@ def source(name: str, cache: Path, log) -> Path:
     return path
 
 
+def patched_source(name: str, pristine: Path, cache: Path, log) -> tuple[Path, dict[str, str]]:
+    """Verify the entire effective diff against snapshotted reviewed patches.
+
+    Build in a separate worktree, retaining the original pristine checkout.
+    Never reset an existing cache that differs from the expected source.
+    """
+    paths = PATCHES.get(name, [])
+    if not paths:
+        return pristine, {}
+    with tempfile.TemporaryDirectory(prefix="patch-input-", dir=cache) as temporary:
+        inputs = Path(temporary)
+        snapshots, identities = [], {}
+        for number, relative in enumerate(paths):
+            content = (ROOT / relative).read_bytes()
+            identities[relative] = hashlib.sha256(content).hexdigest()
+            path = inputs / f"{number}.patch"
+            path.write_bytes(content)
+            snapshots.append(str(path))
+        key = hashlib.sha256(json.dumps(identities, sort_keys=True).encode()).hexdigest()
+        worktree = cache / f"{name}-{PINS[name][1]}-patched-{key[:20]}"
+        index_env = dict(os.environ, GIT_INDEX_FILE=str(inputs / "expected.index"))
+        run(["git", "read-tree", "HEAD"], pristine, log, index_env)
+        run(["git", "apply", "--cached", "--whitespace=nowarn", *snapshots], pristine, log, index_env)
+        flags = ["--binary", "--no-ext-diff", "--no-renames"]
+        expected = capture(["git", "diff", *flags, "--cached", "HEAD"], pristine, index_env)
+        if not worktree.exists():
+            run(["git", "worktree", "add", "--detach", str(worktree), PINS[name][1]], pristine, log)
+            run(["git", "apply", "--index", "--whitespace=nowarn", *snapshots], worktree, log)
+        if capture(["git", "rev-parse", "HEAD"], worktree) != PINS[name][1]:
+            raise RuntimeError(f"Unexpected patched {name} source revision: {worktree}")
+        actual = capture(["git", "diff", *flags, "HEAD"], worktree)
+        unknown = capture(["git", "ls-files", "--others", "--exclude-standard"], worktree)
+        if actual != expected or unknown:
+            raise RuntimeError(f"Modified or incomplete patched {name} cache; preserve for inspection: {worktree}")
+        return worktree, identities
+
+
 def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
     url, revision, version = PINS[name]
     logpath = cache / f"{name}.log"
     with logpath.open("wb") as log:
-        src = source(name, cache, log)
+        pristine = source(name, cache, log)
+        src, patches = patched_source(name, pristine, cache, log)
         env = os.environ.copy()
         env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(jobs)
         if name == "gocryptfs":
@@ -197,6 +236,13 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         for path in license_paths:
             copy_notice(path, license_dir / path.name)
         source_notices(src, license_dir / "source")
+        for relative, expected in patches.items():
+            path = ROOT / relative
+            if sha256(path) != expected:
+                raise RuntimeError("Reviewed patch changed during the build: " + relative)
+            destination = license_dir / "patches" / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            copy_notice(path, destination)
         # Record Go dependency pins or CryFS Conan recipe/submodule identities.
         dependency_files = [p for p in (src / "go.mod", src / "go.sum", src / "conanfile.py") if p.is_file()]
         for path in dependency_files:
@@ -228,7 +274,7 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         elif platform.system() == "Darwin":
             native_dependencies = capture(["otool", "-L", str(output / name)], src)
         return {"schema": 1, "backend": name, "source": url, "revision": revision,
-                "version": version, "build_platform": platform.platform(), "target": target,
+                "version": version, "patches": patches, "build_platform": platform.platform(), "target": target,
                 "toolchain": toolchain, "sha256": sha256(output / name),
                 "dependencies": {p.name: sha256(p) for p in dependency_files},
                 "dependency_identities": dependencies,

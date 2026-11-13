@@ -22,6 +22,15 @@ the native FUSE ABI. The pinned CryFS **1.0.3 uses FUSE 2**, unlike newer commit
 on its moving `release/1.0` branch. Qualify the actual binary's dependencies on
 each target. See `cryptomator/README.md` for the private Java build.
 
+CryFS builds require the reviewed `cryfs/fsyncdir.patch`. The builder snapshots
+its bytes and creates a separate Git worktree keyed by the patch digest. It
+checks the full effective diff against the reviewed patch on every reuse and
+rejects unexpected untracked source, without resetting edited caches. Manifests
+record source-relative patch names and hashes; the patch and notices ship with
+the component. Unpatched upstream and intermediate patch builds cannot satisfy
+the current release provenance. See `cryfs/README.md` for durability evidence and
+the write-through performance tradeoff.
+
 FreeBSD's Go FUSE route needs the base `fusefs` kernel module, access to
 `/dev/fuse`, `/sbin/mount_fusefs` and native permission for user mounts. Its CLI
 suite passed on the dedicated guest with temporary `vfs.usermount=1` and
