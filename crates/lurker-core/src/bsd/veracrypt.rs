@@ -16,6 +16,22 @@ use std::path::{Path, PathBuf};
 
 const NAME: &str = "lurker-veracrypt-bsd";
 
+/// Supplied only by the locked, root-owned registry after session verification.
+/// Printed source paths alone cannot identify an engine's opened file handle.
+#[derive(Clone, Debug)]
+pub(super) struct ManagedAttachment {
+    pub(super) source: PathBuf,
+    pub(super) dev: u64,
+    pub(super) ino: u64,
+    pub(super) mapped: String,
+}
+
+struct AttachedRecord {
+    source: PathBuf,
+    mapped: String,
+    information: String,
+}
+
 fn candidates(current: &Path) -> Vec<PathBuf> {
     let Some(directory) = current.parent() else {
         return Vec::new();
@@ -137,9 +153,19 @@ pub(super) fn format(
     cipher: CreateCipher,
     credential: &Credential,
 ) -> AppResult<()> {
+    format_with_managed(source, size_mib, cipher, credential, &[])
+}
+
+pub(super) fn format_with_managed(
+    source: &Path,
+    size_mib: u64,
+    cipher: CreateCipher,
+    credential: &Credential,
+    managed: &[ManagedAttachment],
+) -> AppResult<()> {
     source_name(source)?;
     regular_file(source)?;
-    ensure_source_available(source)?;
+    ensure_source_available_with_managed(source, managed)?;
     let keyfile = match credential {
         Credential::Keyfile(path) => Some(path.as_path()),
         _ => None,
@@ -167,48 +193,77 @@ fn not_mounted(error: &AppError) -> bool {
     .any(|message| error.message.ends_with(message))
 }
 
-/// Acquisition checks every private-engine session by inode, including volumes
-/// attached directly through the engine instead of Lurker's session registry.
-/// Keep this separate from source-scoped recovery: an unrelated missing source
-/// must not prevent closing a positively identified, owned attachment.
+/// Without trusted registry context, any existing engine attachment blocks new
+/// acquisition. Keep this separate from source-scoped recovery and cleanup.
 pub(super) fn ensure_source_available(source: &Path) -> AppResult<()> {
+    ensure_source_available_with_managed(source, &[])
+}
+
+pub(super) fn ensure_source_available_with_managed(
+    source: &Path,
+    managed: &[ManagedAttachment],
+) -> AppResult<()> {
     source_name(source)?;
     regular_file(source)?;
     let wanted = fs::metadata(source)
         .map_err(|e| AppError::io("Cannot inspect requested VeraCrypt source identity", e))?;
     let text = match invoke(&args(&["--text", "--list", "--verbose"]), None) {
         Ok(text) => text,
-        Err(error) if not_mounted(&error) => return Ok(()),
+        Err(error) if not_mounted(&error) && managed.is_empty() => return Ok(()),
+        Err(error) if not_mounted(&error) => return Err(AppError::new("Managed VeraCrypt attachment inventory changed; reconcile existing sessions before acquisition.")),
         Err(error) => return Err(error),
     };
-    ensure_listing_available(&text, wanted.dev(), wanted.ino())
+    ensure_listing_available(&text, wanted.dev(), wanted.ino(), managed)
 }
 
-fn ensure_listing_available(text: &str, wanted_dev: u64, wanted_ino: u64) -> AppResult<()> {
-    // Resolve all records first. A matching source is not a reason to silently
-    // overlook an incomplete or unresolved attachment elsewhere in the list.
-    let identities: Vec<_> = attached_sources(text)?
-        .into_iter()
-        .map(|path| {
-            let metadata = fs::metadata(&path).map_err(|e| {
-                AppError::io(
-                    format!(
-                        "Cannot resolve attached VeraCrypt source identity: {}",
-                        path.display()
-                    ),
-                    e,
-                )
-            })?;
-            Ok((metadata.dev(), metadata.ino()))
-        })
-        .collect::<AppResult<_>>()?;
-    if identities.contains(&(wanted_dev, wanted_ino)) {
+fn ensure_listing_available(
+    text: &str,
+    wanted_dev: u64,
+    wanted_ino: u64,
+    managed: &[ManagedAttachment],
+) -> AppResult<()> {
+    let records = attached_sources(text)?;
+    correlate_managed(&records, managed)?;
+    for record in &records {
+        verify_backing(&record.information, &record.mapped)?;
+    }
+    if managed
+        .iter()
+        .any(|entry| entry.dev == wanted_dev && entry.ino == wanted_ino)
+    {
         return Err(AppError::new("VeraCrypt source is already attached, possibly through a hard-link alias; refusing acquisition."));
     }
     Ok(())
 }
 
-fn attached_sources(text: &str) -> AppResult<Vec<PathBuf>> {
+fn correlate_managed(records: &[AttachedRecord], managed: &[ManagedAttachment]) -> AppResult<()> {
+    let mut matched = HashSet::new();
+    for record in records {
+        let known: Vec<_> = managed
+            .iter()
+            .enumerate()
+            .filter(|(_, known)| known.source == record.source && known.mapped == record.mapped)
+            .collect();
+        if known.len() != 1 {
+            return Err(AppError::new("An unmanaged VeraCrypt volume is attached. Close it with its original tool before creating or mounting another VeraCrypt volume; Lurker will not adopt or close it."));
+        }
+        let (index, known) = known[0];
+        let metadata = fs::metadata(&record.source).map_err(|e| AppError::io("Cannot validate a managed VeraCrypt source identity; reconcile that session before acquisition", e))?;
+        if !metadata.is_file()
+            || metadata.dev() != known.dev
+            || metadata.ino() != known.ino
+            || !matched.insert(index)
+        {
+            return Err(AppError::new("Managed VeraCrypt source identity changed; reconcile that session before acquisition."));
+        }
+    }
+    if matched.len() != managed.len() {
+        return Err(AppError::new("Managed VeraCrypt attachment inventory changed; reconcile existing sessions before acquisition."));
+    }
+    Ok(())
+}
+
+fn attached_sources(text: &str) -> AppResult<Vec<AttachedRecord>> {
     let malformed = || {
         AppError::new(
             "Malformed or ambiguous private VeraCrypt attachment listing; refusing acquisition.",
@@ -261,14 +316,18 @@ fn attached_sources(text: &str) -> AppResult<Vec<PathBuf>> {
         source_name(Path::new(auxiliary[0]))?;
         // Validate the native virtual-device namespace without inspecting or
         // taking ownership of another session's device.
-        listed_device(&record, path)?;
+        let mapped = listed_device(&record, path)?;
         if !unique_sources.insert(source[0].to_owned())
             || !devices.insert(device[0].to_owned())
             || !auxiliaries.insert(auxiliary[0].to_owned())
         {
             return Err(malformed());
         }
-        sources.push(path.to_owned());
+        sources.push(AttachedRecord {
+            source: path.to_owned(),
+            mapped,
+            information: record,
+        });
     }
     Ok(sources)
 }
@@ -382,13 +441,22 @@ fn verify_backing(text: &str, mapped: &str) -> AppResult<()> {
 }
 
 pub(super) fn unlock(source: &Path, readonly: bool, credential: &Credential) -> AppResult<String> {
+    unlock_with_managed(source, readonly, credential, &[])
+}
+
+pub(super) fn unlock_with_managed(
+    source: &Path,
+    readonly: bool,
+    credential: &Credential,
+    managed: &[ManagedAttachment],
+) -> AppResult<String> {
     source_name(source)?;
     regular_file(source)?;
     #[cfg(target_os = "openbsd")]
     if readonly {
         return Err(AppError::new("OpenBSD VeraCrypt read-only crypto attachment has not been qualified; refusing a writable fallback."));
     }
-    ensure_source_available(source)?;
+    ensure_source_available_with_managed(source, managed)?;
     let (keyfile, input) = authentication(credential)?;
     let mut argv = args(&[
         "--text",
@@ -505,7 +573,11 @@ mod tests {
         let first = inventory_record(1, "/tmp/External Slot: 99 密碼.hc", 1);
         let second = inventory_record(2, "/tmp/another.hc", 2);
         assert_eq!(
-            attached_sources(&(first.clone() + &second)).unwrap(),
+            attached_sources(&(first.clone() + &second))
+                .unwrap()
+                .into_iter()
+                .map(|record| record.source)
+                .collect::<Vec<_>>(),
             vec![
                 PathBuf::from("/tmp/External Slot: 99 密碼.hc"),
                 PathBuf::from("/tmp/another.hc")
@@ -529,38 +601,60 @@ mod tests {
         }
     }
 
+    fn managed_context(source: &Path, mapped: String) -> ManagedAttachment {
+        let metadata = fs::metadata(source).unwrap();
+        ManagedAttachment {
+            source: source.to_owned(),
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+            mapped,
+        }
+    }
+
     #[test]
-    fn inventory_blocks_hardlinks_and_unresolved_sources_without_blocking_unrelated_files() {
+    fn inventory_requires_complete_trusted_context_and_rejects_replaced_pathnames() {
         let root = std::env::temp_dir().join(format!("lurker-vc-inventory-{}", std::process::id()));
         fs::create_dir(&root).unwrap();
         let source = root.join("External Slot: 8 密碼.hc");
-        let alias = root.join("alias.hc");
+        let alias = root.join("old inode alias.hc");
         let other = root.join("unrelated.hc");
         test_file(&source);
         test_file(&other);
         fs::hard_link(&source, &alias).unwrap();
         let text = inventory_record(1, source.to_str().unwrap(), 1);
-        let identity = fs::metadata(&alias).unwrap();
-        assert!(
-            ensure_listing_available(&text, identity.dev(), identity.ino())
-                .unwrap_err()
-                .message
-                .contains("already attached")
-        );
-        let unrelated = fs::metadata(&other).unwrap();
-        assert!(ensure_listing_available(&text, unrelated.dev(), unrelated.ino()).is_ok());
-        let moved = root.join("moved.hc");
-        fs::rename(&source, &moved).unwrap();
-        assert!(
-            ensure_listing_available(&text, unrelated.dev(), unrelated.ino())
-                .unwrap_err()
-                .message
-                .contains("Cannot resolve attached")
-        );
-        fs::rename(moved, &source).unwrap();
+        let records = attached_sources(&text).unwrap();
+        let known = managed_context(&source, records[0].mapped.clone());
+        assert!(correlate_managed(&records, &[])
+            .unwrap_err()
+            .message
+            .contains("original tool"));
+        assert!(correlate_managed(&records, std::slice::from_ref(&known)).is_ok());
+        let second_text = inventory_record(2, other.to_str().unwrap(), 2);
+        let second = attached_sources(&second_text).unwrap();
+        let second_known = managed_context(&other, second[0].mapped.clone());
+        let both = attached_sources(&(text.clone() + &second_text)).unwrap();
+        assert!(correlate_managed(&both, &[known.clone(), second_known.clone()]).is_ok());
+        assert!(correlate_managed(&both, std::slice::from_ref(&known)).is_err());
+        assert!(correlate_managed(&records, &[known.clone(), second_known]).is_err());
+        // Printed pathname A now identifies inode B while the external engine
+        // still has inode A open through its original file handle.
+        fs::rename(&other, &source).unwrap();
+        assert_ne!(fs::metadata(&source).unwrap().ino(), known.ino);
+        assert_eq!(fs::metadata(&alias).unwrap().ino(), known.ino);
+        assert!(correlate_managed(&records, &[])
+            .unwrap_err()
+            .message
+            .contains("original tool"));
+        assert!(correlate_managed(&records, std::slice::from_ref(&known))
+            .unwrap_err()
+            .message
+            .contains("identity changed"));
+        fs::remove_file(&source).unwrap();
+        assert!(correlate_managed(&records, std::slice::from_ref(&known)).is_err());
+        fs::hard_link(&alias, &source).unwrap();
+        assert!(correlate_managed(&records, &[known]).is_ok());
         fs::remove_file(source).unwrap();
         fs::remove_file(alias).unwrap();
-        fs::remove_file(other).unwrap();
         fs::remove_dir(root).unwrap();
     }
     #[test]
@@ -742,29 +836,57 @@ mod tests {
         let source = root.join("External Slot: 99 密碼.hc");
         let alias = root.join("hard alias.hc");
         let owned = root.join("owned.hc");
+        let second_owned = root.join("second-owned.hc");
         let candidate = root.join("candidate.hc");
-        test_file(&source).set_len(96 * 1024 * 1024).unwrap();
-        test_file(&owned).set_len(96 * 1024 * 1024).unwrap();
+        for path in [&source, &owned, &second_owned] {
+            test_file(path).set_len(96 * 1024 * 1024).unwrap();
+        }
         test_file(&candidate);
         let credential = Credential::Password(b"external alias qualification only".to_vec());
         format(&source, 96, CreateCipher::Aes, &credential).unwrap();
+        format(&owned, 96, CreateCipher::Aes, &credential).unwrap();
+        let own_mapping = unlock(&owned, false, &credential).unwrap();
+        let known = managed_context(&owned, own_mapping.clone());
+        // Two independently verified, registry-managed sessions remain usable.
+        format_with_managed(
+            &second_owned,
+            96,
+            CreateCipher::Aes,
+            &credential,
+            std::slice::from_ref(&known),
+        )
+        .unwrap();
+        let second_mapping = unlock_with_managed(
+            &second_owned,
+            false,
+            &credential,
+            std::slice::from_ref(&known),
+        )
+        .unwrap();
+        let second_known = managed_context(&second_owned, second_mapping);
+        ensure_source_available_with_managed(&candidate, &[known.clone(), second_known]).unwrap();
+        assert!(ensure_source_available(&candidate)
+            .unwrap_err()
+            .message
+            .contains("original tool"));
+        close(&second_owned).unwrap();
+        ensure_source_available_with_managed(&candidate, std::slice::from_ref(&known)).unwrap();
         fs::hard_link(&source, &alias).unwrap();
         let hash_program = if cfg!(target_os = "freebsd") {
             "/sbin/sha256"
         } else {
             "/bin/sha256"
         };
-        let hash = || {
+        let hash = |path: &Path| {
             exec(
                 hash_program,
-                &["-q".into(), source.as_os_str().to_owned()],
+                &["-q".into(), path.as_os_str().to_owned()],
                 None,
             )
             .unwrap()
         };
-        let before = hash();
-        // Direct private-engine attachment deliberately bypasses the Lurker
-        // registry, reproducing an external manual session through path A.
+        let before = hash(&source);
+        // This direct engine invocation bypasses the registry deliberately.
         let mut argv = args(&[
             "--text",
             "--mount",
@@ -780,38 +902,73 @@ mod tests {
         invoke(&argv, Some(&input)).unwrap();
         let mapped = listed_device(&listing(&source).unwrap(), &source).unwrap();
         verify_mapping(&source, &mapped).unwrap();
-        assert!(ensure_source_available(&alias)
-            .unwrap_err()
-            .message
-            .contains("already attached"));
-        assert!(unlock(&alias, false, &credential)
-            .unwrap_err()
-            .message
-            .contains("already attached"));
-        assert!(format(&alias, 96, CreateCipher::Aes, &credential)
-            .unwrap_err()
-            .message
-            .contains("already attached"));
-        assert_eq!(hash(), before);
+        for target in [&alias, &candidate] {
+            assert!(
+                ensure_source_available_with_managed(target, std::slice::from_ref(&known))
+                    .unwrap_err()
+                    .message
+                    .contains("original tool")
+            );
+        }
+        assert!(
+            unlock_with_managed(&alias, false, &credential, std::slice::from_ref(&known))
+                .unwrap_err()
+                .message
+                .contains("original tool")
+        );
+        assert!(format_with_managed(
+            &alias,
+            96,
+            CreateCipher::Aes,
+            &credential,
+            std::slice::from_ref(&known)
+        )
+        .unwrap_err()
+        .message
+        .contains("original tool"));
+        assert_eq!(hash(&alias), before);
         verify_mapping(&source, &mapped).unwrap();
-        // An unresolved *other* session blocks acquisition, while scoped
-        // recovery of an identified owned session still remains possible.
-        format(&owned, 96, CreateCipher::Aes, &credential).unwrap();
-        let own_mapping = unlock(&owned, false, &credential).unwrap();
-        let moved = root.join("moved-external.hc");
-        fs::rename(&source, &moved).unwrap();
-        assert!(ensure_source_available(&candidate)
-            .unwrap_err()
-            .message
-            .contains("Cannot resolve attached"));
+        // Replace printed pathname A with inode B; the opened original inode A
+        // remains reachable through the alias. No printed-path stat can prove
+        // which inode the external engine actually opened.
+        let replacement = root.join("replacement.tmp");
+        fs::write(&replacement, b"replacement inode marker").unwrap();
+        fs::rename(&replacement, &source).unwrap();
+        assert_ne!(
+            fs::metadata(&source).unwrap().ino(),
+            fs::metadata(&alias).unwrap().ino()
+        );
+        assert!(
+            ensure_source_available_with_managed(&alias, std::slice::from_ref(&known))
+                .unwrap_err()
+                .message
+                .contains("original tool")
+        );
+        assert!(
+            ensure_source_available_with_managed(&candidate, std::slice::from_ref(&known))
+                .unwrap_err()
+                .message
+                .contains("original tool")
+        );
+        assert_eq!(hash(&alias), before);
+        assert_eq!(fs::read(&source).unwrap(), b"replacement inode marker");
+        // Literal deletion still blocks acquisition but not scoped recovery of
+        // the positively identified, independently owned session.
+        fs::remove_file(&source).unwrap();
+        assert!(
+            ensure_source_available_with_managed(&candidate, std::slice::from_ref(&known))
+                .unwrap_err()
+                .message
+                .contains("original tool")
+        );
         assert!(attached(&owned).unwrap());
         verify_mapping(&owned, &own_mapping).unwrap();
         close(&owned).unwrap();
-        fs::rename(&moved, &source).unwrap();
-        assert_eq!(hash(), before);
+        fs::hard_link(&alias, &source).unwrap();
+        assert_eq!(hash(&source), before);
         verify_mapping(&source, &mapped).unwrap();
         close(&source).unwrap();
-        for path in [source, alias, owned, candidate] {
+        for path in [source, alias, owned, second_owned, candidate] {
             fs::remove_file(path).unwrap();
         }
         fs::remove_dir(root).unwrap();
