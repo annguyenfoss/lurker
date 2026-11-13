@@ -426,14 +426,26 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         verify_session(&session)?;
         let backing = session.backing.as_deref().unwrap();
         #[cfg(target_os = "netbsd")]
-        native::format(backing, c.cipher, &credential, &params_path(&source))?;
-        #[cfg(not(target_os = "netbsd"))]
+        {
+            native::format(backing, c.cipher, &credential, &params_path(&source))?;
+            session.mapped = Some(native::unlock_initial(
+                backing,
+                &credential,
+                &params_path(&source),
+            )?);
+        }
+        #[cfg(target_os = "openbsd")]
+        {
+            session.mapped = Some(native::format(backing, c.cipher, &credential)?);
+        }
+        #[cfg(any(target_os = "freebsd", target_os = "dragonfly"))]
         {
             native::format(backing, c.cipher, &credential)?;
             session.mapped = Some(native::unlock(backing, false, &credential)?);
-            registry.save(&session)?;
-            native::make_filesystem(session.mapped.as_deref().unwrap())?;
         }
+        // Persist every acquired crypto device before filesystem work. Failed
+        // or interrupted newfs must leave an explicitly recoverable mapping.
+        initialize_acquired_mapping(&registry, &session, native::make_filesystem)?;
         Ok(())
     })();
     let cleaned = cleanup(&registry, &mut session);
@@ -477,6 +489,22 @@ fn absolute_destination(path: &Path) -> AppResult<PathBuf> {
     let parent =
         fs::canonicalize(parent).map_err(|e| AppError::io("Resolve destination parent", e))?;
     Ok(parent.join(name))
+}
+
+/// The injection boundary is after a real crypto attachment has been acquired.
+/// Persist and revalidate its identity before any filesystem initializer runs.
+fn initialize_acquired_mapping(
+    registry: &Registry,
+    session: &Session,
+    initialize: impl FnOnce(&str) -> AppResult<()>,
+) -> AppResult<()> {
+    let mapped = session
+        .mapped
+        .as_deref()
+        .ok_or_else(|| AppError::new("Missing newly acquired crypto device."))?;
+    registry.save(session)?;
+    verify_session(session)?;
+    initialize(mapped)
 }
 
 fn publish(source: &Path, target: &Path, force: bool) -> AppResult<()> {
@@ -862,6 +890,11 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
 }
 
 pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
+    // Native sessions are privileged state. An ordinary user's global probe
+    // must still be able to merge its independent userspace folder sessions.
+    if crate::effective_uid() != 0 {
+        return Ok(Vec::new());
+    }
     if !Path::new(STATE).exists() {
         return Ok(Vec::new());
     }
@@ -1083,6 +1116,13 @@ fn mounts() -> AppResult<Vec<Mounted>> {
 mod tests {
     use super::*;
     #[test]
+    fn unprivileged_discovery_does_not_read_the_privileged_registry() {
+        if crate::effective_uid() != 0 {
+            assert!(list_active_volumes().unwrap().is_empty());
+        }
+    }
+
+    #[test]
     fn no_clobber_publication_preserves_existing_file() {
         let root = std::env::temp_dir().join(format!("lurker-publish-{}", unique_id()));
         fs::create_dir(&root).unwrap();
@@ -1109,5 +1149,85 @@ mod tests {
         assert!(!id.matches(&path));
         fs::remove_file(path).unwrap();
         fs::remove_file(alias).unwrap();
+    }
+    #[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
+    #[test]
+    #[ignore = "requires root; real disposable native crypto attachments under /tmp"]
+    fn initialization_failure_retains_a_journaled_mapping_for_owned_cleanup() {
+        require_root().unwrap();
+        let registry = Registry::open().unwrap();
+        let directory = std::env::temp_dir().join(format!("lurker-init-failure-{}", unique_id()));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let source = directory.join("image");
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&source)
+            .unwrap();
+        file.set_len(128 * 1024 * 1024).unwrap();
+        let credential = Credential::Password(b"temporary initialization failure test".to_vec());
+        let mut session = Session {
+            version: 1,
+            id: unique_id(),
+            backend: default_backend(),
+            source: source.clone(),
+            identity: Identity::read(&source).unwrap(),
+            backing: None,
+            mapped: None,
+            mounted: None,
+            intended_mountpoint: None,
+            readonly: false,
+        };
+        registry.save(&session).unwrap();
+        session.backing = Some(native::attach_file(&source, false).unwrap());
+        registry.save(&session).unwrap();
+        let backing = session.backing.as_deref().unwrap();
+        #[cfg(target_os = "netbsd")]
+        {
+            native::format(
+                backing,
+                crate::CreateCipher::Aes,
+                &credential,
+                &params_path(&source),
+            )
+            .unwrap();
+            session.mapped =
+                Some(native::unlock_initial(backing, &credential, &params_path(&source)).unwrap());
+        }
+        #[cfg(target_os = "openbsd")]
+        {
+            session.mapped =
+                Some(native::format(backing, crate::CreateCipher::Aes, &credential).unwrap());
+        }
+        let mapped = session.mapped.clone().unwrap();
+        let error = initialize_acquired_mapping(&registry, &session, |device| {
+            assert_eq!(device, mapped);
+            let saved = registry
+                .records()
+                .unwrap()
+                .into_iter()
+                .find(|s| s.id == session.id)
+                .unwrap();
+            assert_eq!(saved.mapped.as_deref(), Some(device));
+            verify_session(&saved).unwrap();
+            Err(AppError::new("Injected filesystem initialization failure"))
+        })
+        .unwrap_err();
+        assert_eq!(error.message, "Injected filesystem initialization failure");
+        let mut saved = registry
+            .records()
+            .unwrap()
+            .into_iter()
+            .find(|s| s.id == session.id)
+            .unwrap();
+        assert_eq!(saved.mapped.as_deref(), Some(mapped.as_str()));
+        verify_session(&saved).unwrap();
+        cleanup(&registry, &mut saved).unwrap();
+        assert!(!registry.path(&saved).exists());
+        assert!(native::verify_mapping(&mapped, session.backing.as_deref().unwrap()).is_err());
+        assert!(native::verify_backing(session.backing.as_deref().unwrap(), &source).is_err());
+        fs::remove_dir_all(directory).unwrap();
     }
 }
