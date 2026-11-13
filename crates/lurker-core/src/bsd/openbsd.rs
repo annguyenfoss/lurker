@@ -127,7 +127,11 @@ pub(super) fn detach_file(device: &str) -> AppResult<()> {
     Ok(())
 }
 
-pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential) -> AppResult<()> {
+pub(super) fn format(
+    device: &str,
+    cipher: CreateCipher,
+    credential: &Credential,
+) -> AppResult<String> {
     if cipher != CreateCipher::Aes {
         return Err(AppError::new(
             "OpenBSD softraid CRYPTO supports Lurker's AES profile only.",
@@ -141,11 +145,10 @@ pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential
         &args(&["-wAT-", name]),
         Some(b"RAID *\n"),
     )?;
-    let mapped = assemble(device, credential, true)?;
-    // No filesystem exists yet. Closing here gives the shared lifecycle the
-    // same format -> unlock -> make_filesystem contract as GELI and LUKS.
-    verify_mapping(&mapped, device)?;
-    close(&mapped)
+    // Return the newly initialized mapping to the shared lifecycle without an
+    // internal detach/reopen. The caller journals this resource before
+    // filesystem formatting or cleanup, keeping interrupted creation recoverable.
+    assemble(device, credential, true)
 }
 
 /// A mount must never turn a damaged or unrelated image into a new volume.
@@ -389,8 +392,8 @@ mod tests {
         let credential = Credential::Password(b"native disposable softraid test secret".to_vec());
         let device = attach_file(&image, false).unwrap();
         assert!(unlock(&device, false, &credential).is_err());
-        format(&device, CreateCipher::Aes, &credential).unwrap();
-        let mapped = unlock(&device, false, &credential).unwrap();
+        let mapped = format(&device, CreateCipher::Aes, &credential).unwrap();
+        verify_mapping(&mapped, &device).unwrap();
         make_filesystem(&mapped).unwrap();
         let mountpoint = root.join("mounted");
         fs::create_dir(&mountpoint).unwrap();
