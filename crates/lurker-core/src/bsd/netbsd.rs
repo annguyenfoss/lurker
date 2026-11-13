@@ -8,7 +8,8 @@ use super::{args, exec, Credential};
 use crate::{AppError, AppResult, CreateCipher};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 const CGDCONFIG: &str = "/sbin/cgdconfig";
@@ -124,18 +125,58 @@ pub(super) fn make_filesystem(device: &str) -> AppResult<()> {
     Ok(())
 }
 
+// NetBSD <dev/vndvar.h>: struct vnd_user and VNDIOCGET. Kernel returns the
+// backing vnode's va_fsid/va_fileid, which match stat's st_dev/st_ino even on
+// tmpfs or a FUSE filesystem without a corresponding /dev mount-source node.
+// This is an ABI binding only; encryption remains in the native CGD stack.
+#[repr(C)]
+struct VndUser {
+    unit: libc::c_int,
+    device: libc::dev_t,
+    inode: libc::ino_t,
+}
+
+// <sys/ioccom.h> _IOWR('F', 3, struct vnd_user).
+const VNDIOCGET: libc::c_ulong = 0xc000_0000
+    | ((std::mem::size_of::<VndUser>() as libc::c_ulong & 0x1fff) << 16)
+    | ((b'F' as libc::c_ulong) << 8)
+    | 3;
+
+fn backing_identity(n: u32) -> AppResult<(u64, u64)> {
+    let raw = format!("/dev/rvnd{n}d");
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(&raw)
+        .map_err(|e| AppError::io("Failed to open NetBSD vnode for identity check", e))?;
+    let unit = libc::c_int::try_from(n).map_err(|_| AppError::new("Invalid NetBSD vnode unit."))?;
+    let mut info = VndUser {
+        unit,
+        device: 0,
+        inode: 0,
+    };
+    // SAFETY: VNDIOCGET is the native read/write ioctl for exactly VndUser's
+    // repr(C) layout; file is a live raw vnode descriptor, and info is fully
+    // initialized and valid for the whole synchronous kernel call.
+    if unsafe { libc::ioctl(file.as_raw_fd(), VNDIOCGET, &mut info) } == -1 {
+        return Err(AppError::io(
+            "Failed to query NetBSD vnode backing identity",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    if info.unit != unit || (info.device == 0 && info.inode == 0) {
+        return Err(AppError::new(
+            "NetBSD vnode is unconfigured or its unit changed.",
+        ));
+    }
+    Ok((info.device as u64, info.inode as u64))
+}
+
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     let n = device_number(device, "vnd")?;
-    let listing = exec(VNDCONFIG, &args(&["-l", &format!("/dev/rvnd{n}d")]), None)?;
-    // Compare the kernel-reported backing inode/device, not a substring path.
-    use std::os::unix::fs::MetadataExt;
     let identity =
         fs::metadata(path).map_err(|e| AppError::io("Failed to inspect CGD image", e))?;
-    let reported = parse_backing(&listing, n)
-        .ok_or_else(|| AppError::new("Unrecognized vnode identity; refusing detach."))?;
-    let filesystem = fs::metadata(reported.0)
-        .map_err(|e| AppError::io("Failed to identify vnode backing filesystem", e))?;
-    if reported.1 != identity.ino() || filesystem.rdev() != identity.dev() {
+    if backing_identity(n)? != (identity.dev(), identity.ino()) {
         return Err(AppError::new(
             "NetBSD vnode backing identity changed; refusing detach.",
         ));
@@ -221,19 +262,6 @@ impl Drop for ParametersSnapshot {
         let _ = fs::remove_file(&self.path);
         let _ = fs::remove_dir(&self.directory);
     }
-}
-
-fn parse_backing(listing: &str, n: u32) -> Option<(&str, u64)> {
-    let line = listing.trim().strip_prefix(&format!("vnd{n}: "))?;
-    let (filesystem, rest) = line.split_once(" (")?;
-    if filesystem.is_empty() {
-        return None;
-    }
-    let (device, inode) = rest.split_once(") inode ")?;
-    if !device.starts_with("/dev/") || device.contains(['\n', '\r']) {
-        return None;
-    }
-    Some((device, inode.trim().parse().ok()?))
 }
 
 fn device_number(device: &str, kind: &str) -> AppResult<u32> {
@@ -360,14 +388,80 @@ mod tests {
         );
         assert_eq!(free_cgd("wd0: not in use\ncgd: not in use"), None);
         assert_eq!(device_number("/dev/vnd3d", "vnd").unwrap(), 3);
-        assert_eq!(
-            parse_backing("vnd0: / (/dev/dk1) inode 332685\n", 0),
-            Some(("/dev/dk1", 332685))
-        );
-        assert!(parse_backing("vnd0: not in use", 0).is_none());
         for name in ["/dev/wd0d", "/dev/vndd", "vnd0", "/dev/vnd0d/foo"] {
             assert!(device_number(name, "vnd").is_err());
         }
+    }
+    /// Run as root on a disposable NetBSD test host, never a development host:
+    /// cargo test -p lurker-core native_vnode_identity -- --ignored
+    #[cfg(target_os = "netbsd")]
+    #[test]
+    #[ignore = "allocates disposable vnode devices and mounts a private tmpfs"]
+    fn native_vnode_identity_works_on_ffs_and_tmpfs() {
+        assert_eq!(
+            unsafe { libc::geteuid() },
+            0,
+            "Native vnode identity test needs root"
+        );
+        let root = PathBuf::from(format!(
+            "/tmp/lurker-vnd-identity-test-{}",
+            std::process::id()
+        ));
+        fs::DirBuilder::new().mode(0o700).create(&root).unwrap();
+        fn fixture(root: &Path) -> AppResult<()> {
+            let image = root.join("image");
+            let alias = root.join("alias");
+            File::create(&image)
+                .and_then(|f| f.set_len(2 * 1024 * 1024))
+                .map_err(|e| AppError::io("Failed to create disposable identity image", e))?;
+            fs::hard_link(&image, &alias)
+                .map_err(|e| AppError::io("Failed to alias disposable image", e))?;
+            let vnode = attach_file(&image, false)?;
+            let tested = (|| {
+                verify_backing(&vnode, &image)?;
+                verify_backing(&vnode, &alias)?;
+                fs::rename(&image, root.join("original"))
+                    .map_err(|e| AppError::io("Failed to replace disposable image", e))?;
+                File::create(&image)
+                    .and_then(|f| f.set_len(2 * 1024 * 1024))
+                    .map_err(|e| AppError::io("Failed to create replacement image", e))?;
+                if verify_backing(&vnode, &image).is_ok() {
+                    return Err(AppError::new("Vnode identity accepted a replaced image."));
+                }
+                verify_backing(&vnode, &alias)
+            })();
+            // Detach only the unit this fixture successfully acquired. Never
+            // force a live mapping closed or remove fixture files on failure.
+            detach_file(&vnode)?;
+            tested
+        }
+        fixture(&root).unwrap();
+        let ram = root.join("tmpfs");
+        fs::DirBuilder::new().mode(0o700).create(&ram).unwrap();
+        exec(
+            "/sbin/mount_tmpfs",
+            &[
+                "-s".into(),
+                "32M".into(),
+                "tmpfs".into(),
+                ram.as_os_str().into(),
+            ],
+            None,
+        )
+        .unwrap();
+        let tested = fixture(&ram);
+        // A failed unmount leaves evidence and data in place for inspection.
+        exec("/sbin/umount", &[ram.as_os_str().into()], None).unwrap();
+        tested.unwrap();
+        fs::remove_dir_all(&root).unwrap();
+    }
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn vnode_identity_abi_matches_netbsd_amd64_headers() {
+        assert_eq!(std::mem::size_of::<VndUser>(), 24);
+        assert_eq!(std::mem::offset_of!(VndUser, device), 8);
+        assert_eq!(std::mem::offset_of!(VndUser, inode), 16);
+        assert_eq!(VNDIOCGET, 0xc0184603);
     }
     #[test]
     fn password_framing_and_native_limits() {
