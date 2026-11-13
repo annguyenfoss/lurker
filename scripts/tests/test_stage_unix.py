@@ -138,19 +138,26 @@ class PackagingPolicy(unittest.TestCase):
         with mock.patch.object(stager.platform, "system", return_value="FreeBSD"), mock.patch.object(stager.platform, "machine", return_value="amd64"):
             stager.verify_platform({"target": {"GOOS": "freebsd", "GOARCH": "amd64"}, "build_platform": "Linux"})
 
-    def test_bsd_patch_identity_binds_manifest_to_exact_source_bytes(self):
-        source = mock.Mock()
-        source.read.return_value = b"reviewed patch"
+    def test_bsd_patch_identity_binds_both_patches_to_exact_source_bytes(self):
         import hashlib
-        expected = hashlib.sha256(b"reviewed patch").hexdigest()
-        source.constant.return_value = expected
-        manifest = {"patches": [{"path": "native/bsd-veracrypt/auxiliary-path.patch", "sha256": expected}]}
+        patches = {"native/veracrypt/utf8-console.patch": b"shared utf8 patch",
+                   "native/bsd-veracrypt/auxiliary-path.patch": b"bsd auxiliary patch"}
+        constants = {"COMMON_PATCH_SHA256": hashlib.sha256(patches["native/veracrypt/utf8-console.patch"]).hexdigest(),
+                     "PATCH_SHA256": hashlib.sha256(patches["native/bsd-veracrypt/auxiliary-path.patch"]).hexdigest()}
+        source = mock.Mock()
+        source.read.side_effect = lambda name: patches[name]
+        source.constant.side_effect = lambda path, name: constants[name]
+        manifest = {"patches": [{"path": name, "sha256": hashlib.sha256(data).hexdigest()} for name, data in patches.items()]}
         stager.verify_bsd_patches(manifest, source)
-        with self.assertRaisesRegex(ValueError, "artifact patch provenance"):
-            stager.verify_bsd_patches({"patches": []}, source)
-        source.read.return_value = b"different patch"
-        with self.assertRaisesRegex(ValueError, "reviewed digest"):
-            stager.verify_bsd_patches(manifest, source)
+        for absent in ([], manifest["patches"][:1], manifest["patches"][1:]):
+            with self.assertRaisesRegex(ValueError, "artifact patch provenance"):
+                stager.verify_bsd_patches({"patches": absent}, source)
+        for name in list(patches):
+            original = patches[name]
+            patches[name] = b"changed patch"
+            with self.assertRaisesRegex(ValueError, "reviewed digest"):
+                stager.verify_bsd_patches(manifest, source)
+            patches[name] = original
 
     def test_private_jvm_preload_requires_qualified_loader_anchors(self):
         runtime = self.root / "libexec/lurker/backends/cryptomator/runtime"

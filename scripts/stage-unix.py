@@ -213,11 +213,14 @@ def require_executable(path):
 
 
 def verify_bsd_patches(manifest, source):
-    name = "native/bsd-veracrypt/auxiliary-path.patch"
-    actual = hashlib.sha256(source.read(name)).hexdigest()
-    if source.constant("scripts/build-bsd-backends.py", "PATCH_SHA256") != actual:
-        fail("BSD VeraCrypt source patch differs from its reviewed digest")
-    if manifest.get("patches") != [{"path": name, "sha256": actual}]:
+    expected = []
+    for name, constant in (("native/veracrypt/utf8-console.patch", "COMMON_PATCH_SHA256"),
+                           ("native/bsd-veracrypt/auxiliary-path.patch", "PATCH_SHA256")):
+        actual = hashlib.sha256(source.read(name)).hexdigest()
+        if source.constant("scripts/build-bsd-backends.py", constant) != actual:
+            fail("BSD VeraCrypt source patch differs from its reviewed digest: " + name)
+        expected.append({"path": name, "sha256": actual})
+    if manifest.get("patches") != expected:
         fail("BSD VeraCrypt artifact patch provenance differs from exact source")
 
 
