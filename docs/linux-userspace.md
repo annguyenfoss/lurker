@@ -16,7 +16,7 @@ encrypted container -> VeraCrypt decrypted FUSE image -> loop device -> host fil
 
 Loop setup and mounting the inner filesystem still need privileges. In the checked upstream source, `MountVolumeRequest::RequiresElevation()` returns `!Core->HasAdminPrivileges()` on Linux. `--mount-options=nokernelcrypto` changes the crypto engine; it does not remove the privilege requirement for the remaining mount steps.
 
-Lurker’s Privileged route uses a different opening path: system VeraCrypt creates the container, but cryptsetup opens it and the host mounts its filesystem. The installed VeraCrypt application is not needed to mount an existing container through that route.
+Lurker’s Privileged route uses a different opening path: a private, pinned VeraCrypt-derived creator initializes the container, but cryptsetup opens it and the host mounts its filesystem. The installed VeraCrypt application is not needed to mount an existing container through that route.
 
 Lurker’s Unprivileged route reuses VeraCrypt’s crypto/FUSE implementation, bypasses loop-device setup, and uses LKL/FUSE for the inner filesystem. The bundled modified `lurker-veracrypt` helper is unprivileged-only and refuses root execution. Stock VeraCrypt and the bundled helper are not interchangeable executables.
 
@@ -25,14 +25,14 @@ Lurker’s Unprivileged route reuses VeraCrypt’s crypto/FUSE implementation, b
 | Area | Privileged | Unprivileged |
 |---|---|---|
 | Execution | CLI privileged commands use root/sudo; desktop helper uses pkexec with terminal sudo fallback | CLI/helper and both native backends run as the login user; no elevation fallback |
-| Create | System VeraCrypt, followed by mkfs.btrfs through a kernel mapping | Bundled modified VeraCrypt, followed by mkfs.btrfs on the decrypted FUSE file |
+| Create | Bundled private VeraCrypt creator, followed by mkfs.btrfs through a kernel mapping | Bundled modified VeraCrypt, followed by mkfs.btrfs on the decrypted FUSE file |
 | Open | `cryptsetup open --type tcrypt --veracrypt`, device-mapper and kernel crypto | VeraCrypt userspace crypto exposing a decrypted FUSE image |
 | Filesystem | Host filesystem driver or mount helper | Linux filesystem implementation inside the LKL process, exported through FUSE |
 | Targets | Regular files, disks and partitions | Regular files only |
 | Existing filesystems | Those supported by the host’s mount tools | Validated Btrfs, ext4, exFAT, FAT, NTFS3 and XFS |
 | New Btrfs ownership | Initially root-owned | Initialized for the login uid/gid |
 | Btrfs management | Host ioctls/tools available with appropriate permissions; not exposed as new Lurker UI controls | Ordinary file operations; no host Btrfs snapshot/scrub/device-management ioctls |
-| Updates | Installed VeraCrypt/cryptsetup and host filesystem components | Host FUSE plus bundled, pinned VeraCrypt/LKL helpers, which need maintained revisions and rebuilds |
+| Updates | Bundled creator plus installed cryptsetup and host filesystem components | Host FUSE plus bundled, pinned VeraCrypt/LKL helpers, which need maintained revisions and rebuilds |
 | Status | Existing kernel-backed Lurker workflow | Experimental integration with additional native patches and process lifecycle logic |
 
 Both creation routes use the same normal-volume AES/Serpent/Twofish, SHA-512, PIM 0 and password-or-keyfile authentication profiles, and create Btrfs with zstd mounting. Choosing Unprivileged does not select weaker encryption defaults.
@@ -40,6 +40,18 @@ Both creation routes use the same normal-volume AES/Serpent/Twofish, SHA-512, PI
 The container format is intended to be interchangeable after unmounting, subject to filesystem support and permissions. Tests confirmed that cryptsetup accepts both password-only and keyfile-only headers from userspace-created containers using `--test-passphrase`. That check does not prove a full cross-mode filesystem read/write cycle; dedicated mount/write/remount tests in both directions remain useful follow-up work. Never open the same container concurrently through the two routes.
 
 No comparative throughput or latency benchmark has been run. The userspace route adds two FUSE layers and a 192 MiB LKL memory arena per mounted filesystem, plus VeraCrypt buffers. Extra overhead is an architectural expectation, not a measured slowdown.
+
+## Bundled privileged-route creator
+
+The privileged route discovers `lurker-veracrypt-create` beside the application under `backends/` or `userspace/`, then under `/usr/lib/lurker/{backends,userspace}`. It does not search PATH for a separate VeraCrypt application. Normal-user developer runs may set `LURKER_BACKEND_DIR`; root ignores that override. Missing creator disables only VeraCrypt creation, not LUKS or mounting existing VeraCrypt files.
+
+The creator is built separately from the same pinned upstream source as the root-refusing userspace helper. Its entry-point whitelist allows only Lurker's create profile arguments, one target and upstream's in-memory build self-test; it rejects mount, formatter, service/elevation and general VeraCrypt operations. The existing userspace helper remains unprivileged-only. No cipher primitive is replaced.
+
+Before any root execution or block-device elevation, discovery canonicalizes the creator and requires the executable and every ancestor to be root-owned and not group/world writable. A developer build under a home directory or `/tmp` cannot be elevated. Install a trusted package first for a root desktop helper or physical-device create. Ordinary file creation from a normal-user CLI can execute its user-owned build without elevating the creator; the later cryptsetup/filesystem operations retain their existing privilege boundary.
+
+Build only the creator with `python scripts/build-linux-userspace.py --only-creator`; the full build produces all three helpers. `creator-source.json` records the source revision, patch hash and output hash, with the VeraCrypt license beside it. Host dynamic library dependencies still require packaging qualification; this build does not claim a portable static executable.
+
+`python scripts/test-linux-bundled.py --cli /path/to/lurker --result /tmp/lurker-result.json` runs the native CLI matrix as root **inside a disposable test VM**. It uses private `/tmp/lurker-bundled-test-*` images, checks all three algorithms for LUKS2, LUKS1 and VeraCrypt, and tests persistence, SQLite WAL, rename, incorrect keys, duplicate mounts, no-clobber create and readonly. It does not invoke a separately installed VeraCrypt. Logs/results survive failure, and backing storage is retained when safe unmount fails. This is additional coverage; optional stock-VeraCrypt interoperability tests remain separate.
 
 ## Supported unprivileged operations
 

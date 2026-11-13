@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the file-only Linux helpers; never install, elevate, or change the host.
+"""Build private Linux backends; never install, elevate, or change the host.
 
 Upstream encryption and filesystem implementations stay in external processes.
 Only the small, reviewed integration patches are part of the Lurker repository.
@@ -18,6 +18,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = {
     "veracrypt": ("veracrypt/VeraCrypt", "8172bc55f834485f67be271e02c1167981423621"),
+    "veracrypt-create": ("veracrypt/VeraCrypt", "8172bc55f834485f67be271e02c1167981423621"),
     "lkl": ("lkl/linux", "d0f76a77e8c2ca68bd7d96190b8da09040eab072"),
 }
 
@@ -72,12 +73,33 @@ def prepare(name, cache, offline):
     return source.resolve()
 
 
+def publish_creator(source, output):
+    output.mkdir(parents=True, exist_ok=True)
+    temporary = output / "lurker-veracrypt-create.tmp"
+    shutil.copy2(source / "src/Main/veracrypt", temporary)
+    temporary.chmod(0o755)
+    run(["strip", "--strip-unneeded", temporary])
+    version = subprocess.check_output([temporary, "--lurker-creator-version"], text=True).strip()
+    if version != "lurker-creator-1":
+        raise RuntimeError("Invalid private VeraCrypt creator")
+    temporary.replace(output / "lurker-veracrypt-create")
+    licenses = output / "licenses"
+    licenses.mkdir(exist_ok=True)
+    shutil.copy2(source / "License.txt", licenses / "VeraCrypt.txt")
+    (output / "creator-source.json").write_text(json.dumps({
+        "source": SOURCES["veracrypt-create"],
+        "patch_sha256": hashlib.sha256((ROOT / "native/linux-userspace/patches/veracrypt-create.patch").read_bytes()).hexdigest(),
+        "binary_sha256": hashlib.sha256((output / "lurker-veracrypt-create").read_bytes()).hexdigest(),
+    }, indent=2) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, default=ROOT / "target/userspace/src")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "target/release/userspace")
     parser.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 2))
     parser.add_argument("--offline", action="store_true")
+    parser.add_argument("--only-creator", action="store_true", help="Build only the private header/container creator; omit FUSE/LKL helpers")
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("These helpers are Linux-only.")
@@ -85,16 +107,24 @@ def main():
         parser.error("Build as your normal user, without sudo.")
     if args.jobs < 1:
         parser.error("--jobs must be positive.")
-    for tool in ["gcc", "g++", "make", "wx-config", "pkg-config", "patch", "flex", "bison", "bc", "perl", "strip"]:
+    required = ["gcc", "g++", "make", "wx-config", "pkg-config", "patch", "strip"]
+    if not args.only_creator:
+        required.extend(["flex", "bison", "bc", "perl"])
+    for tool in required:
         if not shutil.which(tool):
             parser.error(f"Required build tool not found: {tool}")
     run(["pkg-config", "--exists", "fuse3"])
-    sources = {name: prepare(name, args.source_dir.resolve(), args.offline) for name in SOURCES}
-    vc = sources["veracrypt"]
+    names = ["veracrypt-create"] if args.only_creator else list(SOURCES)
+    sources = {name: prepare(name, args.source_dir.resolve(), args.offline) for name in names}
+    vc = sources["veracrypt-create"]
     flags = ["NOGUI=1", "WITHFUSE3=1"]
     if not shutil.which("yasm"):
         flags.append("NOASM=1")
     run(["make", "-C", vc / "src", f"-j{args.jobs}", *flags])
+    if args.only_creator:
+        publish_creator(vc, args.output_dir.resolve())
+        return
+    run(["make", "-C", sources["veracrypt"] / "src", f"-j{args.jobs}", *flags])
     lkl = sources["lkl"]
     # tools/lkl regenerates this from our patched defconfig plus host settings.
     # Never inherit filesystem selections from an earlier upstream/cache build.
@@ -103,7 +133,7 @@ def main():
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
     binaries = {
-        "lurker-veracrypt": vc / "src/Main/veracrypt",
+        "lurker-veracrypt": sources["veracrypt"] / "src/Main/veracrypt",
         "lurker-fs": lkl / "tools/lkl/lklfuse",
     }
     for name, binary in binaries.items():
@@ -116,6 +146,7 @@ def main():
         if version != "lurker-userspace-2":
             raise RuntimeError(f"Invalid userspace helper: {binary}")
         temporary.replace(destination)
+    publish_creator(vc, output)
     licenses = output / "licenses"
     licenses.mkdir(exist_ok=True)
     shutil.copy2(vc / "License.txt", licenses / "VeraCrypt.txt")

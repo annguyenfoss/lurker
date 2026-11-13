@@ -1,0 +1,40 @@
+--- a/src/Main/Unix/Main.cpp
++++ b/src/Main/Unix/Main.cpp
+@@ -30,6 +30,37 @@ using namespace VeraCrypt;
+ 
+ int main (int argc, char **argv)
+ {
++	if (argc == 2 && strcmp (argv[1], "--lurker-creator-version") == 0)
++	{
++		std::cout << "lurker-creator-1" << std::endl;
++		return 0;
++	}
++	// This private executable only initializes encrypted headers/data. Mounts,
++	// filesystem formatters, keyslot changes and native elevation are forbidden.
++	// Upstream make runs its in-memory cipher self-test after linking.
++	const bool selfTest = argc == 3 && strcmp (argv[1], "--text") == 0 && strcmp (argv[2], "--test") == 0;
++	bool create = false, filesystem = false, target = false;
++	for (int i = 1; !selfTest && i < argc; ++i)
++	{
++		const std::string arg (argv[i]);
++		if (arg == "--create") { create = true; continue; }
++		if (arg == "--filesystem=none") { filesystem = true; continue; }
++		if (arg == "-k" && i + 1 < argc - 1) { ++i; continue; }
++		if (arg == "-t" || arg == "--force" || arg == "--stdin" || arg == "--non-interactive"
++			|| arg == "--volume-type=normal" || arg == "--hash=SHA-512" || arg == "--random-source=/dev/urandom"
++			|| arg == "--pim=0" || arg == "--quick" || arg == "--encryption=AES"
++			|| arg == "--encryption=Serpent" || arg == "--encryption=Twofish") continue;
++		if (arg.size() > 8 && arg.compare (0, 7, "--size=") == 0 && arg.back() == 'M'
++			&& arg.find_first_not_of ("0123456789", 7) == arg.size() - 1) continue;
++		if (i == argc - 1 && !arg.empty() && arg[0] != '-') { target = true; continue; }
++		std::cerr << "Unsupported private creator argument." << std::endl;
++		return 1;
++	}
++	if (!selfTest && (!create || !filesystem || !target))
++	{
++		std::cerr << "Private creator requires create, filesystem=none and one target." << std::endl;
++		return 1;
++	}
+ #ifdef TC_LINUX
+ 	// The requester helper must never initialize a core service or handle secrets.
+ 	if (argc > 1 && strcmp (argv[1], TC_REQUESTER_HELPER_CMDLINE_OPTION) == 0)
