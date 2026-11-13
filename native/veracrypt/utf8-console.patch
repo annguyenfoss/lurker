@@ -1,0 +1,14 @@
+--- a/src/Main/UserInterface.cpp
++++ b/src/Main/UserInterface.cpp
+@@ -367,2 +367,9 @@
+-	void UserInterface::DisplayVolumeProperties (const VolumeInfoList &volumes) const
+-	{
++	void UserInterface::DisplayVolumeProperties (const VolumeInfoList &volumes) const
++	{
++		// libc++ wide streams retain the classic locale after setlocale().
++		// Preserve complete UTF-8 file identities in the private listing contract.
++#ifdef TC_MACOSX
++		std::wcout.imbue (std::locale ("en_US.UTF-8"));
++#elif defined(TC_BSD)
++		std::wcout.imbue (std::locale ("C.UTF-8"));
++#endif
