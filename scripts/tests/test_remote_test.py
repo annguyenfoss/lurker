@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -95,6 +96,22 @@ class RemoteRunnerTests(unittest.TestCase):
                       {"name": "test", "skip": "no", "blocked": "yes"}]:
             with self.assertRaises(ValueError):
                 coordinator.validate_spec({"stages": [stage]})
+
+    def test_missing_runner_is_incomplete_not_running_or_passed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "launcher.json").write_text(json.dumps({"pid": 99999999, "signature": "old process"}))
+            (root / "result.json").write_text(json.dumps({"status": "running"}))
+            result = subprocess.run([sys.executable, "-c", coordinator.INSPECT, str(root)],
+                                    capture_output=True, text=True, check=True)
+            state = json.loads(result.stdout)
+            self.assertEqual("incomplete", state["status"])
+            self.assertTrue(state["runner_terminal"])
+
+    def test_artifact_cannot_escape_target(self):
+        for artifact in ("/etc/passwd", "../../private-key"):
+            with self.assertRaisesRegex(ValueError, "artifact"):
+                coordinator.validate_spec({"stages": [], "artifacts": [artifact]})
 
     def test_inventory_has_every_supplied_host(self):
         inventory = json.loads(coordinator.INVENTORY.read_text())

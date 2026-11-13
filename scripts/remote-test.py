@@ -76,6 +76,10 @@ def stages_for(suite):
 
 
 def validate_spec(spec):
+    for artifact in spec.get("artifacts", []):
+        path = Path(artifact)
+        if path.is_absolute() or ".." in path.parts or not path.parts:
+            raise ValueError("artifact must be relative to CARGO_TARGET_DIR")
     names = set()
     for stage in spec["stages"]:
         if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", stage["name"]) or stage["name"] in names:
@@ -118,16 +122,25 @@ runner=source/'scripts/remote-test/runner.py'
 if not runner.is_file(): raise ValueError('runner absent from requested commit')
 with (job/'supervisor.log').open('wb') as log:
  process=subprocess.Popen([sys.executable,str(runner),str(job)],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True,close_fds=True)
-(job/'launcher.json').write_text(json.dumps({'pid':process.pid}))
+signature=subprocess.run(['ps','-p',str(process.pid),'-o','lstart='],capture_output=True,text=True).stdout.strip()
+(job/'launcher.json').write_text(json.dumps({'pid':process.pid,'signature':signature}))
 print(json.dumps({'job':str(job),'pid':process.pid}))
 '''
 
 INSPECT = r'''
-import json,pathlib,sys
+import json,pathlib,subprocess,sys
 job=pathlib.Path(sys.argv[1]);result=job/'result.json'
-if result.exists(): print(result.read_text())
-else: print(json.dumps({'status':'incomplete','diagnostic':'runner has not published a result','job':str(job)}))
+state=json.loads(result.read_text()) if result.exists() else {'status':'incomplete','diagnostic':'runner has not published a result','job':str(job)}
+if state['status'] in ('running','incomplete'):
+ launcher=job/'launcher.json'
+ if launcher.exists():
+  identity=json.loads(launcher.read_text())
+  observed=subprocess.run(['ps','-p',str(identity['pid']),'-o','lstart='],capture_output=True,text=True).stdout.strip()
+  if not observed or (identity.get('signature') and observed!=identity['signature']):
+   state.update(status='incomplete',runner_terminal=True,diagnostic='runner process missing or replaced; inspect retained logs/resources before rerunning')
+print(json.dumps(state))
 '''
+
 
 
 def deploy(host, job_id, run_id, commit, args, data, manifest, override):
@@ -167,7 +180,7 @@ def start(args):
     directory = STATE / run_id
     directory.mkdir(parents=True)
     override = json.loads(args.spec.read_text()) if args.spec else None
-    manifest = {"schema": 1, "run_id": run_id, "commit": commit, "suite": args.suite,
+    manifest = {"schema": 1, "run_id": run_id, "commit": commit, "suite": override.get("suite", args.suite) if override else args.suite,
                 "created": time.time(), "jobs": [], "concurrency": args.concurrency}
     atomic_json(directory / "manifest.json", manifest)
     (directory / "source.tar").write_bytes(data)
@@ -208,7 +221,7 @@ def dispatch(args):
         for record in active:
             try:
                 state = json.loads(ssh(record["host"], INSPECT, [record["job"]]))
-                if state["status"] in ("running", "incomplete"):
+                if state["status"] == "running" or (state["status"] == "incomplete" and not state.get("runner_terminal")):
                     retained.append(record)
             except Exception:
                 retained.append(record)  # timeouts never launch a duplicate

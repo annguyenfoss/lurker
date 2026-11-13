@@ -11,7 +11,7 @@ python scripts/remote-test.py log RUN_ID rust-check --host openbsd
 python scripts/remote-test.py cancel RUN_ID --host freebsd
 ```
 
-`start` returns a run ID immediately. A detached local dispatcher limits simultaneously active remote jobs (default two); each job also runs detached from SSH. `collect`, `inspect`, and `resume` collect persisted results without restarting jobs. Observation errors remain incomplete. The local manifest, summary, uploaded source, and dispatcher log live in ignored `target/remote-test/RUN_ID/`. The run is pinned to its original commit even if the local branch advances. Uncommitted edits are never deployed.
+`start` returns a run ID immediately. A detached local dispatcher limits simultaneously active remote jobs (default two); each job also runs detached from SSH. `collect`, `inspect`, and `resume` collect persisted results without restarting jobs. Observation errors remain incomplete. Process identity is checked with its recorded start signature; a missing/replaced runner is reported incomplete rather than left running or assumed passed. The local manifest, summary, uploaded source, and dispatcher log live in ignored `target/remote-test/RUN_ID/`. The run is pinned to its original commit even if the local branch advances. Uncommitted edits are never deployed.
 
 `core` runs core, CLI and helper compilation/unit tests. `workspace` also includes the desktop. Both are **build-only suites**: packaging and installed-artifact tests are explicitly skipped and no runtime encryption support is claimed. Custom `--spec recipe.json` supplies commands for backend build, packaging and disposable native CLI tests. For example:
 
@@ -36,7 +36,7 @@ Each job publishes `result.json` atomically with source identity, toolchains, st
 
 Cancellation creates a marker; the live runner terminates only a child process group it launched. It never signals persisted PIDs, kills VMs, or force-unmounts storage. A killed runner may leave its host lock and resources: inspect the lock's owner record, reconcile that job and clean only its verified resources before removing the stale lock. A crashed dispatcher leaves queued jobs unstarted; inspect its log and start a new run rather than resubmitting potentially launched job IDs. Preserve failure evidence; old job/cache cleanup is currently explicit, not automatic.
 
-The harness does not replace absent-backend/clean-machine packaging qualification. It does not yet provide automatic bootstrap, release signing, retention pruning, heartbeat-based crash reconciliation, or every backend's native test recipe. These remain explicit implementation work.
+The harness does not replace absent-backend/clean-machine packaging qualification. It does not yet provide automatic bootstrap, release signing, retention pruning, automatic stale-resource reconciliation, or every backend's native test recipe. These remain explicit implementation work.
 
 Harness verification (no SSH or encryption operations):
 
