@@ -224,6 +224,13 @@ def verify_bsd_patches(manifest, source):
         fail("BSD VeraCrypt artifact patch provenance differs from exact source")
 
 
+def verify_folder_patches(kind, manifest, source):
+    paths = source.constant("scripts/build-folder-backends.py", "PATCHES").get(kind, [])
+    expected = {name: hashlib.sha256(source.read(name)).hexdigest() for name in paths}
+    if manifest.get("patches", {}) != expected:
+        fail("folder artifact patch provenance differs from exact source: " + kind)
+
+
 def verify_cryptomator_sources(root, source):
     # The helper is Lurker code, so a dependency lock alone cannot identify its
     # runtime behavior. Documentation changes do not require rebuilding Java.
@@ -249,6 +256,7 @@ def validate_backend(kind, directory, source):
         pin = source.constant("scripts/build-folder-backends.py", "PINS")[kind]
         if manifest.get("revision") != pin[1] or manifest.get("source") != pin[0] or digest(root / kind) != manifest.get("sha256"):
             fail("folder artifact source/binary differs from its pinned build manifest")
+        verify_folder_patches(kind, manifest, source)
         license_files = manifest.get("license_files")
         if not license_files:
             fail("folder artifact license inventory is missing")

@@ -138,6 +138,22 @@ class PackagingPolicy(unittest.TestCase):
         with mock.patch.object(stager.platform, "system", return_value="FreeBSD"), mock.patch.object(stager.platform, "machine", return_value="amd64"):
             stager.verify_platform({"target": {"GOOS": "freebsd", "GOARCH": "amd64"}, "build_platform": "Linux"})
 
+    def test_folder_durability_patch_provenance_rejects_stale_or_missing_patch(self):
+        import hashlib
+        name = "native/folder/cryfs/fsyncdir.patch"
+        source = mock.Mock()
+        source.constant.return_value = {"cryfs": [name]}
+        source.read.return_value = b"final durability patch"
+        correct = {"patches": {name: hashlib.sha256(source.read.return_value).hexdigest()}}
+        stager.verify_folder_patches("cryfs", correct, source)
+        for stale in ({}, {"patches": {}}, {"patches": {name: "old-patch-sha256"}}):
+            with self.assertRaisesRegex(ValueError, "patch provenance"):
+                stager.verify_folder_patches("cryfs", stale, source)
+        stager.verify_folder_patches("gocryptfs", {}, source)
+        stager.verify_folder_patches("gocryptfs", {"patches": {}}, source)
+        with self.assertRaisesRegex(ValueError, "patch provenance"):
+            stager.verify_folder_patches("gocryptfs", correct, source)
+
     def test_bsd_patch_identity_binds_both_patches_to_exact_source_bytes(self):
         import hashlib
         patches = {"native/veracrypt/utf8-console.patch": b"shared utf8 patch",
