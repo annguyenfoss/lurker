@@ -33,7 +33,7 @@ public final class Main {
     public static void main(String[] args) {
         try {
             if (args.length == 1 && args[0].equals("--version")) {
-                System.out.println("lurker-cryptomator 1; cryptofs 2.8.0; fuse-nio 5.0.5");
+                System.out.println("lurker-cryptomator 1; cryptofs 2.8.0; fuse-nio 5.1.0");
                 return;
             }
             if (args.length == 1 && args[0].equals("--capabilities")) {

@@ -33,6 +33,20 @@ def verify_dependencies(modules: Path) -> None:
         raise SystemExit("Cryptomator dependency lock mismatch: " + ", ".join(changed))
 
 
+def runtime_link_options(java_home: Path) -> list[str]:
+    if (java_home / "jmods/java.base.jmod").is_file():
+        return ["--module-path", str(java_home / "jmods")]
+    # JEP 493 permits full JDKs without jmods. Some IDE runtimes lack both
+    # jmods and this capability, so check the JDK's advertised support.
+    help_text = subprocess.check_output(
+        [str(java_home / "bin/jlink"), "--help"], text=True,
+        env=dict(os.environ, LC_ALL="C"),
+    )
+    if "Linking from run-time image enabled" not in help_text:
+        raise SystemExit("JDK cannot link a runtime: use a full JDK with jmods or runtime-image linking support")
+    return []
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--java-home", required=True, type=Path)
@@ -46,8 +60,7 @@ def main() -> None:
     for tool in ("java", "javac", "jlink"):
         if not (java_home / "bin" / tool).is_file():
             raise SystemExit(f"JDK tool missing: {tool}")
-    if not (java_home / "jmods/java.base.jmod").is_file():
-        raise SystemExit("A full build JDK with jmods is required; an IDE runtime is insufficient")
+    link_options = runtime_link_options(java_home)
     maven = shutil.which(args.maven)
     if not maven:
         raise SystemExit("Maven build prerequisite missing")
@@ -73,7 +86,7 @@ def main() -> None:
         shutil.copytree(modules, stage / "mods")
         shutil.copy2(project / "target/lurker-cryptomator-1.0.0.jar", stage / "mods")
         subprocess.run([
-            str(java_home / "bin/jlink"), "--module-path", str(java_home / "jmods"),
+            str(java_home / "bin/jlink"), *link_options,
             "--add-modules", "java.base,java.compiler,java.naming,java.xml,jdk.unsupported",
             "--no-header-files", "--no-man-pages", "--strip-debug", "--compress", "zip-6",
             "--output", str(stage / "runtime"),
@@ -111,7 +124,7 @@ exec "$LURKER_CRYPTOMATOR_ROOT/runtime/bin/java" \\
         manifest = {
             "schema": 1, "backend": "cryptomator", "protocol": 1,
             "os": platform.system(), "architecture": platform.machine(), "java": java_version,
-            "cryptofs": "2.8.0", "fuse_nio": "5.0.5", "helper_license": "AGPL-3.0-only",
+            "cryptofs": "2.8.0", "fuse_nio": "5.1.0", "helper_license": "AGPL-3.0-only",
             "sources": json.loads((SOURCE / "dependencies.lock.json").read_text()),
             "tests": test_summary,
             "files": {str(path.relative_to(stage)): digest(path) for path in sorted(stage.rglob("*")) if path.is_file()},

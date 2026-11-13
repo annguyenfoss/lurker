@@ -13,6 +13,8 @@ import java.nio.file.Path;
 import java.nio.file.ReadOnlyFileSystemException;
 import java.nio.file.StandardOpenOption;
 import java.nio.channels.FileChannel;
+import java.lang.reflect.Proxy;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BackendTest {
@@ -45,5 +47,21 @@ class BackendTest {
                 assertThrows(IOException.class, Main::readPassword);
             }
         } finally { System.setIn(original); }
+    }
+
+    @Test void fuseAdapterRegistersFsyncCallback() throws Exception {
+        // Surefire loads dependencies on its classpath. Reflection keeps this
+        // internal adapter integration check out of the shipped module contract.
+        var errno = Class.forName("org.cryptomator.jfuse.api.Errno");
+        var errors = Proxy.newProxyInstance(errno.getClassLoader(), new Class<?>[]{errno}, (proxy, method, args) -> 0);
+        var transcoder = Class.forName("org.cryptomator.frontend.fuse.FileNameTranscoder");
+        var names = transcoder.getMethod("transcoder").invoke(null);
+        var type = Class.forName("org.cryptomator.frontend.fuse.ReadWriteAdapter");
+        try (var adapter = (AutoCloseable) type.getMethod("create", errno, Path.class, int.class, transcoder, boolean.class)
+                .invoke(null, errors, vault, 254, names, false)) {
+            var operations = (Set<?>) type.getMethod("supportedOperations").invoke(adapter);
+            assertTrue(operations.stream().anyMatch(value -> ((Enum<?>) value).name().equals("FSYNC")),
+                    "The FUSE callback must be registered, not merely implemented; otherwise fsync silently loses open-file data on daemon death");
+        }
     }
 }

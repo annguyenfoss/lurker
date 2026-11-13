@@ -37,10 +37,10 @@
       "source": "https://repo.maven.apache.org/maven2/com/google/guava/failureaccess/1.0.3/failureaccess-1.0.3-sources.jar"
     },
     {
-      "binary": "https://repo.maven.apache.org/maven2/org/cryptomator/fuse-nio-adapter/5.0.5/fuse-nio-adapter-5.0.5.jar",
-      "coordinates": "org.cryptomator:fuse-nio-adapter:5.0.5",
-      "file": "fuse-nio-adapter-5.0.5.jar",
-      "source": "https://repo.maven.apache.org/maven2/org/cryptomator/fuse-nio-adapter/5.0.5/fuse-nio-adapter-5.0.5-sources.jar"
+      "binary": "https://repo.maven.apache.org/maven2/org/cryptomator/fuse-nio-adapter/5.1.0/fuse-nio-adapter-5.1.0.jar",
+      "coordinates": "org.cryptomator:fuse-nio-adapter:5.1.0",
+      "file": "fuse-nio-adapter-5.1.0.jar",
+      "source": "https://repo.maven.apache.org/maven2/org/cryptomator/fuse-nio-adapter/5.1.0/fuse-nio-adapter-5.1.0-sources.jar"
     },
     {
       "binary": "https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.15.0/gson-2.15.0.jar",
@@ -55,10 +55,10 @@
       "source": "https://repo.maven.apache.org/maven2/com/google/guava/guava/33.8.0-jre/guava-33.8.0-jre-sources.jar"
     },
     {
-      "binary": "https://repo.maven.apache.org/maven2/org/cryptomator/integrations-api/1.5.1/integrations-api-1.5.1.jar",
-      "coordinates": "org.cryptomator:integrations-api:1.5.1",
-      "file": "integrations-api-1.5.1.jar",
-      "source": "https://repo.maven.apache.org/maven2/org/cryptomator/integrations-api/1.5.1/integrations-api-1.5.1-sources.jar"
+      "binary": "https://repo.maven.apache.org/maven2/org/cryptomator/integrations-api/1.7.0/integrations-api-1.7.0.jar",
+      "coordinates": "org.cryptomator:integrations-api:1.7.0",
+      "file": "integrations-api-1.7.0.jar",
+      "source": "https://repo.maven.apache.org/maven2/org/cryptomator/integrations-api/1.7.0/integrations-api-1.7.0-sources.jar"
     },
     {
       "binary": "https://repo.maven.apache.org/maven2/com/google/j2objc/j2objc-annotations/3.1/j2objc-annotations-3.1.jar",
@@ -171,10 +171,10 @@
     "dagger-2.51.1.jar": "c3891a4c4a4e48682888ca321eaf8497004b286e1d9a2936867373219f7dd86d",
     "error_prone_annotations-2.52.0.jar": "24822b246a2da324006fc5a1c940b1d2cf9cd716e530155c39fea695d5ab01c4",
     "failureaccess-1.0.3.jar": "cbfc3906b19b8f55dd7cfd6dfe0aa4532e834250d7f080bd8d211a3e246b59cb",
-    "fuse-nio-adapter-5.0.5.jar": "dc8a84c30ec36f17708108056ec6e5753ef822f078b1d61931f6d2970cf8672b",
+    "fuse-nio-adapter-5.1.0.jar": "dbd18d6039d9204a4d42b2fe48fa5a2cbf338066162aff600c6b0e2e7b1d7004",
     "gson-2.15.0.jar": "96d3dd843dc2911de01cdabcd50064cb9e860353102a0a78c96fd833d396fc7d",
     "guava-33.8.0-jre.jar": "97b79ec3f2c0a6313a0c2df51ce1abdf8907e6531803467b81efcaaf99b35161",
-    "integrations-api-1.5.1.jar": "f2711261ee315041757d38b2993957fded33d11b9901d11425115299e9bac2ad",
+    "integrations-api-1.7.0.jar": "7f4cccbdf3d862259a3d2449bc8558a1536d1cfc4a94c51371c805ff8f76776e",
     "j2objc-annotations-3.1.jar": "84d3a150518485f8140ea99b8a985656749629f6433c92b80c75b36aba3b099b",
     "jackson-annotations-2.23.jar": "e5b60c3088e0887b290ff9226394354589a1dad583743944b7f5538661056b4c",
     "jackson-core-2.23.0.jar": "449798beb4c4ec26de9cc25b39ca2198036883fb905ca968cbef7136d19a25d9",

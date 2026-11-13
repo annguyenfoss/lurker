@@ -34,5 +34,23 @@ class DependencyLockTests(unittest.TestCase):
                     BUILD.verify_dependencies(modules)
 
 
+class RuntimeLinkTests(unittest.TestCase):
+    def test_traditional_jdk_uses_jmods(self):
+        with tempfile.TemporaryDirectory(prefix="lurker-jdk-link-") as directory:
+            root = Path(directory)
+            (root / "jmods").mkdir()
+            (root / "jmods/java.base.jmod").touch()
+            self.assertEqual(BUILD.runtime_link_options(root), ["--module-path", str(root / "jmods")])
+
+    def test_linkable_jdk_without_jmods_is_accepted(self):
+        with patch.object(BUILD.subprocess, "check_output", return_value="Capabilities:\n  Linking from run-time image enabled\n"):
+            self.assertEqual(BUILD.runtime_link_options(Path("/missing-jmods")), [])
+
+    def test_ide_runtime_without_linking_support_is_rejected(self):
+        with patch.object(BUILD.subprocess, "check_output", return_value="jlink usage without runtime-image capability"):
+            with self.assertRaises(SystemExit):
+                BUILD.runtime_link_options(Path("/missing-jmods"))
+
+
 if __name__ == "__main__":
     unittest.main()
