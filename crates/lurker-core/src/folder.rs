@@ -310,6 +310,9 @@ fn process_identity(pid: u32) -> Option<Process> {
             return None;
         }
         let info = unsafe { info.assume_init() };
+        if info.pbi_status == libc::SZOMB {
+            return None;
+        }
         Some(Process {
             pid,
             birth: format!("{}:{}", info.pbi_start_tvsec, info.pbi_start_tvusec),
@@ -339,7 +342,7 @@ fn process_identity(pid: u32) -> Option<Process> {
             return None;
         }
         let info = unsafe { info.assume_init() };
-        if info.ki_pid != pid as i32 {
+        if info.ki_pid != pid as i32 || info.ki_stat == libc::SZOMB {
             return None;
         }
         Some(Process {
@@ -491,7 +494,12 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
             "This directory backend is not selected for this OS.",
         ));
     }
-    if c.force || c.size_gb.is_some() || c.keyfile.is_some() || c.cipher != CreateCipher::Aes {
+    if c.source_kind != crate::SourceKind::Directory
+        || c.force
+        || c.size_gb.is_some()
+        || c.keyfile.is_some()
+        || c.cipher != CreateCipher::Aes
+    {
         return Err(AppError::new(
             "Directory create takes no size, force, keyfile or alternate cipher; each backend uses its fixed authenticated format.",
         ));
