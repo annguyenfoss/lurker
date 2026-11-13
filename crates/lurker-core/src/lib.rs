@@ -1,4 +1,11 @@
 mod api;
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+mod bsd;
 mod credentials;
 mod error;
 mod folder;
@@ -56,6 +63,15 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
         }
         validate_request(&command)?;
         workflow::run(command, output)
+    }
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    {
+        bsd::run(command, output)
     }
 }
 
@@ -122,6 +138,17 @@ pub fn probe_system() -> AppResult<SystemProbe> {
         probe.tools.extend(folder::tool_statuses());
         Ok(probe)
     }
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    {
+        let mut probe = bsd::probe_system()?;
+        probe.tools.extend(folder::tool_statuses());
+        Ok(probe)
+    }
 }
 
 pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
@@ -134,6 +161,17 @@ pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
     #[cfg(target_os = "linux")]
     {
         list_linux_volumes()
+    }
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    {
+        let mut volumes = bsd::list_active_volumes()?;
+        volumes.extend(folder::list_active_volumes()?);
+        Ok(volumes)
     }
 }
 
@@ -185,8 +223,15 @@ fn list_linux_volumes() -> AppResult<Vec<ActiveVolume>> {
     Ok(volumes)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-compile_error!("Lurker supports Linux and macOS only.");
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd"
+)))]
+compile_error!("Lurker supports Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD.");
 
 pub fn effective_uid() -> u32 {
     // SAFETY: geteuid has no arguments or preconditions.
