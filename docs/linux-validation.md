@@ -49,7 +49,7 @@ The frontend runner creates its own independent temporary files and uses a pseud
 - Readonly originally protected only the filesystem. It now protects the crypto mapper as well.
 - Bare filenames failed parent-directory resolution; sources passed through symlinks outside `/dev` could fail device-mapper activation. Paths are resolved before crypto operations.
 - LUKS create suppressed stdout, hiding terminal prompts. Interactive output is now inherited.
-- VeraCrypt device creation passed `--size=max`, which failed for device-hosted volumes. Device size is now determined by VeraCrypt; the archived profile and cipher directive are synchronized.
+- VeraCrypt device creation passed `--size=max`, which failed for device-hosted volumes. Device size is now determined by VeraCrypt, as documented in the cipher directive.
 - Block-device safety ignored unsuccessful lsblk commands and active unmounted holders. Inspection now fails closed and checks holders throughout the device tree.
 - Desktop form validation trimmed passwords and confirmation independently. Secret values now preserve whitespace exactly.
 - The desktop selected Skia despite the software-renderer requirement. It now selects winit/software, and the unused Skia feature is removed.

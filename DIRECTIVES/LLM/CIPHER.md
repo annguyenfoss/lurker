@@ -147,14 +147,12 @@ Use this file as the source of truth for selected encryption backends and create
 - The userspace helper reads passwords from stdin with a newline terminator, in a UTF-8 locale. Preserve spaces and reject embedded NUL/newlines.
 - Read-only applies to both the decrypted FUSE image and the filesystem driver.
 - No physical-device creation, LUKS, tags, custom PIM or hidden-volume controls are added by this mode.
-- The archived Bash implementation retains the same crypto profiles but only implements the privileged kernel route.
 
 ## Sync Rules
 
 When changing any create profile, update all of:
 
 - `crates/lurker-core/src/workflow.rs`
-- `legacy/bash-cli/lurker`
 - this file
 - `README.md` if user-visible behavior changed
 
@@ -174,4 +172,3 @@ If cipher choices change, also update:
 - AES-256 is fixed. Reject Serpent/Twofish instead of silently ignoring the selected cipher.
 - Mount uses `hdiutil attach -stdinpass`, optionally `-readonly`; unmount detaches the virtual disk without force.
 - macOS VeraCrypt retains the existing cipher names, SHA-512, PIM 0, password-or-keyfile authentication, and full initialization; it changes only the inner filesystem to exFAT.
-- Archived Bash is Linux-only and does not implement Apple or macOS workflows.

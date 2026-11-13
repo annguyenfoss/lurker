@@ -16,8 +16,7 @@ Non-negotiables:
 - The desktop app is Slint + winit + software renderer.
 - `apps/lurker-desktop/build.rs` intentionally uses Slint `material`; do not switch styles casually.
 - Create profiles are hardcoded and opinionated. Do not move them into an external config file.
-- If create cipher behavior changes, update `crates/lurker-core/src/workflow.rs`, `legacy/bash-cli/lurker`, `DIRECTIVES/LLM/CIPHER.md`, and any user-facing docs together.
-- `legacy/` is archival reference, not the active architecture.
+- If create cipher behavior changes, update `crates/lurker-core/src/workflow.rs`, `DIRECTIVES/LLM/CIPHER.md`, and any user-facing docs together.
 
 Default verification:
 

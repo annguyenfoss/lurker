@@ -41,10 +41,6 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 - `scripts/build-macos-dmg.py`: native release app bundle and drag-to-Applications DMG packaging; helper stays beside the desktop executable inside `Contents/MacOS`
 - `scripts/build-linux-userspace.py`: builds pinned, patched VeraCrypt and LKL filesystem helpers without installation or elevation; integration patches live under `native/linux-userspace/patches`
 - `docs/linux-userspace.md`: stock VeraCrypt/FUSE distinction, Linux privileged/unprivileged comparison, security findings, implementation lessons, validation evidence and open hardening work
-- `legacy/bash-cli`
-  - archived Bash implementation; still kept in sync for create cipher profiles
-- `legacy/rust-cli-monolith`
-  - historical only; not part of the active architecture
 
 ## Core Invariants
 
@@ -98,7 +94,6 @@ Both frontends share `lurker-core`. Desktop privilege escalation goes through `l
 When changing create cipher profiles or create-time crypto defaults, update all of:
 
 - `crates/lurker-core/src/workflow.rs`
-- `legacy/bash-cli/lurker`
 - `DIRECTIVES/LLM/CIPHER.md`
 - `README.md` if user-visible behavior changed
 

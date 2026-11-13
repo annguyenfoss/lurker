@@ -16,9 +16,6 @@ lurker/
 │   └── lurker-helper/  # internal helper used by the desktop app
 ├── apps/
 │   └── lurker-desktop/ # Slint desktop app
-├── legacy/
-│   ├── bash-cli/               # archived Bash implementation
-│   └── rust-cli-monolith/      # archived single-crate Rust layout
 └── extras/
 ```
 
@@ -215,7 +212,6 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - The desktop app does not call the CLI binary. It talks to `lurker-helper` over a local stdin/stdout JSON contract.
 - The CLI supports interactive terminal prompting; macOS create also confirms the passphrase. Passphrases are passed to crypto tools through terminal input or stdin, never command-line arguments.
 - Privileged creates initially produce root-owned Btrfs directories. After mounting a new personal volume, set its ownership once with `sudo chown "$(id -u):$(id -g)" /your/mountpoint` if needed. Unprivileged creates assign the filesystem to your login user directly.
-- The archived Bash implementation in `legacy/bash-cli/` was updated to match the same three create cipher profiles.
 
 ### Credentials and LUKS keyslots
 
