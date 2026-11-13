@@ -112,7 +112,7 @@ pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential
     let mapped = assemble(device, credential, true)?;
     // No filesystem exists yet. Closing here gives the shared lifecycle the
     // same format -> unlock -> make_filesystem contract as GELI and LUKS.
-    validate_mapping(&mapped, device)?;
+    verify_mapping(&mapped, device)?;
     close(&mapped)
 }
 
@@ -154,7 +154,7 @@ fn assemble(device: &str, credential: &Credential, creating: bool) -> AppResult<
     let output = exec("/sbin/bioctl", &argv, Some(&input))?;
     let name = parse_attached(&output)?;
     let mapped = format!("/dev/{name}a");
-    validate_mapping(&mapped, device)?;
+    verify_mapping(&mapped, device)?;
     Ok(mapped)
 }
 
@@ -170,7 +170,7 @@ pub(super) fn unlock(device: &str, readonly: bool, credential: &Credential) -> A
     assemble(device, credential, false)
 }
 
-pub(super) fn validate_mapping(mapped: &str, backing: &str) -> AppResult<()> {
+pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
     let name = device_name(mapped, "sd")?;
     let vnode = device_name(backing, "vnd")?;
     let output = exec("/sbin/bioctl", &args(&[name]), None)?;
@@ -203,7 +203,7 @@ fn mapping_matches(output: &str, mapped: &str, vnode: &str) -> bool {
         && chunks[0].last() == Some(&format!("<{vnode}a>").as_str())
 }
 
-/// Caller must validate_mapping against its stored backing identity immediately
+/// Caller must verify_mapping against its stored backing identity immediately
 /// before closing. No force option is used: a busy filesystem keeps its mapping.
 pub(super) fn close(device: &str) -> AppResult<()> {
     let name = device_name(device, "sd")?;
@@ -317,7 +317,7 @@ mod tests {
         data.sync_all().unwrap();
         drop(data);
         exec("/sbin/umount", &[mountpoint.as_os_str().to_owned()], None).unwrap();
-        validate_mapping(&mapped, &device).unwrap();
+        verify_mapping(&mapped, &device).unwrap();
         close(&mapped).unwrap();
         assert!(unlock(&device, false, &Credential::Password(b"incorrect".to_vec())).is_err());
         let mapped = unlock(&device, false, &credential).unwrap();
@@ -333,7 +333,7 @@ mod tests {
             b"durably committed test content"
         );
         exec("/sbin/umount", &[mountpoint.as_os_str().to_owned()], None).unwrap();
-        validate_mapping(&mapped, &device).unwrap();
+        verify_mapping(&mapped, &device).unwrap();
         close(&mapped).unwrap();
         verify_backing(&device, &image).unwrap();
         detach_file(&device).unwrap();
