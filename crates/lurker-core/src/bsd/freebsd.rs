@@ -5,6 +5,8 @@
 //! it deliberately has no physical-device, forced-detach or boot integration.
 use super::{Credential, args, exec};
 use crate::{AppError, AppResult, CreateCipher};
+use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 const MDCONFIG: &str = "/sbin/mdconfig";
@@ -38,17 +40,50 @@ pub(super) fn detach_file(device: &str) -> AppResult<()> {
 }
 
 /// md unit numbers may be reused after another process detaches a device.
-/// Require mdconfig's conjunction of unit and backing filename before cleanup.
+/// Match the kernel's backing vnode identity, not GEOM's printed filename:
+/// libgeom's XML conversion can corrupt Unicode/spaces in that display field.
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     let unit = md_unit(device)?;
-    let mut argv = args(&["-l", "-u", unit, "-f"]);
-    argv.push(path.as_os_str().to_owned());
-    if exec(MDCONFIG, &argv, None)?.trim() != unit {
+    let metadata = fs::metadata(path)
+        .map_err(|e| AppError::io("Failed to inspect the recorded md backing file", e))?;
+    let listing = exec("/sbin/geom", &args(&["md", "list", unit]), None)?;
+    if !metadata.is_file() || !backing_matches(&listing, unit, metadata.dev(), metadata.ino()) {
         return Err(AppError::new(
             "The FreeBSD md backing file changed; refusing cleanup.",
         ));
     }
     Ok(())
+}
+
+fn backing_matches(listing: &str, unit: &str, device: u64, inode: u64) -> bool {
+    let geom = format!("Geom name: {unit}");
+    let provider = format!("1. Name: {unit}");
+    let ident = format!("ident: MD-DEV{device}-INO{inode}");
+    let lines: Vec<&str> = listing.lines().map(str::trim).collect();
+    lines
+        .iter()
+        .filter(|line| line.starts_with("Geom name:"))
+        .count()
+        == 1
+        && lines.contains(&geom.as_str())
+        && lines
+            .iter()
+            .filter(|line| line.starts_with("1. Name:"))
+            .count()
+            == 1
+        && lines.contains(&provider.as_str())
+        && lines
+            .iter()
+            .filter(|line| line.starts_with("type:"))
+            .count()
+            == 1
+        && lines.contains(&"type: vnode")
+        && lines
+            .iter()
+            .filter(|line| line.starts_with("ident:"))
+            .count()
+            == 1
+        && lines.contains(&ident.as_str())
 }
 
 pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
@@ -185,6 +220,27 @@ mod tests {
     #[test]
     fn password_transport_preserves_spaces_and_uses_one_line() {
         assert_eq!(password_line(b"  password  "), b"  password  \n");
+    }
+
+    #[test]
+    fn backing_identity_uses_vnode_numbers_and_rejects_reused_or_ambiguous_devices() {
+        let listing = "Geom name: md42\nProviders:\n1. Name: md42\n file: garbled Unicode display\n type: vnode\n ident: MD-DEV64-INO240775\n";
+        assert!(backing_matches(listing, "md42", 64, 240775));
+        assert!(!backing_matches(listing, "md42", 64, 240776));
+        assert!(!backing_matches(listing, "md42", 65, 240775));
+        assert!(!backing_matches(listing, "md4", 64, 240775));
+        assert!(!backing_matches(
+            &listing.replace("vnode", "swap"),
+            "md42",
+            64,
+            240775
+        ));
+        assert!(!backing_matches(
+            &format!("{listing} ident: MD-DEV64-INO240775\n"),
+            "md42",
+            64,
+            240775
+        ));
     }
 
     #[test]
