@@ -22,6 +22,12 @@ share/lurker/manifest.json
 
 Only explicitly selected applicable backends ship. Selection does not claim runtime qualification. Native LUKS/GELI/CGD/softraid/PEFS facilities remain host dependencies; private third-party runtimes must be supplied for selected VeraCrypt, gocryptfs, CryFS and Cryptomator operations. Missing required tools, runtimes, notices, provenance or shared libraries block packaging. CryFS 1.x specifically needs FUSE 2 (`libfuse.so.2` plus `fusermount`); Cryptomator and the Linux VeraCrypt userspace stack need FUSE 3 / `fusermount3`. gocryptfs accepts either Linux mount helper and uses `mount_fusefs` on FreeBSD. These are recorded per backend, rather than treating the two FUSE ABIs as interchangeable.
 
+FreeBSD gocryptfs runs as the login user. The prepared test guest required loaded
+`fusefs`, access to `/dev/fuse`, and `vfs.usermount=1` in addition to
+`mount_fusefs`. An administrator must provide the intended mount/device access
+policy; the package does not change it. Native qualification temporarily enabled
+the required access and restored the original settings afterwards.
+
 Build the Rust products in a clean checkout at one exact commit, then record their identities. Use the user's managed toolchains. `--source-commit` requires the full 40-character SHA. A deployed Git archive uses its verified `--source-manifest source-manifest.json` instead of Git metadata. Build outputs should be outside the immutable deployed source tree.
 
 ```bash
