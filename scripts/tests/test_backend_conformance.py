@@ -139,6 +139,22 @@ class HarnessTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "bypassed duplicate"):
                 suite.aliased_duplicate()
 
+    def test_auto_mode_keeps_create_explicit_and_routes_mounts_through_auto(self):
+        suite = harness.Suite(self.options("--auto-detect"))
+        create = suite.create_args()
+        self.assertEqual(create[create.index("--type") + 1], "gocryptfs")
+        for action in ["mount", "unmount"]:
+            args = suite.args(action, "/owned/path")
+            self.assertEqual(args[args.index("--type") + 1], "auto")
+        self.assertEqual(suite.result["detection_mode"], "auto")
+
+    def test_default_mode_still_requests_the_selected_format_explicitly(self):
+        suite = harness.Suite(self.options())
+        for action in ["create", "mount", "unmount"]:
+            args = suite.args(action, "/owned/path")
+            self.assertEqual(args[args.index("--type") + 1], "gocryptfs")
+        self.assertEqual(suite.result["detection_mode"], "explicit")
+
     def test_profile_verification_closes_sqlite_before_unmount(self):
         suite = harness.Suite(self.options())
         (suite.mountpoint / "profile 密碼.bin").write_bytes(suite.payload)

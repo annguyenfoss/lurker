@@ -187,6 +187,7 @@ class Suite:
         self.mounted = False
         self.result = {"schema": SCHEMA, "suite": "native-cli-conformance", "status": "running",
                        "backend": options.backend, "cipher": options.cipher,
+                       "detection_mode": "auto" if options.auto_detect else "explicit",
                        "readonly_expectation": "unsupported" if options.expect_readonly_unsupported else ("skipped" if options.skip_readonly else "supported"),
                        "host": platform.node(), "os": platform.system(), "release": platform.release(),
                        "architecture": platform.machine(), "binary": str(options.binary),
@@ -201,7 +202,8 @@ class Suite:
         atomic_json(self.root / "result.json", self.result)
 
     def args(self, action, *operands):
-        args = [str(self.options.binary), "--color=never", action, "--type", self.options.backend]
+        kind = "auto" if self.options.auto_detect and action in {"mount", "unmount"} else self.options.backend
+        args = [str(self.options.binary), "--color=never", action, "--type", kind]
         if self.options.unprivileged:
             args.append("--unprivileged")
         return args + list(map(str, operands))
@@ -439,6 +441,8 @@ def parse_args(argv=None):
     parser.add_argument("--timeout", type=float, default=240)
     parser.add_argument("--commit", help="Source SHA supplied by the verified build coordinator")
     parser.add_argument("--unprivileged", action="store_true", help="Use Linux's explicit VeraCrypt user route")
+    parser.add_argument("--auto-detect", action="store_true",
+                        help="Use --type auto for mount/unmount while creating the explicitly selected format")
     readonly = parser.add_mutually_exclusive_group()
     readonly.add_argument("--skip-readonly", metavar="REASON", help="Record an explicit unsupported-readonly exception")
     readonly.add_argument("--expect-readonly-unsupported", action="store_true",

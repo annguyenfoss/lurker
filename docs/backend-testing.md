@@ -26,6 +26,11 @@ summary with the result path. Nonzero exit means failed (1) or blocked (2).
 The remote runner can invoke this as an installed-artifact stage in its custom
 specification; the stage log contains the result reference.
 
+`--auto-detect` retains the known format for create and sends `--type auto` for
+mount/unmount, including incorrect-credential, alias, busy and read-only cases.
+Results identify `detection_mode` as `auto` or `explicit`; keep these qualification
+runs distinct. A new empty vault has no header to detect, so create stays explicit.
+
 The suite checks create, protection of an existing destination, unlock, Unicode
 and spaces, fsync, atomic rename/truncation, SQLite WAL and integrity, duplicate and aliased-source
 attachment refusal, busy close refusal, close, wrong credentials, reopen and
