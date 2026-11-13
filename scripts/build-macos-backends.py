@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Build a pinned private macOS VeraCrypt backend; FUSE-T stays host-installed."""
+import argparse
+import json
+import os
+from pathlib import Path
+import platform
+import shutil
+import sys
+
+from macos_backend import SOURCES, VC_REVISION, run, sha256, source, stage_macho, write_json
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cache-dir", type=Path, default=ROOT / "target/macos-backends")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / "target/release/macos-backends")
+    parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 2))
+    parser.add_argument("--offline", action="store_true")
+    args = parser.parse_args()
+    if sys.platform != "darwin" or os.geteuid() == 0:
+        parser.error("Build on macOS as the login user, without sudo.")
+    if args.jobs < 1:
+        parser.error("--jobs must be positive")
+    for tool in ["make", "clang", "xcrun", "pkg-config", "otool", "lipo", "install_name_tool", "codesign"]:
+        if not shutil.which(tool):
+            parser.error(f"Missing build prerequisite: {tool}")
+    run("pkg-config", "--exists", "fuse-t")
+    fuse_version = run("pkg-config", "--modversion", "fuse-t", capture=True).strip()
+    cache = args.cache_dir.resolve()
+    vc, wx = (source(name, cache, args.offline) for name in ["veracrypt", "wxwidgets"])
+    # Use the supported native Cocoa build with a static wxWidgets dependency;
+    # Lurker calls only its text interface. Console-only and reduced GUI builds
+    # have incomplete wx feature guards on this Mac toolchain.
+    flags = ["WXSTATIC=FULL", f"WX_ROOT={wx}", "WITHFUSET=1", "LOCAL_DEVELOPMENT_BUILD=true",
+             "WX_CONFIGURE_EXTRA_FLAGS=--with-regex=builtin"]
+    specification = {"schema": 1, "sources": SOURCES, "architecture": platform.machine(),
+                     "flags": flags, "fuse_t": fuse_version,
+                     "sdk": run("xcrun", "--show-sdk-version", capture=True).strip(),
+                     "compiler": run("clang", "--version", capture=True).splitlines()[0]}
+    stamp = cache / "build-spec.json"
+    serialized = json.dumps(specification, sort_keys=True)
+    if stamp.exists() and stamp.read_text() != serialized:
+        raise RuntimeError("Native build inputs changed; use a new --cache-dir to avoid stale objects.")
+    stamp.write_text(serialized)
+    wx_stamp = cache / "wx-built.json"
+    if not wx_stamp.exists():
+        run("make", f"-j{args.jobs}", *flags, "wxbuild", cwd=vc / "src")
+        wx_stamp.write_text(serialized)
+    run("make", f"-j{args.jobs}", *flags, cwd=vc / "src")
+    output = args.output_dir.resolve()
+    # Replace only our generated staging directory after the complete build.
+    temporary = output.with_name(f".{output.name}-{os.getpid()}")
+    temporary.mkdir(parents=True)
+    try:
+        targets, external = stage_macho(vc / "src/Main/VeraCrypt", temporary / "lurker-veracrypt",
+                                       temporary / "Frameworks", platform.machine())
+        licenses = temporary / "licenses"
+        licenses.mkdir()
+        shutil.copyfile(vc / "License.txt", licenses / "VeraCrypt-LICENSE.txt")
+        shutil.copyfile(wx / "docs/licence.txt", licenses / "wxWidgets-LICENSE.txt")
+        # Include the notices shipped with wx's optional static dependencies;
+        # a static link does not remove their attribution obligations.
+        notice_names = {"license", "license.txt", "licence", "licence.txt", "copying", "copying.txt",
+                        "copyright", "copyright.txt", "readme", "readme.txt"}
+        for path in (wx / "src").rglob("*"):
+            if path.is_file() and path.name.lower() in notice_names:
+                relative = path.relative_to(wx)
+                target = licenses / "wxWidgets" / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, target)
+        for target in sorted(targets, key=lambda path: path.suffix != ".dylib"):
+            # install_name_tool invalidates the compiler's arm64 signature.
+            # Development artifacts must be executable before DMG re-signing.
+            run("codesign", "--force", "--sign", "-", target)
+        run(temporary / "lurker-veracrypt", "-t", "--test")
+        write_json(temporary / "provenance.json", {
+            **specification, "veracrypt_revision": VC_REVISION,
+            "source_archives": {name: {"url": spec[0], "sha256": spec[1]} for name, spec in SOURCES.items()},
+            "external_libraries": external,
+            "artifacts": {str(path.relative_to(temporary)): sha256(path) for path in targets},
+        })
+        if output.exists():
+            if output.is_symlink() or not (output / "provenance.json").is_file():
+                raise RuntimeError(f"Refusing to replace an unrecognized directory: {output}")
+            shutil.rmtree(output)
+        temporary.rename(output)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    print(json.dumps({"status": "built", "backend": str(output / "lurker-veracrypt"), "fuse_t": fuse_version}))
+
+
+if __name__ == "__main__":
+    main()

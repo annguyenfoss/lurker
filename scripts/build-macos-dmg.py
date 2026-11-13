@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 
+from macos_backend import architectures, minimum_version, sha256, stage_macho
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -77,8 +79,19 @@ def main():
     architecture = {"aarch64-apple-darwin": "arm64", "x86_64-apple-darwin": "x86_64"}.get(host)
     if architecture is None:
         raise SystemExit(f"Unsupported native macOS build target: {host}")
-    run("cargo", "build", "--release", "--locked", "--target", host, "-p", "lurker-desktop", "-p", "lurker-helper")
+    run("cargo", "build", "--release", "--locked", "--target", host, "-p", "lurker-desktop", "-p", "lurker-helper", "-p", "lurker-cli")
     binaries = Path(metadata["target_directory"]) / host / "release"
+    backend_root = Path(metadata["target_directory"]) / "release/macos-backends"
+    provenance_file = backend_root / "provenance.json"
+    if not provenance_file.is_file():
+        raise SystemExit("Build the private backend first: python scripts/build-macos-backends.py")
+    provenance = json.loads(provenance_file.read_text())
+    if "lurker-veracrypt" not in provenance.get("artifacts", {}):
+        raise SystemExit("Private backend manifest does not cover lurker-veracrypt.")
+    for name, digest in provenance["artifacts"].items():
+        path = backend_root / name
+        if Path(name).is_absolute() or ".." in Path(name).parts or sha256(path) != digest:
+            raise SystemExit(f"Private backend provenance mismatch: {name}")
     output = ROOT / "dist"
     output.mkdir(exist_ok=True)
     name = f"Lurker-{version}-macos-{architecture}.dmg"
@@ -92,9 +105,21 @@ def main():
         resources = app / "Contents/Resources"
         executable_dir.mkdir(parents=True)
         resources.mkdir()
-        minimum_versions = []
-        for binary in ["lurker-desktop", "lurker-helper"]:
+        helper_dir = app / "Contents/Helpers"
+        frameworks = app / "Contents/Frameworks"
+        native_targets, external = stage_macho(
+            backend_root / "lurker-veracrypt", helper_dir / "lurker-veracrypt",
+            frameworks, architecture,
+        )
+        shutil.copytree(backend_root / "licenses", resources / "backend-licenses")
+        shutil.copyfile(provenance_file, resources / "backend-provenance.json")
+        if external != provenance["external_libraries"]:
+            raise SystemExit("Staged backend external dependencies differ from its build manifest.")
+        minimum_versions = [minimum_version(binary) for binary in native_targets]
+        for binary in ["lurker-desktop", "lurker-helper", "lurker"]:
             source = binaries / binary
+            if architecture not in architectures(source):
+                raise SystemExit(f"Missing {architecture} slice: {source}")
             # All Rust/UI assets are embedded. Reject an accidentally linked
             # Homebrew or developer-local dylib instead of shipping a broken app.
             for line in run("otool", "-L", source, capture=True).splitlines()[1:]:
@@ -141,9 +166,18 @@ def main():
         shutil.copyfile(ROOT / "LICENSE", resources / "LICENSE.txt")
         (resources / "LICENSE.txt").chmod(0o644)
         run("plutil", "-lint", app / "Contents/Info.plist")
-        for target in [executable_dir / "lurker-helper", executable_dir / "lurker-desktop", app]:
+        # Sign inner dylibs before executables; sign the outer bundle last.
+        signing_targets = sorted(native_targets, key=lambda path: path.suffix != ".dylib")
+        signing_targets += [executable_dir / "lurker", executable_dir / "lurker-helper", executable_dir / "lurker-desktop", app]
+        backend_entitlements = working / "backend-entitlements.plist"
+        with backend_entitlements.open("wb") as file:
+            # The separately installed FUSE runtime has another developer's
+            # Team ID. Confine this exception to its consumer, not the app/UI.
+            plistlib.dump({"com.apple.security.cs.disable-library-validation": True}, file)
+        for target in signing_targets:
+            exception = ["--entitlements", backend_entitlements] if target == helper_dir / "lurker-veracrypt" else []
             run("codesign", "--force", "--sign", identity, "--options", "runtime",
-                "--timestamp=none" if identity == "-" else "--timestamp", target)
+                "--timestamp=none" if identity == "-" else "--timestamp", *exception, target)
         run("codesign", "--verify", "--deep", "--strict", "--verbose=2", app)
 
         (image / "Applications").symlink_to("/Applications", target_is_directory=True)
@@ -159,7 +193,8 @@ def main():
             "Drag Lurker.app onto Applications, then eject this disk image.\n"
             "Open Lurker from Applications. No package installer or terminal install is needed.\n\n"
             "Apple encrypted disk images work with built-in macOS tools.\n"
-            "VeraCrypt requires VeraCrypt and its matching FUSE runtime to be installed separately.\n\n"
+            "VeraCrypt support is included. Install the matching FUSE-T runtime separately.\n"
+            "The CLI is Lurker.app/Contents/MacOS/lurker.\n\n"
             + signature_note + f"Requires macOS {minimum} or later; architecture: {architecture}.\n",
             encoding="utf-8",
         )
