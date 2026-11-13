@@ -432,6 +432,74 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    /// Confirm that the kernel treats recognizable-but-corrupt metadata as an
+    /// assembly failure, never as permission to initialize a new volume.
+    #[cfg(target_os = "openbsd")]
+    #[test]
+    #[ignore = "requires root and a disposable native OpenBSD test host"]
+    fn native_corrupt_metadata_cannot_initialize_or_rewrite_image() {
+        assert_eq!(crate::effective_uid(), 0);
+        let root =
+            std::env::temp_dir().join(format!("lurker-softraid-checksum-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let image = root.join("disposable corrupt metadata.img");
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&image)
+            .unwrap();
+        file.set_len(96 * 1024 * 1024).unwrap();
+        drop(file);
+        let credential =
+            Credential::Password(b"native temporary checksum regression secret".to_vec());
+        let device = attach_file(&image, false).unwrap();
+        let mapped = format(&device, CreateCipher::Aes, &credential).unwrap();
+        verify_mapping(&mapped, &device).unwrap();
+        close(&mapped).unwrap();
+        let name = device_name(&device, "vnd").unwrap();
+        let mut native = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(format!("/dev/r{name}a"))
+            .unwrap();
+        // OpenBSD sr_meta_invariant places ssd_uuid at byte 16. It participates
+        // in the native metadata checksum but not our format-family probe.
+        // Raw character devices require sector-aligned I/O. Preserve the rest
+        // of the containing sector while flipping just one UUID byte.
+        native.seek(SeekFrom::Start(8192)).unwrap();
+        let mut sector = [0u8; 512];
+        native.read_exact(&mut sector).unwrap();
+        sector[16] ^= 1;
+        native.seek(SeekFrom::Start(8192)).unwrap();
+        native.write_all(&sector).unwrap();
+        native.sync_all().unwrap();
+        drop(native);
+        assert!(probe_crypto_header(&device).unwrap());
+        let before = exec("/bin/sha256", &[image.as_os_str().to_owned()], None).unwrap();
+        let error = unlock(&device, false, &credential).unwrap_err();
+        let after = exec("/bin/sha256", &[image.as_os_str().to_owned()], None).unwrap();
+        assert_eq!(before, after, "Corrupt metadata unlock rewrote the disposable image; preserve its fixture for inspection.");
+        let active = exec("/sbin/bioctl", &args(&["softraid0"]), None).unwrap();
+        assert!(
+            !active.contains(&format!("<{name}a>")),
+            "Corrupt metadata unexpectedly assembled a mapping; preserve its fixture."
+        );
+        assert!(
+            error.message.contains("corrupt metadata")
+                || error.message.contains("invalid metadata checksum"),
+            "Unexpected native error: {}",
+            error.message
+        );
+        eprintln!(
+            "Corrupt softraid metadata rejected without creating a mapping: {}",
+            error.message
+        );
+        eprintln!("Unchanged image digest: {}", before.trim());
+        verify_backing(&device, &image).unwrap();
+        detach_file(&device).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
     /// Opt in as root on the OpenBSD test guest. All storage belongs to this
     /// uniquely created temporary directory; no existing device is selected.
     #[cfg(target_os = "openbsd")]
