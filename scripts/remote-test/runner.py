@@ -81,7 +81,15 @@ def selected_environment(spec, job):
     key = hashlib.sha256(json.dumps({"versions": versions, "os": platform.platform(), "flags": flags,
                                     "backend_inputs": backend_inputs,
                                     "stages": spec["stages"]}, sort_keys=True).encode()).hexdigest()[:20]
-    cache = job.parents[1] / "cache" / key
+    cache_root = Path(spec.get("cache_root", spec["host"].get("cache_root", "~/.cache/lurker/remote-test"))).expanduser().absolute()
+    cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = cache_root.lstat()
+    if cache_root.is_symlink() or info.st_uid != os.geteuid() or info.st_mode & 0o022:
+        raise ValueError("unsafe compiler cache root: " + str(cache_root))
+    cache_free = shutil.disk_usage(cache_root).free
+    if cache_free < spec.get("minimum_cache_free_bytes", 1024 * 1024 * 1024):
+        raise ValueError("insufficient compiler-cache disk: " + str(cache_free) + " bytes at " + str(cache_root))
+    cache = cache_root / key
     cache.mkdir(parents=True, exist_ok=True)
     env["CARGO_TARGET_DIR"] = str(cache / "target")
     env["CARGO_BUILD_JOBS"] = str(spec.get("build_jobs", 2))
@@ -186,6 +194,8 @@ def run_job(job):
         preflight_stage = None
         result["toolchains"] = versions
         result["cache"] = str(cache)
+        result["storage"] = {"run": {"path": str(job), "free_bytes": free},
+                             "cache": {"path": str(cache.resolve()), "free_bytes": shutil.disk_usage(cache).free}}
         # Serialize same-host jobs: cached compiler outputs and storage tests must
         # not conflict. Keep this lock on abnormal exit for explicit reconciliation.
         active_lock = job.parents[1] / "active-job"

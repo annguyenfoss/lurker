@@ -150,7 +150,10 @@ def deploy(host, job_id, run_id, commit, args, data, manifest, override):
         record["host"] = resolved
         spec = {"schema": 1, "job_id": job_id, "run_id": run_id, "commit": commit,
                 "host": host, "suite": args.suite, "minimum_free_bytes": args.minimum_free_mib * 1024 * 1024,
-                "build_jobs": args.build_jobs, "stages": stages_for(args.suite)}
+                "build_jobs": args.build_jobs, "minimum_cache_free_bytes": args.minimum_cache_free_mib * 1024 * 1024,
+                "stages": stages_for(args.suite)}
+        if args.cache_root:
+            spec["cache_root"] = args.cache_root
         if override:
             spec.update(override)
             # Run/source identity cannot be overridden by a stage recipe.
@@ -187,7 +190,8 @@ def start(args):
     atomic_json(directory / "source-manifest.json", source_manifest)
     manifest["jobs"] = [{"job_id": run_id + "-" + name, "host": inventory[name], "status": "queued"} for name in targets]
     manifest["options"] = {"suite": args.suite, "minimum_free_mib": args.minimum_free_mib,
-                           "build_jobs": args.build_jobs, "override": override}
+                           "build_jobs": args.build_jobs, "minimum_cache_free_mib": args.minimum_cache_free_mib,
+                           "cache_root": args.cache_root, "override": override}
     atomic_json(directory / "manifest.json", manifest)
     with (directory / "dispatcher.log").open("wb") as log:
         process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "dispatch", run_id],
@@ -303,7 +307,9 @@ def main():
     launch.add_argument("--spec", type=Path, help="JSON stage recipe; no secrets")
     launch.add_argument("--concurrency", type=int, default=2)
     launch.add_argument("--build-jobs", type=int, default=2)
-    launch.add_argument("--minimum-free-mib", type=int, default=1024)
+    launch.add_argument("--minimum-free-mib", type=int, default=256, help="free space for /tmp job source/logs/fixtures")
+    launch.add_argument("--minimum-cache-free-mib", type=int, default=1024, help="free space on compiler cache filesystem")
+    launch.add_argument("--cache-root", help="remote compiler cache root; default ~/.cache/lurker/remote-test")
     for name in ("collect", "inspect", "resume", "dispatch"):
         command = sub.add_parser(name)
         command.add_argument("run_id")
@@ -316,7 +322,7 @@ def main():
     args = parser.parse_args()
     try:
         if args.command == "start":
-            if args.concurrency < 1 or args.build_jobs < 1 or args.minimum_free_mib < 1:
+            if args.concurrency < 1 or args.build_jobs < 1 or args.minimum_free_mib < 1 or args.minimum_cache_free_mib < 1:
                 raise ValueError("concurrency, build jobs and free space must be positive")
             return start(args)
         if args.command == "dispatch":

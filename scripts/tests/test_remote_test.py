@@ -72,6 +72,7 @@ class RemoteRunnerTests(unittest.TestCase):
                         {"name": "native-tests", "commands": [["must-not-run"]]}]}
             (job / "spec.json").write_text(json.dumps(spec))
             (job / "source-manifest.json").write_text(json.dumps({"files": {}}))
+            (root / "cache").mkdir()
             with mock.patch.object(runner, "selected_environment", return_value=(os.environ.copy(), {}, root / "cache")):
                 self.assertEqual(1, runner.run_job(job))
             result = json.loads((job / "result.json").read_text())
@@ -125,6 +126,22 @@ class RemoteRunnerTests(unittest.TestCase):
                 self.assertEqual(0, coordinator.dispatch(type("Args", (), {"run_id": "run"})()))
                 deploy.assert_not_called()
             self.assertEqual("cancelled", job["status"])
+
+    def test_compiler_cache_defaults_to_home_not_temporary_job_disk(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / "home"
+            home.mkdir()
+            job = root / "temporary-jobs/runs/job"
+            job.mkdir(parents=True)
+            (job / "source-manifest.json").write_text(json.dumps({"files": {}}))
+            spec = {"host": {"rust": "rustup"}, "stages": [], "commit": "a" * 40, "minimum_cache_free_bytes": 1}
+            output = type("Process", (), {"returncode": 0, "stdout": "version", "stderr": ""})()
+            with mock.patch.dict(os.environ, {"HOME": str(home)}), mock.patch.object(runner.subprocess, "run", return_value=output):
+                env, _, cache = runner.selected_environment(spec, job)
+            self.assertTrue(cache.is_relative_to(home / ".cache/lurker/remote-test"))
+            self.assertFalse(cache.is_relative_to(job.parents[1]))
+            self.assertEqual(str(cache / "target"), env["CARGO_TARGET_DIR"])
 
     def test_inventory_has_every_supplied_host(self):
         inventory = json.loads(coordinator.INVENTORY.read_text())
