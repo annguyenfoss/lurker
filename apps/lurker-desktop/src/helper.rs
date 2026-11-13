@@ -35,7 +35,10 @@ pub fn resolve_helper_path() -> Result<PathBuf, String> {
 pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<OperationResponse, String> {
     let directory_backend =
         lurker_core::request_requires_user_session(&command).map_err(|e| e.message)?;
-    let unprivileged = command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged;
+    // Directory requests have their own login-session capability. A row's
+    // Unprivileged mode must not require Linux's separate VeraCrypt transport.
+    let unprivileged =
+        !directory_backend && command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged;
     let keyfile = match &command {
         CommandAction::Create(c) => c.keyfile.is_some(),
         CommandAction::Mount(c) => c.keyfile.is_some(),
@@ -151,6 +154,35 @@ mod tests {
             .unwrap_err()
             .contains("does not support directory backends"));
         assert!(!directory.join("helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn directory_session_does_not_require_linux_veracrypt_capability() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-folder-capability-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(
+            &helper,
+            r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"directory_backends":true,"unprivileged_veracrypt":false}'
+else
+  cat >/dev/null
+  printf '%s\n' '{"ok":true,"logs":[],"error":null}'
+fi
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let command = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Unprivileged,
+            target: directory.join("unused"),
+            tag: None,
+            volume_type: VolumeType::Gocryptfs,
+        });
+        assert!(run_helper(&helper, command).unwrap().ok);
         fs::remove_dir_all(directory).unwrap();
     }
 
