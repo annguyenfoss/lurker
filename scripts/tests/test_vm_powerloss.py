@@ -218,6 +218,17 @@ class Ownership(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "connected"):
                 clone.stop_network()
         call.assert_not_called()
+    def test_ssh_selects_native_paths_and_keeps_strict_host_key(self):
+        clone = VM.OwnedClone.load(self.directory)
+        with patch.object(VM.OwnedClone, "lease", return_value="192.168.231.10"), patch.object(VM, "run", return_value="ready") as call:
+            self.assertEqual(clone.ssh("mount", user="root"), "ready")
+        argv = call.call_args.args[0]
+        self.assertIn("StrictHostKeyChecking=yes", argv)
+        self.assertIn("HostKeyAlias=archlinux-core-01", argv)
+        self.assertTrue(argv[-1].startswith("export PATH="))
+        self.assertIn("/sbin", argv[-1].splitlines()[0])
+        self.assertTrue(argv[-1].endswith("\nmount"))
+
 
 
 class GuestFixture(unittest.TestCase):

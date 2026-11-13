@@ -269,6 +269,9 @@ class OwnedClone:
 
     def ssh(self, command, user="adjutant", timeout=60):
         address = self.lease()
+        # Native BSD root SSH sessions need explicit system-tool directories;
+        # no login shell or developer PATH is required by this fault runner.
+        command = "export PATH=/usr/local/sbin:/usr/local/bin:/usr/pkg/sbin:/usr/pkg/bin:/usr/sbin:/usr/bin:/sbin:/bin\n" + command
         # The copied host key must already be trusted for the original domain.
         return run(["ssh", "-F", "/dev/null", "-o", "StrictHostKeyChecking=yes", "-o", "CheckHostIP=no",
                     "-o", "UpdateHostKeys=no", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
