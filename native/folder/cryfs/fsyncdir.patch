@@ -1,0 +1,388 @@
+diff --git a/src/blockstore/implementations/ondisk/OnDiskBlockStore2.cpp b/src/blockstore/implementations/ondisk/OnDiskBlockStore2.cpp
+index 23b0936..673ffdf 100644
+--- a/src/blockstore/implementations/ondisk/OnDiskBlockStore2.cpp
++++ b/src/blockstore/implementations/ondisk/OnDiskBlockStore2.cpp
+@@ -1,6 +1,12 @@
+ #include "OnDiskBlockStore2.h"
+ #include <boost/filesystem.hpp>
+ #include <cpp-utils/system/diskspace.h>
++#include <cerrno>
++#include <fcntl.h>
++#include <unistd.h>
++#include <system_error>
++#include <vector>
++#include <cstdio>
+ 
+ using std::string;
+ using boost::optional;
+@@ -13,6 +19,67 @@ namespace ondisk {
+ const string OnDiskBlockStore2::FORMAT_VERSION_HEADER_PREFIX = "cryfs;block;";
+ const string OnDiskBlockStore2::FORMAT_VERSION_HEADER = OnDiskBlockStore2::FORMAT_VERSION_HEADER_PREFIX + "0";
+ namespace {
++// fsync must cover the encrypted bytes and the names used to find them.
++// Scope all I/O to this store; never use process/global sync as a substitute.
++class FileDescriptor final {
++public:
++  FileDescriptor(const boost::filesystem::path& path, int flags)
++      : value(::open(path.c_str(), flags | O_CLOEXEC, 0600)) {
++    if (value < 0) throw std::system_error(errno, std::generic_category(), "open encrypted block path");
++  }
++  explicit FileDescriptor(int descriptor) : value(descriptor) {
++    if (value < 0) throw std::system_error(errno, std::generic_category(), "create encrypted block temporary");
++  }
++  ~FileDescriptor() { ::close(value); }
++  void sync() const {
++    int result;
++    do { result = ::fsync(value); } while (result < 0 && errno == EINTR);
++    if (result < 0) throw std::system_error(errno, std::generic_category(), "fsync encrypted block path");
++  }
++  const int value;
++  FileDescriptor(const FileDescriptor&) = delete;
++  FileDescriptor& operator=(const FileDescriptor&) = delete;
++};
++
++void syncDirectory(const boost::filesystem::path& path) {
++  FileDescriptor(path, O_RDONLY | O_DIRECTORY).sync();
++}
++
++// A failed/short write must leave the previously committed ciphertext intact.
++// Publish in the same directory so rename is atomic and no cross-device copy occurs.
++bool storeDurably(const boost::filesystem::path& path, const Data& data, bool noReplace) {
++  std::string pattern = (path.parent_path() / ("." + path.filename().string() + ".tmp-XXXXXX")).string();
++  std::vector<char> name(pattern.begin(), pattern.end());
++  name.push_back('\0');
++  FileDescriptor file(::mkstemp(name.data()));
++  struct Temporary final {
++    const char* path;
++    ~Temporary() { ::unlink(path); }
++  } temporary{name.data()};
++  if (::fcntl(file.value, F_SETFD, FD_CLOEXEC) < 0) {
++    throw std::system_error(errno, std::generic_category(), "protect encrypted block temporary descriptor");
++  }
++  size_t offset = 0;
++  while (offset < data.size()) {
++    const auto count = ::write(file.value, data.dataOffset(offset), data.size() - offset);
++    if (count < 0 && errno == EINTR) continue;
++    if (count <= 0) throw std::system_error(count < 0 ? errno : EIO, std::generic_category(), "write encrypted block");
++    offset += static_cast<size_t>(count);
++  }
++  file.sync();
++  if (noReplace) {
++    if (::link(name.data(), path.c_str()) < 0) {
++      if (errno == EEXIST) return false;
++      throw std::system_error(errno, std::generic_category(), "publish new encrypted block");
++    }
++    if (::unlink(name.data()) < 0) throw std::system_error(errno, std::generic_category(), "remove encrypted block temporary");
++  } else if (::rename(name.data(), path.c_str()) < 0) {
++    throw std::system_error(errno, std::generic_category(), "replace encrypted block");
++  }
++  syncDirectory(path.parent_path());
++  return true;
++}
++
+ constexpr size_t PREFIX_LENGTH = 3;
+ constexpr size_t POSTFIX_LENGTH = BlockId::STRING_LENGTH - PREFIX_LENGTH;
+ constexpr const char* ALLOWED_BLOCKID_CHARACTERS = "0123456789ABCDEF";
+@@ -53,12 +120,14 @@ OnDiskBlockStore2::OnDiskBlockStore2(const boost::filesystem::path& path)
+ 
+ bool OnDiskBlockStore2::tryCreate(const BlockId &blockId, const Data &data) {
+   auto filepath = _getFilepath(blockId);
+-  if (boost::filesystem::exists(filepath)) {
+-    return false;
+-  }
+-
+-  store(blockId, data);
+-  return true;
++  if (boost::filesystem::exists(filepath)) return false;
++  Data fileContent(formatVersionHeaderSize() + data.size());
++  std::memcpy(fileContent.data(), FORMAT_VERSION_HEADER.c_str(), formatVersionHeaderSize());
++  std::memcpy(fileContent.dataOffset(formatVersionHeaderSize()), data.data(), data.size());
++  boost::filesystem::create_directory(filepath.parent_path());
++  const bool created = storeDurably(filepath, fileContent, true);
++  if (created) syncDirectory(_rootDir);
++  return created;
+ }
+ 
+ bool OnDiskBlockStore2::remove(const BlockId &blockId) {
+@@ -71,9 +140,11 @@ bool OnDiskBlockStore2::remove(const BlockId &blockId) {
+     cpputils::logging::LOG(cpputils::logging::ERR, "Couldn't find block {} to remove", blockId.ToString());
+     return false;
+   }
++  syncDirectory(filepath.parent_path());
+   if (boost::filesystem::is_empty(filepath.parent_path())) {
+     boost::filesystem::remove(filepath.parent_path());
+   }
++  syncDirectory(_rootDir);
+   return true;
+ }
+ 
+@@ -91,7 +162,8 @@ void OnDiskBlockStore2::store(const BlockId &blockId, const Data &data) {
+   std::memcpy(fileContent.dataOffset(formatVersionHeaderSize()), data.data(), data.size());
+   auto filepath = _getFilepath(blockId);
+   boost::filesystem::create_directory(filepath.parent_path()); // TODO Instead create all of them once at fs creation time?
+-  fileContent.StoreToFile(filepath);
++  storeDurably(filepath, fileContent, false);
++  syncDirectory(_rootDir);
+ }
+ 
+ uint64_t OnDiskBlockStore2::numBlocks() const {
+diff --git a/src/cryfs/impl/filesystem/CryDevice.cpp b/src/cryfs/impl/filesystem/CryDevice.cpp
+index d8aebcd..d95fb89 100644
+--- a/src/cryfs/impl/filesystem/CryDevice.cpp
++++ b/src/cryfs/impl/filesystem/CryDevice.cpp
+@@ -1,4 +1,3 @@
+-#include <blockstore/implementations/caching/CachingBlockStore2.h>
+ #include <cpp-utils/crypto/symmetric/ciphers.h>
+ #include "cryfs/impl/filesystem/parallelaccessfsblobstore/DirBlobRef.h"
+ #include "CryDevice.h"
+@@ -34,7 +33,6 @@ using blockstore::BlockId;
+ using blobstore::BlobStore;
+ using blockstore::lowtohighlevel::LowToHighLevelBlockStore;
+ using blobstore::onblocks::BlobStoreOnBlocks;
+-using blockstore::caching::CachingBlockStore2;
+ using blockstore::integrity::IntegrityBlockStore2;
+ using cpputils::unique_ref;
+ using cpputils::make_unique_ref;
+@@ -99,9 +97,9 @@ unique_ref<blobstore::BlobStore> CryDevice::CreateBlobStore(unique_ref<BlockStor
+   // in the configFile and therefore has to be run before the second parameter to the BlobStoreOnBlocks parameter is evaluated.
+   return make_unique_ref<BlobStoreOnBlocks>(
+      make_unique_ref<LowToHighLevelBlockStore>(
+-         make_unique_ref<CachingBlockStore2>(
+-             std::move(integrityEncryptedBlockStore)
+-         )
++         // The write-back block cache can retain blocks after Blob::flush().
++         // Keep the blob caches, but send their explicit flushes to durable storage.
++         std::move(integrityEncryptedBlockStore)
+      ),
+      configFile->config()->BlocksizeBytes());
+ }
+diff --git a/src/cryfs/impl/filesystem/CryDir.cpp b/src/cryfs/impl/filesystem/CryDir.cpp
+index 9dff77f..16aa368 100644
+--- a/src/cryfs/impl/filesystem/CryDir.cpp
++++ b/src/cryfs/impl/filesystem/CryDir.cpp
+@@ -42,6 +42,8 @@ unique_ref<fspp::OpenFile> CryDir::createAndOpenFile(const string &name, fspp::m
+     parent()->updateModificationTimestampForChild(blockId());
+   }
+   auto child = device()->CreateFileBlob(blockId());
++  // Publish only a valid persisted child blob, including empty files/directories.
++  child->flush();
+   auto now = cpputils::time::now();
+   auto dirBlob = LoadBlob();
+   dirBlob->AddChildFile(name, child->blockId(), mode, uid, gid, now, now);
+@@ -56,6 +58,8 @@ void CryDir::createDir(const string &name, fspp::mode_t mode, fspp::uid_t uid, f
+   }
+   auto blob = LoadBlob();
+   auto child = device()->CreateDirBlob(blockId());
++  // Publish only a valid persisted child blob, including empty files/directories.
++  child->flush();
+   auto now = cpputils::time::now();
+   blob->AddChildDir(name, child->blockId(), mode, uid, gid, now, now);
+ }
+@@ -81,6 +85,14 @@ vector<fspp::Dir::Entry> CryDir::children() {
+   return children;
+ }
+ 
++void CryDir::fsync() {
++  device()->callFsActionCallbacks();
++  LoadBlob()->flush();
++  if (!isRootDir()) {
++    parent()->flush();
++  }
++}
++
+ size_t CryDir::numChildren() {
+   auto blob = LoadBlob();
+   return blob->NumChildren();
+@@ -99,6 +111,8 @@ void CryDir::createSymlink(const string &name, const bf::path &target, fspp::uid
+   }
+   auto blob = LoadBlob();
+   auto child = device()->CreateSymlinkBlob(target, blockId());
++  // Publish only a valid persisted child blob, including empty files/directories.
++  child->flush();
+   auto now = cpputils::time::now();
+   blob->AddChildSymlink(name, child->blockId(), uid, gid, now, now);
+ }
+diff --git a/src/cryfs/impl/filesystem/CryDir.h b/src/cryfs/impl/filesystem/CryDir.h
+index c3f37d2..e405158 100644
+--- a/src/cryfs/impl/filesystem/CryDir.h
++++ b/src/cryfs/impl/filesystem/CryDir.h
+@@ -21,6 +21,7 @@ public:
+   //TODO Make Entry a public class instead of hidden in DirBlob (which is not publicly visible)
+   std::vector<fspp::Dir::Entry> children() override;
+   size_t numChildren();
++  void fsync() override;
+ 
+   fspp::Dir::EntryType getType() const override;
+ 
+diff --git a/src/cryfs/impl/filesystem/cachingfsblobstore/SymlinkBlobRef.h b/src/cryfs/impl/filesystem/cachingfsblobstore/SymlinkBlobRef.h
+index dbc0c7f..9c7bb7d 100644
+--- a/src/cryfs/impl/filesystem/cachingfsblobstore/SymlinkBlobRef.h
++++ b/src/cryfs/impl/filesystem/cachingfsblobstore/SymlinkBlobRef.h
+@@ -16,6 +16,8 @@ public:
+         ASSERT(_base != nullptr, "We just initialized this with a pointer to SymlinkBlob. Can't be something else now.");
+     }
+ 
++    void flush() { _base->flush(); }
++
+     const boost::filesystem::path &target() const {
+         return _base->target();
+     }
+diff --git a/src/cryfs/impl/filesystem/fsblobstore/SymlinkBlob.h b/src/cryfs/impl/filesystem/fsblobstore/SymlinkBlob.h
+index 1eca3c4..a28ffd5 100644
+--- a/src/cryfs/impl/filesystem/fsblobstore/SymlinkBlob.h
++++ b/src/cryfs/impl/filesystem/fsblobstore/SymlinkBlob.h
+@@ -15,6 +15,8 @@ namespace cryfs {
+ 
+             SymlinkBlob(cpputils::unique_ref<blobstore::Blob> blob);
+ 
++            void flush() { baseBlob().flush(); }
++
+             const boost::filesystem::path &target() const;
+ 
+             fspp::num_bytes_t lstat_size() const override;
+diff --git a/src/cryfs/impl/filesystem/parallelaccessfsblobstore/SymlinkBlobRef.h b/src/cryfs/impl/filesystem/parallelaccessfsblobstore/SymlinkBlobRef.h
+index 58affcc..b6ed30a 100644
+--- a/src/cryfs/impl/filesystem/parallelaccessfsblobstore/SymlinkBlobRef.h
++++ b/src/cryfs/impl/filesystem/parallelaccessfsblobstore/SymlinkBlobRef.h
+@@ -12,6 +12,8 @@ class SymlinkBlobRef final: public FsBlobRef {
+ public:
+     SymlinkBlobRef(cachingfsblobstore::SymlinkBlobRef *base) : _base(base) {}
+ 
++    void flush() { _base->flush(); }
++
+     const boost::filesystem::path &target() const {
+         return _base->target();
+     }
+diff --git a/src/fspp/fs_interface/Dir.h b/src/fspp/fs_interface/Dir.h
+index 6e9179b..495d11b 100644
+--- a/src/fspp/fs_interface/Dir.h
++++ b/src/fspp/fs_interface/Dir.h
+@@ -34,6 +34,9 @@ public:
+   //TODO Allow alternative implementation returning only children names without more information
+   //virtual std::vector<std::string> children() const = 0;
+   virtual std::vector<Entry> children() = 0;
++
++  // Persist directory entries and metadata; failures must reach the caller.
++  virtual void fsync() = 0;
+ };
+ 
+ }
+diff --git a/src/fspp/fuse/Filesystem.h b/src/fspp/fuse/Filesystem.h
+index eb20d1f..d8a85dc 100644
+--- a/src/fspp/fuse/Filesystem.h
++++ b/src/fspp/fuse/Filesystem.h
+@@ -39,6 +39,7 @@ public:
+   virtual void write(int descriptor, const void *buf, fspp::num_bytes_t count, fspp::num_bytes_t offset) = 0;
+   virtual void fsync(int descriptor) = 0;
+   virtual void fdatasync(int descriptor) = 0;
++  virtual void fsyncdir(const boost::filesystem::path &path) = 0;
+   virtual void access(const boost::filesystem::path &path, int mask) = 0;
+   //TODO Test uid/gid parameters of mkdir
+   virtual void mkdir(const boost::filesystem::path &path, ::mode_t mode, ::uid_t uid, ::gid_t gid) = 0;
+diff --git a/src/fspp/fuse/Fuse.cpp b/src/fspp/fuse/Fuse.cpp
+index c101d61..4f794f8 100644
+--- a/src/fspp/fuse/Fuse.cpp
++++ b/src/fspp/fuse/Fuse.cpp
+@@ -1,3 +1,4 @@
++#include <system_error>
+ // NOMINMAX works around an MSVC issue, see https://github.com/microsoft/cppwinrt/issues/479
+ #if defined(_MSC_VER)
+ #define NOMINMAX
+@@ -1149,6 +1150,9 @@ int Fuse::fsync(const bf::path &path, int datasync, fuse_file_info *fileinfo) {
+     LOG(WARN, "fsync({}, {}, _): failed with errno {}", path, datasync, e.getErrno());
+ #endif
+     return -e.getErrno();
++  } catch(const std::system_error &e) {
++    _logException(e);
++    return -e.code().value();
+   } catch(const std::exception &e) {
+     _logException(e);
+     return -EIO;
+@@ -1229,14 +1233,28 @@ int Fuse::releasedir(const bf::path &path, fuse_file_info *fileinfo) {
+   return 0;
+ }
+ 
+-//TODO
+ int Fuse::fsyncdir(const bf::path &path, int datasync, fuse_file_info *fileinfo) {
+   UNUSED(fileinfo);
+-  UNUSED(datasync);
+-  UNUSED(path);
++  UNUSED(datasync); // Directory data includes its entries and metadata.
+   const ThreadNameForDebugging _threadName("fsyncdir");
+-  //LOG(WARN, "Called non-implemented fsyncdir({}, {}, _)", path, datasync);
+-  return 0;
++  try {
++    _fs->fsyncdir(path);
++    return 0;
++  } catch(const cpputils::AssertFailed &e) {
++    LOG(ERR, "AssertFailed in Fuse::fsyncdir: {}", e.what());
++    return -EIO;
++  } catch (FuseErrnoException &e) {
++    return -e.getErrno();
++  } catch(const std::system_error &e) {
++    _logException(e);
++    return -e.code().value();
++  } catch(const std::exception &e) {
++    _logException(e);
++    return -EIO;
++  } catch(...) {
++    _logUnknownException();
++    return -EIO;
++  }
+ }
+ 
+ void Fuse::init(fuse_conn_info *conn) {
+diff --git a/src/fspp/fuse/InvalidFilesystem.h b/src/fspp/fuse/InvalidFilesystem.h
+index 38e79f4..2316aa0 100644
+--- a/src/fspp/fuse/InvalidFilesystem.h
++++ b/src/fspp/fuse/InvalidFilesystem.h
+@@ -64,6 +64,10 @@ namespace fspp {
+                 throw std::logic_error("Filesystem not initialized yet");
+             }
+ 
++            void fsyncdir(const boost::filesystem::path &) override {
++                throw std::logic_error("Filesystem not initialized yet");
++            }
++
+             void fdatasync(int ) override {
+                 throw std::logic_error("Filesystem not initialized yet");
+             }
+diff --git a/src/fspp/impl/FilesystemImpl.cpp b/src/fspp/impl/FilesystemImpl.cpp
+index b7ec6a3..3acd903 100644
+--- a/src/fspp/impl/FilesystemImpl.cpp
++++ b/src/fspp/impl/FilesystemImpl.cpp
+@@ -139,6 +139,10 @@ void FilesystemImpl::flush(int descriptor) {
+   });
+ }
+ 
++void FilesystemImpl::fsyncdir(const bf::path &path) {
++  LoadDir(path)->fsync();
++}
++
+ void FilesystemImpl::closeFile(int descriptor) {
+   PROFILE(_closeFileNanosec);
+   _open_files.close(descriptor);
+diff --git a/src/fspp/impl/FilesystemImpl.h b/src/fspp/impl/FilesystemImpl.h
+index 3e7d40e..f2b640d 100644
+--- a/src/fspp/impl/FilesystemImpl.h
++++ b/src/fspp/impl/FilesystemImpl.h
+@@ -38,6 +38,7 @@ public:
+ 	fspp::num_bytes_t read(int descriptor, void *buf, fspp::num_bytes_t count, fspp::num_bytes_t offset) override;
+ 	void write(int descriptor, const void *buf, fspp::num_bytes_t count, fspp::num_bytes_t offset) override;
+ 	void fsync(int descriptor) override;
++    void fsyncdir(const boost::filesystem::path &path) override;
+ 	void fdatasync(int descriptor) override;
+ 	void access(const boost::filesystem::path &path, int mask) override;
+ 	int createAndOpenFile(const boost::filesystem::path &path, ::mode_t mode, ::uid_t uid, ::gid_t gid) override;
+diff --git a/test/fspp/testutils/FuseTest.h b/test/fspp/testutils/FuseTest.h
+index 08ca036..30c9ec4 100644
+--- a/test/fspp/testutils/FuseTest.h
++++ b/test/fspp/testutils/FuseTest.h
+@@ -31,6 +31,7 @@ public:
+   MOCK_METHOD(void, write, (int, const void*, fspp::num_bytes_t, fspp::num_bytes_t), (override));
+   MOCK_METHOD(void, flush, (int), (override));
+   MOCK_METHOD(void, fsync, (int), (override));
++  MOCK_METHOD(void, fsyncdir, (const boost::filesystem::path&), (override));
+   MOCK_METHOD(void, fdatasync, (int), (override));
+   MOCK_METHOD(void, access, (const boost::filesystem::path&, int), (override));
+   MOCK_METHOD(int, createAndOpenFile, (const boost::filesystem::path&, mode_t, uid_t, gid_t), (override));
