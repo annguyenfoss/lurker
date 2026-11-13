@@ -74,7 +74,12 @@ def selected_environment(spec, job):
         if result.returncode:
             raise ValueError(name + " unavailable: " + result.stderr.strip()[:300])
         versions[name] = {"path": str(executable), "version": result.stdout.strip()}
-    key = hashlib.sha256(json.dumps({"versions": versions, "os": platform.platform(),
+    manifest = json.loads((job / "source-manifest.json").read_text())["files"]
+    backend_inputs = {name: value for name, value in manifest.items()
+                      if name.startswith(("native/", "scripts/build-")) or name == "scripts/macos_backend.py"}
+    flags = {name: env.get(name, "") for name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CFLAGS", "CXXFLAGS", "LDFLAGS")}
+    key = hashlib.sha256(json.dumps({"versions": versions, "os": platform.platform(), "flags": flags,
+                                    "backend_inputs": backend_inputs,
                                     "stages": spec["stages"]}, sort_keys=True).encode()).hexdigest()[:20]
     cache = job.parents[1] / "cache" / key
     cache.mkdir(parents=True, exist_ok=True)

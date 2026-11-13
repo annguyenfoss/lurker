@@ -211,11 +211,17 @@ def dispatch(args):
     while pending or active:
         while pending and len(active) < manifest["concurrency"]:
             record = pending.pop(0)
+            if (directory / (record["job_id"] + ".cancel")).exists():
+                record["status"] = "cancelled"
+                atomic_json(directory / "manifest.json", manifest)
+                continue
             deployed = deploy(record["host"], record["job_id"], manifest["run_id"], manifest["commit"],
                               options, data, source_manifest, options.override)
             record.update(deployed)
             atomic_json(directory / "manifest.json", manifest)
             if record["status"] == "launched":
+                if (directory / (record["job_id"] + ".cancel")).exists():
+                    ssh(record["host"], "import pathlib,sys;(pathlib.Path(sys.argv[1])/'cancel').touch()", [record["job"]])
                 active.append(record)
         retained = []
         for record in active:
@@ -264,11 +270,13 @@ def collect(args):
 
 
 def control(args):
-    _, manifest = read_run(args.run_id)
+    directory, manifest = read_run(args.run_id)
     jobs = [job for job in manifest["jobs"] if args.host is None or job["job_id"].endswith("-" + args.host)]
     if not jobs:
         raise ValueError("no matching job")
     for job in jobs:
+        if args.command == "cancel":
+            (directory / (job["job_id"] + ".cancel")).touch()
         if job["status"] != "launched":
             continue
         if args.command == "cancel":

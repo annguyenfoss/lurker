@@ -113,6 +113,19 @@ class RemoteRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "artifact"):
                 coordinator.validate_spec({"stages": [], "artifacts": [artifact]})
 
+    def test_cancelled_queued_job_is_never_deployed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            job = {"job_id": "run-host", "host": {"ssh": "unused"}, "status": "queued"}
+            manifest = {"run_id": "run", "commit": "a" * 40, "concurrency": 1, "jobs": [job], "options": {}}
+            (root / "source.tar").write_bytes(b"")
+            (root / "source-manifest.json").write_text("{}")
+            (root / "run-host.cancel").touch()
+            with mock.patch.object(coordinator, "read_run", return_value=(root, manifest)), mock.patch.object(coordinator, "deploy") as deploy:
+                self.assertEqual(0, coordinator.dispatch(type("Args", (), {"run_id": "run"})()))
+                deploy.assert_not_called()
+            self.assertEqual("cancelled", job["status"])
+
     def test_inventory_has_every_supplied_host(self):
         inventory = json.loads(coordinator.INVENTORY.read_text())
         self.assertEqual(11, len(inventory))
