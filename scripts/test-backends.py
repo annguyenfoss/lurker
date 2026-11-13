@@ -345,11 +345,16 @@ class Suite:
     def verify(self):
         if (self.mountpoint / "profile 密碼.bin").read_bytes() != self.payload:
             raise AssertionError("Durably written profile bytes did not survive")
-        with sqlite3.connect(self.mountpoint / "browser-profile.sqlite") as db:
+        db = sqlite3.connect(self.mountpoint / "browser-profile.sqlite")
+        try:
             if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise AssertionError("SQLite integrity check failed")
             if db.execute("SELECT value FROM profile WHERE key=?", ("密碼",)).fetchone()[0] != self.payload:
                 raise AssertionError("SQLite committed profile record differs")
+        finally:
+            # Connection context managers commit/rollback; they do not close.
+            # Close explicitly before testing filesystem drain/unmount.
+            db.close()
         if (self.mountpoint / "atomic.data").read_bytes() != b"initial":
             raise AssertionError("Renamed/truncated file did not survive")
 

@@ -116,6 +116,26 @@ class HarnessTests(unittest.TestCase):
         self.assertTrue(result["timed_out"])
         self.assertNotEqual(result["exit_code"], 0)
 
+    def test_profile_verification_closes_sqlite_before_unmount(self):
+        suite = harness.Suite(self.options())
+        (suite.mountpoint / "profile 密碼.bin").write_bytes(suite.payload)
+        (suite.mountpoint / "atomic.data").write_bytes(b"initial")
+        connection = mock.Mock()
+        connection.execute.return_value.fetchone.side_effect = [("ok",), (suite.payload,)]
+        with mock.patch.object(harness.sqlite3, "connect", return_value=connection):
+            suite.verify()
+        connection.close.assert_called_once_with()
+
+    def test_failed_profile_verification_also_closes_sqlite(self):
+        suite = harness.Suite(self.options())
+        (suite.mountpoint / "profile 密碼.bin").write_bytes(suite.payload)
+        connection = mock.Mock()
+        connection.execute.return_value.fetchone.return_value = ("corrupt",)
+        with mock.patch.object(harness.sqlite3, "connect", return_value=connection):
+            with self.assertRaisesRegex(AssertionError, "integrity"):
+                suite.verify()
+        connection.close.assert_called_once_with()
+
     def test_readonly_negative_mode_requires_actual_request_and_rejection(self):
         suite = harness.Suite(self.options("--expect-readonly-unsupported"))
         suite.result["cases"].append({"name": "readonly", "status": "running"})
