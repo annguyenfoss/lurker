@@ -19,7 +19,7 @@
 +		const std::string arg (argv[i]);
 +		if (arg == "--create") { create = true; continue; }
 +		if (arg == "--filesystem=none") { filesystem = true; continue; }
-+		if (arg == "-k" && i + 1 < argc - 1) { ++i; continue; }
++		if (arg == "-k" && i + 1 < argc - 1 && (argv[i + 1][0] == '/' || argv[i + 1][0] == '\0')) { ++i; continue; }
 +		if (arg == "-t" || arg == "--force" || arg == "--stdin" || arg == "--non-interactive"
 +			|| arg == "--volume-type=normal" || arg == "--hash=SHA-512" || arg == "--random-source=/dev/urandom"
 +			|| arg == "--pim=0" || arg == "--quick" || arg == "--encryption=AES"
