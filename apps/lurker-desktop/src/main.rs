@@ -667,7 +667,15 @@ mod tests {
         assert_eq!(ui.get_keys_new_passphrase(), "");
         assert_eq!(ui.get_keys_confirm(), "");
         super::apply_privilege_mode(&ui, "unprivileged");
-        assert_eq!(ui.get_current_view(), "create");
+        // macOS intentionally has no Linux privilege selector; it is a no-op.
+        assert_eq!(
+            ui.get_current_view(),
+            if cfg!(target_os = "macos") {
+                "keys"
+            } else {
+                "create"
+            }
+        );
         ui.hide().unwrap();
     }
 

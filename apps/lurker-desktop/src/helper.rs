@@ -202,7 +202,9 @@ fi
             privilege_mode: PrivilegeMode::Unprivileged,
             target: directory.join("unused"),
             tag: None,
-            volume_type: VolumeType::Auto,
+            // Pin the transport under test; Auto may inspect unrelated folder
+            // recovery state before capability negotiation.
+            volume_type: VolumeType::Veracrypt,
         });
         assert!(run_helper(&helper, command)
             .unwrap_err()
