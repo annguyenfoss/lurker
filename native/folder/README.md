@@ -22,6 +22,13 @@ the native FUSE ABI. The pinned CryFS **1.0.3 uses FUSE 2**, unlike newer commit
 on its moving `release/1.0` branch. Qualify the actual binary's dependencies on
 each target. See `cryptomator/README.md` for the private Java build.
 
+FreeBSD's Go FUSE route needs the base `fusefs` kernel module, access to
+`/dev/fuse`, `/sbin/mount_fusefs` and native permission for user mounts. Its CLI
+suite passed on the dedicated guest with temporary `vfs.usermount=1` and
+`/dev/fuse` restricted to the test user; both were restored afterwards. Lurker
+does not change sysctl/devfs policy, grant device access or elevate this backend.
+An administrator must prepare that host prerequisite for ordinary user sessions.
+
 Creation refuses existing targets, sizes, force, keyfiles and alternate cipher
 families. A private target directory is reserved with atomic mkdir, initialized
 in an internal staging directory, synced and published with the native vault
