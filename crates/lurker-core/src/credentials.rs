@@ -112,7 +112,7 @@ pub(crate) fn validate_request(command: &CommandAction) -> AppResult<()> {
         CommandAction::Unmount(_) => return Ok(()),
         CommandAction::Keyslots(c) => {
             use crate::KeyslotOperation;
-            if cfg!(target_os = "macos") {
+            if !cfg!(target_os = "linux") {
                 return Err(AppError::new("LUKS keyslot management requires Linux."));
             }
             if c.privilege_mode == crate::PrivilegeMode::Unprivileged {
@@ -152,7 +152,12 @@ pub(crate) fn validate_request(command: &CommandAction) -> AppResult<()> {
         }
     };
     validate(passphrase, keyfile)?;
-    if keyfile.is_some() && kind == VolumeType::Apple {
+    if keyfile.is_some()
+        && !matches!(
+            kind,
+            VolumeType::Auto | VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
+        )
+    {
         return Err(AppError::new(
             "Keyfile authentication is supported for LUKS and VeraCrypt only.",
         ));

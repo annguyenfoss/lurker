@@ -13,6 +13,15 @@ pub enum CommandAction {
 }
 
 impl CommandAction {
+    pub fn volume_type(&self) -> VolumeType {
+        match self {
+            Self::Create(c) => c.volume_type,
+            Self::Mount(c) => c.volume_type,
+            Self::Unmount(c) => c.volume_type,
+            Self::Keyslots(_) => VolumeType::Luks,
+        }
+    }
+
     pub fn privilege_mode(&self) -> PrivilegeMode {
         match self {
             Self::Create(c) => c.privilege_mode,

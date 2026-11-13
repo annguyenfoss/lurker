@@ -37,6 +37,7 @@ use std::path::Path;
 
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     credentials::validate_request(&command)?;
+    validate_platform(&command)?;
     #[cfg(target_os = "macos")]
     {
         if command.privilege_mode() == PrivilegeMode::Unprivileged {
@@ -54,10 +55,22 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     }
 }
 
+fn validate_platform(command: &CommandAction) -> AppResult<()> {
+    let backend = command.volume_type();
+    if !backend.supports_platform(std::env::consts::OS) {
+        return Err(AppError::new(format!(
+            "Backend {backend} is outside the approved scope on {}.",
+            std::env::consts::OS
+        )));
+    }
+    Ok(())
+}
+
 /// Called before a desktop helper elevates, so a privileged request cannot
 /// overwrite a container already served by the login user's userspace backend.
 pub fn validate_request(command: &CommandAction) -> AppResult<()> {
     credentials::validate_request(command)?;
+    validate_platform(command)?;
     #[cfg(target_os = "linux")]
     if command.privilege_mode() == PrivilegeMode::Privileged {
         userspace::check_privileged_conflicts(command)?;

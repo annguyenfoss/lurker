@@ -47,11 +47,14 @@ fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> 
     assert_mapper_available(&mapper_name_for_source(&command.target, None)?)?;
     match command.volume_type {
         VolumeType::Veracrypt => veracrypt_create_device(ctx, &command),
-        VolumeType::Luks => luks_create_device(ctx, &command),
+        VolumeType::Luks | VolumeType::Luks1 => luks_create_device(ctx, &command),
         VolumeType::Apple => Err(AppError::new("Apple encrypted disk images require macOS.")),
         VolumeType::Auto => Err(AppError::new(
             "Option --type auto is not valid with create.",
         )),
+        other => Err(AppError::new(format!(
+            "Backend {other} is not a Linux block-container backend."
+        ))),
     }
 }
 
@@ -86,7 +89,7 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
                 command.readonly,
             )
         }
-        VolumeType::Luks => luks_mount_device(
+        VolumeType::Luks | VolumeType::Luks1 => luks_mount_device(
             ctx,
             &command.source,
             &command.mountpoint,
@@ -96,7 +99,9 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
             command.readonly,
         ),
         VolumeType::Apple => Err(AppError::new("Apple encrypted disk images require macOS.")),
-        VolumeType::Auto => Err(AppError::new("Unsupported volume type: auto")),
+        other => Err(AppError::new(format!(
+            "Unsupported Linux container type: {other}"
+        ))),
     }
 }
 
@@ -124,6 +129,9 @@ fn assert_create_target(ctx: &mut AppContext, command: &CreateCommand) -> AppRes
     match command.source_kind {
         SourceKind::File => assert_create_file_target(&command.target, command.force),
         SourceKind::Block => assert_create_block_target(ctx, &command.target, command.force),
+        SourceKind::Directory => Err(AppError::new(
+            "Container creation requires a file or block device.",
+        )),
     }
 }
 
@@ -272,6 +280,11 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
     let mapper_name = mapper_name_for_source(&command.target, None)?;
 
     match command.source_kind {
+        SourceKind::Directory => {
+            return Err(AppError::new(
+                "Container creation requires a file or block device.",
+            ))
+        }
         SourceKind::File => {
             let size_gb = command.size_gb.as_deref().unwrap_or_default();
             let size_mib = size_gb_to_mib(size_gb)?;
@@ -287,13 +300,19 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
                 .msg2(&format!("Target size: {} GB ({} MiB)", size_gb, size_mib));
             write_random_file(ctx.output.clone(), &temp_path, size_mib)?;
 
-            ctx.output.msg2("Formatting LUKS2 header");
+            ctx.output
+                .msg2(if command.volume_type == VolumeType::Luks1 {
+                    "Formatting LUKS1 header"
+                } else {
+                    "Formatting LUKS2 header"
+                });
             luks_format(
                 ctx,
                 &temp_path,
                 command.passphrase.as_deref(),
                 command.keyfile.as_deref(),
                 profile,
+                command.volume_type == VolumeType::Luks1,
             )?;
 
             ctx.output.msg2(&format!(
@@ -306,7 +325,7 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
                 &mapper_name,
                 command.passphrase.as_deref(),
                 command.keyfile.as_deref(),
-                Some(profile),
+                (command.volume_type != VolumeType::Luks1).then_some(profile),
                 false,
             )?;
 
@@ -332,13 +351,19 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
             ctx.output.msg2(&format!("LUKS profile: {}", profile.label));
             ctx.output.msg2("Destructive mode enabled by --force");
 
-            ctx.output.msg2("Formatting LUKS2 header");
+            ctx.output
+                .msg2(if command.volume_type == VolumeType::Luks1 {
+                    "Formatting LUKS1 header"
+                } else {
+                    "Formatting LUKS2 header"
+                });
             luks_format(
                 ctx,
                 &command.target,
                 command.passphrase.as_deref(),
                 command.keyfile.as_deref(),
                 profile,
+                command.volume_type == VolumeType::Luks1,
             )?;
 
             ctx.output.msg2(&format!(
@@ -351,7 +376,7 @@ fn luks_create_device(ctx: &mut AppContext, command: &CreateCommand) -> AppResul
                 &mapper_name,
                 command.passphrase.as_deref(),
                 command.keyfile.as_deref(),
-                Some(profile),
+                (command.volume_type != VolumeType::Luks1).then_some(profile),
                 false,
             )?;
 
@@ -383,6 +408,11 @@ fn veracrypt_create_device(ctx: &mut AppContext, command: &CreateCommand) -> App
     let mapper_name = mapper_name_for_source(&command.target, None)?;
 
     match command.source_kind {
+        SourceKind::Directory => {
+            return Err(AppError::new(
+                "Container creation requires a file or block device.",
+            ))
+        }
         SourceKind::File => {
             let size_gb = command.size_gb.as_deref().unwrap_or_default();
             let size_mib = size_gb_to_mib(size_gb)?;
@@ -680,7 +710,10 @@ fn resolve_volume_type(
     allow_unknown_explicit: bool,
 ) -> AppResult<VolumeType> {
     if let Some(actual_type) = actual_type {
-        if requested_type != VolumeType::Auto && requested_type != actual_type {
+        if requested_type != VolumeType::Auto
+            && requested_type != actual_type
+            && !(requested_type == VolumeType::Luks && actual_type == VolumeType::Luks1)
+        {
             return Err(AppError::new(format!(
                 "Requested --type {} but detected {} container for {}: {}",
                 requested_type,
@@ -723,12 +756,33 @@ fn detect_source_volume_type(
     if is_luks_source(ctx, &source)? {
         resolve_volume_type(
             requested_type,
-            Some(VolumeType::Luks),
+            Some(if requested_type == VolumeType::Luks1 {
+                // Verify the on-disk version, rather than treating every LUKS header as LUKS1.
+                let cryptsetup = ctx.cryptsetup_path().to_path_buf();
+                let dump = ctx.capture_command(
+                    &cryptsetup,
+                    &["luksDump".into(), source.as_os_str().into()],
+                    true,
+                    "Failed to inspect LUKS version",
+                )?;
+                if !dump.status.success()
+                    || !String::from_utf8_lossy(&dump.stdout).lines().any(|line| {
+                        line.trim()
+                            .strip_prefix("Version:")
+                            .is_some_and(|v| v.trim() == "1")
+                    })
+                {
+                    return Err(AppError::new("Source is not a LUKS1 container."));
+                }
+                VolumeType::Luks1
+            } else {
+                VolumeType::Luks
+            }),
             source_path,
             "source",
             false,
         )
-    } else if requested_type == VolumeType::Luks {
+    } else if matches!(requested_type, VolumeType::Luks | VolumeType::Luks1) {
         Err(AppError::new("Source is not a LUKS container."))
     } else {
         Ok(VolumeType::Veracrypt)
@@ -764,7 +818,15 @@ fn detect_luks_cipher_profile(
         return Ok(None);
     }
 
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
+    let header = String::from_utf8_lossy(&output.stdout);
+    if header.lines().any(|line| {
+        line.trim()
+            .strip_prefix("Version:")
+            .is_some_and(|version| version.trim() == "1")
+    }) {
+        return Ok(None); // Kernel performance tuning is only qualified for the LUKS2 profiles.
+    }
+    for line in header.lines() {
         let trimmed = line.trim();
         if let Some(value) = trimmed
             .strip_prefix("Cipher:")
@@ -808,7 +870,11 @@ fn active_mapper_volume_type(
         if let Some(value) = line.trim().strip_prefix("type:") {
             let value = value.trim().to_ascii_lowercase();
             if value.starts_with("luks") {
-                return Ok(Some(VolumeType::Luks));
+                return Ok(Some(if value == "luks1" {
+                    VolumeType::Luks1
+                } else {
+                    VolumeType::Luks
+                }));
             }
             if value.starts_with("tcrypt") || value.starts_with("veracrypt") {
                 return Ok(Some(VolumeType::Veracrypt));
@@ -1003,16 +1069,51 @@ fn block_device_tree_has_mounts(ctx: &mut AppContext, device_path: &Path) -> App
         .any(|line| !line.trim().is_empty()))
 }
 
+fn luks_format_arguments(profile: &CreateCipherProfile, luks1: bool) -> Vec<OsString> {
+    if !luks1 {
+        return profile.format_args.iter().map(OsString::from).collect();
+    }
+    let cipher = profile
+        .format_args
+        .windows(2)
+        .find(|p| p[0] == "-c")
+        .unwrap()[1];
+    let time = profile
+        .format_args
+        .windows(2)
+        .find(|p| p[0] == "-i")
+        .unwrap()[1];
+    [
+        "--type",
+        "luks1",
+        "-c",
+        cipher,
+        "-s",
+        "512",
+        "--pbkdf",
+        "pbkdf2",
+        "--hash",
+        "sha512",
+        "-i",
+        time,
+        "--use-urandom",
+    ]
+    .into_iter()
+    .map(OsString::from)
+    .collect()
+}
+
 fn luks_format(
     ctx: &mut AppContext,
     target: &Path,
     passphrase: Option<&str>,
     keyfile: Option<&Path>,
     profile: &CreateCipherProfile,
+    luks1: bool,
 ) -> AppResult<()> {
     let privileged = is_block_device_target(target);
     let mut args = vec![OsString::from("-v")];
-    args.extend(profile.format_args.iter().map(OsString::from));
+    args.extend(luks_format_arguments(profile, luks1));
     let cryptsetup = ctx.cryptsetup_path().to_path_buf();
     if let Some(keyfile) = keyfile {
         args.extend([
@@ -1208,6 +1309,11 @@ fn veracrypt_create(
     args.push("-k".into());
     args.push(crate::credentials::veracrypt_keyfiles(keyfile)?);
     match target_kind {
+        SourceKind::Directory => {
+            return Err(AppError::new(
+                "VeraCrypt cannot create a directory backend.",
+            ))
+        }
         SourceKind::File => {
             let size_mib = size_mib.ok_or_else(|| AppError::new("Missing file container size."))?;
             args.push(OsString::from(format!("--size={}M", size_mib)));
@@ -1399,6 +1505,24 @@ impl Drop for TempFileGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn luks1_profile_never_inherits_luks2_kdf_or_sector_arguments() {
+        for cipher in [
+            CreateCipher::Aes,
+            CreateCipher::Serpent,
+            CreateCipher::Twofish,
+        ] {
+            let args = luks_format_arguments(cipher_profile(cipher), true);
+            let values: Vec<_> = args.iter().map(|arg| arg.to_str().unwrap()).collect();
+            assert!(values.windows(2).any(|pair| pair == ["--type", "luks1"]));
+            assert!(values.windows(2).any(|pair| pair == ["--pbkdf", "pbkdf2"]));
+            assert!(values.windows(2).any(|pair| pair == ["--hash", "sha512"]));
+            assert!(!values.iter().any(|value| value.starts_with("--pbkdf-")
+                || *value == "--sector-size"
+                || *value == "argon2id"));
+        }
+    }
 
     #[test]
     fn veracrypt_tags_are_rejected() {

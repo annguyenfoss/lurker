@@ -266,3 +266,17 @@ Real Linux tests create fresh `/tmp` images and dedicated loop devices. They nev
 ## License
 
 This project is licensed under the GNU General Public License v3.0 only. See [LICENSE](LICENSE).
+
+### Cross-platform backend development
+
+The approved backend matrix and implementation plan are in
+`DIRECTIVES/LLM/CIPHER.md` and `DIRECTIVES/PLAN/CROSS_PLATFORMS.md`.
+Selected BSD and directory backends are under development; selection is not a
+claim of native qualification. CLI directory creation uses
+`create --type gocryptfs|cryfs|cryptomator|pefs <directory>` without a size or
+cipher option. These backends retain their native fixed encryption profiles.
+Explicit Linux `--type luks1` uses XTS/PBKDF2-SHA-512; the `luks` default remains
+LUKS2/Argon2id. Backend/OS combinations outside the approved matrix are rejected.
+Native packages carry private third-party engines; host kernel tools and FUSE
+remain prerequisites, with macOS FUSE installed separately. A Cargo-only build
+does not include every private native engine.

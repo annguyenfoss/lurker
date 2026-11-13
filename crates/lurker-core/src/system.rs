@@ -7,7 +7,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output as ProcessOutput, Stdio};
 
@@ -84,7 +84,7 @@ impl AppContext {
         self.tools
             .veracrypt
             .as_deref()
-            .ok_or_else(|| AppError::new("Required command not found: veracrypt"))
+            .ok_or_else(|| AppError::new("Bundled VeraCrypt creator is missing. Build scripts/build-linux-userspace.py --only-creator or install the complete Lurker package."))
     }
 
     pub fn set_cleanup_mapper(&mut self, mapper_name: impl Into<String>) {
@@ -307,7 +307,14 @@ impl ToolPaths {
         let cryptsetup = require_command("cryptsetup")?;
         let sudo = find_executable("sudo");
         let blkid = find_executable("blkid");
-        let veracrypt = find_executable("veracrypt");
+        let veracrypt = if matches!(command, CommandAction::Create(c) if c.volume_type == VolumeType::Veracrypt)
+        {
+            Some(resolve_veracrypt_creator(
+                matches!(command, CommandAction::Create(c) if c.source_kind == SourceKind::Block),
+            )?)
+        } else {
+            None
+        };
         let mut tools = Self {
             cryptsetup,
             mkfs_btrfs: None,
@@ -330,7 +337,7 @@ impl ToolPaths {
                     tools.lsblk = Some(require_command("lsblk")?);
                 }
                 if *volume_type == VolumeType::Veracrypt && tools.veracrypt.is_none() {
-                    return Err(AppError::new("Required command not found: veracrypt"));
+                    return Err(AppError::new("Bundled VeraCrypt creator is missing. Build scripts/build-linux-userspace.py --only-creator or install the complete Lurker package."));
                 }
             }
             CommandAction::Mount(_) => {
@@ -344,6 +351,70 @@ impl ToolPaths {
 
         Ok(tools)
     }
+}
+
+/// Private backend discovery never searches PATH for an unrelated VeraCrypt app.
+fn creator_candidates(root: bool) -> Vec<PathBuf> {
+    if !root {
+        if let Some(directory) = env::var_os("LURKER_BACKEND_DIR") {
+            return vec![PathBuf::from(directory).join("lurker-veracrypt-create")];
+        }
+    }
+    let mut candidates = Vec::new();
+    if let Ok(executable) = env::current_exe() {
+        if let Some(parent) = executable.parent() {
+            candidates.push(parent.join("backends/lurker-veracrypt-create"));
+            candidates.push(parent.join("userspace/lurker-veracrypt-create"));
+        }
+    }
+    candidates.push("/usr/lib/lurker/backends/lurker-veracrypt-create".into());
+    candidates.push("/usr/lib/lurker/userspace/lurker-veracrypt-create".into());
+    candidates
+}
+
+fn trusted_root_program(path: &Path) -> AppResult<PathBuf> {
+    let canonical = fs::canonicalize(path)
+        .map_err(|err| AppError::io("Failed to resolve private backend", err))?;
+    if !is_executable(&canonical) {
+        return Err(AppError::new("Private backend is not executable."));
+    }
+    // Checking every canonical ancestor prevents directory replacement attacks.
+    // Root must never execute a developer's user-writable build output.
+    for component in canonical.ancestors() {
+        let metadata = fs::metadata(component)
+            .map_err(|err| AppError::io("Failed to inspect private backend ownership", err))?;
+        if metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
+            return Err(AppError::new(format!("Refusing elevated private backend in an untrusted path: {}. Install a root-owned package first.", component.display())));
+        }
+    }
+    Ok(canonical)
+}
+
+fn resolve_veracrypt_creator(will_elevate: bool) -> AppResult<PathBuf> {
+    let root = crate::effective_uid() == 0;
+    for candidate in creator_candidates(root) {
+        if !is_executable(&candidate) {
+            continue;
+        }
+        let program = if root || will_elevate {
+            trusted_root_program(&candidate)?
+        } else {
+            fs::canonicalize(&candidate)
+                .map_err(|err| AppError::io("Failed to resolve creator", err))?
+        };
+        let output = Command::new(&program)
+            .arg("--lurker-creator-version")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|err| AppError::io("Failed to inspect private VeraCrypt creator", err))?;
+        if !output.status.success() || output.stdout != b"lurker-creator-1\n" {
+            return Err(AppError::new(
+                "Incompatible private VeraCrypt creator. Rebuild the bundled backend.",
+            ));
+        }
+        return Ok(program);
+    }
+    Err(AppError::new("Bundled VeraCrypt creator is missing. Build scripts/build-linux-userspace.py --only-creator or install the complete Lurker package."))
 }
 
 pub fn probe_system() -> AppResult<SystemProbe> {
@@ -381,8 +452,10 @@ pub fn probe_system() -> AppResult<SystemProbe> {
                 required: false,
             },
             ToolStatus {
-                name: "veracrypt".into(),
-                path: find_executable("veracrypt"),
+                name: "lurker-veracrypt-create".into(),
+                path: creator_candidates(false)
+                    .into_iter()
+                    .find(|path| is_executable(path)),
                 required: false,
             },
             ToolStatus {
@@ -465,6 +538,18 @@ mod tests {
             sudo_ready: false,
             cleanup_mapper: None,
         }
+    }
+
+    #[test]
+    fn elevated_backend_rejects_writable_ancestors_and_user_builds() {
+        let directory = std::env::temp_dir().join(format!("lurker-trust-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let program = directory.join("creator");
+        std::fs::write(&program, b"#!/bin/sh\nexit 0\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(super::trusted_root_program(&program).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

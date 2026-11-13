@@ -24,6 +24,8 @@ const VERACRYPT_CREATE_ARGS_COMMON: &[&str] = &[
 // VeraCrypt determines the full device size; --size=max is file-only.
 const VERACRYPT_CREATE_ARGS_BLOCK: &[&str] = &["--quick"];
 
+// LUKS1 uses the same cipher families and iteration times with PBKDF2/SHA-512;
+// Linux dispatch removes LUKS2-only KDF/sector flags for that explicit format.
 const LUKS_FORMAT_ARGS_AES: &[&str] = &[
     "--type",
     "luks2",

@@ -59,6 +59,9 @@ pub fn build_create_command(
             };
             joined
         }
+        SourceKind::Directory => {
+            return Err("Directory creation is currently available through the CLI.".into())
+        }
         SourceKind::Block => required_value("Partition", partition)?.to_string(),
     };
 
@@ -84,6 +87,9 @@ pub fn build_create_command(
                 other => return Err(format!("Unsupported size unit: {other}")),
             };
             Some(format!("{in_gb}"))
+        }
+        SourceKind::Directory => {
+            return Err("Directory creation is currently available through the CLI.".into())
         }
         SourceKind::Block => None,
     };

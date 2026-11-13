@@ -46,6 +46,14 @@ pub enum VolumeType {
     Luks,
     Veracrypt,
     Apple,
+    Luks1,
+    Geli,
+    Cgd,
+    Softraid,
+    Pefs,
+    Gocryptfs,
+    Cryfs,
+    Cryptomator,
 }
 
 impl VolumeType {
@@ -55,6 +63,15 @@ impl VolumeType {
             "luks" => Some(Self::Luks),
             "veracrypt" => Some(Self::Veracrypt),
             "apple" => Some(Self::Apple),
+            "luks1" => Some(Self::Luks1),
+            "geli" => Some(Self::Geli),
+            "cgd" => Some(Self::Cgd),
+            "softraid" => Some(Self::Softraid),
+            "pefs" => Some(Self::Pefs),
+            "gocryptfs" => Some(Self::Gocryptfs),
+            "cryfs" => Some(Self::Cryfs),
+            "cryptomator" => Some(Self::Cryptomator),
+
             _ => None,
         }
     }
@@ -65,6 +82,14 @@ impl VolumeType {
             Self::Luks => "luks",
             Self::Veracrypt => "veracrypt",
             Self::Apple => "apple",
+            Self::Luks1 => "luks1",
+            Self::Geli => "geli",
+            Self::Cgd => "cgd",
+            Self::Softraid => "softraid",
+            Self::Pefs => "pefs",
+            Self::Gocryptfs => "gocryptfs",
+            Self::Cryfs => "cryfs",
+            Self::Cryptomator => "cryptomator",
         }
     }
 }
@@ -114,6 +139,7 @@ impl Display for CreateCipher {
 pub enum SourceKind {
     File,
     Block,
+    Directory,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -146,8 +172,95 @@ impl VolumeType {
     pub fn default_create() -> Self {
         if cfg!(target_os = "macos") {
             Self::Apple
+        } else if cfg!(target_os = "freebsd") {
+            Self::Geli
+        } else if cfg!(target_os = "netbsd") {
+            Self::Cgd
+        } else if cfg!(target_os = "openbsd") {
+            Self::Softraid
+        } else if cfg!(target_os = "dragonfly") {
+            Self::Luks1
         } else {
             Self::Luks
+        }
+    }
+
+    pub fn is_directory(self) -> bool {
+        matches!(
+            self,
+            Self::Pefs | Self::Gocryptfs | Self::Cryfs | Self::Cryptomator
+        )
+    }
+
+    /// Approved scope only; runtime prerequisites and operation support are
+    /// checked separately by the backend. Selection never implies availability.
+    pub fn supports_platform(self, os: &str) -> bool {
+        match self {
+            Self::Auto => matches!(
+                os,
+                "linux" | "macos" | "freebsd" | "dragonfly" | "netbsd" | "openbsd"
+            ),
+            Self::Apple => os == "macos",
+            Self::Luks => os == "linux",
+            Self::Luks1 => matches!(os, "linux" | "dragonfly"),
+            Self::Veracrypt => matches!(os, "linux" | "macos" | "freebsd" | "openbsd"),
+            Self::Geli | Self::Pefs => os == "freebsd",
+            Self::Cgd => os == "netbsd",
+            Self::Softraid => os == "openbsd",
+            Self::Gocryptfs => matches!(os, "linux" | "macos" | "freebsd"),
+            Self::Cryfs | Self::Cryptomator => matches!(os, "linux" | "macos"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    #[test]
+    fn approved_backend_platform_pairs_are_explicit() {
+        let platforms = [
+            "macos",
+            "linux",
+            "freebsd",
+            "dragonfly",
+            "netbsd",
+            "openbsd",
+        ];
+        let cases = [
+            (VolumeType::Apple, [true, false, false, false, false, false]),
+            (VolumeType::Luks, [false, true, false, false, false, false]),
+            (VolumeType::Luks1, [false, true, false, true, false, false]),
+            (
+                VolumeType::Veracrypt,
+                [true, true, true, false, false, true],
+            ),
+            (VolumeType::Geli, [false, false, true, false, false, false]),
+            (VolumeType::Cgd, [false, false, false, false, true, false]),
+            (
+                VolumeType::Softraid,
+                [false, false, false, false, false, true],
+            ),
+            (VolumeType::Pefs, [false, false, true, false, false, false]),
+            (
+                VolumeType::Gocryptfs,
+                [true, true, true, false, false, false],
+            ),
+            (VolumeType::Cryfs, [true, true, false, false, false, false]),
+            (
+                VolumeType::Cryptomator,
+                [true, true, false, false, false, false],
+            ),
+        ];
+        for (backend, allowed) in cases {
+            assert_eq!(VolumeType::parse(backend.as_str()), Some(backend));
+            for (os, expected) in platforms.into_iter().zip(allowed) {
+                assert_eq!(backend.supports_platform(os), expected, "{backend} on {os}");
+            }
+            assert!(!backend.supports_platform("windows"));
+        }
+        for excluded in ["age", "encfs", "securefs", "zfs", "fscrypt"] {
+            assert_eq!(VolumeType::parse(excluded), None);
         }
     }
 }

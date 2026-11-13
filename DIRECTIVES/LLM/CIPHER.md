@@ -80,6 +80,13 @@ Use this file as the source of truth for selected encryption backends and create
     - `--perf-submit_from_crypt_cpus`
   - apply those open args automatically when a Twofish LUKS header is detected
 
+## LUKS1 Profiles (Linux; DragonFly qualified separately)
+
+- Explicit `--type luks1`; Linux `luks` still creates LUKS2 by default.
+- AES, Serpent and Twofish use their respective `*-xts-plain64` modes with 512-bit keys, PBKDF2/SHA-512 and 512-byte sectors.
+- Iteration times remain 5000 ms (AES/Twofish) and 10000 ms (Serpent). No Argon2, memory/parallelism options or LUKS2-only format arguments.
+- DragonFly's native cryptsetup and kernel algorithms require independent qualification; its adapter must document any compatible fixed profile differences before advertising support.
+
 ## LUKS Keyslot Management (Linux)
 
 - Each slot accepts either a password or a binary keyfile. Slots are independent alternatives; any one enrolled credential can unlock the volume.

@@ -225,7 +225,7 @@ where
                 let value = &current["--type=".len()..];
                 volume_type = VolumeType::parse(value).ok_or_else(|| ParseFailure {
                     message: Some(format!(
-                        "Invalid --type value: {}. Use auto, luks, veracrypt, or apple.",
+                        "Invalid --type value: {}. Use auto, luks, luks1, veracrypt, apple, geli, cgd, softraid, pefs, gocryptfs, cryfs, or cryptomator.",
                         value
                     )),
                     exit_code: 1,
@@ -438,7 +438,12 @@ where
             "Option --key-file is only valid with create, mount, add-key or remove-key.",
         ));
     }
-    if keyfile.is_some() && volume_type == VolumeType::Apple {
+    if keyfile.is_some()
+        && !matches!(
+            volume_type,
+            VolumeType::Auto | VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
+        )
+    {
         return Err(usage_failure(
             &script_name,
             color_mode,
@@ -447,7 +452,7 @@ where
     }
     match action.as_str() {
         "keyslots" | "add-key" | "remove-key" => {
-            if cfg!(target_os = "macos")
+            if !cfg!(target_os = "linux")
                 || privilege_mode == lurker_core::PrivilegeMode::Unprivileged
             {
                 return Err(usage_failure(
@@ -536,8 +541,26 @@ where
             }
 
             let target = PathBuf::from(&action_args[0]);
-            let source_kind = classify_create_target(&target, &script_name, color_mode)?;
+            let source_kind = if volume_type.is_directory() {
+                SourceKind::Directory
+            } else {
+                classify_create_target(&target, &script_name, color_mode)?
+            };
+            if volume_type.is_directory() && (create_cipher_explicit || force) {
+                return Err(usage_failure(&script_name, color_mode,
+                    "Directory backends use their fixed native profile and do not accept --cipher or --force."));
+            }
             let size_gb = match source_kind {
+                SourceKind::Directory => {
+                    if action_args.len() != 1 {
+                        return Err(usage_failure(
+                            &script_name,
+                            color_mode,
+                            "Usage: lurker create --type BACKEND <directory>",
+                        ));
+                    }
+                    None
+                }
                 SourceKind::Block => {
                     if action_args.len() != 1 {
                         return Err(usage_failure(
@@ -609,7 +632,7 @@ where
             let source = PathBuf::from(&action_args[0]);
             let source_kind = path_source_kind(&source).ok_or_else(|| ParseFailure {
                 message: Some(format!(
-                    "Source does not exist or is not a regular file or block device: {}",
+                    "Source does not exist or is not a regular file, directory or supported device: {}",
                     source.display()
                 )),
                 exit_code: 1,
@@ -623,6 +646,8 @@ where
             let mountpoint = PathBuf::from(&action_args[1]);
             if !mountpoint.is_dir()
                 && !((cfg!(target_os = "macos")
+                    || volume_type.is_directory()
+                    || source_kind == SourceKind::Directory
                     || privilege_mode == lurker_core::PrivilegeMode::Unprivileged)
                     && !mountpoint.exists())
             {
@@ -724,14 +749,18 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
         ("", "", "")
     };
 
+    let directory_help = "\nDirectory backends (where supported):\n  create --type gocryptfs|cryfs|cryptomator|pefs <directory>\n  mount --type BACKEND <encrypted-directory> <mountpoint>\n  unmount --type BACKEND <mountpoint>\n  No size or cipher option; fixed native encryption profile.\n";
+    if !cfg!(any(target_os = "linux", target_os = "macos")) {
+        return format!("Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\nNative default: {}. File containers only; native device operations require administrator privileges.\n{directory_help}", VolumeType::default_create());
+    }
     if cfg!(target_os = "macos") {
         return format!(
-            "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type apple|veracrypt] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} mount [--type auto|apple|veracrypt] [--readonly] <file> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type auto|apple|veracrypt] <file|mountpoint|virtual-device>{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.dmg 4{reset}\n  {accent}{script_name} createvc --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} mount ./vault.dmg ~/vault-mount{reset}\n  {accent}{script_name} unmount ~/vault-mount{reset}\n\n{header}Options:{reset}\n  {accent}--type TYPE{reset}       Create defaults to apple; mount/unmount default to auto\n  {accent}--key-file FILE{reset}   Use a keyfile instead of a password (VeraCrypt create or mount)\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}-F, --force{reset}       Replace an existing unmounted regular file after successful create\n  {accent}--color=WHEN{reset}      auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n\n  macOS supports file containers only (minimum 32 MiB). LUKS and tags require Linux.\n"
+            "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type apple|veracrypt] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} mount [--type auto|apple|veracrypt] [--readonly] <file> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type auto|apple|veracrypt] <file|mountpoint|virtual-device>{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.dmg 4{reset}\n  {accent}{script_name} createvc --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} mount ./vault.dmg ~/vault-mount{reset}\n  {accent}{script_name} unmount ~/vault-mount{reset}\n\n{header}Options:{reset}\n  {accent}--type TYPE{reset}       Create defaults to apple; mount/unmount default to auto\n  {accent}--key-file FILE{reset}   Use a keyfile instead of a password (VeraCrypt create or mount)\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}-F, --force{reset}       Replace an existing unmounted regular file after successful create\n  {accent}--color=WHEN{reset}      auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n\n  macOS supports file containers only (minimum 32 MiB). LUKS and tags require Linux.\n{directory_help}"
         );
     }
 
     format!(
-        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} keyslots <source>{reset}\n  {accent}{script_name} add-key <source> [--slot N] [--key-file FILE] [--new-key-file FILE]{reset}\n  {accent}{script_name} remove-key <source> --slot N [--key-file FILE]{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--slot N{reset}          LUKS slot to add (optional) or remove (required)\n  {accent}--new-key-file FILE{reset}   New LUKS credential for add-key; otherwise prompt for a new password\n  {accent}--unprivileged{reset}    Linux VeraCrypt files without elevation (userspace helpers required)\n  {accent}--privileged{reset}      Use the existing kernel-backed route (default)\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), apple (macOS default), veracrypt; auto for mount/unmount\n  {accent}--key-file FILE{reset}   Use a keyfile instead of a password (LUKS/VeraCrypt create or mount)\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n"
+        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} keyslots <source>{reset}\n  {accent}{script_name} add-key <source> [--slot N] [--key-file FILE] [--new-key-file FILE]{reset}\n  {accent}{script_name} remove-key <source> --slot N [--key-file FILE]{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--slot N{reset}          LUKS slot to add (optional) or remove (required)\n  {accent}--new-key-file FILE{reset}   New LUKS credential for add-key; otherwise prompt for a new password\n  {accent}--unprivileged{reset}    Linux VeraCrypt files without elevation (userspace helpers required)\n  {accent}--privileged{reset}      Use the existing kernel-backed route (default)\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), luks1, apple (macOS default), veracrypt, geli, cgd, softraid, pefs, gocryptfs, cryfs, cryptomator; auto for mount/unmount\n  {accent}--key-file FILE{reset}   Use a keyfile instead of a password (LUKS/VeraCrypt create or mount)\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n{directory_help}"
     )
 }
 
@@ -760,7 +789,7 @@ fn parse_volume_type(
 ) -> Result<VolumeType, ParseFailure> {
     VolumeType::parse(&value.to_string_lossy()).ok_or_else(|| ParseFailure {
         message: Some(format!(
-            "Invalid --type value: {}. Use auto, luks, veracrypt, or apple.",
+            "Invalid --type value: {}. Use auto, luks, luks1, veracrypt, apple, geli, cgd, softraid, pefs, gocryptfs, cryfs, or cryptomator.",
             value.to_string_lossy()
         )),
         exit_code: 1,
@@ -794,6 +823,8 @@ fn path_source_kind(path: &Path) -> Option<SourceKind> {
     let file_type = metadata.file_type();
     if file_type.is_block_device() {
         Some(SourceKind::Block)
+    } else if file_type.is_dir() {
+        Some(SourceKind::Directory)
     } else if file_type.is_file() {
         Some(SourceKind::File)
     } else {
@@ -870,6 +901,30 @@ mod tests {
     use super::{parse_env_args, CommandAction, ParseOutcome};
     use lurker_core::{CreateCipher, SourceKind, VolumeType};
     use std::ffi::OsString;
+
+    #[test]
+    fn folder_create_has_no_size_and_rejects_container_options() {
+        for kind in ["gocryptfs", "cryfs", "cryptomator", "pefs"] {
+            let parsed = parse_env_args(
+                ["lurker", "create", "--type", kind, "new-vault"].map(OsString::from),
+            )
+            .unwrap();
+            let ParseOutcome::Run(cli) = parsed else {
+                panic!()
+            };
+            let CommandAction::Create(c) = cli.command else {
+                panic!()
+            };
+            assert_eq!(c.source_kind, SourceKind::Directory);
+            assert!(c.size_gb.is_none());
+            for flag in ["--cipher=aes", "--force", "--key-file=Cargo.toml", "1"] {
+                assert!(parse_env_args(
+                    ["lurker", "create", "--type", kind, "new-vault", flag].map(OsString::from)
+                )
+                .is_err());
+            }
+        }
+    }
 
     #[test]
     fn keyfiles_and_keyslot_actions_parse_without_password_arguments() {
