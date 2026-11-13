@@ -172,9 +172,9 @@ Build a native release DMG on the Mac where you want to install it:
 
 ```bash
 # One-time build tooling setup (not needed by people installing the app):
-python3 -m venv build/macos-dmg-tools
-build/macos-dmg-tools/bin/python -m pip install -r scripts/requirements-macos-dmg.txt
-python3 scripts/build-macos-dmg.py
+uv venv build/macos-dmg-tools
+uv pip install --python build/macos-dmg-tools/bin/python -r scripts/requirements-macos-dmg.txt
+build/macos-dmg-tools/bin/python scripts/build-macos-dmg.py
 ```
 
 Open `dist/Lurker-0.1.0-macos-arm64.dmg` on Apple Silicon (or the `x86_64` DMG when built on Intel), then drag **Lurker.app** onto **Applications** and eject the image. The app bundles its CLI, helper, selected private backends, fonts, icons and UI resources. No `.pkg`, terminal installation, or separately installed Lurker CLI is needed.
