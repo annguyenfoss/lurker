@@ -155,3 +155,33 @@ Normal writable CLI reopen and close succeeded without test-container repair;
 acknowledged data and the FULL/WAL commit survived. Exact runner and credential
 transport hashes are in the guest result. Private evidence is under
 `/mnt/virt/lurker-fault-b202611141`.
+
+OpenBSD `8.0` softraid CRYPTO/AES reached a concrete recovery limit at the same
+`76f05fb` candidate. Its acknowledged workload used a 128 MiB FFS container;
+archive SHA-256 was
+`ce769a91ab5001608f4ddf48f80571325f3a3c175daba62ebf2ce756007cb30a`.
+After the abrupt cut and normal guest boot, writable CLI reopen failed with
+`filesystem must be mounted read-only; you may need to run fsck`. The suite
+performed no repair, force mount or writable substitute for unsupported read-only
+crypto. Acknowledged data could not be inspected, so this result establishes a
+blocked normal recovery path without establishing data loss. The full image,
+external readiness and redacted diagnostic remain under
+`/mnt/virt/lurker-fault-b202611142`.
+
+| Native AES case at `76f05fb` | Recovery result |
+| --- | --- |
+| Arch Linux LUKS2 / Btrfs | Passed 5 checks |
+| FreeBSD GELI / UFS | Passed 5 checks |
+| NetBSD CGD / FFSv2 | Passed 5 checks |
+| OpenBSD softraid / FFS | Writable reopen refused; filesystem check required |
+| DragonFly LUKS1 | Poweroff untested: original IDE `hda` and UEFI need a reviewed private-firmware adapter |
+
+The final audit found all ten original guests running with their expected source
+paths. The four copied source definitions still matched their saved baselines;
+no original block jobs remained. All owned clones, isolated networks and metadata
+probe pools were stopped, while all four private disks and evidence were retained.
+The concise aggregate and full host audit are ignored artifacts at
+`target/vm-powerloss/summary.json` and `target/vm-powerloss/final-host-audit.json`.
+These are three passed cases and 15 recovery checks, one refused recovery, and
+one untested firmware configuration. They retain their exact `76f05fb` runtime
+attribution and do not qualify later candidates or untested backends/ciphers.
