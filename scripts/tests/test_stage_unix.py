@@ -129,6 +129,15 @@ class PackagingPolicy(unittest.TestCase):
         self.assertEqual([["fusermount3", "fusermount"]], stager.TOOLS["Linux"]["gocryptfs"])
         self.assertEqual(["mount_fusefs"], stager.TOOLS["FreeBSD"]["gocryptfs"])
 
+    def test_folder_targets_use_go_or_native_target_not_build_host(self):
+        with mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.platform, "machine", return_value="x86_64"):
+            stager.verify_platform({"target": {"GOOS": "linux", "GOARCH": "amd64"}, "build_platform": "Other-build-host"})
+            stager.verify_platform({"target": {"os": "Linux", "machine": "x86_64"}, "build_platform": "Other-build-host"})
+            with self.assertRaisesRegex(ValueError, "OS/architecture"):
+                stager.verify_platform({"target": {"GOOS": "freebsd", "GOARCH": "amd64"}, "build_platform": "Linux"})
+        with mock.patch.object(stager.platform, "system", return_value="FreeBSD"), mock.patch.object(stager.platform, "machine", return_value="amd64"):
+            stager.verify_platform({"target": {"GOOS": "freebsd", "GOARCH": "amd64"}, "build_platform": "Linux"})
+
     def _stage_fixture(self):
         binaries = self.root / "binaries"
         binaries.mkdir()

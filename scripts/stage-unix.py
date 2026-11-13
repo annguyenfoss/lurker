@@ -184,10 +184,20 @@ def verify_files(root, expected):
 
 
 def verify_platform(manifest):
-    system = manifest.get("os")
-    if system is None and manifest.get("platform"):
-        system = manifest["platform"].split("-")[0]
-    machine = manifest.get("architecture", manifest.get("machine"))
+    target = manifest.get("target")
+    if target is not None:
+        if not isinstance(target, dict):
+            fail("native artifact target metadata is invalid")
+        if "GOOS" in target:
+            system = {"linux": "Linux", "freebsd": "FreeBSD", "darwin": "Darwin"}.get(target["GOOS"])
+            machine = target.get("GOARCH")
+        else:
+            system, machine = target.get("os"), target.get("machine")
+    else:
+        system = manifest.get("os")
+        if system is None and manifest.get("platform"):
+            system = manifest["platform"].split("-")[0]
+        machine = manifest.get("architecture", manifest.get("machine"))
     if system != platform.system() or architecture(machine) != architecture(platform.machine()):
         fail("native artifact OS/architecture differs from this packaging host")
 
@@ -217,6 +227,10 @@ def validate_backend(kind, directory, source):
         pin = source.constant("scripts/build-folder-backends.py", "PINS")[kind]
         if manifest.get("revision") != pin[1] or manifest.get("source") != pin[0] or digest(root / kind) != manifest.get("sha256"):
             fail("folder artifact source/binary differs from its pinned build manifest")
+        license_files = manifest.get("license_files")
+        if not license_files:
+            fail("folder artifact license inventory is missing")
+        verify_files(root / "licenses" / kind, license_files)
     elif kind == "cryptomator":
         manifest = json_file(root / "manifest.json")
         verify_platform(manifest)
