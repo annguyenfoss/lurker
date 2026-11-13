@@ -23,6 +23,7 @@ fn run() -> i32 {
                 serde_json::json!({
                     "protocol_version": 3,
                     "directory_backends": true,
+                    "trusted_privileged_tools": !cfg!(target_os = "macos"),
                     "unprivileged_veracrypt": cfg!(target_os = "linux"),
                     "keyfile_authentication": true,
                     "luks_keyslots": cfg!(target_os = "linux"),

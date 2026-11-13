@@ -39,6 +39,9 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
     // Unprivileged mode must not require Linux's separate VeraCrypt transport.
     let unprivileged =
         !directory_backend && command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged;
+    let privileged_tools = !cfg!(target_os = "macos")
+        && !directory_backend
+        && command.privilege_mode() == lurker_core::PrivilegeMode::Privileged;
     let keyfile = match &command {
         CommandAction::Create(c) => c.keyfile.is_some(),
         CommandAction::Mount(c) => c.keyfile.is_some(),
@@ -46,7 +49,7 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
         CommandAction::Unmount(_) => false,
     };
     let keyslots = matches!(&command, CommandAction::Keyslots(_));
-    if directory_backend || unprivileged || keyfile || keyslots {
+    if privileged_tools || directory_backend || unprivileged || keyfile || keyslots {
         let result = Command::new(helper_path)
             .arg("capabilities")
             .stdin(Stdio::null())
@@ -71,6 +74,12 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
             || (keyslots && capabilities["luks_keyslots"] != true)
         {
             return Err("Installed lurker-helper does not support keyfiles or LUKS keyslots. Update it together with the desktop app.".into());
+        }
+        if privileged_tools
+            && (capabilities["protocol_version"] != 3
+                || capabilities["trusted_privileged_tools"] != true)
+        {
+            return Err("Installed lurker-helper does not enforce trusted privileged tool paths. Update it together with the desktop app.".into());
         }
     }
     let payload = serde_json::to_vec(&command)
@@ -210,6 +219,40 @@ fi
             .unwrap_err()
             .contains("does not support unprivileged"));
         assert!(!directory.join("old-helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn plain_privileged_requests_require_the_trusted_tool_contract() {
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-privileged-capability-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(
+            &helper,
+            r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":2,"keyfile_authentication":true,"luks_keyslots":true}'
+else
+  touch "${0}.ran"
+fi
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let command = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            target: directory.join("unused"),
+            tag: None,
+            volume_type: VolumeType::Luks,
+        });
+        assert!(run_helper(&helper, command)
+            .unwrap_err()
+            .contains("does not enforce trusted privileged tool paths"));
+        assert!(!directory.join("helper.ran").exists());
         fs::remove_dir_all(directory).unwrap();
     }
 
