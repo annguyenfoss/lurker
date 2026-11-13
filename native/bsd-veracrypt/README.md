@@ -15,7 +15,9 @@ inputs are checked against pinned SHA-256 values before cache reuse. Use
 The reviewed BSD-only `auxiliary-path.patch` adds the private auxiliary mount
 directory to verbose volume metadata. Lurker uses it to verify that the native
 device still backs this volume's FUSE image before cleanup. No encryption or
-format primitive is changed. The manifest records the patch digest.
+format primitive is changed. It also fixes libc++ wide-stream UTF-8 listing
+output so a Unicode path cannot truncate the identity record. The manifest
+records the patch digest.
 
 The staged executable uses upstream's text/stdin interface. It is intended for
 Lurker's trusted, administrator-controlled private backend directory; a normal
@@ -40,6 +42,18 @@ read-only mappings. OpenBSD read-only attachment is explicitly unsupported by
 this upstream adapter. Failures preserve owned resources and concise evidence;
 the script never force-detaches them. Lurker CLI conformance remains a separate
 gate; engine tests cannot substitute for it.
+
+The Rust adapter is `crates/lurker-core/src/bsd/veracrypt.rs`, compiled only for
+FreeBSD/OpenBSD. Its opt-in `native_private_veracrypt_lifecycle` test passed on
+FreeBSD 15.1 amd64 and OpenBSD 8.0 amd64 with pinned VeraCrypt 1.26.30 and the
+reviewed patch: AES, Serpent and Twofish; password and binary keyfile separately;
+Unicode/spaced paths and passwords; incorrect credentials; native UFS/FFS2
+writes, fsync, close/reopen and retained data. FreeBSD read-only attachment was
+also verified for each case. OpenBSD read-only attachment fails explicitly.
+The adapter checks private executable/library ownership, source-scoped listing,
+auxiliary FUSE mount/permissions and native backing identity before cleanup.
+These are native **backend adapter** results; they do not claim whole CLI,
+desktop or release-package qualification.
 
 Upstream references:
 
