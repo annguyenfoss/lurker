@@ -2,16 +2,16 @@
 
 ## Product Model
 
-`lurker` is a Linux and macOS file-container encryption utility with two first-class frontends:
+`lurker` is a disk/container and directory encryption utility with two first-class frontends. Native BSD CLI support and the additional selected backends are being qualified alongside Linux/macOS:
 
 - `lurker`: CLI for terminal/scripting use
 - `lurker-desktop`: Slint desktop app for simple create/mount/unmount flows
 
 Both frontends share `lurker-core`. Desktop privilege escalation goes through `lurker-helper`.
 
-## Planned Cross-platform Architecture
+## Cross-platform Architecture
 
-Before implementing another platform or bundled backend, read `DIRECTIVES/PLAN/CROSS_PLATFORMS.md`, especially its reuse boundaries and KVM validation topology. The established implementation described below is Linux/macOS; BSD adapters and additional backends are being implemented. The selected matrix records scope, not successful native qualification. Keep unfinished or untested pairs labeled accordingly.
+Before implementing another platform or bundled backend, read `DIRECTIVES/PLAN/CROSS_PLATFORMS.md`, especially its reuse boundaries and KVM validation topology. The core now dispatches to Linux/macOS, native BSD adapters and a shared directory-backend lifecycle. Native packaging and functional qualification remain separate from compilation. The selected matrix records scope, not successful native qualification. Keep unfinished or untested pairs labeled accordingly.
 
 Use one shared core and reusable backend integrations with small OS-specific adapters. Share upstream encryption code and backend policy; isolate native mounts, devices, authorization and discovery. All six Linux distributions use the same Linux integration code, with differences handled through packaging and demonstrated tool capabilities. Do not copy entire workflows per OS or reimplement encryption primitives. The plan defines five primary KVM OS development targets and ten build/functional-test guests; macOS is tested separately on a Mac.
 
@@ -20,6 +20,8 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 ## Workspace Map
 
 - `crates/lurker-core`
+  - `src/folder.rs`: shared login-user gocryptfs/CryFS/Cryptomator lifecycle, fixed profiles, private backend discovery and identity-checked sessions
+  - `src/bsd.rs`, `src/bsd/`: shared native BSD file-container lifecycle with FreeBSD GELI, NetBSD CGD, OpenBSD softraid and DragonFly LUKS1 adapters; PEFS and private VeraCrypt qualification continue
   - `src/api.rs`: shared serde command/response types
   - `src/model.rs`: enums such as `VolumeType`, `CreateCipher`, `SourceKind`
   - `src/credentials.rs`: password/keyfile exclusivity and keyfile validation
@@ -46,14 +48,18 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
   - `ui/controls.slint`: custom button/select/checkbox controls
   - `ui/theme.slint`: layout tokens
   - `ui/zoom-metrics.slint`: regression surface for text zoom tests
+- `scripts/build-macos-backends.py`: pinned native VeraCrypt/wx build and audited private dependency staging; compatible FUSE remains external
+- `scripts/build-folder-backends.py`, `scripts/build-cryptomator.py`: pinned private directory engines and a private Cryptomator Java runtime
+- `scripts/remote-test.py`: isolated exact-commit remote jobs with bounded summaries; see `docs/remote-testing.md`
+- `scripts/test-backends.py`: CLI conformance using private `/tmp` fixtures, PTY passwords and retained JSON evidence
 - `scripts/build-macos-dmg.py`: native release app bundle and drag-to-Applications DMG packaging; helper stays beside the desktop executable inside `Contents/MacOS`
 - `scripts/build-linux-userspace.py`: builds pinned, patched VeraCrypt and LKL filesystem helpers without installation or elevation; integration patches live under `native/linux-userspace/patches`
 - `docs/linux-userspace.md`: stock VeraCrypt/FUSE distinction, Linux privileged/unprivileged comparison, security findings, implementation lessons, validation evidence and open hardening work
 
 ## Core Invariants
 
-- Linux and macOS only. macOS operations are file-backed virtual disks, never physical-device encryption.
-- Linux create types: `luks` (default), `veracrypt`. macOS: `apple` (default), `veracrypt`.
+- The approved six-OS matrix in `CIPHER.md` controls backend dispatch. Physical-device creation remains Linux-only; BSD native creation uses dedicated file-backed devices. macOS operations are file-backed virtual disks or selected directory backends.
+- Container defaults: Linux `luks` (LUKS2), macOS `apple`, FreeBSD `geli`, NetBSD `cgd`, OpenBSD `softraid`, DragonFly `luks1`. Explicit Linux `luks1` preserves its compatible PBKDF2 profile. Directory backends are explicit selections with no size or generic cipher option.
 - Apple encryption is AES-256 at the disk-image layer, with APFS inside; it is not system FileVault or APFS filesystem encryption.
 - Supported create ciphers: `aes`, `serpent`, `twofish`.
 - Create cipher matters only on create. Mount/unmount detect existing volumes.
@@ -62,9 +68,9 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 - VeraCrypt tags are unsupported.
 - Do not implement VeraCrypt authentication requiring a password and keyfile together: losing either required credential can lose access to the data. This decision does not prohibit keyfile-only authentication; see the authentication decision in `CIPHER.md`.
 - The desktop app never invokes the installed CLI binary. Check helper capability flags before sending keyfile or keyslot requests so older helpers cannot ignore credential fields.
-- The helper is an implementation detail for desktop privilege escalation.
+- The helper is an implementation detail for desktop privilege escalation. Protocol 3 adds directory-backend capability negotiation; directory engines run as the login user even when an older request supplies the default privileged mode. Protocol 2 remains accepted for legacy credential operations.
 - File-backed create uses same-directory temp files, atomic no-clobber publication without force, and atomic rename with force.
-- Privileged Linux mounts use cryptsetup-managed `lurker_*` mappings; the installed VeraCrypt application is required only for creation on that route.
+- Privileged Linux mounts use cryptsetup-managed `lurker_*` mappings; creation uses the packaged restricted private VeraCrypt creator. Its path and every ancestor must be administrator-controlled before elevated execution.
 - Unprivileged Linux supports VeraCrypt regular files, with the same cipher profiles and Btrfs/zstd default. It never invokes sudo, pkexec, mount, losetup, or device-mapper. No fallback to elevation is permitted.
 - The unprivileged crypto helper exposes a FUSE image; the filesystem helper runs Linux filesystem code inside LKL. Both run as the login user. Standard user FUSE mounting uses the system's existing fusermount3 helper.
 - The helper JSON command and active-volume records carry a serde-defaulted `privilege_mode`; missing mode retains the original privileged behavior. macOS hides the selector and keeps its existing native user-session route.
@@ -78,7 +84,7 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 
 - CLI: parse args -> build `CommandAction` -> `lurker_core::run()`
 - Desktop: gather form state -> `apps/lurker-desktop/src/logic.rs` builds shared command -> `lurker-helper` runs core -> desktop refreshes active volumes
-- Active volume listing comes from `lurker_core::list_active_volumes()`, which scans `/dev/mapper/lurker_*` and correlates mountinfo on Linux. On macOS it reads hdiutil plists and VeraCrypt verbose listings, showing the user's attached encrypted disk images and VeraCrypt volumes
+- Active volume listing comes from `lurker_core::list_active_volumes()`, which scans `/dev/mapper/lurker_*` and correlates mountinfo on Linux, merged with private directory sessions. BSD native volumes come from their identity-checked registry and native mount tables. On macOS it reads hdiutil plists and VeraCrypt verbose listings, showing the user's attached encrypted disk images and VeraCrypt volumes
 
 ## What Lives Where
 
@@ -124,7 +130,7 @@ If you add or remove a supported create cipher, also update:
 - Use `/usr/bin/hdiutil` for Apple disk-image encryption, attach, detach, and structured discovery.
 - VeraCrypt unmount must first use `/usr/sbin/diskutil unmount` to reject busy filesystems; some VeraCrypt builds force-detach internally.
 - The existing Generate button must use system randomness, with no fixed example password fallback.
-- Use the installed VeraCrypt application executable (also discoverable on PATH); its matching FUSE-T/macFUSE runtime is required.
+- Prefer the packaged native VeraCrypt backend under `Contents/Helpers` or the private CLI layout; installed-app discovery is a compatibility fallback. Its qualified external FUSE runtime is required. FUSE-T and macFUSE are not interchangeable without native workload tests.
 - Passphrases travel over stdin only. hdiutil uses a NUL terminator; VeraCrypt uses a newline. Reject embedded NUL/newline characters and preserve spaces.
 - The desktop still invokes lurker-helper, never the CLI; macOS helper requests run in the login user session without Linux escalation.
 - Reject LUKS and physical devices on macOS, and reject Apple images on Linux with platform-specific errors.
