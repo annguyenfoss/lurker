@@ -36,7 +36,7 @@ pub use model::{
     ColorMode, CreateCipher, PrivilegeMode, ResolvedTargetKind, SourceKind, VolumeType,
 };
 pub use output::{Output, OutputBuffer, OutputEntry, OutputLevel};
-pub use trust::trusted_privileged_executable;
+pub use trust::{trusted_privileged_executable, trusted_system_executable};
 
 #[cfg(target_os = "linux")]
 use crate::linux::{canonical_device_path, read_mountinfo};

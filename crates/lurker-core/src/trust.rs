@@ -30,6 +30,32 @@ pub fn trusted_privileged_executable(path: &Path) -> AppResult<PathBuf> {
     Ok(canonical)
 }
 
+/// Authorization agents come from administrator-controlled system directories,
+/// never an interactive user's PATH. Return the canonical trusted executable.
+pub fn trusted_system_executable(name: &str) -> AppResult<PathBuf> {
+    if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+        return Err(AppError::new("Invalid system authorization program name."));
+    }
+    for directory in [
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+        "/usr/pkg/bin",
+        "/usr/pkg/sbin",
+    ] {
+        let path = Path::new(directory).join(name);
+        if path.exists() {
+            return trusted_privileged_executable(&path);
+        }
+    }
+    Err(AppError::new(format!(
+        "Required trusted system program not found: {name}"
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,5 +85,7 @@ mod tests {
         let resolved = trusted_privileged_executable(program).unwrap();
         assert!(resolved.is_absolute());
         assert_eq!(resolved, fs::canonicalize(program).unwrap());
+        assert_eq!(trusted_system_executable("true").unwrap(), resolved);
+        assert!(trusted_system_executable("../sudo").is_err());
     }
 }

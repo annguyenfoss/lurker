@@ -6,7 +6,7 @@
 use lurker_core::*;
 use std::fs;
 use std::io::Write;
-use std::os::unix::fs::{symlink, PermissionsExt};
+use std::os::unix::fs::{symlink, DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output as ProcessOutput, Stdio};
 
@@ -449,8 +449,24 @@ fn real_failure_recovery() {
     let mut sandbox = Sandbox::new();
     let at = sandbox.path("mount");
     fs::create_dir(&at).unwrap();
-    let wrappers = sandbox.path("tools");
-    fs::create_dir(&wrappers).unwrap();
+    // Root failure-injection executables must obey the production trust
+    // boundary. Keep encrypted data in /tmp, executable fixtures under /run.
+    let wrappers = PathBuf::from(format!(
+        "/run/lurker-test-tools-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::DirBuilder::new().mode(0o700).create(&wrappers).unwrap();
+    struct RemoveTools(PathBuf);
+    impl Drop for RemoveTools {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    let _remove_tools = RemoveTools(wrappers.clone());
     let original_path = std::env::var_os("PATH").unwrap();
     let wrapped_path = std::env::join_paths(
         std::iter::once(wrappers.clone()).chain(std::env::split_paths(&original_path)),

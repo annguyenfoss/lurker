@@ -20,7 +20,6 @@ pub struct ToolPaths {
     pub blkid: Option<PathBuf>,
     pub lsblk: Option<PathBuf>,
     pub veracrypt: Option<PathBuf>,
-    pub sudo: Option<PathBuf>,
 }
 
 pub struct AppContext {
@@ -102,19 +101,20 @@ impl AppContext {
         privileged: bool,
         interactive: bool,
     ) -> AppResult<Command> {
+        let program = if privileged || self.is_root {
+            crate::trusted_privileged_executable(program)?
+        } else {
+            program.to_path_buf()
+        };
         let mut command = if privileged && !self.is_root {
             self.ensure_sudo()?;
-            let sudo = self
-                .tools
-                .sudo
-                .as_deref()
-                .ok_or_else(|| AppError::new("Required command not found: sudo"))?;
+            let sudo = crate::trusted_system_executable("sudo")?;
             let mut command = Command::new(sudo);
-            command.arg(program);
+            command.arg(&program);
             command.args(args);
             command
         } else {
-            let mut command = Command::new(program);
+            let mut command = Command::new(&program);
             command.args(args);
             command
         };
@@ -198,11 +198,7 @@ impl AppContext {
             return Ok(());
         }
 
-        let sudo = self
-            .tools
-            .sudo
-            .as_deref()
-            .ok_or_else(|| AppError::new("Required command not found: sudo"))?;
+        let sudo = crate::trusted_system_executable("sudo")?;
         self.output.msg2("Refreshing sudo credentials");
         let status = Command::new(sudo)
             .arg("-v")
@@ -223,7 +219,7 @@ impl AppContext {
             return true;
         }
 
-        let Some(sudo) = self.tools.sudo.as_deref() else {
+        let Ok(sudo) = crate::trusted_system_executable("sudo") else {
             return false;
         };
         let Ok(status) = Command::new(sudo)
@@ -244,6 +240,9 @@ impl AppContext {
     }
 
     fn try_run_privileged_silent(&mut self, program: &Path, args: &[OsString]) -> bool {
+        let Ok(program) = crate::trusted_privileged_executable(program) else {
+            return false;
+        };
         let mut command = if self.is_root {
             let mut command = Command::new(program);
             command.args(args);
@@ -252,7 +251,7 @@ impl AppContext {
             if !self.try_ensure_sudo() {
                 return false;
             }
-            let Some(sudo) = self.tools.sudo.as_deref() else {
+            let Ok(sudo) = crate::trusted_system_executable("sudo") else {
                 return false;
             };
             let mut command = Command::new(sudo);
@@ -305,7 +304,6 @@ impl Drop for AppContext {
 impl ToolPaths {
     fn resolve(command: &CommandAction) -> AppResult<Self> {
         let cryptsetup = require_command("cryptsetup")?;
-        let sudo = find_executable("sudo");
         let blkid = find_executable("blkid");
         let veracrypt = if matches!(command, CommandAction::Create(c) if c.volume_type == VolumeType::Veracrypt)
         {
@@ -323,7 +321,6 @@ impl ToolPaths {
             blkid,
             lsblk: find_executable("lsblk"),
             veracrypt,
-            sudo,
         };
 
         match command {
@@ -447,12 +444,12 @@ pub fn probe_system() -> AppResult<SystemProbe> {
             },
             ToolStatus {
                 name: "sudo".into(),
-                path: find_executable("sudo"),
+                path: crate::trusted_system_executable("sudo").ok(),
                 required: false,
             },
             ToolStatus {
                 name: "pkexec".into(),
-                path: find_executable("pkexec"),
+                path: crate::trusted_system_executable("pkexec").ok(),
                 required: false,
             },
         ],
@@ -519,7 +516,6 @@ mod tests {
                 blkid: None,
                 lsblk: None,
                 veracrypt: None,
-                sudo: None,
             },
             is_root: false,
             sudo_ready: false,
@@ -536,6 +532,31 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
         assert!(super::trusted_root_program(&program).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn privileged_commands_reject_user_programs_before_authorization_or_cleanup() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-path-trust-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let program = directory.join("cryptsetup");
+        std::fs::write(&program, b"#!/bin/sh\nexit 0\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut context = subprocess_context();
+        assert!(context
+            .prepare_command(&program, &[], true, false)
+            .unwrap_err()
+            .message
+            .contains("untrusted path"));
+        assert!(!context.sudo_ready);
+        assert!(!context.try_run_privileged_silent(&program, &[]));
+        context.is_root = true;
+        assert!(context
+            .prepare_command(&program, &[], false, false)
+            .is_err());
+        assert!(!context.try_run_privileged_silent(&program, &[]));
         std::fs::remove_dir_all(directory).unwrap();
     }
 

@@ -129,7 +129,8 @@ fn spawn_reexec(
     current_exe: &std::path::Path,
     payload: &[u8],
 ) -> Result<Output, String> {
-    let mut command = Command::new(program);
+    let executable = lurker_core::trusted_system_executable(program).map_err(|e| e.message)?;
+    let mut command = Command::new(executable);
     command
         .arg(current_exe)
         .arg("--as-root")
