@@ -300,6 +300,30 @@ fn attach_native_file(source: &Path, readonly: bool) -> AppResult<String> {
     native::attach_file(source, readonly)
 }
 
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+fn managed_veracrypt(registry: &Registry) -> AppResult<Vec<veracrypt::ManagedAttachment>> {
+    let mut managed = Vec::new();
+    for session in registry.records()? {
+        if session.backend != VolumeType::Veracrypt {
+            continue;
+        }
+        let Some(mapped) = &session.mapped else {
+            continue;
+        };
+        // A printed source path alone is not the encrypted file identity held
+        // by an engine. Only a root journal, its unchanged source inode, and
+        // the verified native mapping/auxiliary backing establish management.
+        verify_session(&session)?;
+        managed.push(veracrypt::ManagedAttachment {
+            source: session.source.clone(),
+            dev: session.identity.dev,
+            ino: session.identity.ino,
+            mapped: mapped.clone(),
+        });
+    }
+    Ok(managed)
+}
+
 fn credential(
     password: Option<&str>,
     keyfile: Option<&Path>,
@@ -419,10 +443,11 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
     if backend == VolumeType::Veracrypt {
         veracrypt::backend()?;
-        if target.exists() && veracrypt::attached(&target)? {
-            return Err(AppError::new(
-                "Refusing to replace an attached VeraCrypt container.",
-            ));
+        if target.exists() {
+            veracrypt::ensure_source_available_with_managed(
+                &target,
+                &managed_veracrypt(&registry)?,
+            )?;
         }
     }
     let credential = credential(
@@ -462,8 +487,19 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     let initialized = (|| {
         #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         if backend == VolumeType::Veracrypt {
-            veracrypt::format(&source, size / (1024 * 1024), c.cipher, &credential)?;
-            session.mapped = Some(veracrypt::unlock(&source, false, &credential)?);
+            veracrypt::format_with_managed(
+                &source,
+                size / (1024 * 1024),
+                c.cipher,
+                &credential,
+                &managed_veracrypt(&registry)?,
+            )?;
+            session.mapped = Some(veracrypt::unlock_with_managed(
+                &source,
+                false,
+                &credential,
+                &managed_veracrypt(&registry)?,
+            )?);
             initialize_acquired_mapping(&registry, &session, veracrypt::make_filesystem)?;
             return Ok(());
         }
@@ -595,10 +631,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     let registry = Registry::open()?;
     registry.ensure_unused(&source)?;
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-    if backend == VolumeType::Veracrypt && veracrypt::attached(&source)? {
-        return Err(AppError::new(
-            "VeraCrypt container is already attached; refusing a duplicate mount.",
-        ));
+    if backend == VolumeType::Veracrypt {
+        veracrypt::ensure_source_available_with_managed(&source, &managed_veracrypt(&registry)?)?;
     }
     let credential = credential(c.passphrase.as_deref(), c.keyfile.as_deref(), false)?;
     if !c.mountpoint.exists() {
@@ -651,7 +685,12 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     let result = (|| {
         #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         if backend == VolumeType::Veracrypt {
-            session.mapped = Some(veracrypt::unlock(&source, c.readonly, &credential)?);
+            session.mapped = Some(veracrypt::unlock_with_managed(
+                &source,
+                c.readonly,
+                &credential,
+                &managed_veracrypt(&registry)?,
+            )?);
             registry.save(&session)?;
         }
         if session.mapped.is_none() {
@@ -668,14 +707,18 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                 native::detach_file(session.backing.as_deref().unwrap())?;
                 session.backing = None;
                 registry.save(&session)?;
-                if veracrypt::attached(&source)? {
-                    return Err(AppError::new(
-                        "VeraCrypt container is already attached; refusing a duplicate mount.",
-                    ));
-                }
+                veracrypt::ensure_source_available_with_managed(
+                    &source,
+                    &managed_veracrypt(&registry)?,
+                )?;
                 session.backend = VolumeType::Veracrypt;
                 registry.save(&session)?;
-                session.mapped = Some(veracrypt::unlock(&source, c.readonly, &credential)?);
+                session.mapped = Some(veracrypt::unlock_with_managed(
+                    &source,
+                    c.readonly,
+                    &credential,
+                    &managed_veracrypt(&registry)?,
+                )?);
                 registry.save(&session)?;
             }
             if session.mapped.is_none() {
@@ -1483,6 +1526,170 @@ mod tests {
             .unwrap()
             .iter()
             .any(|s| s.source == unknown));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    #[test]
+    #[ignore = "requires root and trusted private VeraCrypt runtime; disposable external-attachment fixture"]
+    fn external_veracrypt_alias_cannot_be_mounted_or_force_replaced() {
+        require_root().unwrap();
+        veracrypt::backend().unwrap();
+        let directory = std::env::temp_dir().join(format!("lurker-external-{}", unique_id()));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let source = directory.join("external Slot: 1 密碼.img");
+        let alias = directory.join("hardlink alias.img");
+        let mountpoint = directory.join("mnt");
+        let passphrase = "temporary external attachment test";
+        let command = CreateCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            target: source.clone(),
+            size_gb: Some("0.125".into()),
+            force: false,
+            source_kind: SourceKind::File,
+            volume_type: VolumeType::Veracrypt,
+            cipher: crate::CreateCipher::Aes,
+            passphrase: Some(passphrase.into()),
+            keyfile: None,
+        };
+        create(command.clone(), Output::silent()).unwrap();
+        fs::hard_link(&source, &alias).unwrap();
+        let identity = Identity::read(&source).unwrap();
+        let credential = Credential::Password(passphrase.as_bytes().to_vec());
+        // Attach directly through the engine, outside the shared Registry.
+        let external = veracrypt::unlock(&source, false, &credential).unwrap();
+        #[cfg(target_os = "freebsd")]
+        let sha256 = "/sbin/sha256";
+        #[cfg(target_os = "openbsd")]
+        let sha256 = "/bin/sha256";
+        let before = exec(sha256, &[source.as_os_str().to_owned()], None).unwrap();
+        for kind in [VolumeType::Auto, VolumeType::Veracrypt] {
+            let attempted = mount(
+                MountCommand {
+                    privilege_mode: PrivilegeMode::Privileged,
+                    source: alias.clone(),
+                    mountpoint: mountpoint.clone(),
+                    tag: None,
+                    volume_type: kind,
+                    passphrase: Some(passphrase.into()),
+                    keyfile: None,
+                    readonly: false,
+                },
+                Output::silent(),
+            );
+            assert!(attempted.is_err());
+            veracrypt::verify_mapping(&source, &external).unwrap();
+        }
+        let mut replace = command;
+        replace.target = alias.clone();
+        replace.force = true;
+        assert!(create(replace, Output::silent()).is_err());
+        assert!(identity.matches(&source) && identity.matches(&alias));
+        assert_eq!(
+            exec(sha256, &[source.as_os_str().to_owned()], None).unwrap(),
+            before
+        );
+        assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
+        assert!(!Registry::open()
+            .unwrap()
+            .records()
+            .unwrap()
+            .iter()
+            .any(|s| s.identity.dev == identity.dev && s.identity.ino == identity.ino));
+        assert!(!fs::read_dir(&directory).unwrap().any(|e| e
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".lurker-bsd-")));
+        // The rejected operations must leave the original external attachment
+        // intact. Its fixture owner closes it explicitly after verification.
+        veracrypt::verify_mapping(&source, &external).unwrap();
+        veracrypt::close(&source).unwrap();
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    #[test]
+    #[ignore = "requires root and trusted private VeraCrypt runtime; two disposable managed sessions"]
+    fn verified_managed_veracrypt_sessions_can_coexist() {
+        require_root().unwrap();
+        veracrypt::backend().unwrap();
+        let directory = std::env::temp_dir().join(format!("lurker-managed-{}", unique_id()));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let mut sessions = Vec::new();
+        for label in ["first", "second"] {
+            let source = directory.join(format!("{label}.img"));
+            let mountpoint = directory.join(format!("{label}-mnt"));
+            let passphrase = "temporary managed session test";
+            create(
+                CreateCommand {
+                    privilege_mode: PrivilegeMode::Privileged,
+                    target: source.clone(),
+                    size_gb: Some("0.125".into()),
+                    force: false,
+                    source_kind: SourceKind::File,
+                    volume_type: VolumeType::Veracrypt,
+                    cipher: crate::CreateCipher::Aes,
+                    passphrase: Some(passphrase.into()),
+                    keyfile: None,
+                },
+                Output::silent(),
+            )
+            .unwrap();
+            mount(
+                MountCommand {
+                    privilege_mode: PrivilegeMode::Privileged,
+                    source: source.clone(),
+                    mountpoint: mountpoint.clone(),
+                    tag: None,
+                    volume_type: VolumeType::Auto,
+                    passphrase: Some(passphrase.into()),
+                    keyfile: None,
+                    readonly: false,
+                },
+                Output::silent(),
+            )
+            .unwrap();
+            let marker = mountpoint.join("sentinel");
+            fs::write(&marker, label).unwrap();
+            File::open(&marker).unwrap().sync_all().unwrap();
+            sessions.push((source, mountpoint, label));
+        }
+        let active = list_active_volumes().unwrap();
+        assert_eq!(
+            active
+                .iter()
+                .filter(|v| v
+                    .source_path
+                    .as_ref()
+                    .is_some_and(|p| p.starts_with(&directory)))
+                .count(),
+            2
+        );
+        for (_, mountpoint, label) in sessions.iter().rev() {
+            assert_eq!(
+                fs::read_to_string(mountpoint.join("sentinel")).unwrap(),
+                *label
+            );
+            unmount(
+                UnmountCommand {
+                    privilege_mode: PrivilegeMode::Privileged,
+                    target: mountpoint.clone(),
+                    tag: None,
+                    volume_type: VolumeType::Auto,
+                },
+                Output::silent(),
+            )
+            .unwrap();
+        }
+        assert!(!Registry::open()
+            .unwrap()
+            .records()
+            .unwrap()
+            .iter()
+            .any(|s| s.source.starts_with(&directory)));
         fs::remove_dir_all(directory).unwrap();
     }
 }
