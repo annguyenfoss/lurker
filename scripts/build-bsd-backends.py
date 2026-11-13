@@ -19,7 +19,7 @@ import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
-PATCH_SHA256 = "ab7d91fca203805dcd4b2708c995416f2acbe2354bd3b0585518a9718a64f730"
+PATCH_SHA256 = "1b277bbadd77663d098a40a3cc83ade4febcd0088b92e061d49b2014c772164a"
 PATCH_TARGET = "src/Main/UserInterface.cpp"
 PINS = {
     "veracrypt": {
@@ -53,16 +53,24 @@ def patched_input(archive):
     if (lines[0].rstrip() != b"--- a/" + PATCH_TARGET.encode()
             or lines[1].rstrip() != b"+++ b/" + PATCH_TARGET.encode()
             or not lines[2].startswith(b"@@ ")
-            or any(not line.startswith((b" ", b"+", b"-")) for line in lines[3:])):
-        raise RuntimeError("Expected one reviewed BSD auxiliary identity patch hunk")
-    before = b"".join(line[1:] for line in lines[3:] if line[:1] in (b" ", b"-"))
-    after = b"".join(line[1:] for line in lines[3:] if line[:1] in (b" ", b"+"))
+            or any(not line.startswith((b" ", b"+", b"-", b"@@ ")) for line in lines[3:])):
+        raise RuntimeError("Expected reviewed BSD auxiliary identity patch hunks")
     with tarfile.open(archive) as tar:
         top = tar.getmembers()[0].name.split("/")[0]
         original = tar.extractfile(top + "/" + PATCH_TARGET).read()
-    if original.count(before) != 1:
-        raise RuntimeError("Reviewed BSD auxiliary identity patch does not match pinned upstream")
-    return original.replace(before, after, 1)
+    hunks = []
+    for line in lines[2:]:
+        if line.startswith(b"@@ "):
+            hunks.append([])
+        else:
+            hunks[-1].append(line)
+    for hunk in hunks:
+        before = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"-"))
+        after = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"+"))
+        if original.count(before) != 1:
+            raise RuntimeError("Reviewed BSD auxiliary identity patch does not match pinned upstream")
+        original = original.replace(before, after, 1)
+    return original
 
 
 def prepare(name, cache, offline=False):

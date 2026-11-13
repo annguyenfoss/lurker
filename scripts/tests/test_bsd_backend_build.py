@@ -86,7 +86,9 @@ class SourceProvenance(unittest.TestCase):
 
     def test_reviewed_patch_is_repeatable_and_rejects_extra_source_changes(self):
         # A reduced real upstream fixture retains the complete reviewed hunk.
-        original = ('prefix\n#ifndef TC_WINDOWS\n'
+        original = ('prefix\n\tvoid UserInterface::DisplayVolumeProperties (const VolumeInfoList &volumes) const\n'
+            '\t{\n\t\tif (volumes.size() < 1)\n\t\t\tthrow_err (LangString["NO_VOLUMES_MOUNTED"]);\n\n\t\twxString prop;\n'
+            '#ifndef TC_WINDOWS\n'
             '\t\t\tprop << LangString["VIRTUAL_DEVICE"] << L": " << wstring (volume.VirtualDevice) << L\'\\n\';\n'
             '#endif\n'
             '\t\t\tprop << LangString["MOUNT_POINT"] << L": " << wstring (volume.MountPoint) << L\'\\n\';\n'

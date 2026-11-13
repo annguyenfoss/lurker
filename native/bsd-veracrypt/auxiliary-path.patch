@@ -1,5 +1,15 @@
 --- a/src/Main/UserInterface.cpp
 +++ b/src/Main/UserInterface.cpp
+@@ -367,2 +367,7 @@
+-	void UserInterface::DisplayVolumeProperties (const VolumeInfoList &volumes) const
+-	{
++	void UserInterface::DisplayVolumeProperties (const VolumeInfoList &volumes) const
++	{
++#ifdef TC_BSD
++		// libc++ wide streams retain the C locale after setlocale().
++		// Preserve UTF-8 file identities in the private listing contract.
++		std::wcout.imbue (std::locale ("C.UTF-8"));
++#endif
 @@ -378,6 +378,9 @@
  #ifndef TC_WINDOWS
  			prop << LangString["VIRTUAL_DEVICE"] << L": " << wstring (volume.VirtualDevice) << L'\n';
