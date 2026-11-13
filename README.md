@@ -4,14 +4,14 @@
   <img src="extras/assets/lurker.png" alt="lurker logo" width="320">
 </p>
 
-Encrypted file containers made easy for Linux and macOS, with a shared Rust core, a CLI, and a Slint desktop app.
+Encrypted disks, file containers and directories with a shared Rust core and CLI. The Slint desktop targets Linux/macOS; native BSD CLI backends are being qualified. See `DIRECTIVES/LLM/CIPHER.md` for the approved platform matrix.
 
 ## Repository Layout
 
 ```text
 lurker/
 ├── crates/
-│   ├── lurker-core/    # shared Rust domain + Linux/macOS integration
+│   ├── lurker-core/    # shared domain, backend lifecycles and native OS adapters
 │   ├── lurker-cli/     # `lurker` terminal binary
 │   └── lurker-helper/  # internal helper used by the desktop app
 ├── apps/
@@ -42,7 +42,7 @@ Run it:
 ./target/release/lurker help
 ```
 
-Install it:
+Install the Rust CLI alone (native/private backend dependencies remain required):
 
 ```bash
 install -m 755 ./target/release/lurker /usr/local/bin/lurker
@@ -111,7 +111,7 @@ cargo build --release --workspace --locked
 ./target/release/lurker-desktop
 ```
 
-The script downloads fixed upstream VeraCrypt and Linux Kernel Library revisions, applies the tracked integration patches, and places two ordinary executables in `target/release/userspace/`. It never installs packages, invokes sudo, or modifies system configuration. It needs a C/C++ toolchain, Python 3.12+, make, patch, pkg-config, wxWidgets base, FUSE3 development files, flex, bison, bc and Perl. For a debug desktop, set `LURKER_USERSPACE_DIR="$PWD/target/release/userspace"` when launching it. For a system-wide installation, place the helpers under `/usr/lib/lurker/userspace`.
+The script downloads fixed upstream VeraCrypt and Linux Kernel Library revisions, applies the tracked integration patches, and places a private creator and two userspace executables in `target/release/userspace/`. It never installs packages, invokes sudo, or modifies system configuration. It needs a C/C++ toolchain, Python 3.12+, make, patch, pkg-config, wxWidgets base, FUSE3 development files, flex, bison, bc and Perl. For a debug desktop, set `LURKER_USERSPACE_DIR="$PWD/target/release/userspace"` when launching it. For a system-wide installation, place the helpers under `/usr/lib/lurker/userspace`.
 
 The CLI exposes the same route:
 
@@ -137,7 +137,34 @@ Privileged mode uses these system tools; unprivileged requirements are listed ab
 - `pkexec` for preferred desktop privilege escalation
 - `sudo` for desktop fallback when launched from a terminal
 - optional `blkid`
-- optional `veracrypt` (required for privileged VeraCrypt creation; privileged mounts use cryptsetup)
+- the private `lurker-veracrypt-create` component for VeraCrypt creation; a separately installed VeraCrypt application is not used
+
+Complete Linux/BSD distributions are staged with `scripts/stage-unix.py`; see
+`docs/unix-packaging.md` for build inputs, dependency manifests and archive layout.
+A Cargo-only build supplies the Rust products, not the bundled encryption engines.
+Directory engines run as the login user: gocryptfs needs host FUSE support, stable
+CryFS 1.0.3 uses FUSE ABI 2, and Cryptomator carries a private Java runtime.
+
+## Directory and native BSD CLI backends
+
+```bash
+lurker create --type gocryptfs ./encrypted-profile
+lurker mount ./encrypted-profile ./profile-mount
+lurker unmount ./profile-mount
+```
+
+Directory create takes no size, `--cipher` or replacement flag. Select `cryfs`,
+`cryptomator` or FreeBSD `pefs` in the same form where the approved matrix allows
+it. Backend builds and host prerequisites are separate; do not infer support from
+an executable compiling. macOS directory qualification requires a compatible
+separately installed macFUSE; the tested FUSE-T routes failed SQLite WAL checks.
+
+Native BSD defaults are GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD), softraid CRYPTO/FFS
+(OpenBSD), and LUKS1/UFS (DragonFly). Native containers take `<file> <size-gb>` and
+administrator authorization. BSD physical-device creation is excluded. Keep
+NetBSD `.cgdparams` and PEFS `.pefs.conf`/`.pefs.db` metadata with their encrypted
+data. OpenBSD CRYPTO read-only attachment and multi-source RAID1C are unavailable.
+See `docs/backend-testing.md` for the exact tested revisions and remaining gates.
 
 ## macOS Drag-and-Drop Installer
 
@@ -150,11 +177,11 @@ build/macos-dmg-tools/bin/python -m pip install -r scripts/requirements-macos-dm
 python3 scripts/build-macos-dmg.py
 ```
 
-Open `dist/Lurker-0.1.0-macos-arm64.dmg` on Apple Silicon (or the `x86_64` DMG when built on Intel), then drag **Lurker.app** onto **Applications** and eject the image. The app bundles its helper, fonts, icons, and other UI resources. No `.pkg`, terminal installation, or separately installed Lurker CLI is needed.
+Open `dist/Lurker-0.1.0-macos-arm64.dmg` on Apple Silicon (or the `x86_64` DMG when built on Intel), then drag **Lurker.app** onto **Applications** and eject the image. The app bundles its CLI, helper, selected private backends, fonts, icons and UI resources. No `.pkg`, terminal installation, or separately installed Lurker CLI is needed.
 
 The installer opens an 800-point-wide Finder window with an illustrated Retina background, fixed app/Applications icon positions, and hidden supporting files. Its saved Finder settings are authored directly, so building does not require Finder automation or changing system preferences.
 
-The script builds the architecture of the current Rust toolchain, derives the minimum macOS version from the binaries, verifies the bundle signature and disk-image checksum, and writes a `.sha256` checksum next to the DMG. Apple encryption uses built-in system tools; VeraCrypt and its matching FUSE runtime remain separate optional dependencies.
+The script builds the architecture of the current Rust toolchain, derives the minimum macOS version from the binaries, verifies the bundle signature and disk-image checksum, and writes a `.sha256` checksum next to the DMG. Apple encryption uses built-in system tools. The private VeraCrypt backend is bundled; its matching FUSE runtime remains a separately installed prerequisite. Optional directory backends include their private runtimes; a system Java or Go installation is not required. See `docs/macos-backends.md` for the qualified runtime boundaries and build arguments.
 
 Local builds are ad-hoc signed and are not Apple-notarized. Distribution signing can use `CODESIGN_IDENTITY`, but notarization is a separate release step requiring a Developer ID distribution certificate and Apple credentials. See https://developer.apple.com/developer-id/.
 
@@ -165,7 +192,7 @@ Both the CLI and desktop app support:
 - **Apple Encryption** (default): an AES-256 encrypted, read/write `.dmg` virtual disk with APFS inside. Encryption protects the disk image, not individual files or the host filesystem. This uses Apple DiskImages encryption, not system FileVault.
 - **VeraCrypt**: a normal file container with AES, Serpent, or Twofish, SHA-512, and an exFAT filesystem inside.
 
-Apple encryption uses the built-in `/usr/bin/hdiutil`; VeraCrypt unmount also uses `/usr/sbin/diskutil` to reject busy filesystems. For VeraCrypt, install VeraCrypt for macOS together with the matching FUSE-T or macFUSE runtime required by that build. Lurker discovers `/Applications/VeraCrypt.app/Contents/MacOS/VeraCrypt` even when started from Finder.
+Apple encryption uses the built-in `/usr/bin/hdiutil`; VeraCrypt unmount also uses `/usr/sbin/diskutil` to reject busy filesystems. The packaged VeraCrypt backend needs its qualified separately installed FUSE runtime, and does not require VeraCrypt.app. Source-only builds retain installed-app discovery as a compatibility fallback; use the complete native backend builder for a standalone app. FUSE-T and macFUSE are not interchangeable without qualification.
 
 Build and install the same binaries as above. Keep `lurker-helper` next to `lurker-desktop`. On macOS the helper runs in the login user session; Linux pkexec/sudo escalation is not used.
 
@@ -215,7 +242,7 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 
 ### Credentials and LUKS keyslots
 
-`create` and `mount` accept `--key-file FILE` for LUKS and VeraCrypt. Select an existing, non-empty regular file; its binary contents are used without trimming or text conversion. Without this option, the CLI prompts for a password. Apple disk images retain password authentication.
+`create` and `mount` accept `--key-file FILE` for LUKS, VeraCrypt, FreeBSD GELI and PEFS. Select an existing, non-empty regular file; its binary contents are used without trimming or text conversion. Without this option, the CLI prompts for a password. Apple disk images retain password authentication.
 
 ```bash
 lurker create --type luks --key-file ./vault.key ./vault.img 4
