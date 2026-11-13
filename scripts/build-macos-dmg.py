@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build a native release app and a drag-to-Applications DMG using Apple tools."""
+import argparse
 import hashlib
 import json
 import os
@@ -34,8 +35,8 @@ def layout_tools():
             os.execv(str(interpreter), [str(interpreter), str(Path(__file__).resolve()), *sys.argv[1:]])
         raise SystemExit(
             "Install DMG build dependencies first:\n"
-            "python3 -m venv build/macos-dmg-tools\n"
-            "build/macos-dmg-tools/bin/python -m pip install -r scripts/requirements-macos-dmg.txt"
+            "uv venv build/macos-dmg-tools\n"
+            "uv pip install --python build/macos-dmg-tools/bin/python -r scripts/requirements-macos-dmg.txt"
         )
 
 
@@ -70,6 +71,10 @@ def configure_finder(mountpoint, DSStore, Alias):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--folder-backends", nargs="*", default=[], choices=["gocryptfs", "cryfs", "cryptomator"],
+                        help="Include these already-built private directory backends")
+    options = parser.parse_args()
     if sys.platform != "darwin":
         raise SystemExit("Build the macOS DMG on macOS with Rust and Xcode command-line tools.")
     DSStore, Alias = layout_tools()
@@ -115,6 +120,60 @@ def main():
         shutil.copyfile(provenance_file, resources / "backend-provenance.json")
         if external != provenance["external_libraries"]:
             raise SystemExit("Staged backend external dependencies differ from its build manifest.")
+        folder_root = Path(metadata["target_directory"]) / "release/backends"
+        java_executables = []
+        for backend in dict.fromkeys(options.folder_backends):
+            if backend == "cryptomator":
+                source = folder_root / backend
+                manifest = json.loads((source / "manifest.json").read_text())
+                for relative, digest in manifest["files"].items():
+                    path = source / relative
+                    if Path(relative).is_absolute() or ".." in Path(relative).parts or sha256(path) != digest:
+                        raise SystemExit(f"Cryptomator manifest mismatch: {relative}")
+                destination = resources / "backends" / backend
+                shutil.copytree(source, destination, symlinks=True)
+                # Helpers is a code location: source-language files there are
+                # interpreted as nested executable code by codesign. Keep
+                # corresponding sources/notices as sealed app resources.
+                for extra, resource_name in [("source", "backend-sources"),
+                                              ("licenses", "backend-licenses"),
+                                              ("build-evidence", "backend-build-evidence")]:
+                    if (destination / extra).exists():
+                        resource_dir = resources / resource_name
+                        resource_dir.mkdir(exist_ok=True)
+                        shutil.move(destination / extra, resource_dir / backend)
+                for path in destination.rglob("*"):
+                    if not path.is_file() or path.is_symlink():
+                        continue
+                    with path.open("rb") as stream:
+                        magic = stream.read(4)
+                    if magic in {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",
+                                 b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca"}:
+                        if architecture not in architectures(path):
+                            raise SystemExit(f"Missing {architecture} Java runtime slice: {path}")
+                        # Jlink's relative runtime layout is already self-contained.
+                        # Reject developer paths instead of flattening its dylibs.
+                        for line in run("otool", "-L", path, capture=True).splitlines()[1:]:
+                            dependency = line.strip().split(" (", 1)[0]
+                            if not dependency.startswith(("/System/Library/", "/usr/lib/", "@rpath/", "@loader_path/", "@executable_path/")):
+                                raise SystemExit(f"External Java runtime dependency: {dependency}")
+                        native_targets.append(path)
+                        if path.parent.name == "bin":
+                            java_executables.append(path)
+                launcher = helper_dir / "lurker-cryptomator"
+                run("xcrun", "clang", "-arch", architecture, "-mmacosx-version-min=12.0",
+                    "-Os", "-Wall", "-Wextra", "-Werror",
+                    ROOT / "native/macos/cryptomator-launcher.c", "-o", launcher)
+                native_targets.append(launcher)
+            else:
+                manifest = json.loads((folder_root / f"{backend}.json").read_text())
+                source = folder_root / backend
+                if sha256(source) != manifest["sha256"]:
+                    raise SystemExit(f"Private {backend} manifest mismatch")
+                targets, _ = stage_macho(source, helper_dir / backend, frameworks, architecture)
+                native_targets.extend(targets)
+                shutil.copytree(folder_root / "licenses" / backend, resources / "backend-licenses" / backend)
+                shutil.copyfile(folder_root / f"{backend}.json", resources / f"{backend}-provenance.json")
         minimum_versions = [minimum_version(binary) for binary in native_targets]
         for binary in ["lurker-desktop", "lurker-helper", "lurker"]:
             source = binaries / binary
@@ -174,8 +233,14 @@ def main():
             # The separately installed FUSE runtime has another developer's
             # Team ID. Confine this exception to its consumer, not the app/UI.
             plistlib.dump({"com.apple.security.cs.disable-library-validation": True}, file)
+        java_entitlements = working / "java-entitlements.plist"
+        with java_entitlements.open("wb") as file:
+            plistlib.dump({"com.apple.security.cs.disable-library-validation": True,
+                          "com.apple.security.cs.allow-jit": True}, file)
         for target in signing_targets:
             exception = ["--entitlements", backend_entitlements] if target == helper_dir / "lurker-veracrypt" else []
+            if target in java_executables:
+                exception = ["--entitlements", java_entitlements]
             run("codesign", "--force", "--sign", identity, "--options", "runtime",
                 "--timestamp=none" if identity == "-" else "--timestamp", *exception, target)
         run("codesign", "--verify", "--deep", "--strict", "--verbose=2", app)
@@ -194,6 +259,10 @@ def main():
             "Open Lurker from Applications. No package installer or terminal install is needed.\n\n"
             "Apple encrypted disk images work with built-in macOS tools.\n"
             "VeraCrypt support is included. Install the matching FUSE-T runtime separately.\n"
+            + ("Included directory backends: " + ", ".join(options.folder_backends) + ".\n"
+               "Directory backends require their qualified FUSE runtime; FUSE-T is not interchangeable with macFUSE.\n"
+               if options.folder_backends else "")
+            +
             "The CLI is Lurker.app/Contents/MacOS/lurker.\n\n"
             + signature_note + f"Requires macOS {minimum} or later; architecture: {architecture}.\n",
             encoding="utf-8",

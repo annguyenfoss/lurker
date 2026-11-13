@@ -16,6 +16,16 @@ python scripts/build-macos-backends.py --jobs 4
 python scripts/build-macos-dmg.py
 ```
 
+After building directory backends into `target/release/backends`, include them
+explicitly with `--folder-backends gocryptfs cryfs cryptomator`. The packager
+checks their manifests, includes the private Cryptomator Java image, audits its
+native dependencies and signs its nested code. The Java image lives in sealed
+Resources with a native launcher in Helpers; its source/notices are resources,
+not nested executable code. Java executables receive the JIT
+and native-library validation exceptions needed by that private runtime. This
+does not qualify an incompatible host FUSE runtime; missing prerequisites must
+still fail closed.
+
 `--offline` requires previously downloaded and verified archives. Native sources
 and objects are cached; changed compiler/SDK/options require a fresh cache
 directory. A failed wxWidgets build is not treated as a completed dependency.
