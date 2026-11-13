@@ -275,6 +275,31 @@ fn check_backend(kind: VolumeType) -> AppResult<VolumeType> {
     Ok(kind)
 }
 
+fn mount_backend(kind: VolumeType, source: &Path) -> AppResult<VolumeType> {
+    let backend = check_backend(kind)?;
+    #[cfg(target_os = "freebsd")]
+    if kind == VolumeType::Auto {
+        // GELI metadata is identifiable without a credential. An absent native
+        // header selects authentication with the private VeraCrypt engine;
+        // malformed recognized native metadata is an error, never a fallback.
+        return Ok(if native::probe_image(source)?.is_some() {
+            VolumeType::Geli
+        } else {
+            VolumeType::Veracrypt
+        });
+    }
+    let _ = source;
+    Ok(backend)
+}
+
+fn attach_native_file(source: &Path, readonly: bool) -> AppResult<String> {
+    #[cfg(target_os = "freebsd")]
+    if let Some(sector_size) = native::probe_image(source)? {
+        return native::attach_file_with_sector(source, readonly, sector_size);
+    }
+    native::attach_file(source, readonly)
+}
+
 fn credential(
     password: Option<&str>,
     keyfile: Option<&Path>,
@@ -553,7 +578,6 @@ fn publish_cgd(source: &Path, target: &Path) -> AppResult<()> {
 }
 
 fn mount(c: MountCommand, output: Output) -> AppResult<()> {
-    let backend = check_backend(c.volume_type)?;
     if c.tag.is_some() {
         return Err(AppError::new("Native BSD mounts do not support tags."));
     }
@@ -566,6 +590,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             "Native BSD disk containers must be regular files.",
         ));
     }
+    let backend = mount_backend(c.volume_type, &source)?;
     let identity = Identity::read(&source)?;
     let registry = Registry::open()?;
     registry.ensure_unused(&source)?;
@@ -630,27 +655,49 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             registry.save(&session)?;
         }
         if session.mapped.is_none() {
-            session.backing = Some(native::attach_file(&source, c.readonly)?);
+            session.backing = Some(attach_native_file(&source, c.readonly)?);
             registry.save(&session)?;
             verify_session(&session)?;
-            #[cfg(target_os = "netbsd")]
+            #[cfg(target_os = "openbsd")]
+            if c.volume_type == VolumeType::Auto
+                && !native::probe_crypto_header(session.backing.as_deref().unwrap())?
             {
-                session.mapped = Some(native::unlock(
-                    session.backing.as_deref().unwrap(),
-                    c.readonly,
-                    &credential,
-                    &params_path(&source),
-                )?);
+                // Inspect the existing native partition through its kernel
+                // layout, without invoking bioctl on an unknown format. Release
+                // that owned vnode before the authenticated VeraCrypt route.
+                native::detach_file(session.backing.as_deref().unwrap())?;
+                session.backing = None;
+                registry.save(&session)?;
+                if veracrypt::attached(&source)? {
+                    return Err(AppError::new(
+                        "VeraCrypt container is already attached; refusing a duplicate mount.",
+                    ));
+                }
+                session.backend = VolumeType::Veracrypt;
+                registry.save(&session)?;
+                session.mapped = Some(veracrypt::unlock(&source, c.readonly, &credential)?);
+                registry.save(&session)?;
             }
-            #[cfg(not(target_os = "netbsd"))]
-            {
-                session.mapped = Some(native::unlock(
-                    session.backing.as_deref().unwrap(),
-                    c.readonly,
-                    &credential,
-                )?);
+            if session.mapped.is_none() {
+                #[cfg(target_os = "netbsd")]
+                {
+                    session.mapped = Some(native::unlock(
+                        session.backing.as_deref().unwrap(),
+                        c.readonly,
+                        &credential,
+                        &params_path(&source),
+                    )?);
+                }
+                #[cfg(not(target_os = "netbsd"))]
+                {
+                    session.mapped = Some(native::unlock(
+                        session.backing.as_deref().unwrap(),
+                        c.readonly,
+                        &credential,
+                    )?);
+                }
+                registry.save(&session)?;
             }
-            registry.save(&session)?;
         }
         let mut argv = args(&[
             "-t",
@@ -682,7 +729,11 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             ))),
         };
     }
-    output.success(&format!("Mounted {backend} at {}", target.display()));
+    output.success(&format!(
+        "Mounted {} at {}",
+        session.backend,
+        target.display()
+    ));
     Ok(())
 }
 
@@ -1313,6 +1364,125 @@ mod tests {
         assert!(!registry.path(&saved).exists());
         assert!(native::verify_mapping(&mapped, session.backing.as_deref().unwrap()).is_err());
         assert!(native::verify_backing(session.backing.as_deref().unwrap(), &source).is_err());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    #[test]
+    #[ignore = "requires root and the complete trusted private VeraCrypt runtime; disposable /tmp images"]
+    fn auto_dispatch_authenticates_existing_formats_without_changing_unknown_data() {
+        require_root().unwrap();
+        veracrypt::backend().unwrap();
+        let directory = std::env::temp_dir().join(format!("lurker-auto-{}", unique_id()));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let mountpoint = directory.join("mnt");
+        let passphrase = "temporary Auto dispatch password";
+        fn digest(path: &Path) -> String {
+            #[cfg(target_os = "freebsd")]
+            let tool = "/sbin/sha256";
+            #[cfg(target_os = "openbsd")]
+            let tool = "/bin/sha256";
+            exec(tool, &[path.as_os_str().to_owned()], None).unwrap()
+        }
+        let mount_request = |source: &Path, password: &str| MountCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            source: source.to_owned(),
+            mountpoint: mountpoint.clone(),
+            tag: None,
+            volume_type: VolumeType::Auto,
+            passphrase: Some(password.to_owned()),
+            keyfile: None,
+            readonly: false,
+        };
+        let close = || {
+            unmount(
+                UnmountCommand {
+                    privilege_mode: PrivilegeMode::Privileged,
+                    target: mountpoint.clone(),
+                    tag: None,
+                    volume_type: VolumeType::Auto,
+                },
+                Output::silent(),
+            )
+            .unwrap()
+        };
+        for backend in [default_backend(), VolumeType::Veracrypt] {
+            let source = directory.join(format!("{backend} 密碼 with spaces.img"));
+            create(
+                CreateCommand {
+                    privilege_mode: PrivilegeMode::Privileged,
+                    target: source.clone(),
+                    size_gb: Some("0.125".into()),
+                    force: false,
+                    source_kind: SourceKind::File,
+                    volume_type: backend,
+                    cipher: crate::CreateCipher::Aes,
+                    passphrase: Some(passphrase.into()),
+                    keyfile: None,
+                },
+                Output::silent(),
+            )
+            .unwrap();
+            mount(mount_request(&source, passphrase), Output::silent()).unwrap();
+            {
+                let registry = Registry::open().unwrap();
+                let session = registry
+                    .records()
+                    .unwrap()
+                    .into_iter()
+                    .find(|s| s.source == source)
+                    .unwrap();
+                assert_eq!(session.backend, backend);
+                verify_session(&session).unwrap();
+            }
+            let marker = mountpoint.join("sentinel");
+            fs::write(&marker, b"durably committed Auto data").unwrap();
+            File::open(&marker).unwrap().sync_all().unwrap();
+            close();
+            mount(mount_request(&source, passphrase), Output::silent()).unwrap();
+            assert_eq!(fs::read(&marker).unwrap(), b"durably committed Auto data");
+            close();
+            let before = digest(&source);
+            assert!(mount(
+                mount_request(&source, "incorrect Auto credential"),
+                Output::silent()
+            )
+            .is_err());
+            assert_eq!(digest(&source), before);
+            assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
+            assert!(!Registry::open()
+                .unwrap()
+                .records()
+                .unwrap()
+                .iter()
+                .any(|s| s.source == source));
+        }
+        let unknown = directory.join("random unknown image");
+        let mut random = File::open("/dev/urandom").unwrap();
+        let mut image = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&unknown)
+            .unwrap();
+        let mut block = [0; 65536];
+        for _ in 0..1024 {
+            random.read_exact(&mut block).unwrap();
+            image.write_all(&block).unwrap();
+        }
+        image.sync_all().unwrap();
+        drop(image);
+        let before = digest(&unknown);
+        assert!(mount(mount_request(&unknown, passphrase), Output::silent()).is_err());
+        assert_eq!(digest(&unknown), before);
+        assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
+        assert!(!Registry::open()
+            .unwrap()
+            .records()
+            .unwrap()
+            .iter()
+            .any(|s| s.source == unknown));
         fs::remove_dir_all(directory).unwrap();
     }
 }
