@@ -15,6 +15,70 @@ pub struct VolumeRowView {
     pub unprivileged: bool,
 }
 
+/// Keep presentation choices within the core's approved OS matrix.
+pub fn create_formats(os: &str, unprivileged: bool) -> Vec<&'static str> {
+    [
+        "luks",
+        "apple",
+        "geli",
+        "cgd",
+        "softraid",
+        "luks1",
+        "vera",
+        "gocryptfs",
+        "cryfs",
+        "cryptomator",
+        "pefs",
+    ]
+    .into_iter()
+    .filter(|name| {
+        let backend = parse_format(name).unwrap();
+        backend.supports_platform(os)
+            && (!unprivileged
+                || backend == VolumeType::Veracrypt
+                || matches!(
+                    backend,
+                    VolumeType::Gocryptfs | VolumeType::Cryfs | VolumeType::Cryptomator
+                ))
+    })
+    .collect()
+}
+
+fn parse_format(format: &str) -> Option<VolumeType> {
+    VolumeType::parse(if format == "vera" {
+        "veracrypt"
+    } else {
+        format
+    })
+    .filter(|backend| *backend != VolumeType::Auto)
+}
+
+pub fn validate_create_platform(
+    command: &CreateCommand,
+    os: &str,
+    mode: lurker_core::PrivilegeMode,
+) -> Result<(), String> {
+    if !command.volume_type.supports_platform(os) {
+        return Err(format!(
+            "{} creation is unavailable on {os}.",
+            command.volume_type
+        ));
+    }
+    if command.source_kind == SourceKind::Block
+        && (os != "linux" || mode == lurker_core::PrivilegeMode::Unprivileged)
+    {
+        return Err("Physical-device creation requires Linux Privileged mode.".into());
+    }
+    if mode == lurker_core::PrivilegeMode::Unprivileged
+        && !create_formats(os, true)
+            .iter()
+            .any(|name| parse_format(name) == Some(command.volume_type))
+    {
+        return Err("Choose VeraCrypt or a directory backend in Unprivileged mode.".into());
+    }
+    Ok(())
+}
+
 pub fn build_create_command(
     target_kind: &str,
     format: &str,
@@ -32,24 +96,26 @@ pub fn build_create_command(
     let source_kind = match target_kind {
         "file" => SourceKind::File,
         "partition" => SourceKind::Block,
+        "directory" => SourceKind::Directory,
         _ => return Err(format!("Unsupported target kind: {target_kind}")),
     };
-    let volume_type = match format {
-        "luks" => VolumeType::Luks,
-        "apple" => VolumeType::Apple,
-        "vera" | "veracrypt" => VolumeType::Veracrypt,
-        _ => return Err(format!("Unsupported format: {format}")),
-    };
-    // Apple has a fixed profile and no cipher selector in the form. A previous
-    // VeraCrypt selection may still be stored when the user switches formats.
-    let cipher = if volume_type == VolumeType::Apple {
-        CreateCipher::Aes
-    } else {
+    let volume_type =
+        parse_format(format).ok_or_else(|| format!("Unsupported format: {format}"))?;
+    if volume_type.is_directory() != (source_kind == SourceKind::Directory) {
+        return Err("Choose a directory target for directory encryption, or a file/device for container encryption.".into());
+    }
+    // Hidden fixed-profile fields must not carry a previous backend's cipher.
+    let cipher = if matches!(
+        volume_type,
+        VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
+    ) {
         CreateCipher::parse(cipher).ok_or_else(|| format!("Unsupported create cipher: {cipher}"))?
+    } else {
+        CreateCipher::Aes
     };
 
     let target = match source_kind {
-        SourceKind::File => {
+        SourceKind::File | SourceKind::Directory => {
             let path = required_value("Location", file_path)?;
             let name = required_value("Filename", file_name)?;
             let joined = if path.ends_with('/') {
@@ -58,9 +124,6 @@ pub fn build_create_command(
                 format!("{path}/{name}")
             };
             joined
-        }
-        SourceKind::Directory => {
-            return Err("Directory creation is currently available through the CLI.".into())
         }
         SourceKind::Block => required_value("Partition", partition)?.to_string(),
     };
@@ -71,8 +134,16 @@ pub fn build_create_command(
             return Err("Create passphrase confirmation does not match.".into());
         }
     }
-    if volume_type == VolumeType::Apple && keyfile.is_some() {
-        return Err("Keyfile authentication is supported for LUKS and VeraCrypt only.".into());
+    if !matches!(
+        volume_type,
+        VolumeType::Luks
+            | VolumeType::Luks1
+            | VolumeType::Veracrypt
+            | VolumeType::Geli
+            | VolumeType::Pefs
+    ) && keyfile.is_some()
+    {
+        return Err(format!("{volume_type} accepts a passphrase only."));
     }
 
     let size_gb = match source_kind {
@@ -81,6 +152,9 @@ pub fn build_create_command(
             let value: f64 = raw
                 .parse()
                 .map_err(|_| format!("Size must be a number, got: {raw}"))?;
+            if !value.is_finite() || value <= 0.0 {
+                return Err("Size must be a positive finite number.".into());
+            }
             let in_gb = match size_unit {
                 "GB" | "gb" => value,
                 "MB" | "mb" => value / 1024.0,
@@ -88,10 +162,7 @@ pub fn build_create_command(
             };
             Some(format!("{in_gb}"))
         }
-        SourceKind::Directory => {
-            return Err("Directory creation is currently available through the CLI.".into())
-        }
-        SourceKind::Block => None,
+        SourceKind::Directory | SourceKind::Block => None,
     };
 
     Ok(CreateCommand {
@@ -308,6 +379,134 @@ mod tests {
     use super::{build_create_command, build_mount_command, volume_rows};
     use lurker_core::{ActiveVolume, CreateCipher, SourceKind, VolumeType};
     use std::path::PathBuf;
+
+    #[test]
+    fn create_matrix_defaults_and_directory_profiles_follow_the_core() {
+        use lurker_core::PrivilegeMode;
+        for (os, default, expected_count) in [
+            ("linux", "luks", 6),
+            ("macos", "apple", 5),
+            ("freebsd", "geli", 4),
+            ("netbsd", "cgd", 1),
+            ("openbsd", "softraid", 2),
+            ("dragonfly", "luks1", 1),
+        ] {
+            let formats = super::create_formats(os, false);
+            assert_eq!(formats[0], default);
+            assert_eq!(formats.len(), expected_count);
+            for format in formats {
+                let backend = super::parse_format(format).unwrap();
+                let directory = backend.is_directory();
+                let command = build_create_command(
+                    if directory { "directory" } else { "file" },
+                    format,
+                    "/tmp",
+                    "desktop-validation",
+                    "",
+                    if directory {
+                        "stale invalid size"
+                    } else {
+                        "128"
+                    },
+                    "MB",
+                    "serpent",
+                    "test password",
+                    "test password",
+                    "pass",
+                    "",
+                )
+                .unwrap();
+                assert_eq!(command.volume_type, backend);
+                assert_eq!(command.size_gb.is_none(), directory);
+                assert!(!command.force);
+                assert_eq!(
+                    command.cipher == CreateCipher::Serpent,
+                    matches!(
+                        backend,
+                        VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
+                    )
+                );
+                super::validate_create_platform(&command, os, PrivilegeMode::Privileged).unwrap();
+                let unprivileged =
+                    super::validate_create_platform(&command, os, PrivilegeMode::Unprivileged);
+                assert_eq!(
+                    unprivileged.is_ok(),
+                    backend == VolumeType::Veracrypt
+                        || matches!(
+                            backend,
+                            VolumeType::Gocryptfs | VolumeType::Cryfs | VolumeType::Cryptomator
+                        )
+                );
+            }
+        }
+        assert!(super::create_formats("windows", false).is_empty());
+    }
+
+    #[test]
+    fn unsupported_targets_credentials_and_invalid_sizes_fail_before_helper() {
+        use lurker_core::PrivilegeMode;
+        for format in ["gocryptfs", "cryfs", "cryptomator", "pefs"] {
+            assert!(build_create_command(
+                "file", format, "/tmp", "vault", "", "1", "GB", "aes", "password", "password",
+                "pass", ""
+            )
+            .is_err());
+        }
+        for format in [
+            "apple",
+            "cgd",
+            "softraid",
+            "gocryptfs",
+            "cryfs",
+            "cryptomator",
+        ] {
+            let directory = super::parse_format(format).unwrap().is_directory();
+            assert!(build_create_command(
+                if directory { "directory" } else { "file" },
+                format,
+                "/tmp",
+                "vault",
+                "",
+                "1",
+                "GB",
+                "aes",
+                "",
+                "",
+                "key",
+                "/tmp/key"
+            )
+            .is_err());
+        }
+        for size in ["NaN", "inf", "0", "-1"] {
+            assert!(build_create_command(
+                "file", "luks", "/tmp", "vault", "", size, "GB", "aes", "password", "password",
+                "pass", ""
+            )
+            .is_err());
+        }
+        let raw = build_create_command(
+            "partition",
+            "vera",
+            "",
+            "",
+            "/dev/fake",
+            "",
+            "GB",
+            "aes",
+            "password",
+            "password",
+            "pass",
+            "",
+        )
+        .unwrap();
+        for os in ["macos", "freebsd", "netbsd", "openbsd", "dragonfly"] {
+            assert!(super::validate_create_platform(&raw, os, PrivilegeMode::Privileged).is_err());
+        }
+        assert!(
+            super::validate_create_platform(&raw, "linux", PrivilegeMode::Unprivileged).is_err()
+        );
+        super::validate_create_platform(&raw, "linux", PrivilegeMode::Privileged).unwrap();
+    }
 
     #[test]
     fn create_keyfile_authentication_never_carries_a_password() {

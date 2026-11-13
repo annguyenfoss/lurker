@@ -11,7 +11,8 @@ import {
 } from "../components/inputs.slint";
 
 export component CreateView inherits Card {
-    in property <bool> is-macos: false;
+    in property <bool> is-linux: true;
+    in property <[string]> formats: ["luks", "vera"];
     in property <bool> unprivileged: false;
     in property <bool> busy: false;
     in-out property <string> target-kind: "file";   // "file" | "partition"
@@ -27,8 +28,13 @@ export component CreateView inherits Card {
     in-out property <string> confirm: "";
     in-out property <string> auth-method: "pass";
     in-out property <string> key-file: "";
+    out property <bool> directory-format: root.format == "gocryptfs" || root.format == "cryfs" || root.format == "cryptomator" || root.format == "pefs";
+    out property <bool> variable-cipher: root.format == "luks" || root.format == "luks1" || root.format == "vera";
+    out property <bool> supports-keyfile: root.variable-cipher || root.format == "geli" || root.format == "pefs";
     changed format => {
-        if root.format == "apple" { root.auth-method = "pass"; root.key-file = ""; }
+        root.target-kind = root.directory-format ? "directory" : "file";
+        if !root.variable-cipher { root.cipher = "aes"; }
+        if !root.supports-keyfile { root.auth-method = "pass"; root.key-file = ""; }
     }
     changed auth-method => {
         root.passphrase = "";
@@ -43,17 +49,11 @@ export component CreateView inherits Card {
     callback submit;
     callback generate-passphrase;
 
-    private property <[SegmentOption]> userspace-formats: [{ value: "vera", label: "VeraCrypt" }];
-    private property <[SegmentOption]> platform-formats: [
-        { value: root.is-macos ? "apple" : "luks", label: root.is-macos ? "Apple Encryption" : "LUKS" },
-        { value: "vera", label: "VeraCrypt" },
-    ];
-
     private property <bool> pass-match: root.passphrase.character-count > 0 && root.passphrase == root.confirm;
     private property <bool> can-submit:
         !root.busy &&
-        (root.target-kind == "file" ? root.file-name != "" : root.partition != "")
-        && (root.auth-method == "key" && root.format != "apple"
+        (root.target-kind != "partition" ? root.file-path != "" && root.file-name != "" : root.partition != "")
+        && (root.auth-method == "key" && root.supports-keyfile
             ? root.key-file != ""
             : root.passphrase.character-count >= 8 && root.pass-match);
 
@@ -61,19 +61,19 @@ export component CreateView inherits Card {
     CardSection {
         top-divider: false;
         SectionHead { title: "FORMAT"; hint: root.unprivileged ? "without administrator privileges" : "first is default"; }
-        Segmented {
+        SelectField {
             value <=> root.format;
-            options: root.unprivileged ? root.userspace-formats : root.platform-formats;
+            model: root.formats;
         }
     }
 
     // ── Target section ────────────────────────────────────────────────
     CardSection {
-        SectionHead { title: "TARGET"; hint: root.is-macos || root.unprivileged ? "file container" : "file or partition"; }
+        SectionHead { title: "TARGET"; hint: root.directory-format ? "encrypted directory · grows with your files" : root.is-linux && !root.unprivileged ? "file or partition" : "file container"; }
 
         Rectangle { height: UiTheme.s3; }   // spacer
 
-        if !root.is-macos && !root.unprivileged: Segmented {
+        if root.is-linux && !root.unprivileged && !root.directory-format: Segmented {
             value <=> root.target-kind;
             options: [
                 { value: "file",      label: "File container" },
@@ -83,7 +83,7 @@ export component CreateView inherits Card {
 
         Rectangle { height: UiTheme.s3; }   // spacer
 
-        if root.target-kind == "file": VerticalLayout {
+        if root.target-kind != "partition": VerticalLayout {
             spacing: UiTheme.s4;
 
             Field {
@@ -97,13 +97,13 @@ export component CreateView inherits Card {
             HorizontalLayout {
                 spacing: UiTheme.s4;
                 Field {
-                    label: "Filename";
+                    label: root.directory-format ? "Directory name" : "Filename";
                     required: true;
                     ThemedLineEdit {
                         text <=> root.file-name;
                     }
                 }
-                Field {
+                if !root.directory-format: Field {
                     label: "Size";
                     required: true;
                     HorizontalLayout {
@@ -171,13 +171,13 @@ export component CreateView inherits Card {
     }
 
     // ── Cipher section ────────────────────────────────────────────────
-    CardSection {
-        SectionHead { title: "CIPHER"; hint: root.format == "apple" ? "AES-256" : "pick one — the rest is handled for you"; }
-        if root.format == "apple": Text {
+    if !root.directory-format: CardSection {
+        SectionHead { title: "CIPHER"; hint: root.variable-cipher ? "pick one — the rest is handled for you" : "fixed native profile"; }
+        if !root.variable-cipher: Text {
             text: "AES-256";
             color: UiTheme.fg-1;
         }
-        if root.format != "apple": Segmented {
+        if root.variable-cipher: Segmented {
             value <=> root.cipher;
             options: [
                 { value: "aes",     label: "AES" },
@@ -190,13 +190,13 @@ export component CreateView inherits Card {
     // ── Passphrase section ────────────────────────────────────────────
     CardSection {
         SectionHead { title: "UNLOCK WITH"; hint: root.auth-method == "key" ? "key file alone" : "min 8 characters"; }
-        if root.format != "apple": Segmented {
+        if root.supports-keyfile: Segmented {
             value <=> root.auth-method;
             options: [{ value: "pass", label: "Passphrase" }, { value: "key", label: "Key file" }];
         }
-        if root.auth-method == "key" && root.format != "apple": KeyFilePicker { value <=> root.key-file; }
+        if root.auth-method == "key" && root.supports-keyfile: KeyFilePicker { value <=> root.key-file; }
 
-        if root.auth-method == "pass" || root.format == "apple": VerticalLayout {
+        if root.auth-method == "pass" || !root.supports-keyfile: VerticalLayout {
             spacing: UiTheme.s3;
 
             Field {

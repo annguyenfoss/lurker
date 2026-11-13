@@ -12,6 +12,9 @@ import { MountView } from "mount.slint";
 
 export component ManageView inherits Rectangle {
     in property <bool> is-macos: false;
+    in property <bool> is-linux: true;
+    in property <bool> supports-directories: true;
+    in property <bool> supports-keyfile: true;
     in property <bool> unprivileged: false;
     in property <bool> busy: false;
     in property <[VolumeRowData]> volumes;
@@ -155,6 +158,9 @@ export component ManageView inherits Rectangle {
         // ── Inlined MountView ────────────────────────────────────────
         MountView {
             is-macos: root.is-macos;
+            is-linux: root.is-linux;
+            supports-directories: root.supports-directories;
+            supports-keyfile: root.supports-keyfile;
             unprivileged: root.unprivileged;
             busy: root.busy;
             source-kind <=> root.mount-source-kind;

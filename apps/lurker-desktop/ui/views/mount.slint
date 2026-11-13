@@ -15,6 +15,9 @@ import {
 
 export component MountView inherits Card {
     in property <bool> is-macos: false;
+    in property <bool> is-linux: true;
+    in property <bool> supports-directories: true;
+    in property <bool> supports-keyfile: true;
     in property <bool> unprivileged: false;
     in property <bool> busy: false;
     in-out property <string> source-kind: "file";   // "file" | "partition"
@@ -33,6 +36,7 @@ export component MountView inherits Card {
     callback submit;
     callback reset;
 
+    changed supports-keyfile => { if !root.supports-keyfile { root.auth-method = "pass"; root.key-file = ""; } }
     changed auth-method => {
         if root.auth-method == "key" { root.passphrase = ""; }
         else { root.key-file = ""; }
@@ -55,36 +59,40 @@ export component MountView inherits Card {
         && root.mount-point != "/Volumes/"
         && root.mount-point != "/Volumes";
 
+    private property <[SegmentOption]> linux-sources: [
+        { value: "file", label: "File container" },
+        { value: "directory", label: "Directory" },
+        { value: "partition", label: "Partition / disk" },
+    ];
+    private property <[SegmentOption]> file-sources: [
+        { value: "file", label: "File container" },
+        { value: "directory", label: "Directory" },
+    ];
+
     // ── Source section ────────────────────────────────────────────────
     CardSection {
         top-divider: false;
-        SectionHead { title: "SOURCE"; hint: root.unprivileged ? "VeraCrypt file container to unlock" : root.is-macos ? "encrypted file container to unlock" : "encrypted file or partition to unlock"; }
+        SectionHead { title: "SOURCE"; hint: "encrypted container or directory to unlock"; }
 
         Rectangle { height: UiTheme.s3; }
 
-        if !root.is-macos && !root.unprivileged: Segmented {
+        if root.supports-directories || root.is-linux: Segmented {
             value: root.source-kind;
-            options: [
-                { value: "file",      label: "File container" },
-                { value: "partition", label: "Partition / disk" },
-            ];
-            selected(v) => {
-                root.source-kind = v;
-                root.source = "";
-            }
+            options: root.is-linux && !root.unprivileged ? root.linux-sources : root.file-sources;
+            selected(v) => { root.source-kind = v; root.source = ""; }
         }
 
         Rectangle { height: UiTheme.s3; }
 
-        if root.source-kind == "file" && root.source == "" && !root.typing-source: Drop {
+        if root.source-kind != "partition" && root.source == "" && !root.typing-source: Drop {
             icon: @image-url("../icons/file.svg");
-            title: "Drop a container file here";
-            subtitle: root.unprivileged ? "or click to type a path · VeraCrypt" : root.is-macos ? "or click to type a path · Apple Encryption, VeraCrypt" : "or click to type a path · LUKS, VeraCrypt";
+            title: "Drop an encrypted file or directory here";
+            subtitle: "or click to type a path · format detected automatically";
             clicked => { root.typing-source = true; }
             dropped(path) => { root.source = path; }
         }
 
-        if root.source-kind == "file" && (root.source != "" || root.typing-source): Rectangle {
+        if root.source-kind != "partition" && (root.source != "" || root.typing-source): Rectangle {
             min-height: 34px * UiTheme.scale;
             preferred-height: 34px * UiTheme.scale;
             ThemedLineEdit {
@@ -135,7 +143,7 @@ export component MountView inherits Card {
         VerticalLayout {
             spacing: UiTheme.s3;
 
-            Segmented {
+            if root.supports-keyfile: Segmented {
                 value <=> root.auth-method;
                 options: [
                     { value: "pass", label: "Passphrase" },
@@ -153,7 +161,7 @@ export component MountView inherits Card {
             }
 
             if root.auth-method == "key": Text {
-                text: root.is-macos ? "Key files unlock VeraCrypt containers." : "Key files unlock LUKS and VeraCrypt containers.";
+                text: "Key files require a format that supports them, such as LUKS, VeraCrypt, GELI or PEFS.";
                 font-size: UiTheme.fs-sm;
                 color: UiTheme.fg-2;
                 wrap: word-wrap;
@@ -181,7 +189,7 @@ export component MountView inherits Card {
 
             Toggle {
                 label: "Mount read-only";
-                hint: "safe for inspection · prevents writes";
+                hint: "requires read-only support from the detected format";
                 checked <=> root.readonly;
             }
         }

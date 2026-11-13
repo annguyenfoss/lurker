@@ -39,13 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .select()?;
 
     let window = MainWindow::new()?;
-    if cfg!(target_os = "macos") {
-        window.set_is_macos(true);
-        window.set_backend_label("MACOS".into());
-        window.set_create_format("apple".into());
-        window.set_create_file_name("archive.dmg".into());
-        window.set_mount_point(default_mountpoint().into());
-    }
+    configure_platform(&window, std::env::consts::OS);
     if let Some(home) = std::env::var_os("HOME") {
         window.set_create_file_path(home.to_string_lossy().as_ref().into());
     }
@@ -110,11 +104,21 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             &w.get_create_auth_method(),
             &w.get_create_key_file(),
         ) {
-            Ok(command) => cs.run_operation(
-                "Container created",
-                CommandAction::Create(command).with_privilege_mode(selected_privilege_mode(&w)),
-                ResetKind::CreateSecrets,
-            ),
+            Ok(command) => {
+                let mode = selected_privilege_mode(&w);
+                if let Err(message) =
+                    logic::validate_create_platform(&command, std::env::consts::OS, mode)
+                {
+                    clear_create_secrets(&w);
+                    cs.push_toast("err", "Create failed", &message);
+                    return;
+                }
+                cs.run_operation(
+                    "Encrypted storage created",
+                    CommandAction::Create(command).with_privilege_mode(mode),
+                    ResetKind::CreateSecrets,
+                );
+            }
             Err(message) => {
                 clear_create_secrets(&w);
                 cs.push_toast("err", "Create failed", &message);
@@ -150,7 +154,8 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
     let ks = state.clone();
     window.on_submit_keyslots(move || {
         let Some(w) = ks.window.upgrade() else { return };
-        if cfg!(target_os = "macos") || selected_privilege_mode(&w) == PrivilegeMode::Unprivileged {
+        if !cfg!(target_os = "linux") || selected_privilege_mode(&w) == PrivilegeMode::Unprivileged
+        {
             clear_keyslot_secrets(&w);
             ks.push_toast(
                 "err",
@@ -563,6 +568,76 @@ mod tests {
     }
 
     #[test]
+    fn selected_platform_backends_render_and_reset_incompatible_form_fields() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        ui.show().unwrap();
+        for os in [
+            "linux",
+            "macos",
+            "freebsd",
+            "netbsd",
+            "openbsd",
+            "dragonfly",
+        ] {
+            super::configure_platform(&ui, os);
+            render(&window);
+            assert_eq!(ui.get_is_linux(), os == "linux");
+            assert_eq!(
+                ui.get_create_format().as_str(),
+                super::logic::create_formats(os, false)[0]
+            );
+            for format in super::logic::create_formats(os, false) {
+                ui.set_current_view("create".into());
+                ui.set_create_format("vera".into());
+                render(&window);
+                ui.set_create_target_kind("partition".into());
+                ui.set_create_cipher("twofish".into());
+                ui.set_create_auth_method("key".into());
+                render(&window);
+                ui.set_create_key_file("/tmp/stale-key".into());
+                ui.set_create_format(format.into());
+                render(&window);
+                let backend = lurker_core::VolumeType::parse(if format == "vera" {
+                    "veracrypt"
+                } else {
+                    format
+                })
+                .unwrap();
+                // Selecting the already-active VeraCrypt format retains its existing target.
+                if format != "vera" {
+                    assert_eq!(
+                        ui.get_create_target_kind(),
+                        if backend.is_directory() {
+                            "directory"
+                        } else {
+                            "file"
+                        }
+                    );
+                }
+                if !matches!(format, "luks" | "luks1" | "vera") {
+                    assert_eq!(ui.get_create_cipher(), "aes");
+                }
+                if !matches!(format, "luks" | "luks1" | "vera" | "geli" | "pefs") {
+                    assert_eq!(ui.get_create_auth_method(), "pass");
+                    assert_eq!(ui.get_create_key_file(), "");
+                }
+                for scale in [0.8, 1.0, 1.2] {
+                    ui.set_ui_scale(scale);
+                    render(&window);
+                    snapshot(&window, &format!("{os}-create-{format}-{scale}"));
+                }
+                ui.set_current_view("manage".into());
+                ui.set_mount_source_kind("directory".into());
+                ui.set_mount_source("/tmp/encrypted-directory".into());
+                render(&window);
+            }
+        }
+        ui.hide().unwrap();
+    }
+
+    #[test]
     #[cfg(target_os = "linux")]
     fn linux_privilege_selection_keeps_forms_and_command_routing_consistent() {
         let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
@@ -670,10 +745,10 @@ mod tests {
         // macOS intentionally has no Linux privilege selector; it is a no-op.
         assert_eq!(
             ui.get_current_view(),
-            if cfg!(target_os = "macos") {
-                "keys"
-            } else {
+            if cfg!(target_os = "linux") {
                 "create"
+            } else {
+                "keys"
             }
         );
         ui.hide().unwrap();
@@ -764,6 +839,37 @@ mod tests {
     }
 }
 
+fn set_create_formats(window: &MainWindow, os: &str, unprivileged: bool) {
+    let formats = logic::create_formats(os, unprivileged)
+        .into_iter()
+        .map(Into::into)
+        .collect::<Vec<slint::SharedString>>();
+    window.set_create_formats(ModelRc::from(Rc::new(VecModel::from(formats))));
+}
+
+fn configure_platform(window: &MainWindow, os: &str) {
+    window.set_platform_os(os.into());
+    window.set_is_macos(os == "macos");
+    window.set_backend_label(os.to_uppercase().into());
+    set_create_formats(window, os, false);
+    let format = logic::create_formats(os, false)
+        .first()
+        .copied()
+        .unwrap_or("luks");
+    window.set_create_format(format.into());
+    window.set_create_file_name(
+        match format {
+            "apple" => "archive.dmg",
+            "geli" => "archive.geli",
+            "cgd" => "archive.cgd",
+            "softraid" => "archive.softraid",
+            _ => "archive.luks",
+        }
+        .into(),
+    );
+    window.set_mount_point(default_mountpoint().into());
+}
+
 fn default_mountpoint() -> String {
     if cfg!(target_os = "macos") {
         std::env::var("HOME")
@@ -793,7 +899,7 @@ fn mountpoint_for_mode(mode: PrivilegeMode) -> String {
 }
 
 fn apply_privilege_mode(window: &MainWindow, value: &str) {
-    if cfg!(target_os = "macos") {
+    if !cfg!(target_os = "linux") || !window.get_is_linux() {
         return;
     }
     let mode = PrivilegeMode::parse(value).unwrap_or_default();
@@ -806,6 +912,7 @@ fn apply_privilege_mode(window: &MainWindow, value: &str) {
         }
         .into(),
     );
+    set_create_formats(window, "linux", unprivileged);
     window.set_create_target_kind("file".into());
     window.set_create_format(if unprivileged { "vera" } else { "luks" }.into());
     let name = window.get_create_file_name();

@@ -45,7 +45,7 @@ export component MainWindow inherits Window {
     in-out property <string> zoom_label: "100%";
     in-out property <string> privilege-mode: "privileged";
     in property <bool> operation-busy: false;
-    private property <bool> unprivileged: !root.is-macos && root.privilege-mode == "unprivileged";
+    private property <bool> unprivileged: root.is-linux && root.privilege-mode == "unprivileged";
 
     // Create flow
     in-out property <string> create-target-kind: "file";
@@ -91,6 +91,9 @@ export component MainWindow inherits Window {
     in property <string> create-partition-label;   // meta shown in DevicePicker
     in property <string> mount-source-label;       // meta shown in DevicePicker
     in property <bool> is-macos: false;
+    in property <string> platform-os: "linux";
+    out property <bool> is-linux: root.platform-os == "linux" && !root.is-macos;
+    in property <[string]> create-formats: ["luks", "luks1", "vera", "gocryptfs", "cryfs", "cryptomator"];
     in property <string> backend-label: "LINUX";
 
     // ── Callbacks (only ones with Rust side) ──────────────────────────
@@ -165,7 +168,7 @@ export component MainWindow inherits Window {
             // ── Sidebar ──
             Sidebar {
                 brand-name: "Lurker";
-                brand-tag: root.is-macos ? "APPLE · VERACRYPT" : "LUKS · VERACRYPT";
+                brand-tag: "ENCRYPTED STORAGE";
 
                 NavLabel { text: "ACTIONS"; }
 
@@ -191,7 +194,7 @@ export component MainWindow inherits Window {
                         active: root.current-view == "manage";
                         clicked => { root.current-view = "manage"; }
                     }
-                    if !root.is-macos && !root.unprivileged: NavItem {
+                    if root.is-linux && !root.unprivileged: NavItem {
                         label: "LUKS keys";
                         icon: @image-url("icons/key.svg");
                         active: root.current-view == "keys";
@@ -215,14 +218,14 @@ export component MainWindow inherits Window {
 
                 MainHeader {
                     title: root.current-view == "create"
-                        ? "Create encrypted container"
+                        ? "Create encrypted storage"
                         : root.current-view == "keys" ? "Manage LUKS credentials" : "Manage volumes";
                     subtitle: root.current-view == "create"
-                        ? (root.is-macos ? "Make a new encrypted file container." : root.unprivileged ? "VeraCrypt file containers without administrator prompts." : "Make a new encrypted file or partition.")
+                        ? (root.unprivileged ? "Create encrypted files and directories without administrator prompts." : "Make a new encrypted container or directory.")
                         : root.current-view == "keys" ? "Each enrolled password or key file unlocks independently."
                         : (root.unprivileged ? "Unlock VeraCrypt files without administrator prompts." : "Mounted volumes, and unlock new ones.");
 
-                    if !root.is-macos: Segmented {
+                    if root.is-linux: Segmented {
                         value <=> root.privilege-mode;
                         enabled: !root.operation-busy;
                         options: [
@@ -278,7 +281,8 @@ export component MainWindow inherits Window {
                                 width: UiTheme.work-wrap-max;
 
                             if root.current-view == "create": CreateView {
-                                is-macos: root.is-macos;
+                                is-linux: root.is-linux;
+                                formats: root.create-formats;
                                 unprivileged: root.unprivileged;
                                 busy: root.operation-busy;
                                 target-kind <=> root.create-target-kind;
@@ -301,7 +305,7 @@ export component MainWindow inherits Window {
                                 generate-passphrase => { root.generate-passphrase(); }
                             }
 
-                            if root.current-view == "keys" && !root.is-macos && !root.unprivileged: KeyslotsView {
+                            if root.current-view == "keys" && root.is-linux && !root.unprivileged: KeyslotsView {
                                 busy: root.operation-busy;
                                 source <=> root.keys-source;
                                 operation <=> root.keys-operation;
@@ -319,6 +323,9 @@ export component MainWindow inherits Window {
 
                             if root.current-view == "manage": ManageView {
                                 is-macos: root.is-macos;
+                                is-linux: root.is-linux;
+                                supports-directories: root.is-linux || root.is-macos || root.platform-os == "freebsd";
+                                supports-keyfile: root.platform-os != "netbsd";
                                 unprivileged: root.unprivileged;
                                 busy: root.operation-busy;
                                 volumes: root.volumes;
