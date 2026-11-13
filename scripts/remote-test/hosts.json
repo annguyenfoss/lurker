@@ -1,0 +1,13 @@
+{
+  "archlinux": {"ssh": "adjutant@archlinux-core-01", "os": "Linux", "arch": "x86_64", "primary": true, "rust": "rustup"},
+  "debian": {"ssh": "adjutant@debian-core-01", "os": "Linux", "arch": "x86_64", "rust": "rustup"},
+  "ubuntu": {"ssh": "adjutant@ubuntu-core-01", "os": "Linux", "arch": "x86_64", "rust": "rustup"},
+  "fedora": {"ssh": "adjutant@fedora-core-01", "os": "Linux", "arch": "x86_64", "rust": "rustup"},
+  "opensuse": {"ssh": "adjutant@opensuse-core-01", "os": "Linux", "arch": "x86_64", "rust": "rustup"},
+  "gentoo": {"ssh": "adjutant@gentoo-core-01", "os": "Linux", "arch": "x86_64", "rust": "rustup"},
+  "freebsd": {"ssh": "adjutant@freebsd-core-01", "os": "FreeBSD", "arch": "amd64", "primary": true, "rust": "rustup"},
+  "netbsd": {"ssh": "adjutant@netbsd-core-01", "os": "NetBSD", "arch": "amd64", "primary": true, "rust": "rustup"},
+  "dragonflybsd": {"ssh": "adjutant@dragonflybsd-core-01", "os": "DragonFly", "arch": "x86_64", "primary": true, "rust": "system"},
+  "openbsd": {"ssh": "adjutant@openbsd-core-01", "os": "OpenBSD", "arch": "amd64", "primary": true, "rust": "system"},
+  "macos": {"ssh": "adjutant@buran", "os": "Darwin", "arch": "arm64", "primary": true, "rust": "rustup"}
+}
