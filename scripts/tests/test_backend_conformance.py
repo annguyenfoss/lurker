@@ -116,6 +116,36 @@ class HarnessTests(unittest.TestCase):
         self.assertTrue(result["timed_out"])
         self.assertNotEqual(result["exit_code"], 0)
 
+    def test_readonly_negative_mode_requires_actual_request_and_rejection(self):
+        suite = harness.Suite(self.options("--expect-readonly-unsupported"))
+        suite.result["cases"].append({"name": "readonly", "status": "running"})
+        with mock.patch.object(harness, "terminal", return_value={"exit_code": 1, "prompts": 0, "timed_out": False}) as terminal, \
+             mock.patch.object(harness.os.path, "ismount", return_value=False):
+            suite.readonly_unsupported()
+        self.assertIn("--readonly", terminal.call_args.args[0])
+        self.assertEqual(suite.result["readonly_expectation"], "unsupported")
+        self.assertEqual(suite.result["cases"][-1]["commands"][0]["exit_code"], 1)
+
+    def test_readonly_negative_mode_fails_on_successful_mount_command(self):
+        suite = harness.Suite(self.options("--expect-readonly-unsupported"))
+        suite.result["cases"].append({"name": "readonly", "status": "running"})
+        with mock.patch.object(harness, "terminal", return_value={"exit_code": 0, "prompts": 0, "timed_out": False}), \
+             mock.patch.object(harness.os.path, "ismount", return_value=False):
+            with self.assertRaisesRegex(AssertionError, "Expected failure"):
+                suite.readonly_unsupported()
+
+    def test_readonly_negative_mode_rejects_attached_resource_even_on_error(self):
+        suite = harness.Suite(self.options("--expect-readonly-unsupported"))
+        suite.result["cases"].append({"name": "readonly", "status": "running"})
+        with mock.patch.object(harness, "terminal", return_value={"exit_code": 1, "prompts": 0, "timed_out": False}), \
+             mock.patch.object(harness.os.path, "ismount", return_value=True):
+            with self.assertRaisesRegex(AssertionError, "left storage attached"):
+                suite.readonly_unsupported()
+
+    def test_readonly_skip_and_negative_mode_are_mutually_exclusive(self):
+        with self.assertRaises(SystemExit):
+            self.options("--skip-readonly", "native limitation", "--expect-readonly-unsupported")
+
     def test_explicit_skip_is_retained_and_not_counted_as_passed(self):
         suite = harness.Suite(self.options())
         suite.case("readonly", skip="native API does not support read-only attach")

@@ -35,9 +35,17 @@ suite. The script never supplies sudo/administrator passwords. Native container
 suites outside macOS require running the suite with administrator privileges;
 userspace directory engines must run as the login user.
 
-A backend without a native read-only operation may be tested with
+For a native API that cannot attach read-only, use
+`--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
+the read-only CLI request and requires both a nonzero exit and no mount at the
+owned target. A writable fallback, unexpected success, or attached resource
+fails the case. `readonly_expectation: "unsupported"` records that this tests
+safe rejection rather than read-only operation support.
+
+A backend without a native read-only operation may alternatively be tested with
 `--skip-readonly 'concrete native limitation'`. That case remains **skipped** with
-its reason and is not evidence of read-only support. Every other required failure
+its reason and is not evidence of read-only support. This option and
+`--expect-readonly-unsupported` are mutually exclusive. Every other required failure
 stops the suite. A timeout signals only the owned CLI child and retains its storage
 for inspection; a dead CLI does not prove mounts or backend processes are gone.
 

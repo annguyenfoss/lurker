@@ -187,6 +187,7 @@ class Suite:
         self.mounted = False
         self.result = {"schema": SCHEMA, "suite": "native-cli-conformance", "status": "running",
                        "backend": options.backend, "cipher": options.cipher,
+                       "readonly_expectation": "unsupported" if options.expect_readonly_unsupported else ("skipped" if options.skip_readonly else "supported"),
                        "host": platform.node(), "os": platform.system(), "release": platform.release(),
                        "architecture": platform.machine(), "binary": str(options.binary),
                        "binary_sha256": file_hash(options.binary), "source_commit": options.commit,
@@ -357,6 +358,15 @@ class Suite:
         if os.path.ismount(self.mountpoint):
             raise AssertionError("Incorrect credential left an attached mount")
 
+    def readonly_unsupported(self):
+        # A native limitation must fail closed, never silently attach writable
+        # storage. Check the mount even when the CLI returns an unexpected code.
+        try:
+            self.mount(readonly=True, expected=False)
+        finally:
+            if os.path.ismount(self.mountpoint):
+                raise AssertionError("Unsupported read-only request left storage attached; owned fixture retained")
+
     def readonly(self):
         self.mount(readonly=True)
         if (self.mountpoint / "profile 密碼.bin").read_bytes() != self.payload:
@@ -383,7 +393,8 @@ class Suite:
                 ("reopen", self.mount), ("persistence", self.verify), ("reclose", self.close),
             ]:
                 self.case(name, function)
-            self.case("readonly", self.readonly, skip=self.options.skip_readonly)
+            self.case("readonly", self.readonly_unsupported if self.options.expect_readonly_unsupported else self.readonly,
+                      skip=self.options.skip_readonly)
             self.result["status"] = "passed"
         except Exception as error:
             self.result.update(status="failed", diagnostic=str(error))
@@ -408,7 +419,10 @@ def parse_args(argv=None):
     parser.add_argument("--timeout", type=float, default=240)
     parser.add_argument("--commit", help="Source SHA supplied by the verified build coordinator")
     parser.add_argument("--unprivileged", action="store_true", help="Use Linux's explicit VeraCrypt user route")
-    parser.add_argument("--skip-readonly", metavar="REASON", help="Record an explicit unsupported-readonly exception")
+    readonly = parser.add_mutually_exclusive_group()
+    readonly.add_argument("--skip-readonly", metavar="REASON", help="Record an explicit unsupported-readonly exception")
+    readonly.add_argument("--expect-readonly-unsupported", action="store_true",
+                          help="Execute read-only mount and require rejection without any attached storage")
     options = parser.parse_args(argv)
     options.binary = options.binary.resolve()
     if not options.binary.is_file() or not os.access(options.binary, os.X_OK):
