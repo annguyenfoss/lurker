@@ -6,7 +6,8 @@ license.workspace = true
 
 [dependencies]
 serde.workspace = true
-libc = "0.2"
+# NetBSD mount-table ABI compatibility requires the corrected getmntinfo binding.
+libc = "0.2.191"
 serde_json.workspace = true
 rpassword = "7.5"
 
