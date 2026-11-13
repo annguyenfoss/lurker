@@ -179,6 +179,15 @@ class OwnedClone:
         require(recorded["disk_identity"] == {"device": metadata.st_dev, "inode": metadata.st_ino},
                 "Clone disk inode changed")
 
+    def event(self, operation, **details):
+        event = {"schema": 1, "run": self.manifest["run"], "domain_uuid": self.manifest["uuid"],
+                 "operation": operation, "time_ns": time.time_ns(), **details}
+        path = self.directory / "hypervisor-events.jsonl"
+        with open(path, "a", opener=lambda p, f: os.open(p, f, 0o600)) as output:
+            output.write(json.dumps(event) + "\n")
+            output.flush()
+            os.fsync(output.fileno())
+
     def create(self):
         self.verify_disk()
         self.verify_network()
@@ -189,11 +198,15 @@ class OwnedClone:
         require(xml == expected, "Saved clone XML changed")
         virsh("create", self.directory / "clone.xml")
         self.verify_domain()
+        self.event("boot", method="libvirt-create")
 
     def poweroff(self):
         self.verify_disk()
         self.verify_domain()
+        self.event("poweroff-intent", method="libvirt-destroy", disk=self.manifest["disk"])
         virsh("destroy", self.manifest["uuid"])
+        require(self.manifest["uuid"] not in virsh("list", "--all", "--uuid").split(), "Transient clone remains defined")
+        self.event("poweroff-complete", method="libvirt-destroy")
 
     def lease(self):
         self.verify_domain()
