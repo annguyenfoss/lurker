@@ -41,6 +41,8 @@ The container format is intended to be interchangeable after unmounting, subject
 
 No comparative throughput or latency benchmark has been run. The userspace route adds two FUSE layers and a 192 MiB LKL memory arena per mounted filesystem, plus VeraCrypt buffers. Extra overhead is an architectural expectation, not a measured slowdown.
 
+Interactive LUKS creation retains two passphrase entries. Lurker validates staged-file publication and explicit destructive `--force` itself, then uses native batch mode with explicit passphrase verification to avoid a second cryptsetup `YES` confirmation.
+
 ## Bundled privileged-route creator
 
 The privileged route discovers `lurker-veracrypt-create` beside the application under `backends/` or `userspace/`, in the package prefix at `../libexec/lurker/backends`, then under `/usr/lib/lurker/{backends,userspace}`. It does not search PATH for a separate VeraCrypt application. Normal-user developer runs may set `LURKER_BACKEND_DIR`; root ignores that override. Missing creator disables only VeraCrypt creation, not LUKS or mounting existing VeraCrypt files.

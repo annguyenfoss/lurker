@@ -1144,7 +1144,11 @@ fn luks_format(
             "Failed to format LUKS container",
         )
     } else {
-        args.push(OsString::from("-y"));
+        // Lurker has already checked staged-file publication or explicit
+        // destructive --force. Suppress the duplicate native YES question,
+        // while explicitly retaining both passphrase entries in batch mode.
+        args.push(OsString::from("--batch-mode"));
+        args.push(OsString::from("--verify-passphrase"));
         args.push(OsString::from("luksFormat"));
         args.push(target.as_os_str().to_os_string());
         ctx.run_command(
