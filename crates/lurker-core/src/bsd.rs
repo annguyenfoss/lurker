@@ -11,6 +11,8 @@ use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
+#[cfg(target_os = "freebsd")]
+use std::os::unix::fs::DirBuilderExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -18,6 +20,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[cfg(target_os = "freebsd")]
 mod freebsd;
+#[cfg(target_os = "freebsd")]
+mod pefs;
 #[cfg(target_os = "freebsd")]
 use freebsd as native;
 #[cfg(target_os = "netbsd")]
@@ -57,9 +61,9 @@ struct Identity {
 impl Identity {
     fn read(path: &Path) -> AppResult<Self> {
         let m = fs::metadata(path).map_err(|e| AppError::io("Inspect container identity", e))?;
-        if !m.is_file() {
+        if !m.is_file() && !m.is_dir() {
             return Err(AppError::new(
-                "BSD native containers must be regular files.",
+                "BSD container sources must be regular files or directories.",
             ));
         }
         Ok(Self {
@@ -91,6 +95,8 @@ struct Session {
     backing: Option<String>,
     mapped: Option<String>,
     mounted: Option<Mounted>,
+    #[serde(default)]
+    intended_mountpoint: Option<PathBuf>,
     readonly: bool,
 }
 
@@ -264,7 +270,11 @@ fn check_backend(kind: VolumeType) -> AppResult<VolumeType> {
     Ok(kind)
 }
 
-fn credential(password: Option<&str>, keyfile: Option<&Path>, confirm: bool) -> AppResult<Credential> {
+fn credential(
+    password: Option<&str>,
+    keyfile: Option<&Path>,
+    confirm: bool,
+) -> AppResult<Credential> {
     crate::credentials::validate(password, keyfile)?;
     if let Some(path) = keyfile {
         return Ok(Credential::Keyfile(
@@ -280,7 +290,9 @@ fn credential(password: Option<&str>, keyfile: Option<&Path>, confirm: bool) -> 
     if confirm {
         let repeated = crate::credentials::prompt_passphrase("Confirm passphrase: ")
             .map_err(|e| AppError::io("Confirm passphrase", e))?;
-        if repeated != password { return Err(AppError::new("Passphrases do not match.")); }
+        if repeated != password {
+            return Err(AppError::new("Passphrases do not match."));
+        }
     }
     Ok(Credential::Password(password.into_bytes()))
 }
@@ -292,6 +304,15 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
         ));
     }
     match command {
+        #[cfg(target_os = "freebsd")]
+        CommandAction::Create(c) if c.volume_type == VolumeType::Pefs => create_pefs(c, output),
+        #[cfg(target_os = "freebsd")]
+        CommandAction::Mount(c)
+            if c.volume_type == VolumeType::Pefs
+                || (c.volume_type == VolumeType::Auto && c.source.is_dir()) =>
+        {
+            mount_pefs(c, output)
+        }
         CommandAction::Create(c) => create(c, output),
         CommandAction::Mount(c) => mount(c, output),
         CommandAction::Unmount(c) => unmount(c, output),
@@ -299,6 +320,30 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     }
 }
 
+/// PEFS uses the native privileged route even though its source is a directory.
+/// A dangling .pefs.conf symlink is the native profile declaration, so inspect
+/// the directory entry rather than following it with Path::exists().
+pub(crate) fn handles_directory(command: &CommandAction) -> bool {
+    #[cfg(target_os = "freebsd")]
+    match command {
+        CommandAction::Create(c) => c.volume_type == VolumeType::Pefs,
+        CommandAction::Mount(c) => {
+            c.volume_type == VolumeType::Pefs
+                || (c.volume_type == VolumeType::Auto
+                    && fs::symlink_metadata(c.source.join(".pefs.conf")).is_ok()
+                    && c.source.join(".pefs.db").is_file())
+        }
+        CommandAction::Unmount(c) => c.volume_type == VolumeType::Pefs,
+        _ => false,
+    }
+    #[cfg(not(target_os = "freebsd"))]
+    {
+        let _ = command;
+        false
+    }
+}
+
+#[cfg(target_os = "netbsd")]
 fn params_path(path: &Path) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
     name.push(".cgdparams");
@@ -341,7 +386,11 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     }
     let registry = Registry::open()?;
     registry.ensure_unused(&target)?;
-    let credential = credential(c.passphrase.as_deref(), c.keyfile.as_deref(), c.passphrase.is_none() && c.keyfile.is_none())?;
+    let credential = credential(
+        c.passphrase.as_deref(),
+        c.keyfile.as_deref(),
+        c.passphrase.is_none() && c.keyfile.is_none(),
+    )?;
     let parent = target
         .parent()
         .ok_or_else(|| AppError::new("Container needs a parent directory."))?;
@@ -367,6 +416,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         backing: None,
         mapped: None,
         mounted: None,
+        intended_mountpoint: None,
         readonly: false,
     };
     registry.save(&session)?;
@@ -459,6 +509,14 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         return Err(AppError::new("Native BSD mounts do not support tags."));
     }
     let source = fs::canonicalize(&c.source).map_err(|e| AppError::io("Resolve container", e))?;
+    if !fs::metadata(&source)
+        .map_err(|e| AppError::io("Inspect container", e))?
+        .is_file()
+    {
+        return Err(AppError::new(
+            "Native BSD disk containers must be regular files.",
+        ));
+    }
     let identity = Identity::read(&source)?;
     let registry = Registry::open()?;
     registry.ensure_unused(&source)?;
@@ -482,7 +540,9 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         use std::os::unix::ffi::OsStrExt;
         let limit = if cfg!(target_os = "openbsd") { 90 } else { 80 };
         if target.as_os_str().as_bytes().len() >= limit {
-            return Err(AppError::new("Mountpoint exceeds this BSD's native mount identity limit."));
+            return Err(AppError::new(
+                "Mountpoint exceeds this BSD's native mount identity limit.",
+            ));
         }
     }
     if mounts()?.iter().any(|m| m.target == target) {
@@ -504,6 +564,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         backing: None,
         mapped: None,
         mounted: None,
+        intended_mountpoint: Some(target.clone()),
         readonly: c.readonly,
     };
     registry.save(&session)?;
@@ -563,6 +624,134 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     Ok(())
 }
 
+#[cfg(target_os = "freebsd")]
+fn create_pefs(c: CreateCommand, output: Output) -> AppResult<()> {
+    if c.source_kind != SourceKind::Directory || c.size_gb.is_some() {
+        return Err(AppError::new(
+            "PEFS creation requires a directory and does not take --size.",
+        ));
+    }
+    let registry = Registry::open()?;
+    pefs::check_runtime()?;
+    let target = absolute_destination(&c.target)?;
+    registry.ensure_unused(&target)?;
+    let credential = credential(
+        c.passphrase.as_deref(),
+        c.keyfile.as_deref(),
+        c.passphrase.is_none() && c.keyfile.is_none(),
+    )?;
+    // mkdir reserves the destination without replacing an existing directory,
+    // including an empty one. A failed initialization remains private for
+    // inspection; --force never deletes a directory's existing contents.
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&target)
+        .map_err(|e| AppError::io("Reserve new private PEFS directory", e))?;
+    if let Err(error) = pefs::initialize(&target, c.cipher, &credential) {
+        return Err(AppError::new(format!("{error}; incomplete private PEFS directory retained at {}. Inspect it before retrying.", target.display())));
+    }
+    File::open(target.join(".pefs.db"))
+        .and_then(|f| f.sync_all())
+        .map_err(|e| AppError::io("Sync PEFS verification database", e))?;
+    sync_directory(&target)?;
+    sync_directory(target.parent().unwrap())?;
+    output.success(&format!("Created PEFS directory: {}", target.display()));
+    Ok(())
+}
+
+#[cfg(target_os = "freebsd")]
+fn mount_pefs(c: MountCommand, output: Output) -> AppResult<()> {
+    if c.tag.is_some() {
+        return Err(AppError::new("PEFS mounts do not support tags."));
+    }
+    let registry = Registry::open()?;
+    pefs::check_runtime()?;
+    let source =
+        fs::canonicalize(&c.source).map_err(|e| AppError::io("Resolve PEFS directory", e))?;
+    if !source.is_dir() {
+        return Err(AppError::new("PEFS source must be a directory."));
+    }
+    registry.ensure_unused(&source)?;
+    let identity = Identity::read(&source)?;
+    let credential = credential(c.passphrase.as_deref(), c.keyfile.as_deref(), false)?;
+    if !c.mountpoint.exists() {
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&c.mountpoint)
+            .map_err(|e| AppError::io("Create PEFS mountpoint", e))?;
+    }
+    if fs::symlink_metadata(&c.mountpoint)
+        .map_err(|e| AppError::io("Inspect PEFS mountpoint", e))?
+        .file_type()
+        .is_symlink()
+    {
+        return Err(AppError::new("PEFS mountpoint must not be a symlink."));
+    }
+    let target =
+        fs::canonicalize(&c.mountpoint).map_err(|e| AppError::io("Resolve PEFS mountpoint", e))?;
+    if source.starts_with(&target) || target.starts_with(&source) {
+        return Err(AppError::new(
+            "PEFS source and mountpoint must be disjoint directories.",
+        ));
+    }
+    if mounts()?.iter().any(|m| m.target == target)
+        || fs::read_dir(&target)
+            .map_err(|e| AppError::io("Inspect PEFS mountpoint", e))?
+            .next()
+            .is_some()
+    {
+        return Err(AppError::new(
+            "PEFS mountpoint must be empty and unmounted.",
+        ));
+    }
+    let mut session = Session {
+        version: 1,
+        id: unique_id(),
+        backend: VolumeType::Pefs,
+        source: source.clone(),
+        identity,
+        backing: None,
+        mapped: None,
+        mounted: None,
+        intended_mountpoint: Some(target.clone()),
+        readonly: c.readonly,
+    };
+    registry.save(&session)?;
+    let attached = pefs::attach(&source, &target, c.readonly, &credential);
+    // Capture any owned mount even after an authentication/cleanup error, so a
+    // busy mount stays recoverable instead of losing its session record.
+    if let Some(mounted) = mounts()?.into_iter().find(|m| m.target == target) {
+        if mounted.source != source || mounted.filesystem != "pefs" {
+            return Err(AppError::new(
+                "Unexpected mount occupies the PEFS target; session retained for recovery.",
+            ));
+        }
+        session.mounted = Some(mounted);
+        registry.save(&session)?;
+    }
+    let attached = attached.and_then(|()| {
+        if session.mounted.is_none() || pefs::is_readonly(&target)? != c.readonly {
+            Err(AppError::new(
+                "PEFS mount identity or read-only mode is missing.",
+            ))
+        } else {
+            Ok(())
+        }
+    });
+    if let Err(error) = attached {
+        return match cleanup(&registry, &mut session) {
+            Ok(()) => Err(error),
+            Err(cleanup) => Err(AppError::new(format!(
+                "{error}; recoverable PEFS session {} retained: {cleanup}",
+                session.id
+            ))),
+        };
+    }
+    output.success(&format!("Mounted PEFS at {}", target.display()));
+    Ok(())
+}
+
 fn filesystem() -> &'static str {
     if cfg!(any(target_os = "netbsd", target_os = "openbsd")) {
         "ffs"
@@ -610,6 +799,13 @@ fn verify_session(s: &Session) -> AppResult<()> {
             "Container identity changed; refusing to detach any recorded resource.",
         ));
     }
+    #[cfg(target_os = "freebsd")]
+    if s.backend == VolumeType::Pefs {
+        if let Some(mounted) = &s.mounted {
+            pefs::verify_mapping(&s.source, &mounted.target)?;
+        }
+        return Ok(());
+    }
     if let Some(backing) = &s.backing {
         native::verify_backing(backing, &s.source)?;
     }
@@ -621,6 +817,13 @@ fn verify_session(s: &Session) -> AppResult<()> {
 
 fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     verify_session(s)?;
+    if s.mounted.is_none() {
+        if let Some(target) = &s.intended_mountpoint {
+            if mounts()?.iter().any(|m| &m.target == target) {
+                return Err(AppError::new("An unrecorded mount occupies the intended target; preserve this session for explicit recovery."));
+            }
+        }
+    }
     if let Some(recorded) = &s.mounted {
         let current = mounts()?;
         if let Some(now) = current.iter().find(|m| m.target == recorded.target) {
@@ -636,6 +839,7 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
             )?;
         }
         s.mounted = None;
+        s.intended_mountpoint = None;
         registry.save(s)?;
     }
     if let Some(mapped) = &s.mapped {
@@ -691,7 +895,7 @@ pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 
 pub fn probe_system() -> AppResult<SystemProbe> {
     let native = if cfg!(target_os = "freebsd") {
-        vec!["/sbin/mdconfig", "/sbin/geli"]
+        vec!["/sbin/mdconfig", "/sbin/geli", "/sbin/geom"]
     } else if cfg!(target_os = "netbsd") {
         vec!["/usr/sbin/vndconfig", "/sbin/cgdconfig"]
     } else if cfg!(target_os = "openbsd") {
