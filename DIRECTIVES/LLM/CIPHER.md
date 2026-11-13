@@ -11,14 +11,14 @@ Use this file as the source of truth for selected encryption backends and create
 | Apple encrypted disk images | ✅ | — | — | — | — | — |
 | LUKS2 | — | ✅ | — | — | — | — |
 | VeraCrypt | ✅ | ✅ | 🟦 | — | — | 🟦 |
-| age | 🟦 | 🟦 | 🟦 | 🟦 | 🟦 | 🟦 |
 | CryFS stable 1.x | — | 🟦 | — | — | — | — |
 | gocryptfs | 🟦 | 🟦 | 🟦 | — | — | — |
 
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, encrypted archives, backups and rclone crypt are excluded. Research availability is not approval to integrate.
+- age/rage is excluded: Lurker targets writable encrypted disks, filesystems and directories unlocked for use during a session. age/rage encrypts files/streams; rage-mount provides only read-only archive access, not writable directory encryption.
 - Apple disk images are the existing hdiutil backend, not FileVault/native APFS-encryption management. VeraCrypt on NetBSD/DragonFly remains an exploratory port outside approved integration scope.
 - Planned support requires native validation: gocryptfs macOS is beta and FreeBSD is basic; VeraCrypt targets FreeBSD x86-64 14+ and OpenBSD x86-64 7.8+, subject to inner-filesystem support. CryFS 2.0 alpha is excluded.
-- Existing profiles below remain authoritative. Select and document profiles for new backends during implementation; do not apply LUKS/VeraCrypt cipher options to age or folder backends automatically.
+- Existing profiles below remain authoritative. Select and document profiles for new backends during implementation; do not apply LUKS/VeraCrypt cipher options to folder backends automatically.
 
 ## Create Profile Scope
 

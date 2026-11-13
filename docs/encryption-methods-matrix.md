@@ -10,7 +10,7 @@ This inventory covers major general-purpose data-at-rest methods, plus encrypted
 
 ## Selected scope and availability (2026-11-14)
 
-✅ selected; ⬜ available but unselected. Selection is intent, not implementation or security approval. EncFS, archives, backups, rclone crypt and database/Git-specific encryption are outside the selected scope. No additional Linux backends are selected beyond LUKS, VeraCrypt, age, CryFS stable and gocryptfs.
+✅ selected; ⬜ available but unselected. Selection is intent, not implementation or security approval. age/rage, EncFS, archives, backups, rclone crypt and database/Git-specific encryption are outside the selected scope. Linux scope is LUKS, VeraCrypt, CryFS stable and gocryptfs. The authoritative scope is `../DIRECTIVES/LLM/CIPHER.md`.
 
 Availability: **N** native OS facility; **S** upstream-supported; **P** existing package/port; **E** existing beta/basic platform support; **T** proposed source-porting candidate, not a verified working port; **U** availability/effort unverified; **O** OS-specific facility absent on this OS; **L** existing port explicitly unmaintained/disabled. O does not rule out compatible readers or a major reimplementation; U never means impossible. Porting estimates are separate from security qualification.
 
@@ -22,7 +22,7 @@ Availability: **N** native OS facility; **S** upstream-supported; **P** existing
 | LUKS1 / dm-crypt | U | ⬜ N | U | ⬜ N | U | U |
 | Plain dm-crypt | O | ⬜ N | U | ⬜ N | U | U |
 | VeraCrypt | ✅ S | ✅ S | ✅ S | T | T | ✅ S |
-| age | ✅ S | ✅ S | ✅ S | ✅ P | ✅ P | ✅ P |
+| age | ⬜ S | ⬜ S | ⬜ S | ⬜ P | ⬜ P | ⬜ P |
 | CryFS stable 1.x | ⬜ S | ✅ S | T | T | T | T |
 | gocryptfs | ✅ E | ✅ S | ✅ E | T | T | T |
 | GELI | O | O | ⬜ N | O | O | O |
@@ -50,7 +50,7 @@ Qualification notes:
 
 - Keep per-OS adapters in shared core. Prefer OS tools for native storage; use libraries where their API solves a concrete integration problem. Linking does not remove kernel, driver or privilege requirements. Dynamic libraries remain runtime dependencies; static/bundled components require Lurker security updates. Package dependencies can be installed by the package manager rather than manually by users. [S135]
 - Current **macOS**: native images need no VeraCrypt install; VeraCrypt operations require the separately installed app and matching FUSE runtime. **Linux privileged**: LUKS and VeraCrypt open/close use system cryptsetup; VeraCrypt creation needs installed VeraCrypt. **Linux unprivileged**: bundled modified VeraCrypt/LKL helpers replace that dependency; AUR recipes include them, plain Cargo builds do not. See `linux-userspace.md` and `../README.md`.
-- **age vs rage:** one interoperable format, Go and Rust implementations. Prefer one external backend across OSes initially: age has researched packages across all four BSDs. Rust Lurker can invoke Go age; separate OS builds do not require different backends. Embedding rage's Rust `age` crate is a separate option; its pre-1.0 documentation labels it beta. Check version/plugin/recipient compatibility. [S40 S41 S136]
+- **age vs rage:** interoperable Go/Rust implementations, retained as research only. Neither provides a writable encrypted directory: files/streams require separate encryption/decryption, and rage-mount exposes encrypted archives read-only. They do not fit Lurker's session-unlock storage workflow and are excluded from integration, including the Rust `age` library. [S40 S41 S136]
 - **VeraCrypt NetBSD/DragonFly:** start console-only and file-only, reuse existing BSD code and preserve crypto/format logic. Build/self-tests → disposable-container interoperability → mount/write/unmount/reopen → failure/read-only/busy-mount tests. Expected work: build/OS detection, dependencies, FUSE, virtual disks, mount discovery and cleanup. NetBSD provides PUFFS/librefuse; that does not prove VeraCrypt compatibility. Initial investigation could take hours; reliable porting may take days/weeks. These are untested estimates, not promised schedules; other T cells need individual feasibility checks. [S137 S138 S139]
 - **HAMMER/HAMMER2:** no qualified native filesystem-encryption backend. Use HAMMER2 above DragonFly's encrypted block mapping; it is an inner filesystem, not another encryption method. The current HAMMER2 utility has no encryption controls. [S12 S140]
 
