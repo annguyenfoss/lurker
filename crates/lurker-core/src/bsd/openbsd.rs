@@ -151,18 +151,40 @@ pub(super) fn format(
     assemble(device, credential, true)
 }
 
-/// A mount must never turn a damaged or unrelated image into a new volume.
-/// bioctl's create/assemble command does both, so qualify native metadata first.
-fn require_crypto_header(device: &str) -> AppResult<()> {
+/// Probe only native CRYPTO metadata. This never calls bioctl or writes a
+/// label: Auto dispatch may try VeraCrypt only when this returns false, never
+/// after native authentication fails. Other storage I/O errors fail closed.
+pub(super) fn probe_crypto_header(device: &str) -> AppResult<bool> {
     let name = device_name(device, "vnd")?;
-    let mut file = File::open(format!("/dev/r{name}a"))
-        .map_err(|e| AppError::io("Read softraid metadata", e))?;
-    file.seek(SeekFrom::Start(8192))
+    let mut file = match File::open(format!("/dev/r{name}a")) {
+        Ok(file) => file,
+        // Unlabeled/random/VeraCrypt images need not expose partition 'a'.
+        Err(error) if matches!(error.raw_os_error(), Some(libc::ENXIO | libc::ENOENT)) => {
+            return Ok(false)
+        }
+        Err(error) => return Err(AppError::io("Read softraid metadata", error)),
+    };
+    probe_crypto_reader(&mut file)
+}
+
+fn probe_crypto_reader(reader: &mut (impl Read + Seek)) -> AppResult<bool> {
+    reader
+        .seek(SeekFrom::Start(8192))
         .map_err(|e| AppError::io("Seek softraid metadata", e))?;
     let mut bytes = [0u8; 56];
-    file.read_exact(&mut bytes)
-        .map_err(|e| AppError::io("Read softraid metadata", e))?;
-    if !is_crypto_header(&bytes) {
+    match reader.read_exact(&mut bytes) {
+        Ok(()) => Ok(is_crypto_header(&bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(error) => Err(AppError::io("Read softraid metadata", error)),
+    }
+}
+
+/// bioctl -c C both creates and assembles volumes. Missing native metadata must
+/// never reach that command during mount. Metadata with a valid native header
+/// but a corrupt checksum is rejected by the kernel's sr_meta_read/validate;
+/// it is not treated as a new volume, and no force flag is ever supplied.
+fn require_crypto_header(device: &str) -> AppResult<()> {
+    if !probe_crypto_header(device)? {
         return Err(AppError::new("No qualified single-chunk softraid CRYPTO metadata found; refusing to initialize during mount."));
     }
     Ok(())
@@ -336,6 +358,45 @@ mod tests {
         assert!(!is_crypto_header(&header));
     }
 
+    #[test]
+    fn metadata_probe_uses_native_offset_and_rejects_truncation() {
+        let mut header = [0u8; 56];
+        header[..8].copy_from_slice(&0x4d4152436372616du64.to_ne_bytes());
+        header[8..12].copy_from_slice(&6u32.to_ne_bytes());
+        header[32..36].copy_from_slice(&1u32.to_ne_bytes());
+        header[52..56].copy_from_slice(&u32::from(b'C').to_ne_bytes());
+        let mut bytes = vec![0u8; 8192 + header.len()];
+        bytes[..header.len()].copy_from_slice(&header);
+        assert!(!probe_crypto_reader(&mut std::io::Cursor::new(&bytes)).unwrap());
+        bytes[8192..].copy_from_slice(&header);
+        assert!(probe_crypto_reader(&mut std::io::Cursor::new(&bytes)).unwrap());
+        assert!(
+            !probe_crypto_reader(&mut std::io::Cursor::new(&bytes[..bytes.len() - 1])).unwrap()
+        );
+        assert!(!probe_crypto_reader(&mut std::io::Cursor::new(&[])).unwrap());
+        for field in [0, 8, 32, 52] {
+            let mut malformed = bytes.clone();
+            malformed[8192 + field] ^= 1;
+            assert!(!probe_crypto_reader(&mut std::io::Cursor::new(&malformed)).unwrap());
+        }
+    }
+
+    #[test]
+    fn metadata_probe_does_not_hide_storage_read_errors() {
+        struct Unreadable;
+        impl Read for Unreadable {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+            }
+        }
+        impl Seek for Unreadable {
+            fn seek(&mut self, _: SeekFrom) -> std::io::Result<u64> {
+                Ok(8192)
+            }
+        }
+        assert!(probe_crypto_reader(&mut Unreadable).is_err());
+    }
+
     /// A hard-link alias is the same object, while a reused vnode number is not.
     #[cfg(target_os = "openbsd")]
     #[test]
@@ -391,8 +452,10 @@ mod tests {
         drop(file);
         let credential = Credential::Password(b"native disposable softraid test secret".to_vec());
         let device = attach_file(&image, false).unwrap();
+        assert!(!probe_crypto_header(&device).unwrap());
         assert!(unlock(&device, false, &credential).is_err());
         let mapped = format(&device, CreateCipher::Aes, &credential).unwrap();
+        assert!(probe_crypto_header(&device).unwrap());
         verify_mapping(&mapped, &device).unwrap();
         make_filesystem(&mapped).unwrap();
         let mountpoint = root.join("mounted");
