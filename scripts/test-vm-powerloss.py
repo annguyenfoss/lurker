@@ -152,11 +152,18 @@ class OwnedClone:
         xml = ET.fromstring(virsh("net-dumpxml", self.manifest["network_uuid"]))
         require(xml.findtext("name") == self.manifest["network"], "Network name changed")
         require(xml.findtext("uuid") == self.manifest["network_uuid"], "Network UUID changed")
+        require(xml.findtext("description") == self.manifest["marker"], "Network ownership marker changed")
+        require(xml.find("dns") is not None and xml.find("dns").get("enable") == "no", "Network DNS must remain disabled")
         require(xml.find("forward") is None, "Fault network must remain isolated")
         require(xml.find("bridge").get("name") == self.manifest["bridge"], "Bridge changed")
         subnet = ipaddress.ip_network(self.manifest["subnet"])
         require(xml.find("ip").get("address") == str(subnet[1]) and
                 xml.find("ip").get("netmask") == str(subnet.netmask), "Network subnet changed")
+        addresses = xml.findall("ip")
+        require(len(addresses) == 1, "Network must have exactly one reviewed subnet")
+        hosts = xml.findall("ip/dhcp/host")
+        require(len(hosts) == 1 and hosts[0].get("mac") == self.manifest["mac"] and
+                hosts[0].get("ip") == str(subnet[10]), "Clone DHCP identity changed")
         return xml
 
     def verify_domain(self):
@@ -276,7 +283,8 @@ def prepare(os_name, run_id, subnet, bandwidth):
 
 def copy_and_boot(clone):
     m = clone.manifest
-    require(not Path(m["disk"]).exists(), "Copy destination already exists")
+    destination = Path(m["disk"])
+    require(not destination.exists() and not destination.is_symlink(), "Copy destination already exists or is a symlink")
     require(virsh("dumpxml", m["source"], "--inactive") == (clone.directory / "source-inactive.xml").read_text(), "Source XML changed")
     require(disk_source(virsh("dumpxml", m["source"])) == m["source_disk"], "Source disk changed")
     require("No current block job" in virsh("blockjob", m["source"], "vda", "--info"), "Preexisting block job")

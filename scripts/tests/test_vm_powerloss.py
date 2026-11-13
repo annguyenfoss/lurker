@@ -128,6 +128,26 @@ class Ownership(unittest.TestCase):
                 clone.create()
         call.assert_not_called()
 
+    def test_dangling_copy_destination_rejected_before_libvirt(self):
+        clone = VM.OwnedClone.load(self.directory)
+        (self.directory / "root.qcow2").symlink_to(self.directory / "missing")
+        with patch.object(VM, "virsh") as call:
+            with self.assertRaisesRegex(RuntimeError, "symlink"):
+                VM.copy_and_boot(clone)
+        call.assert_not_called()
+
+    def test_network_policy_replacement_rejected(self):
+        clone = VM.OwnedClone.load(self.directory)
+        xml = VM.network_xml(self.m)
+        for before, after in ((self.m["marker"], "foreign-marker"), ('enable="no"', 'enable="yes"'),
+                              (self.m["mac"], "52:54:00:00:00:00"), ("192.168.231.10", "192.168.231.11"),
+                              ("255.255.255.0", "255.255.0.0")):
+            with self.subTest(field=before), patch.object(VM, "virsh", return_value=xml.replace(before, after)):
+                with self.assertRaises(RuntimeError):
+                    clone.verify_network()
+        with patch.object(VM, "virsh", return_value=xml):
+            clone.verify_network()
+
 
 class GuestFixture(unittest.TestCase):
     def test_owned_persistent_home_marker_and_permissions(self):
