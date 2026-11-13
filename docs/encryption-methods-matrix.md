@@ -8,6 +8,52 @@ Lurker can provide useful native encryption management on each OS without requir
 
 This inventory covers major general-purpose data-at-rest methods, plus encrypted archives, backups, and specialized file formats that could plausibly fit Lurker. It does not count AES, ChaCha20, KDFs, transport encryption, password managers, or every commercial frontend as separate storage methods. Tomb, SiriKali, Plasma Vault, cryptmount, and systemd-homed manage other backends; they are not additional encryption formats. Age and rage implement one format, as do gocryptfs and cppcryptfs. Separate rows for LUKS1/LUKS2 and EncFS/CryFS generations capture materially different compatibility or maturity.
 
+## Selected scope and availability (2026-11-14)
+
+✅ selected; ⬜ available but unselected. Selection is intent, not implementation or security approval. EncFS, archives, backups, rclone crypt and database/Git-specific encryption are outside the selected scope. No additional Linux backends are selected beyond LUKS, VeraCrypt, age, CryFS stable and gocryptfs.
+
+Availability: **N** native OS facility; **S** upstream-supported; **P** existing package/port; **E** existing beta/basic platform support; **T** proposed source-porting candidate, not a verified working port; **U** availability/effort unverified; **O** OS-specific facility absent on this OS; **L** existing port explicitly unmaintained/disabled. O does not rule out compatible readers or a major reimplementation; U never means impossible. Porting estimates are separate from security qualification.
+
+| Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD |
+| --- | --- | --- | --- | --- | --- | --- |
+| FileVault / native APFS encryption | ⬜ N | O | O | O | O | O |
+| Apple encrypted disk images | ✅ N | U | U | U | U | U |
+| LUKS2 / dm-crypt | U | ✅ N | U | U | U | U |
+| LUKS1 / dm-crypt | U | ⬜ N | U | ⬜ N | U | U |
+| Plain dm-crypt | O | ⬜ N | U | ⬜ N | U | U |
+| VeraCrypt | ✅ S | ✅ S | ✅ S | T | T | ✅ S |
+| age | ✅ S | ✅ S | ✅ S | ✅ P | ✅ P | ✅ P |
+| CryFS stable 1.x | ⬜ S | ✅ S | T | T | T | T |
+| gocryptfs | ✅ E | ✅ S | ✅ E | T | T | T |
+| GELI | O | O | ⬜ N | O | O | O |
+| CGD | O | O | O | O | ⬜ N | O |
+| softraid CRYPTO / RAID1C | O | O | O | O | O | ⬜ N |
+| OpenZFS native encryption | U | ⬜ S | ⬜ N | U | U | U |
+| fscrypt | O | ⬜ N | O | O | O | O |
+| PEFS | O | O | ⬜ P | O | O | O |
+| Cryptomator | ⬜ S | ⬜ S | T | T | T | T |
+| securefs | ⬜ S | ⬜ S | ⬜ S | T | T | T |
+| OpenPGP / GnuPG | ⬜ S | ⬜ S | ⬜ P | ⬜ P | ⬜ P | ⬜ P |
+| OpenSSL CMS | ⬜ S | ⬜ S | ⬜ P | ⬜ P | ⬜ P | ⬜ P |
+| scrypt encrypted-file format | ⬜ P | ⬜ P | ⬜ P | L | ⬜ P | ⬜ P |
+| Loop-AES | O | ⬜ S | O | O | O | O |
+
+Qualification notes:
+
+- **Apple:** FileVault is supported startup-volume protection, not an encrypted container. Lurker implements AES-256 disk images via hdiutil with unencrypted APFS inside; it does not implement FileVault/native APFS-encryption management. [S04 S05 S06 S07]
+- **DragonFly:** native dm-crypt and documented LUKS1 support exist; they must remain visible despite pending security review. Bundled cryptsetup identifies itself as 1.1.2; check patches/profiles rather than assuming age proves insecurity. LUKS2 support is unverified. The checked GnuPG package also needs a supported replacement or verified backports. [S10 S11 S12 S44 S47 S94]
+- **VeraCrypt:** upstream supports FreeBSD x86-64 14+ and OpenBSD x86-64 7.8+. NetBSD/DragonFly remain unselected porting experiments. Inner-filesystem support is independent of crypto-format support. [S13]
+- **Folders:** gocryptfs has a historical audit, macOS beta and FreeBSD basic support; those OS paths still need validation. CryFS means maintained stable 1.x with recovery limitations, never the data-loss-warning 2.0 alpha. PEFS requires a matching kernel/module; securefs has narrower independent assurance. EncFS legacy is unmaintained and its Rust rewrite lacks sufficient assurance for new-vault admission. [S31 S34 S38 S39 S80 S82 S83 S108]
+- **Other files:** qualify maintained package versions, use an authenticated CMS profile, and do not substitute system LibreSSL for the researched OpenSSL backend. ZFS port presence alone does not establish encryption support. Historical audits are evidence, not certification of all current code/platforms. [S25 S26 S49 S50]
+
+### Implementation and porting decisions
+
+- Keep per-OS adapters in shared core. Prefer OS tools for native storage; use libraries where their API solves a concrete integration problem. Linking does not remove kernel, driver or privilege requirements. Dynamic libraries remain runtime dependencies; static/bundled components require Lurker security updates. Package dependencies can be installed by the package manager rather than manually by users. [S135]
+- Current **macOS**: native images need no VeraCrypt install; VeraCrypt operations require the separately installed app and matching FUSE runtime. **Linux privileged**: LUKS and VeraCrypt open/close use system cryptsetup; VeraCrypt creation needs installed VeraCrypt. **Linux unprivileged**: bundled modified VeraCrypt/LKL helpers replace that dependency; AUR recipes include them, plain Cargo builds do not. See `linux-userspace.md` and `../README.md`.
+- **age vs rage:** one interoperable format, Go and Rust implementations. Prefer one external backend across OSes initially: age has researched packages across all four BSDs. Rust Lurker can invoke Go age; separate OS builds do not require different backends. Embedding rage's Rust `age` crate is a separate option; its pre-1.0 documentation labels it beta. Check version/plugin/recipient compatibility. [S40 S41 S136]
+- **VeraCrypt NetBSD/DragonFly:** start console-only and file-only, reuse existing BSD code and preserve crypto/format logic. Build/self-tests → disposable-container interoperability → mount/write/unmount/reopen → failure/read-only/busy-mount tests. Expected work: build/OS detection, dependencies, FUSE, virtual disks, mount discovery and cleanup. NetBSD provides PUFFS/librefuse; that does not prove VeraCrypt compatibility. Initial investigation could take hours; reliable porting may take days/weeks. These are untested estimates, not promised schedules; other T cells need individual feasibility checks. [S137 S138 S139]
+- **HAMMER/HAMMER2:** no qualified native filesystem-encryption backend. Use HAMMER2 above DragonFly's encrypted block mapping; it is an inner filesystem, not another encryption method. The current HAMMER2 utility has no encryption controls. [S12 S140]
+
 ## How to read the matrix
 
 Platform codes describe the method or implementation, not an existing Lurker port:
@@ -201,7 +247,7 @@ These rows preserve the broader survey without presenting legacy or experimental
 
 ## Native priorities for each OS
 
-These are proposed Lurker priorities. They do not require an OS to read another OS's native format.
+These are broader research priorities, not selected implementation scope; the selected-scope matrix above takes precedence. They do not require an OS to read another OS's native format.
 
 | OS | Disk or existing filesystem management | File containers | Folder protection | File encryption | Main integration constraint |
 | --- | --- | --- | --- | --- | --- |
@@ -243,7 +289,9 @@ The following fee assessments describe integration through the OS interface or i
 | FUSE-T | Personal use is free; a separately installed compatible runtime is distinct from embedding it | The current site offers a commercial licence for embedding and shipping FUSE-T in a product. That bundled route is outside the no-paid-licence shortlist. [S129] |
 | WinFsp | GPLv3 and its FLOSS exception provide an open-source route | Commercial licensing is an alternative. Lurker's chosen distribution must satisfy the free licence/exception rather than assuming the commercial licence is necessary. [S130] |
 
-### Shortlist by OS without paid backends
+### Research shortlist by OS without paid backends
+
+This records available options, not selected features; archives, backups and rclone crypt below remain outside the selected scope.
 
 | OS | Disk or container | Folder or filesystem | File or archive | Backup |
 | --- | --- | --- | --- | --- |
@@ -265,7 +313,7 @@ Separate **format**, **implementation**, **storage representation**, **internal 
 
 Make elevation operation-specific. A normal user may read a header or encrypt an owned file even when creating a mapping requires a helper. Installed FUSE/WinFsp/Dokany support may enable routine user mounting but does not prove that driver installation, physical-device access, or all filesystem operations are unprivileged. Record the real state after partial failures and preserve recoverable sessions on busy unmounts.
 
-Use task-oriented entry points: protect a disk, create a container, protect a folder, encrypt files, and optionally back up data. Choose an appropriate default for the detected OS and task; existing-data compatibility can select another backend. Do not expose a list of cipher names as though they were equivalent storage products.
+Use task-oriented entry points: protect a disk, create a container, protect a folder, and encrypt files. Backups are outside the selected scope. Choose an appropriate default for the detected OS and task; existing-data compatibility can select another backend. Do not expose a list of cipher names as though they were equivalent storage products.
 
 Before promoting a backend/OS pair, validate it on that OS: create/open/close, wrong credentials, reboot/session recovery, read-only behavior, credential changes, backup/restore of recovery metadata, interrupted writes, full storage, busy locks/unmounts, Unicode names, permissions and minimum dependency versions. Test destructive operations on disposable virtual disks. CLI/core portability and Slint/winit desktop portability need separate validation. Existing project directives still describe implemented Linux/macOS behavior; this document is research and does not claim the additional ports are implemented.
 
@@ -409,5 +457,11 @@ URLs are primary references inspected during the survey. Current/default manual 
 | S132 | Tarsnap service pricing | https://www.tarsnap.com/ |
 | S133 | VeraCrypt component and redistribution licence terms | https://github.com/veracrypt/VeraCrypt/blob/master/License.txt |
 | S134 | CryptoFS free AGPL and alternative commercial licensing | https://github.com/cryptomator/cryptofs |
+| S135 | libcryptsetup public API and device operations | https://raw.githubusercontent.com/mbroz/cryptsetup/master/lib/libcryptsetup.h |
+| S136 | Rust age library API, interoperability and beta notice | https://docs.rs/age/latest/age/ |
+| S137 | VeraCrypt upstream build requirements | https://raw.githubusercontent.com/veracrypt/VeraCrypt/master/src/Readme.txt |
+| S138 | VeraCrypt OpenBSD virtual-disk and mount adapter | https://raw.githubusercontent.com/veracrypt/VeraCrypt/master/src/Core/Unix/OpenBSD/CoreOpenBSD.cpp |
+| S139 | NetBSD PUFFS and FUSE compatibility | https://netbsd.org/docs/puffs/ |
+| S140 | HAMMER2 management interface | https://man.dragonflybsd.org/?command=hammer2&section=8 |
 
 ArchWiki's data-at-rest inventory was used to check coverage, not as the sole authority for an implementation's current support: https://wiki.archlinux.org/title/Data-at-rest_encryption . The older Ubuntu community encrypted-filesystems page now redirects to an archive notice, so it is not current maintenance evidence: https://wiki.ubuntu.com/EncryptedFilesystems .
