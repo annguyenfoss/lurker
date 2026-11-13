@@ -212,6 +212,15 @@ def require_executable(path):
         fail("required executable missing or unsafe: " + str(path))
 
 
+def verify_bsd_patches(manifest, source):
+    name = "native/bsd-veracrypt/auxiliary-path.patch"
+    actual = hashlib.sha256(source.read(name)).hexdigest()
+    if source.constant("scripts/build-bsd-backends.py", "PATCH_SHA256") != actual:
+        fail("BSD VeraCrypt source patch differs from its reviewed digest")
+    if manifest.get("patches") != [{"path": name, "sha256": actual}]:
+        fail("BSD VeraCrypt artifact patch provenance differs from exact source")
+
+
 def validate_backend(kind, directory, source):
     root = safe_root(directory)
     list(entries(root))
@@ -264,6 +273,7 @@ def validate_backend(kind, directory, source):
     else:
         manifest = json_file(root / "bsd-veracrypt-source.json")
         verify_platform(manifest)
+        verify_bsd_patches(manifest, source)
         pins = source.constant("scripts/build-bsd-backends.py", "PINS")
         actual_pins = manifest.get("sources", {})
         expected_pins = {key: value for key, value in pins.items() if key != "libiconv" or platform.system() == "FreeBSD"}

@@ -138,6 +138,20 @@ class PackagingPolicy(unittest.TestCase):
         with mock.patch.object(stager.platform, "system", return_value="FreeBSD"), mock.patch.object(stager.platform, "machine", return_value="amd64"):
             stager.verify_platform({"target": {"GOOS": "freebsd", "GOARCH": "amd64"}, "build_platform": "Linux"})
 
+    def test_bsd_patch_identity_binds_manifest_to_exact_source_bytes(self):
+        source = mock.Mock()
+        source.read.return_value = b"reviewed patch"
+        import hashlib
+        expected = hashlib.sha256(b"reviewed patch").hexdigest()
+        source.constant.return_value = expected
+        manifest = {"patches": [{"path": "native/bsd-veracrypt/auxiliary-path.patch", "sha256": expected}]}
+        stager.verify_bsd_patches(manifest, source)
+        with self.assertRaisesRegex(ValueError, "artifact patch provenance"):
+            stager.verify_bsd_patches({"patches": []}, source)
+        source.read.return_value = b"different patch"
+        with self.assertRaisesRegex(ValueError, "reviewed digest"):
+            stager.verify_bsd_patches(manifest, source)
+
     def _stage_fixture(self):
         binaries = self.root / "binaries"
         binaries.mkdir()
