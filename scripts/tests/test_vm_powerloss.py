@@ -88,7 +88,7 @@ class Ownership(unittest.TestCase):
     def test_replaced_clone_cannot_authorize_destroy(self):
         clone = VM.OwnedClone.load(self.directory)
         xml = VM.clone_xml(SOURCE, self.m).replace("owned-uuid", "foreign-uuid")
-        with patch.object(VM, "virsh", return_value=xml) as call:
+        with patch.object(VM.OwnedClone, "verify_disk"), patch.object(VM, "virsh", return_value=xml) as call:
             with self.assertRaises(RuntimeError):
                 clone.poweroff()
         self.assertEqual(call.call_count, 1)
@@ -98,7 +98,7 @@ class Ownership(unittest.TestCase):
         clone = VM.OwnedClone.load(self.directory)
         (self.directory / "source-inactive.xml").write_text(SOURCE)
         (self.directory / "clone.xml").write_text(SOURCE)
-        with patch.object(VM.OwnedClone, "verify_network"), patch.object(VM, "virsh") as call:
+        with patch.object(VM.OwnedClone, "verify_disk"), patch.object(VM.OwnedClone, "verify_network"), patch.object(VM, "virsh") as call:
             with self.assertRaises(RuntimeError):
                 clone.create()
         call.assert_not_called()
@@ -108,6 +108,24 @@ class Ownership(unittest.TestCase):
         with patch.object(VM.OwnedClone, "verify_domain"), patch.object(VM, "virsh", return_value="10.11.1.18/24"), patch.object(VM, "run") as call:
             with self.assertRaises(RuntimeError):
                 clone.ssh("true")
+        call.assert_not_called()
+
+    def test_disk_symlink_cannot_authorize_boot_or_poweroff(self):
+        clone = VM.OwnedClone.load(self.directory)
+        (self.directory / "root.qcow2").symlink_to("/original")
+        with patch.object(VM, "virsh") as call:
+            for action in (clone.create, clone.poweroff):
+                with self.assertRaises(RuntimeError):
+                    action()
+        call.assert_not_called()
+
+    def test_replaced_disk_inode_rejected(self):
+        clone = VM.OwnedClone.load(self.directory)
+        (self.directory / "root.qcow2").write_bytes(b"fixture")
+        VM.write_json(self.directory / "copy-result.json", {"disk_identity": {"device": -1, "inode": -1}})
+        with patch.object(VM, "virsh") as call:
+            with self.assertRaisesRegex(RuntimeError, "inode"):
+                clone.create()
         call.assert_not_called()
 
 

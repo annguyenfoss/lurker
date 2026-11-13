@@ -19,6 +19,7 @@ import re
 import secrets
 import shutil
 import sqlite3
+import stat
 import sys
 import subprocess
 import time
@@ -153,8 +154,9 @@ class OwnedClone:
         require(xml.findtext("uuid") == self.manifest["network_uuid"], "Network UUID changed")
         require(xml.find("forward") is None, "Fault network must remain isolated")
         require(xml.find("bridge").get("name") == self.manifest["bridge"], "Bridge changed")
-        require(xml.find("ip").get("address") == str(ipaddress.ip_network(self.manifest["subnet"])[1]),
-                "Network address changed")
+        subnet = ipaddress.ip_network(self.manifest["subnet"])
+        require(xml.find("ip").get("address") == str(subnet[1]) and
+                xml.find("ip").get("netmask") == str(subnet.netmask), "Network subnet changed")
         return xml
 
     def verify_domain(self):
@@ -169,7 +171,16 @@ class OwnedClone:
         require(interfaces[0].find("mac").get("address") == self.manifest["mac"], "Clone MAC changed")
         self.verify_network()
 
+    def verify_disk(self):
+        path = Path(self.manifest["disk"])
+        metadata = path.lstat()
+        require(stat.S_ISREG(metadata.st_mode) and not path.is_symlink(), "Clone disk is not a regular private file")
+        recorded = json.loads((self.directory / "copy-result.json").read_text())
+        require(recorded["disk_identity"] == {"device": metadata.st_dev, "inode": metadata.st_ino},
+                "Clone disk inode changed")
+
     def create(self):
+        self.verify_disk()
         self.verify_network()
         xml = (self.directory / "clone.xml").read_text()
         # Compare the saved definition to a fresh deterministic derivation, so
@@ -180,6 +191,7 @@ class OwnedClone:
         self.verify_domain()
 
     def poweroff(self):
+        self.verify_disk()
         self.verify_domain()
         virsh("destroy", self.manifest["uuid"])
 
@@ -271,7 +283,10 @@ def copy_and_boot(clone):
     require("No current block job" in virsh("blockjob", m["source"], "vda", "--info"), "Copy job still active")
     image = json.loads(run(["qemu-img", "info", "--output=json", m["disk"]]))
     require(not image.get("backing-filename"), "Clone image must have no backing file")
-    write_json(clone.directory / "copy-result.json", {"status": "passed", "source_unchanged": True, "image": image})
+    disk_metadata = Path(m["disk"]).lstat()
+    require(stat.S_ISREG(disk_metadata.st_mode), "Copied disk is not a regular file")
+    write_json(clone.directory / "copy-result.json", {"status": "passed", "source_unchanged": True, "image": image,
+               "disk_identity": {"device": disk_metadata.st_dev, "inode": disk_metadata.st_ino}})
     virsh("net-create", clone.directory / "network.xml")
     clone.create()
     print(json.dumps({"status": "booting", "directory": str(clone.directory), "name": m["name"]}), flush=True)
