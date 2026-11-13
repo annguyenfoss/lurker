@@ -59,3 +59,22 @@ Use only disposable `/tmp/lurker-*` files for native tests:
 ```bash
 TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 ```
+
+Native development evidence on macOS 27.2.1 arm64 / SDK 27.2:
+
+- The app/DMG builds, nested signatures and dependency checks pass; the packaged
+  private VeraCrypt, gocryptfs and Java helper start without external Go/Java/
+  VeraCrypt. The offline native rebuild reuses verified source/wx caches.
+- Apple images pass the packaged CLI lifecycle, SQLite WAL and safety suite.
+  Native Mac core unit tests cover raw-image detection and hardlink identities.
+- VeraCrypt AES/Serpent/Twofish each reached application I/O through the packaged
+  CLI. Subsequent tests found/fixed Unicode listing and hardlink safety bugs.
+  The final FUSE-T 1.2.9 run still failed during native creation with an operation
+  timeout. This combination remains unqualified; a successful small-image run
+  does not establish reliable create/mount behavior across sizes or load.
+- gocryptfs requires macFUSE, absent on that host. CryFS/FUSE-T cannot enable
+  SQLite WAL; Cryptomator's experimental upstream FUSE-T provider also failed WAL.
+  Cryptomator uses its macFUSE provider in production. These directory backends
+  still need native application/lifecycle qualification with compatible macFUSE.
+
+These are development results, not a full macOS support or public-release claim.
