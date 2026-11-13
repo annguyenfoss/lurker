@@ -329,6 +329,21 @@ class Suite:
             raise AssertionError("Rejected duplicate unexpectedly attached a second mount; retained")
         self.verify()
 
+    def aliased_duplicate(self):
+        alias = self.root / "source alias"
+        if self.source.is_dir():
+            alias.symlink_to(self.source, target_is_directory=True)
+        else:
+            os.link(self.source, alias)
+            params = self.source.with_name(self.source.name + ".cgdparams")
+            if params.exists():
+                # Missing recovery params must not be the reason an alias fails.
+                os.link(params, alias.with_name(alias.name + ".cgdparams"))
+        self.cli(self.args("mount", alias, self.other_mount), expected=False, password=self.password)
+        if os.path.ismount(self.other_mount):
+            raise AssertionError("Aliased source bypassed duplicate attachment protection; retained")
+        self.verify()
+
     def busy(self):
         # The cwd belongs to this child; terminate/wait before any retry.
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"], cwd=self.mountpoint,
@@ -393,7 +408,7 @@ class Suite:
             for name, function in [
                 ("create", self.create), ("no-overwrite", self.no_overwrite),
                 ("unlock", self.mount), ("application-io", self.write_workload),
-                ("duplicate", self.duplicate), ("busy", self.busy),
+                ("duplicate", self.duplicate), ("aliased-duplicate", self.aliased_duplicate), ("busy", self.busy),
                 ("close", self.close), ("wrong-password", self.incorrect),
                 ("reopen", self.mount), ("persistence", self.verify), ("reclose", self.close),
             ]:

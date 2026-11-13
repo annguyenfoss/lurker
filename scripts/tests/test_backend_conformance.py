@@ -116,6 +116,29 @@ class HarnessTests(unittest.TestCase):
         self.assertTrue(result["timed_out"])
         self.assertNotEqual(result["exit_code"], 0)
 
+    def test_alias_duplicate_preserves_cgd_parameters_and_checks_real_mount(self):
+        suite = harness.Suite(self.options())
+        suite.source.write_bytes(b"vault")
+        params = suite.source.with_name(suite.source.name + ".cgdparams")
+        params.write_bytes(b"required parameters")
+        with mock.patch.object(suite, "cli") as cli, \
+             mock.patch.object(suite, "verify"), \
+             mock.patch.object(harness.os.path, "ismount", return_value=False):
+            suite.aliased_duplicate()
+        alias = suite.root / "source alias"
+        self.assertEqual(alias.stat().st_ino, suite.source.stat().st_ino)
+        self.assertEqual(alias.with_name(alias.name + ".cgdparams").stat().st_ino, params.stat().st_ino)
+        self.assertIn(str(alias), cli.call_args.args[0])
+        self.assertFalse(cli.call_args.kwargs["expected"])
+
+    def test_alias_duplicate_never_treats_attached_storage_as_a_pass(self):
+        suite = harness.Suite(self.options())
+        suite.source.mkdir()
+        with mock.patch.object(suite, "cli"), \
+             mock.patch.object(harness.os.path, "ismount", return_value=True):
+            with self.assertRaisesRegex(AssertionError, "bypassed duplicate"):
+                suite.aliased_duplicate()
+
     def test_profile_verification_closes_sqlite_before_unmount(self):
         suite = harness.Suite(self.options())
         (suite.mountpoint / "profile 密碼.bin").write_bytes(suite.payload)

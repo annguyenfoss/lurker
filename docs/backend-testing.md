@@ -27,7 +27,7 @@ The remote runner can invoke this as an installed-artifact stage in its custom
 specification; the stage log contains the result reference.
 
 The suite checks create, protection of an existing destination, unlock, Unicode
-and spaces, fsync, atomic rename/truncation, SQLite WAL and integrity, duplicate
+and spaces, fsync, atomic rename/truncation, SQLite WAL and integrity, duplicate and aliased-source
 attachment refusal, busy close refusal, close, wrong credentials, reopen and
 persisted contents, and read-only storage. Passwords are generated only in memory
 and sent through a controlling PTY; logs redact credentials and echoing fails the
