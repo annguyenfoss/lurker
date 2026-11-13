@@ -107,3 +107,25 @@ SSH connection repeats route and MAC verification and retains strict original
 `HostKeyAlias` trust. A changed bridge, gateway, neighbor MAC or incomplete ARP
 entry fails closed. Persist the clone's static guest configuration so recovery
 uses the same isolated address after reboot.
+
+## Native characterization evidence
+
+The first isolated proof on 2026-11-14 passed five recovery checks for packaged
+Linux LUKS2/AES at candidate `76f05fbd2167313273c53201a070252719e4f4ea`.
+The archive SHA-256 was
+`6c4b562dc7ac9766b9373eca4c628830bb5a156e415c6c6563b9df5224bf6dfe`;
+the separate PTY harness included `8bf9f0e`. Arch kernel `7.2.15-arch1-1` used
+cryptsetup 2.8.8, persistent outer Btrfs and inner Btrfs. After an acknowledged
+file fsync, rename/directory fsync and FULL/WAL commit with live SQLite/WAL file
+descriptors, the owned clone was abruptly stopped with libvirt `destroy` and
+recreated. The file digest and committed SQLite row survived; integrity passed
+and an uncommitted row remained invisible. Raw database/WAL evidence was copied
+before SQLite recovery. Normal CLI close succeeded; no filesystem repair ran.
+
+The early worker's readiness file was retained externally and its verified
+fixture parent directory explicitly fsynced before poweroff. This metadata-only
+sync did not checkpoint the encrypted filesystem or run global `sync`; subsequent
+runner versions fsync publication directories themselves. Private evidence is
+under `/mnt/virt/lurker-fault-a20261114a`, including candidate/package identity,
+external readiness, volume-copy proof, hypervisor events and guest result. This
+single case does not qualify other ciphers, backends, filesystems or platforms.
