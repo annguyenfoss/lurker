@@ -152,6 +152,24 @@ class PackagingPolicy(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reviewed digest"):
             stager.verify_bsd_patches(manifest, source)
 
+    def test_private_jvm_preload_requires_qualified_loader_anchors(self):
+        runtime = self.root / "libexec/lurker/backends/cryptomator/runtime"
+        for name in ("bin/java", "lib/libjli.so", "lib/server/libjvm.so", "lib/libjava.so"):
+            path = runtime / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"\x7fELFfixture")
+        manifest = {"backend": "cryptomator", "protocol": 1, "os": stager.platform.system(),
+                    "architecture": stager.platform.machine()}
+        (runtime.parent / "manifest.json").write_text(json.dumps(manifest))
+        (runtime / "lib/jvm.cfg").write_text("-server KNOWN\n-client IGNORE\n")
+        with mock.patch.object(stager, "elf_info", return_value={"soname": ["libjvm.so"]}):
+            self.assertEqual(runtime / "lib/server/libjvm.so", stager.private_jre_preload(runtime / "lib/libjava.so", "libjvm.so", self.root, "readelf"))
+            self.assertIsNone(stager.private_jre_preload(self.root / "other/libjava.so", "libjvm.so", self.root, "readelf"))
+            self.assertIsNone(stager.private_jre_preload(runtime / "lib/libjava.so", "arbitrary.so", self.root, "readelf"))
+            (runtime / "lib/jvm.cfg").unlink()
+            with self.assertRaisesRegex(ValueError, "server JVM loader path"):
+                stager.private_jre_preload(runtime / "lib/libjava.so", "libjvm.so", self.root, "readelf")
+
     def _stage_fixture(self):
         binaries = self.root / "binaries"
         binaries.mkdir()

@@ -326,7 +326,31 @@ def elf_info(path, readelf):
     needed = re.findall(r"\(NEEDED\).*?\[([^]]+)\]", text)
     paths = re.findall(r"\((?:RUNPATH|RPATH)\).*?\[([^]]*)\]", text)
     interpreters = re.findall(r"Requesting program interpreter:\s*([^]]+)\]", text)
-    return {"needed": needed, "search": [p for entry in paths for p in entry.split(":")], "interpreters": interpreters}
+    return {"needed": needed, "search": [p for entry in paths for p in entry.split(":")], "interpreters": interpreters,
+            "soname": re.findall(r"\(SONAME\).*?\[([^]]+)\]", text)}
+
+
+def private_jre_preload(path, name, prefix, readelf):
+    # JLI loads the server VM before Java opens these native java.base libraries.
+    # This is a specific loader relationship, not a search of every packaged lib.
+    runtime = prefix / "libexec/lurker/backends/cryptomator/runtime"
+    consumers = {"libjava.so", "libzip.so", "libnet.so", "libverify.so", "libjimage.so"}
+    if name != "libjvm.so" or path.parent != runtime / "lib" or path.name not in consumers:
+        return None
+    backend_manifest = json_file(runtime.parent / "manifest.json")
+    if backend_manifest.get("backend") != "cryptomator" or backend_manifest.get("protocol") != 1:
+        fail("private Java preload requires the verified Cryptomator runtime manifest")
+    verify_platform(backend_manifest)
+    for anchor in (runtime / "bin/java", runtime / "lib/libjli.so", runtime / "lib/server/libjvm.so"):
+        if not anchor.is_file() or magic(anchor) != b"\x7fELF":
+            fail("private Java preload anchor is missing: " + str(anchor))
+    configuration = runtime / "lib/jvm.cfg"
+    if not configuration.is_file() or not re.search(r"(?m)^-server\s+KNOWN\s*$", configuration.read_text()):
+        fail("private Java runtime does not qualify the server JVM loader path")
+    jvm = runtime / "lib/server/libjvm.so"
+    if elf_info(jvm, readelf).get("soname") != ["libjvm.so"]:
+        fail("private server JVM has an unexpected SONAME")
+    return jvm
 
 
 def audit_dependencies(prefix):
@@ -396,7 +420,10 @@ def audit_dependencies(prefix):
             search.append(directory)
         dependencies = []
         for name in info["needed"] + info["interpreters"]:
-            if "/" in name:
+            preloaded = private_jre_preload(path, name, prefix, readelf)
+            if preloaded is not None:
+                target = preloaded
+            elif "/" in name:
                 target = Path(name)
                 if not target.is_absolute():
                     fail("relative ELF dependency: " + name)
@@ -407,6 +434,9 @@ def audit_dependencies(prefix):
             bundled = target.resolve().is_relative_to(prefix.resolve())
             dependencies.append({"name": name, "path": str(target.relative_to(prefix)) if bundled else str(target.resolve()),
                                  "bundled": bundled, "sha256": digest(target)})
+            if preloaded is not None:
+                dependencies[-1]["resolution"] = "preloaded-by-private-java-launcher"
+                dependencies[-1]["runtime_validation"] = "packaged native Java/Cryptomator tests required"
             pending.append(target)
         records.append({"file": str(path.relative_to(prefix)) if path.is_relative_to(prefix) else str(path),
                         "bundled": path.is_relative_to(prefix), "dependencies": dependencies})
