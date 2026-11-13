@@ -88,6 +88,14 @@ fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> AppResult<T> {
 }
 
 fn veracrypt() -> Option<PathBuf> {
+    if let Ok(current) = std::env::current_exe() {
+        if let Some(private) = private_veracrypt_candidates(&current)
+            .into_iter()
+            .find(|path| executable(path))
+        {
+            return Some(private);
+        }
+    }
     // Finder-launched apps typically have a minimal PATH.
     let bundled = PathBuf::from("/Applications/VeraCrypt.app/Contents/MacOS/VeraCrypt");
     if executable(&bundled) {
@@ -104,6 +112,24 @@ fn veracrypt() -> Option<PathBuf> {
         .find(|p| executable(p))
 }
 
+fn private_veracrypt_candidates(current: &Path) -> Vec<PathBuf> {
+    let Some(directory) = current.parent() else {
+        return Vec::new();
+    };
+    let mut candidates = Vec::new();
+    if directory.file_name().is_some_and(|name| name == "MacOS")
+        && directory
+            .parent()
+            .is_some_and(|parent| parent.file_name().is_some_and(|name| name == "Contents"))
+    {
+        candidates.push(directory.join("../Helpers/lurker-veracrypt"));
+    }
+    // Native CLI package and uninstalled development staging layouts.
+    candidates.push(directory.join("../libexec/lurker/backends/lurker-veracrypt"));
+    candidates.push(directory.join("macos-backends/lurker-veracrypt"));
+    candidates
+}
+
 fn executable(path: &Path) -> bool {
     fs::metadata(path)
         .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
@@ -111,7 +137,7 @@ fn executable(path: &Path) -> bool {
 }
 
 fn require_veracrypt() -> AppResult<PathBuf> {
-    veracrypt().ok_or_else(|| AppError::new("VeraCrypt is required. Install VeraCrypt for macOS and its matching FUSE-T or macFUSE runtime."))
+    veracrypt().ok_or_else(|| AppError::new("The private VeraCrypt backend is missing. Install a complete Lurker package or build scripts/build-macos-backends.py. Its matching FUSE runtime must be installed separately."))
 }
 
 pub fn probe_system() -> AppResult<SystemProbe> {
@@ -164,9 +190,12 @@ fn target_path(path: &Path) -> AppResult<PathBuf> {
 }
 
 fn require_type(kind: VolumeType) -> AppResult<()> {
-    if kind == VolumeType::Luks {
+    if !matches!(
+        kind,
+        VolumeType::Auto | VolumeType::Apple | VolumeType::Veracrypt
+    ) {
         Err(AppError::new(
-            "LUKS requires Linux. On macOS use --type apple or --type veracrypt.",
+            "This container backend is unavailable on macOS. Use --type apple or --type veracrypt.",
         ))
     } else {
         Ok(())
@@ -756,6 +785,22 @@ fn detach(volume: &Volume) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn private_backends_precede_compatibility_installations() {
+        let paths = private_veracrypt_candidates(Path::new(
+            "/Applications/Lurker.app/Contents/MacOS/lurker-helper",
+        ));
+        assert_eq!(
+            paths[0],
+            Path::new("/Applications/Lurker.app/Contents/MacOS/../Helpers/lurker-veracrypt")
+        );
+        let paths = private_veracrypt_candidates(Path::new("/usr/local/bin/lurker"));
+        assert_eq!(
+            paths[0],
+            Path::new("/usr/local/bin/../libexec/lurker/backends/lurker-veracrypt")
+        );
+    }
+
     #[test]
     fn parses_veracrypt_paths_with_spaces() {
         let v = parse_veracrypt_list("Slot: 1\nVolume: /tmp/a b.hc\nVirtual Device: /dev/disk12\nMount Directory: /tmp/a b\nRead-Only: Yes\n\nSlot: 2\nVolume: /tmp/other.hc\nMount Directory: -\n").unwrap();
