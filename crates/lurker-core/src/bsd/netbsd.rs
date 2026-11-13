@@ -39,9 +39,10 @@ pub(super) fn detach_file(device: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Generate recovery metadata and initialize the filesystem. CGD does not have
-/// an embedded header: publishing the image without these params loses access.
-/// The caller owns publication/rollback and must retain params with the image.
+/// Generate and sync recovery metadata only; do not allocate a CGD mapping.
+/// CGD has no embedded header: the caller must publish params with the image.
+/// The shared lifecycle calls unlock_initial, journals the returned mapping,
+/// then initializes its filesystem so interruption leaves a recoverable session.
 pub(super) fn format(
     device: &str,
     cipher: CreateCipher,
@@ -52,7 +53,7 @@ pub(super) fn format(
         return Err(AppError::new("CGD creation supports AES-XTS only."));
     }
     device_number(device, "vnd")?;
-    let input = password_input(credential, true)?;
+    password_input(credential, false)?;
     let generated = exec(
         CGDCONFIG,
         &args(&["-g", "-k", "argon2id", "-V", "ffs", "aes-xts", "512"]),
@@ -69,12 +70,20 @@ pub(super) fn format(
     file.write_all(normalized.as_bytes())
         .map_err(|e| AppError::io("Failed to save CGD parameters", e))?;
     file.sync_all()
-        .map_err(|e| AppError::io("Failed to sync CGD parameters", e))?;
-    let mapped = configure(device, &input, params, true)?;
-    let initialized = make_filesystem(&mapped);
-    let closed = close(&mapped);
-    initialized?;
-    closed
+        .map_err(|e| AppError::io("Failed to sync CGD parameters", e))
+}
+
+/// First attach of a new image uses re-entry verification because its FFS
+/// superblocks do not exist yet. The caller must journal this mapping before
+/// running newfs, and close it through the normal verified cleanup path.
+pub(super) fn unlock_initial(
+    device: &str,
+    credential: &Credential,
+    params: &Path,
+) -> AppResult<String> {
+    device_number(device, "vnd")?;
+    let input = password_input(credential, true)?;
+    configure(device, &input, params, true)
 }
 
 pub(super) fn unlock(
