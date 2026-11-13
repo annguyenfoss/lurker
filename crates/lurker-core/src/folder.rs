@@ -408,39 +408,59 @@ fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
             libc::KERN_PROC_PID,
             pid as i32,
         ];
-        let mut info = std::mem::MaybeUninit::<libc::kinfo_proc>::uninit();
-        let mut size = std::mem::size_of::<libc::kinfo_proc>();
-        let result = unsafe {
-            libc::sysctl(
-                mib.as_mut_ptr(),
-                mib.len() as u32,
-                info.as_mut_ptr().cast(),
-                &mut size,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if result == 0 && size == 0 {
-            return Ok(None);
+        for attempt in 0..3 {
+            let mut info = std::mem::MaybeUninit::<libc::kinfo_proc>::uninit();
+            let mut size = std::mem::size_of::<libc::kinfo_proc>();
+            let result = unsafe {
+                libc::sysctl(
+                    mib.as_mut_ptr(),
+                    mib.len() as u32,
+                    info.as_mut_ptr().cast(),
+                    &mut size,
+                    std::ptr::null_mut(),
+                    0,
+                )
+            };
+            // FreeBSD 15 returns -1/ESRCH for a reaped PID while other
+            // supported kernels may return success with no kinfo_proc bytes.
+            // Capture errno before another native call can overwrite it.
+            let error = if result != 0 {
+                std::io::Error::last_os_error().raw_os_error()
+            } else {
+                None
+            };
+            if process_query_absent(result, size, error) {
+                return Ok(None);
+            }
+            if result != 0 && error == Some(libc::EINTR) && attempt < 2 {
+                continue;
+            }
+            if result != 0 {
+                return Err(AppError::io(
+                    "Cannot verify native backend process; preserve its session",
+                    std::io::Error::from_raw_os_error(error.unwrap_or(libc::EIO)),
+                ));
+            }
+            if size != std::mem::size_of::<libc::kinfo_proc>() {
+                return Err(AppError::new(
+                    "Native backend process identity has an unexpected size; preserve its session.",
+                ));
+            }
+            let info = unsafe { info.assume_init() };
+            if info.ki_pid != pid as i32 {
+                return Err(AppError::new(
+                    "Native backend process identity changed unexpectedly.",
+                ));
+            }
+            if info.ki_stat == libc::SZOMB {
+                return Ok(None);
+            }
+            return Ok(Some(Process {
+                pid,
+                birth: format!("{}:{}", info.ki_start.tv_sec, info.ki_start.tv_usec),
+            }));
         }
-        if result != 0 || size != std::mem::size_of::<libc::kinfo_proc>() {
-            return Err(AppError::new(
-                "Cannot verify native backend process; preserve its session.",
-            ));
-        }
-        let info = unsafe { info.assume_init() };
-        if info.ki_pid != pid as i32 {
-            return Err(AppError::new(
-                "Native backend process identity changed unexpectedly.",
-            ));
-        }
-        if info.ki_stat == libc::SZOMB {
-            return Ok(None);
-        }
-        Ok(Some(Process {
-            pid,
-            birth: format!("{}:{}", info.ki_start.tv_sec, info.ki_start.tv_usec),
-        }))
+        unreachable!("bounded process query always returns on its final attempt")
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
     {
@@ -450,6 +470,11 @@ fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
         ))
     }
 }
+#[cfg(any(test, target_os = "freebsd"))]
+fn process_query_absent(result: i32, size: usize, error: Option<i32>) -> bool {
+    (result == 0 && size == 0) || (result != 0 && error == Some(libc::ESRCH))
+}
+
 fn process_identity(pid: u32) -> Option<Process> {
     process_snapshot(pid).ok().flatten()
 }
@@ -1075,6 +1100,30 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_definite_process_absence_authorizes_exit_recovery() {
+        assert!(process_query_absent(-1, 1088, Some(libc::ESRCH)));
+        assert!(process_query_absent(0, 0, None));
+        for error in [libc::EPERM, libc::EACCES, libc::EINTR, libc::EIO] {
+            assert!(!process_query_absent(-1, 1088, Some(error)));
+        }
+        assert!(!process_query_absent(0, 1088, None));
+    }
+    #[cfg(target_os = "freebsd")]
+    #[test]
+    fn native_process_query_distinguishes_live_child_from_reaped_exit() {
+        let mut child = Command::new("/bin/cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        assert!(process_snapshot(pid).unwrap().is_some());
+        drop(child.stdin.take()); // EOF exits only this test's child, no signal.
+        assert!(child.wait().unwrap().success());
+        assert!(process_snapshot(pid).unwrap().is_none());
+    }
     fn snapshot_record() -> Session {
         Session {
             schema: SCHEMA,
@@ -1128,27 +1177,21 @@ mod tests {
         let record = directory.join("session.json");
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&record, fs::Permissions::from_mode(0o644)).unwrap();
-        assert!(
-            session_snapshot(&root)
-                .unwrap_err()
-                .message
-                .contains("private regular file")
-        );
+        assert!(session_snapshot(&root)
+            .unwrap_err()
+            .message
+            .contains("private regular file"));
         fs::set_permissions(&record, fs::Permissions::from_mode(0o600)).unwrap();
         fs::write(&record, b"invalid JSON").unwrap();
-        assert!(
-            session_snapshot(&root)
-                .unwrap_err()
-                .message
-                .contains("Malformed")
-        );
+        assert!(session_snapshot(&root)
+            .unwrap_err()
+            .message
+            .contains("Malformed"));
         fs::write(&record, vec![b' '; 65537]).unwrap();
-        assert!(
-            session_snapshot(&root)
-                .unwrap_err()
-                .message
-                .contains("64 KiB")
-        );
+        assert!(session_snapshot(&root)
+            .unwrap_err()
+            .message
+            .contains("64 KiB"));
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
@@ -1158,52 +1201,42 @@ mod tests {
             inode: 2,
         };
         for errno in [libc::ENOTCONN, libc::EIO] {
-            assert!(
-                validate_directory_identity(
-                    &expected,
-                    Err(std::io::Error::from_raw_os_error(errno)),
-                    || Ok(true)
-                )
-                .is_ok()
-            );
-            assert!(
-                validate_directory_identity(
-                    &expected,
-                    Err(std::io::Error::from_raw_os_error(errno)),
-                    || Ok(false)
-                )
-                .is_err()
-            );
-            assert!(
-                validate_directory_identity(
-                    &expected,
-                    Err(std::io::Error::from_raw_os_error(errno)),
-                    || Err(AppError::new("process inspection denied"))
-                )
-                .is_err()
-            );
+            assert!(validate_directory_identity(
+                &expected,
+                Err(std::io::Error::from_raw_os_error(errno)),
+                || Ok(true)
+            )
+            .is_ok());
+            assert!(validate_directory_identity(
+                &expected,
+                Err(std::io::Error::from_raw_os_error(errno)),
+                || Ok(false)
+            )
+            .is_err());
+            assert!(validate_directory_identity(
+                &expected,
+                Err(std::io::Error::from_raw_os_error(errno)),
+                || Err(AppError::new("process inspection denied"))
+            )
+            .is_err());
         }
         for errno in [libc::EPERM, libc::EACCES, libc::ENOENT] {
-            assert!(
-                validate_directory_identity(
-                    &expected,
-                    Err(std::io::Error::from_raw_os_error(errno)),
-                    || panic!("Permissions cannot use the dead-daemon exception")
-                )
-                .is_err()
-            );
-        }
-        assert!(
-            validate_directory_identity(
+            assert!(validate_directory_identity(
                 &expected,
-                Ok(Identity {
-                    device: 1,
-                    inode: 3
-                }),
-                || panic!("Replaced inode cannot use the dead-daemon exception")
+                Err(std::io::Error::from_raw_os_error(errno)),
+                || panic!("Permissions cannot use the dead-daemon exception")
             )
-            .is_err()
-        );
+            .is_err());
+        }
+        assert!(validate_directory_identity(
+            &expected,
+            Ok(Identity {
+                device: 1,
+                inode: 3
+            }),
+            || panic!("Replaced inode cannot use the dead-daemon exception")
+        )
+        .is_err());
     }
     #[test]
     fn mount_replacement_and_unconfirmed_mounts_cannot_authorize_recovery() {
@@ -1244,10 +1277,9 @@ mod tests {
             let args = mount_args(kind, source, mp, true).unwrap();
             assert!(args.contains(&source.as_os_str().into()));
             assert!(args.contains(&mp.as_os_str().into()));
-            assert!(
-                args.iter()
-                    .any(|a| matches!(a.to_str(), Some("-ro" | "ro" | "--readonly")))
-            );
+            assert!(args
+                .iter()
+                .any(|a| matches!(a.to_str(), Some("-ro" | "ro" | "--readonly"))));
         }
     }
     #[test]
