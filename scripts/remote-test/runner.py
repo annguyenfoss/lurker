@@ -55,6 +55,38 @@ def verify_source(source, manifest):
         raise ValueError("source tree has unexpected/missing entries")
 
 
+def cache_identities(spec, manifest, versions, environment):
+    def relevant(name):
+        return (name in {"RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_TARGET", "CARGO_INCREMENTAL",
+                         "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_BOOTSTRAP", "CC", "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS"}
+                or name.startswith("CARGO_PROFILE_") or (name.startswith("CARGO_TARGET_") and name.endswith(("_RUSTFLAGS", "_LINKER"))))
+    flags = {name: value for name, value in environment.items() if relevant(name)}
+    command_flags = []
+    for stage in spec["stages"]:
+        for command in stage.get("commands", []):
+            if command and Path(command[0]).name == "env":
+                assignments = {}
+                for word in command[1:]:
+                    if "=" not in word:
+                        break
+                    name, value = word.split("=", 1)
+                    if relevant(name):
+                        assignments[name] = value
+                if assignments:
+                    command_flags.append(assignments)
+    # Cargo fingerprints sources, lockfiles, features, target/profile and command
+    # differences itself. Native build patches must not evict Rust dependencies.
+    cargo_inputs = {"schema": 2, "os": platform.system(), "arch": platform.machine(),
+                    "versions": versions, "flags": flags,
+                    "command_flags": sorted({json.dumps(value, sort_keys=True) for value in command_flags})}
+    backend_inputs = {name: value for name, value in manifest.items()
+                      if name.startswith(("native/", "scripts/build-")) or name == "scripts/macos_backend.py"}
+    cargo_key = hashlib.sha256(json.dumps(cargo_inputs, sort_keys=True).encode()).hexdigest()
+    native_inputs = {"cargo_identity": cargo_inputs, "backend_inputs": backend_inputs, "stages": spec["stages"]}
+    native_key = hashlib.sha256(json.dumps(native_inputs, sort_keys=True).encode()).hexdigest()
+    return {"cargo_key": cargo_key, "native_key": native_key}
+
+
 def selected_environment(spec, job):
     env = os.environ.copy()
     home = Path.home()
@@ -82,12 +114,7 @@ def selected_environment(spec, job):
             raise ValueError(name + " unavailable: " + result.stderr.strip()[:300])
         versions[name] = {"path": str(executable), "version": result.stdout.strip()}
     manifest = json.loads((job / "source-manifest.json").read_text())["files"]
-    backend_inputs = {name: value for name, value in manifest.items()
-                      if name.startswith(("native/", "scripts/build-")) or name == "scripts/macos_backend.py"}
-    flags = {name: env.get(name, "") for name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CFLAGS", "CXXFLAGS", "LDFLAGS")}
-    key = hashlib.sha256(json.dumps({"versions": versions, "os": platform.platform(), "flags": flags,
-                                    "backend_inputs": backend_inputs,
-                                    "stages": spec["stages"]}, sort_keys=True).encode()).hexdigest()[:20]
+    identities = cache_identities(spec, manifest, versions, env)
     cache_root = Path(spec.get("cache_root", spec["host"].get("cache_root", "~/.cache/lurker/remote-test"))).expanduser().absolute()
     cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     info = cache_root.lstat()
@@ -96,9 +123,14 @@ def selected_environment(spec, job):
     cache_free = shutil.disk_usage(cache_root).free
     if cache_free < spec.get("minimum_cache_free_bytes", 1024 * 1024 * 1024):
         raise ValueError("insufficient compiler-cache disk: " + str(cache_free) + " bytes at " + str(cache_root))
-    cache = cache_root / key
+    cache = cache_root / "cargo" / identities["cargo_key"][:20]
+    native_cache = cache_root / "native" / identities["native_key"][:20]
     cache.mkdir(parents=True, exist_ok=True)
+    native_cache.mkdir(parents=True, exist_ok=True)
     env["CARGO_TARGET_DIR"] = str(cache / "target")
+    env["LURKER_CARGO_CACHE_KEY"] = identities["cargo_key"]
+    env["LURKER_NATIVE_CACHE_KEY"] = identities["native_key"]
+    env["LURKER_NATIVE_CACHE_DIR"] = str(native_cache)
     env["CARGO_BUILD_JOBS"] = str(spec.get("build_jobs", 2))
     env["LURKER_TEST_JOB_DIR"] = str(job)
     env["LURKER_TEST_SOURCE_COMMIT"] = spec["commit"]
@@ -132,7 +164,7 @@ def execute(stage, source, job, env):
     deadline = time.monotonic() + stage.get("timeout", 1800)
     with log.open("wb") as output:
         for command in stage["commands"]:
-            command = [part.replace("{python}", sys.executable) for part in command]
+            command = [part.replace("{python}", sys.executable).replace("{native_cache}", env.get("LURKER_NATIVE_CACHE_DIR", "")) for part in command]
             process = subprocess.Popen(command, cwd=source, env=env, stdin=subprocess.DEVNULL,
                                        stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
             while process.poll() is None:
@@ -202,6 +234,8 @@ def run_job(job):
         result["toolchains"] = dict(versions, python={"path": sys.executable, "version": platform.python_version(),
                                                      "manager": "uv" if spec["host"].get("uv") else "configured"})
         result["cache"] = str(cache)
+        result["caches"] = {"cargo": {"key": env.get("LURKER_CARGO_CACHE_KEY"), "path": str(cache)},
+                            "native": {"key": env.get("LURKER_NATIVE_CACHE_KEY"), "path": env.get("LURKER_NATIVE_CACHE_DIR")}}
         result["storage"] = {"run": {"path": str(job), "free_bytes": free},
                              "cache": {"path": str(cache.resolve()), "free_bytes": shutil.disk_usage(cache).free}}
         # Serialize same-host jobs: cached compiler outputs and storage tests must

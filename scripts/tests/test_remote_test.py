@@ -184,6 +184,35 @@ class RemoteRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "absolute path"):
             coordinator.resolve_python(dict(host, uv="../uv"))
 
+    def test_native_recipe_changes_preserve_cargo_cache_identity(self):
+        spec = {"stages": [{"name": "rust-check", "commands": [["cargo", "check"]]}]}
+        versions = {"rustc": {"path": "/managed/rustc", "version": "1"}, "cargo": {"path": "/managed/cargo", "version": "1"}}
+        first = runner.cache_identities(spec, {"native/bsd/patch": {"sha256": "before"}}, versions, {})
+        changed = runner.cache_identities(spec, {"native/bsd/patch": {"sha256": "after"}}, versions, {})
+        self.assertEqual(first["cargo_key"], changed["cargo_key"])
+        self.assertNotEqual(first["native_key"], changed["native_key"])
+        recipe = runner.cache_identities(spec, {"scripts/build-native.py": {"sha256": "recipe"}}, versions, {})
+        self.assertEqual(first["cargo_key"], recipe["cargo_key"])
+        self.assertNotEqual(first["native_key"], recipe["native_key"])
+        other_stage = runner.cache_identities({"stages": [{"name": "rust-tests", "commands": [["cargo", "test"]]}]}, {}, versions, {})
+        self.assertEqual(first["cargo_key"], other_stage["cargo_key"])
+
+    def test_compiler_and_relevant_flags_change_both_cache_identities(self):
+        spec = {"stages": []}
+        versions = {"rustc": {"path": "/managed/rustc", "version": "1"}}
+        first = runner.cache_identities(spec, {}, versions, {})
+        for updated_versions, environment in (({"rustc": {"path": "/managed/rustc", "version": "2"}}, {}),
+                                               (versions, {"RUSTFLAGS": "-C opt-level=1"}),
+                                               (versions, {"CARGO_PROFILE_TEST_DEBUG": "0"})):
+            changed = runner.cache_identities(spec, {}, updated_versions, environment)
+            self.assertNotEqual(first["cargo_key"], changed["cargo_key"])
+            self.assertNotEqual(first["native_key"], changed["native_key"])
+        command = {"stages": [{"name": "rust-tests", "commands": [["env", "CARGO_PROFILE_TEST_DEBUG=0", "cargo", "test"]]}]}
+        changed = runner.cache_identities(command, {}, versions, {})
+        self.assertNotEqual(first["cargo_key"], changed["cargo_key"])
+        self.assertNotEqual(first["native_key"], changed["native_key"])
+        self.assertEqual(first, runner.cache_identities(spec, {}, versions, {"CARGO_BUILD_JOBS": "8"}))
+
     def test_inventory_has_every_supplied_host(self):
         inventory = json.loads(coordinator.INVENTORY.read_text())
         self.assertEqual(11, len(inventory))
