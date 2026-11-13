@@ -28,6 +28,15 @@ resources. Physical devices, forced unmount and whole-machine tests are not
 part of this recipe. Runtime tests belong in isolated `/tmp/lurker-*` storage
 on the designated BSD guests.
 
+`scripts/test-bsd-veracrypt.py --backend /absolute/path/lurker-veracrypt-bsd`
+is an opt-in **engine-only** qualification suite for the designated guests.
+It runs as root, creates unique `/tmp` files, exercises AES/Serpent/Twofish,
+native filesystem writes and fsync/reopen, incorrect credentials and FreeBSD
+read-only mappings. OpenBSD read-only attachment is explicitly unsupported by
+this upstream adapter. Failures preserve owned resources and concise evidence;
+the script never force-detaches them. Lurker CLI conformance remains a separate
+gate; engine tests cannot substitute for it.
+
 Upstream references:
 
 - https://github.com/veracrypt/VeraCrypt/blob/8172bc55f834485f67be271e02c1167981423621/src/Readme.txt
