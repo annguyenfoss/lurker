@@ -7,7 +7,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output as ProcessOutput, Stdio};
 
@@ -374,21 +374,7 @@ fn creator_candidates(root: bool) -> Vec<PathBuf> {
 }
 
 fn trusted_root_program(path: &Path) -> AppResult<PathBuf> {
-    let canonical = fs::canonicalize(path)
-        .map_err(|err| AppError::io("Failed to resolve private backend", err))?;
-    if !is_executable(&canonical) {
-        return Err(AppError::new("Private backend is not executable."));
-    }
-    // Checking every canonical ancestor prevents directory replacement attacks.
-    // Root must never execute a developer's user-writable build output.
-    for component in canonical.ancestors() {
-        let metadata = fs::metadata(component)
-            .map_err(|err| AppError::io("Failed to inspect private backend ownership", err))?;
-        if metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
-            return Err(AppError::new(format!("Refusing elevated private backend in an untrusted path: {}. Install a root-owned package first.", component.display())));
-        }
-    }
-    Ok(canonical)
+    crate::trusted_privileged_executable(path)
 }
 
 fn resolve_veracrypt_creator(will_elevate: bool) -> AppResult<PathBuf> {

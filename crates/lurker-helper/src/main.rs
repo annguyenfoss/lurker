@@ -109,6 +109,8 @@ fn rerun_with_pkexec(payload: &[u8]) -> Result<OperationResponse, String> {
         Err(err) => return Err(format!("Failed to locate helper executable: {err}")),
     };
 
+    let current_exe =
+        lurker_core::trusted_privileged_executable(&current_exe).map_err(|e| e.message)?;
     let output = spawn_reexec("pkexec", &current_exe, payload)?;
     decode_reexec_output("pkexec", output)
 }
@@ -116,6 +118,8 @@ fn rerun_with_pkexec(payload: &[u8]) -> Result<OperationResponse, String> {
 fn rerun_with_sudo(payload: &[u8]) -> Result<OperationResponse, String> {
     let current_exe =
         env::current_exe().map_err(|err| format!("Failed to locate helper executable: {err}"))?;
+    let current_exe =
+        lurker_core::trusted_privileged_executable(&current_exe).map_err(|e| e.message)?;
     let output = spawn_reexec("sudo", &current_exe, payload)?;
     decode_reexec_output("sudo", output)
 }

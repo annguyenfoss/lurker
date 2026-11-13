@@ -22,6 +22,7 @@ mod sha256;
 mod size;
 #[cfg(target_os = "linux")]
 mod system;
+mod trust;
 #[cfg(target_os = "linux")]
 mod userspace;
 mod workflow;
@@ -35,6 +36,7 @@ pub use model::{
     ColorMode, CreateCipher, PrivilegeMode, ResolvedTargetKind, SourceKind, VolumeType,
 };
 pub use output::{Output, OutputBuffer, OutputEntry, OutputLevel};
+pub use trust::trusted_privileged_executable;
 
 #[cfg(target_os = "linux")]
 use crate::linux::{canonical_device_path, read_mountinfo};

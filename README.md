@@ -286,3 +286,8 @@ and package qualification are tracked separately from the selected matrix.
 Native packages carry private third-party engines; host kernel tools and FUSE
 remain prerequisites, with macOS FUSE installed separately. A Cargo-only build
 does not include every private native engine.
+
+Desktop administrator elevation requires an administrator-owned installed helper
+and backend, including their parent directories. A user-writable Cargo build is
+suitable for login-user workflows; it is not automatically elevated through
+pkexec/sudo. Install the verified package for privileged desktop operations.
