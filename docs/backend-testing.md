@@ -96,3 +96,21 @@ build-artifact tests, **not** clean-machine package, fault-injection or release
 qualification, and they do not establish results for subsequent code revisions.
 The 18 host-independent harness tests also passed on Arch Linux and all four
 BSDs without encryption or mount operations.
+
+A later **prepared-guest package prototype** used exact source
+`66e8f9c4bee044d0bb0af8d8649118e4b985dc51`, with administrator-owned prefixes
+under `/var/run/lurker-package-66e8f9c-{freebsd,openbsd}/lurker`:
+
+| Guest | Packaged CLI cases passed | CLI SHA-256 prefix |
+| --- | --- | --- |
+| FreeBSD | VeraCrypt AES/Serpent/Twofish 39; GELI/PEFS 26; gocryptfs 13 | `d1bb2beb1d640a6c` |
+| OpenBSD | VeraCrypt AES/Serpent/Twofish 39 | `2a0a75adf984dd67` |
+
+All 117 explicit-format cases passed without backend overrides. Package payload
+hashes were checked before and after execution; no owned mounts, session records
+or listed crypto streams remained. FreeBSD gocryptfs ran as UID 1300; temporary
+`vfs.usermount` and `/dev/fuse` access were restored exactly. Full package proofs
+and results are under `/tmp/lurker-bsd-package-runs/pkg-66e8f9c4-20261113T210122Z/`
+and `pkg-66e8f9c4-20261113T210809Z/`. These prepared-host results do not establish
+clean-machine independence, Auto detection, subsequent alias-guard changes or a
+final common-revision release matrix.
