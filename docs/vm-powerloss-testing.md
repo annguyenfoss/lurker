@@ -85,3 +85,14 @@ same hash-checked candidate CLI and writes `result.json`. Preserve the separate
 hypervisor poweroff/boot evidence alongside the guest result; invoking a guest
 verification command alone does not prove a power cut happened. Setup and
 verification retain fixtures and never run filesystem repair.
+
+A completed daemon-owned copy can be mode 0600 and unreadable to the coordinator.
+`finish-copy-boot DIRECTORY` resumes only when the retained copy log confirms
+success and the source checks still pass. For this permission case, a unique
+transient `dir` pool registers only the owned run directory without `--build`.
+The daemon's volume XML proves qcow2 format, positive capacity and no backing
+file; the full copy completion is retained separately. The coordinator checks
+pool name, UUID and target before stopping that metadata registration with
+`pool-destroy`. It never uses `pool-delete`, deletes volumes, changes permissions
+or modifies existing pools. `copy-volume.xml` and `probe-pool.json` retain this
+inspection evidence.

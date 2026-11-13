@@ -296,14 +296,70 @@ def copy_and_boot(clone):
     with (clone.directory / "blockcopy.log").open("w") as log:
         code = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT).returncode
     require(code == 0, "Live copy failed; inspect blockcopy.log; do not abort any unidentified job")
+    finish_copy_and_boot(clone)
+
+
+
+def inspect_private_copy(clone):
+    """Inspect unreadable daemon-owned copies through an owned metadata pool."""
+    disk = clone.manifest["disk"]
+    if os.access(disk, os.R_OK):
+        image = json.loads(run(["qemu-img", "info", "--output=json", disk]))
+        require(not image.get("backing-filename"), "Clone image must have no backing file")
+        return {"inspection": "offline-qemu-img", **image}
+    pool_name = clone.manifest["network"] + "-probe"
+    require(pool_name not in virsh("pool-list", "--all", "--name").split(), "Probe pool already exists; reconcile its ownership")
+    # A transient directory pool registers metadata for this already-owned
+    # directory. No --build, pool-delete, vol-create, vol-delete or permissions
+    # change is performed. pool-destroy only stops this metadata registration.
+    virsh("pool-create-as", pool_name, "dir", "--target", clone.directory)
+    pool_uuid = None
+
+    def verified_pool(identifier):
+        xml = ET.fromstring(virsh("pool-dumpxml", identifier))
+        require(xml.tag == "pool" and xml.get("type") == "dir" and xml.findtext("name") == pool_name,
+                "Probe pool identity changed")
+        require(xml.findtext("target/path") == str(clone.directory), "Probe pool target changed")
+        if pool_uuid is not None:
+            require(xml.findtext("uuid") == pool_uuid, "Probe pool UUID changed")
+        return xml
+
+    try:
+        pool = verified_pool(pool_name)
+        pool_uuid = pool.findtext("uuid")
+        require(pool_uuid, "Probe pool has no UUID")
+        write_json(clone.directory / "probe-pool.json", {"name": pool_name, "uuid": pool_uuid,
+                   "target": str(clone.directory), "operation": "metadata-only"})
+        virsh("pool-refresh", pool_uuid)
+        volume_xml = virsh("vol-dumpxml", "root.qcow2", pool_uuid)
+        volume = ET.fromstring(volume_xml)
+        require(volume.findtext("name") == "root.qcow2" and volume.findtext("target/path") == disk,
+                "Probe returned a different image")
+        require(volume.find("target/format").get("type") == "qcow2", "Copied format is not qcow2")
+        require(not volume.findall(".//backingStore/path"), "Copied image has a backing file")
+        require(int(volume.findtext("capacity")) > 0, "Copied capacity missing")
+        (clone.directory / "copy-volume.xml").write_text(volume_xml)
+        return {"inspection": "libvirt-directory-pool", "format": "qcow2", "backing_file": None,
+                "virtual_size": int(volume.findtext("capacity")), "pool_uuid": pool_uuid}
+    finally:
+        if pool_uuid is not None:
+            verified_pool(pool_uuid)
+            virsh("pool-destroy", pool_uuid)
+
+def finish_copy_and_boot(clone):
+    """Resume only a positively completed, disconnected owned copy job."""
+    m = clone.manifest
+    destination = Path(m["disk"])
+    require(destination.is_file() and not destination.is_symlink(), "Completed copy must be a regular private file")
+    require((clone.directory / "blockcopy.log").read_text().strip() == "Successfully copied",
+            "Copy completion is not confirmed; never resume a partial copy")
     after = virsh("dumpxml", m["source"], "--inactive")
     (clone.directory / "source-after.xml").write_text(after)
     require(after == (clone.directory / "source-inactive.xml").read_text(), "Original definition changed")
     require(disk_source(virsh("dumpxml", m["source"])) == m["source_disk"], "Original source disk changed")
     require(virsh("domstate", m["source"]).strip() == "running", "Original stopped unexpectedly")
     require("No current block job" in virsh("blockjob", m["source"], "vda", "--info"), "Copy job still active")
-    image = json.loads(run(["qemu-img", "info", "--output=json", m["disk"]]))
-    require(not image.get("backing-filename"), "Clone image must have no backing file")
+    image = inspect_private_copy(clone)
     disk_metadata = Path(m["disk"]).lstat()
     require(stat.S_ISREG(disk_metadata.st_mode), "Copied disk is not a regular file")
     write_json(clone.directory / "copy-result.json", {"status": "passed", "source_unchanged": True, "image": image,
@@ -514,7 +570,7 @@ def main():
     plan.add_argument("--run", required=True)
     plan.add_argument("--subnet", required=True)
     plan.add_argument("--bandwidth", type=int, default=32)
-    for action in ("copy-boot", "inspect", "poweroff", "boot", "ssh"):
+    for action in ("copy-boot", "finish-copy-boot", "inspect", "poweroff", "boot", "ssh"):
         command = commands.add_parser(action)
         command.add_argument("directory", type=Path)
         if action == "ssh":
@@ -548,6 +604,8 @@ def main():
     clone = OwnedClone.load(args.directory)
     if args.action == "copy-boot":
         copy_and_boot(clone)
+    elif args.action == "finish-copy-boot":
+        finish_copy_and_boot(clone)
     elif args.action == "poweroff":
         clone.poweroff()
     elif args.action == "boot":

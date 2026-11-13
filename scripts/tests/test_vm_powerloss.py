@@ -148,6 +148,42 @@ class Ownership(unittest.TestCase):
         with patch.object(VM, "virsh", return_value=xml):
             clone.verify_network()
 
+    def test_partial_copy_cannot_resume(self):
+        clone = VM.OwnedClone.load(self.directory)
+        (self.directory / "root.qcow2").write_bytes(b"partial")
+        (self.directory / "blockcopy.log").write_text("interrupted")
+        with patch.object(VM, "virsh") as call:
+            with self.assertRaisesRegex(RuntimeError, "completion"):
+                VM.finish_copy_and_boot(clone)
+        call.assert_not_called()
+
+    def test_unreadable_copy_uses_only_owned_metadata_pool(self):
+        clone = VM.OwnedClone.load(self.directory)
+        name = self.m["network"] + "-probe"
+        pool = f'<pool type="dir"><name>{name}</name><uuid>probe-uuid</uuid><target><path>{self.directory}</path></target></pool>'
+        volume = f'<volume><name>root.qcow2</name><capacity>12345</capacity><target><path>{self.m["disk"]}</path><format type="qcow2"/></target><backingStore/></volume>'
+        def answer(*args):
+            if args[0] == "pool-list":
+                return "default iso vmpool01"
+            if args[0] == "pool-dumpxml":
+                return pool
+            if args[0] == "vol-dumpxml":
+                return volume
+            return ""
+        with patch.object(VM.os, "access", return_value=False), patch.object(VM, "virsh", side_effect=answer) as call:
+            image = VM.inspect_private_copy(clone)
+        self.assertEqual(image["inspection"], "libvirt-directory-pool")
+        mutations = [entry.args for entry in call.call_args_list if entry.args[0] in ("pool-create-as", "pool-destroy")]
+        self.assertEqual(mutations, [("pool-create-as", name, "dir", "--target", self.directory), ("pool-destroy", "probe-uuid")])
+        self.assertTrue((self.directory / "copy-volume.xml").is_file())
+
+    def test_probe_pool_collision_never_touches_existing_pool(self):
+        clone = VM.OwnedClone.load(self.directory)
+        with patch.object(VM.os, "access", return_value=False), patch.object(VM, "virsh", return_value=self.m["network"] + "-probe") as call:
+            with self.assertRaisesRegex(RuntimeError, "already exists"):
+                VM.inspect_private_copy(clone)
+        self.assertEqual(call.call_count, 1)
+
 
 class GuestFixture(unittest.TestCase):
     def test_owned_persistent_home_marker_and_permissions(self):
