@@ -22,6 +22,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod freebsd;
 #[cfg(target_os = "freebsd")]
 mod pefs;
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+mod veracrypt;
 #[cfg(target_os = "freebsd")]
 use freebsd as native;
 #[cfg(target_os = "netbsd")]
@@ -262,7 +264,10 @@ fn check_backend(kind: VolumeType) -> AppResult<VolumeType> {
     } else {
         kind
     };
-    if kind != default_backend() {
+    if kind != default_backend()
+        && !(cfg!(any(target_os = "freebsd", target_os = "openbsd"))
+            && kind == VolumeType::Veracrypt)
+    {
         return Err(AppError::new(format!(
             "Backend {kind} is not implemented by this native BSD adapter."
         )));
@@ -386,6 +391,15 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     }
     let registry = Registry::open()?;
     registry.ensure_unused(&target)?;
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    if backend == VolumeType::Veracrypt {
+        veracrypt::backend()?;
+        if target.exists() && veracrypt::attached(&target)? {
+            return Err(AppError::new(
+                "Refusing to replace an attached VeraCrypt container.",
+            ));
+        }
+    }
     let credential = credential(
         c.passphrase.as_deref(),
         c.keyfile.as_deref(),
@@ -421,6 +435,13 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     };
     registry.save(&session)?;
     let initialized = (|| {
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+        if backend == VolumeType::Veracrypt {
+            veracrypt::format(&source, size / (1024 * 1024), c.cipher, &credential)?;
+            session.mapped = Some(veracrypt::unlock(&source, false, &credential)?);
+            initialize_acquired_mapping(&registry, &session, veracrypt::make_filesystem)?;
+            return Ok(());
+        }
         session.backing = Some(native::attach_file(&source, false)?);
         registry.save(&session)?;
         verify_session(&session)?;
@@ -548,6 +569,12 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     let identity = Identity::read(&source)?;
     let registry = Registry::open()?;
     registry.ensure_unused(&source)?;
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    if backend == VolumeType::Veracrypt && veracrypt::attached(&source)? {
+        return Err(AppError::new(
+            "VeraCrypt container is already attached; refusing a duplicate mount.",
+        ));
+    }
     let credential = credential(c.passphrase.as_deref(), c.keyfile.as_deref(), false)?;
     if !c.mountpoint.exists() {
         fs::create_dir_all(&c.mountpoint).map_err(|e| AppError::io("Create mountpoint", e))?;
@@ -597,27 +624,34 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     };
     registry.save(&session)?;
     let result = (|| {
-        session.backing = Some(native::attach_file(&source, c.readonly)?);
-        registry.save(&session)?;
-        verify_session(&session)?;
-        #[cfg(target_os = "netbsd")]
-        {
-            session.mapped = Some(native::unlock(
-                session.backing.as_deref().unwrap(),
-                c.readonly,
-                &credential,
-                &params_path(&source),
-            )?);
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+        if backend == VolumeType::Veracrypt {
+            session.mapped = Some(veracrypt::unlock(&source, c.readonly, &credential)?);
+            registry.save(&session)?;
         }
-        #[cfg(not(target_os = "netbsd"))]
-        {
-            session.mapped = Some(native::unlock(
-                session.backing.as_deref().unwrap(),
-                c.readonly,
-                &credential,
-            )?);
+        if session.mapped.is_none() {
+            session.backing = Some(native::attach_file(&source, c.readonly)?);
+            registry.save(&session)?;
+            verify_session(&session)?;
+            #[cfg(target_os = "netbsd")]
+            {
+                session.mapped = Some(native::unlock(
+                    session.backing.as_deref().unwrap(),
+                    c.readonly,
+                    &credential,
+                    &params_path(&source),
+                )?);
+            }
+            #[cfg(not(target_os = "netbsd"))]
+            {
+                session.mapped = Some(native::unlock(
+                    session.backing.as_deref().unwrap(),
+                    c.readonly,
+                    &credential,
+                )?);
+            }
+            registry.save(&session)?;
         }
-        registry.save(&session)?;
         let mut argv = args(&[
             "-t",
             filesystem(),
@@ -827,6 +861,13 @@ fn verify_session(s: &Session) -> AppResult<()> {
             "Container identity changed; refusing to detach any recorded resource.",
         ));
     }
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    if s.backend == VolumeType::Veracrypt {
+        if let Some(mapped) = &s.mapped {
+            veracrypt::verify_mapping(&s.source, mapped)?;
+        }
+        return Ok(());
+    }
     #[cfg(target_os = "freebsd")]
     if s.backend == VolumeType::Pefs {
         if let Some(mounted) = &s.mounted {
@@ -876,7 +917,7 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
                 "The crypto device still has a mounted filesystem; leave session recoverable.",
             ));
         }
-        native::close(mapped)?;
+        close_mapping(s, mapped)?;
         s.mapped = None;
         registry.save(s)?;
     }
@@ -886,7 +927,20 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
         s.backing = None;
         registry.save(s)?;
     }
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    if s.backend == VolumeType::Veracrypt && s.mapped.is_none() && veracrypt::attached(&s.source)? {
+        return Err(AppError::new("A VeraCrypt attachment exists without a recorded device identity; preserve this session for explicit recovery."));
+    }
     registry.remove(s)
+}
+
+fn close_mapping(s: &Session, mapped: &str) -> AppResult<()> {
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    if s.backend == VolumeType::Veracrypt {
+        return veracrypt::close(&s.source);
+    }
+    let _ = s;
+    native::close(mapped)
 }
 
 pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
@@ -961,10 +1015,29 @@ pub(super) fn args(values: &[&str]) -> Vec<OsString> {
 
 /// Tool output is bounded and secrets are never interpolated into diagnostics.
 pub(super) fn exec(program: &str, argv: &[OsString], input: Option<&[u8]>) -> AppResult<String> {
-    let mut child = Command::new(program)
+    exec_in_locale(program, argv, input, "C")
+}
+
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+pub(super) fn exec_utf8(
+    program: &str,
+    argv: &[OsString],
+    input: Option<&[u8]>,
+) -> AppResult<String> {
+    exec_in_locale(program, argv, input, "C.UTF-8")
+}
+
+fn exec_in_locale(
+    program: &str,
+    argv: &[OsString],
+    input: Option<&[u8]>,
+    locale: &str,
+) -> AppResult<String> {
+    let executable = crate::trusted_privileged_executable(Path::new(program))?;
+    let mut child = Command::new(&executable)
         .args(argv)
         .env_clear()
-        .env("LC_ALL", "C")
+        .env("LC_ALL", locale)
         .env("PATH", "/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/pkg/sbin:/usr/pkg/bin")
         .env("HOME", "/root")
         .stdin(Stdio::piped())
@@ -1121,7 +1194,18 @@ mod tests {
             assert!(list_active_volumes().unwrap().is_empty());
         }
     }
-
+    #[test]
+    fn privileged_subprocess_rejects_a_writable_staging_path() {
+        let directory = std::env::temp_dir().join(format!("lurker-native-exec-{}", unique_id()));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o770)).unwrap();
+        let helper = directory.join("helper");
+        fs::write(&helper, "#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let error = exec(helper.to_str().unwrap(), &[], None).unwrap_err();
+        assert!(error.message.contains("untrusted"));
+        fs::remove_dir_all(directory).unwrap();
+    }
     #[test]
     fn no_clobber_publication_preserves_existing_file() {
         let root = std::env::temp_dir().join(format!("lurker-publish-{}", unique_id()));
@@ -1150,6 +1234,7 @@ mod tests {
         fs::remove_file(path).unwrap();
         fs::remove_file(alias).unwrap();
     }
+
     #[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
     #[test]
     #[ignore = "requires root; real disposable native crypto attachments under /tmp"]
