@@ -46,6 +46,19 @@ class Ownership(unittest.TestCase):
         self.root_patch.start()
         self.addCleanup(self.root_patch.stop)
 
+    def test_atomic_json_fsync_order_includes_published_directory(self):
+        events = []
+        original_fsync, original_replace = VM.os.fsync, VM.Path.replace
+        def fsync(descriptor):
+            events.append("fsync-directory" if VM.stat.S_ISDIR(os.fstat(descriptor).st_mode) else "fsync-file")
+            original_fsync(descriptor)
+        def replace(path, destination):
+            events.append("replace")
+            return original_replace(path, destination)
+        with patch.object(VM.os, "fsync", side_effect=fsync), patch.object(VM.Path, "replace", autospec=True, side_effect=replace):
+            VM.write_json(self.directory / "ack.json", {"ready": True})
+        self.assertEqual(events, ["fsync-file", "replace", "fsync-directory"])
+
     def test_own_manifest_loads(self):
         self.assertEqual(VM.OwnedClone.load(self.directory).manifest, self.m)
         self.assertEqual((self.directory / "manifest.json").stat().st_mode & 0o777, 0o600)
