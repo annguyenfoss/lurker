@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import argparse
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
 import pty
+import platform
 import select
 import shutil
 import sqlite3
@@ -50,7 +52,10 @@ def terminal(args, secrets=(), ok=True, timeout=150):
             if child:
                 finished = True
                 code = os.waitstatus_to_exitcode(status)
-                assert (code == 0) == ok, f"{args[1]} exit={code}: {transcript.decode(errors='replace')[-2000:]}"
+                diagnostic = transcript.decode(errors="replace")
+                for secret in secrets:
+                    diagnostic = diagnostic.replace(secret, "<redacted>")
+                assert (code == 0) == ok, f"{args[1]} exit={code}: {diagnostic[-2000:]}"
                 assert not pending, "Expected credential prompts did not execute"
                 for secret in secrets:
                     assert secret.encode() not in transcript, "Secret echoed to terminal"
@@ -118,8 +123,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("cli", type=Path)
     parser.add_argument("backends", nargs="+", choices=["gocryptfs", "cryfs", "cryptomator"])
+    parser.add_argument("--source-commit", help="Verified deployment commit, supplied by the remote coordinator")
     args = parser.parse_args()
     cli = str(args.cli.resolve())
+    identity = {"cli_sha256": hashlib.sha256(Path(cli).read_bytes()).hexdigest(),
+                "source_commit": args.source_commit, "os": platform.system(),
+                "release": platform.release(), "architecture": platform.machine()}
     if os.geteuid() == 0:
         parser.error("Run as the login user without sudo")
     failed = False
@@ -134,6 +143,7 @@ def main() -> int:
             failed = True
             result = {"backend": kind, "status": "failed", "error": str(error)[:2048], "retained": str(root)}
         result["duration_seconds"] = round(time.monotonic() - started, 2)
+        result.update(identity)
         print(json.dumps(result), flush=True)
     return int(failed)
 
