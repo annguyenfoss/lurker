@@ -129,3 +129,13 @@ runner versions fsync publication directories themselves. Private evidence is
 under `/mnt/virt/lurker-fault-a20261114a`, including candidate/package identity,
 external readiness, volume-copy proof, hypervisor events and guest result. This
 single case does not qualify other ciphers, backends, filesystems or platforms.
+
+The same five checks passed for packaged FreeBSD GELI/AES at that candidate,
+using FreeBSD `15.1-RELEASE-p6`, GELI kernel/userland version 7, outer UFS and
+inner UFS with soft updates. Archive SHA-256:
+`0af7f8e0824d9722529a0e86f6479b5c9fd6e5dd9aad5202b343c40e3f9e2377`.
+The acknowledged WAL stayed open at poweroff; normal writable CLI reopen and
+close both succeeded. No test-container repair was requested. The copied guest
+used its normal boot process, which announced background checks of its root
+filesystem. Evidence remains under `/mnt/virt/lurker-fault-b202611140`; the clone
+and its verified isolated network were cleanly stopped after collection.
