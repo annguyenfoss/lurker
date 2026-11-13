@@ -33,9 +33,9 @@ ENTRY = {"veracrypt-create": ["lurker-veracrypt-create"],
          "veracrypt-bsd": ["lurker-veracrypt-bsd"], "gocryptfs": ["gocryptfs"],
          "cryfs": ["cryfs"], "cryptomator": ["lurker-cryptomator", "runtime/bin/java"]}
 TOOLS = {
-    "Linux": {"luks": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "lsblk"],
-              "luks1": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "lsblk"],
-              "veracrypt": ["cryptsetup", "mkfs.btrfs", "mount", "umount"],
+    "Linux": {"luks": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "lsblk", "losetup"],
+              "luks1": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "lsblk", "losetup"],
+              "veracrypt": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "losetup"],
               "gocryptfs": [["fusermount3", "fusermount"]], "cryfs": ["fusermount"], "cryptomator": ["fusermount3"]},
     "FreeBSD": {"geli": ["geli", "mdconfig", "newfs", "mount", "umount"],
                 "pefs": ["pefs", "mount", "umount"], "gocryptfs": ["mount_fusefs"]},
