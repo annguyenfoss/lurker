@@ -415,13 +415,38 @@ fn encrypted_apple(path: &Path) -> AppResult<Option<bool>> {
     if decode::<Encryption>(&result.stdout)?.encrypted {
         return Ok(Some(true));
     }
-    // isencrypted reports false even for arbitrary random bytes. imageinfo
-    // recognizes actual plaintext disk images, including raw GPT/APFS images;
-    // VeraCrypt's random header cannot be recognized without its password.
+    // isencrypted reports false even for arbitrary random bytes. imageinfo can
+    // also accept arbitrary sector-aligned *.img files as CRawDiskImage, so its
+    // exit code alone cannot identify plaintext (including VeraCrypt images).
     let mut arguments = args(&["imageinfo", "-plist", "-stdinpass"]);
     arguments.push(path.into());
     let info = execute(Path::new(HDIUTIL), &arguments, None)?;
-    Ok(info.status.success().then_some(false))
+    if !info.status.success() {
+        return Ok(None);
+    }
+    plain_image_info(&info.stdout)
+}
+
+#[derive(Deserialize)]
+struct ImageFormat {
+    #[serde(rename = "Class Name")]
+    class_name: String,
+    #[serde(rename = "Properties")]
+    properties: ImageProperties,
+}
+
+#[derive(Deserialize)]
+struct ImageProperties {
+    #[serde(rename = "Partitioned")]
+    partitioned: bool,
+}
+
+fn plain_image_info(bytes: &[u8]) -> AppResult<Option<bool>> {
+    let format: ImageFormat = decode(bytes)?;
+    // Recognizable Apple container formats and partitioned plaintext disks are
+    // refused. An unrecognized raw file still requires VeraCrypt authentication;
+    // it is never attached directly as an unencrypted image.
+    Ok((format.class_name != "CRawDiskImage" || format.properties.partitioned).then_some(false))
 }
 
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
@@ -785,6 +810,20 @@ fn detach(volume: &Volume) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn generic_raw_img_is_not_misidentified_as_plaintext() {
+        let raw = br#"<plist version="1.0"><dict><key>Class Name</key><string>CRawDiskImage</string><key>Properties</key><dict><key>Partitioned</key><false/></dict></dict></plist>"#;
+        assert_eq!(plain_image_info(raw).unwrap(), None);
+        let partitioned = String::from_utf8_lossy(raw).replace("<false/>", "<true/>");
+        assert_eq!(
+            plain_image_info(partitioned.as_bytes()).unwrap(),
+            Some(false)
+        );
+        let udif = String::from_utf8_lossy(raw).replace("CRawDiskImage", "CUDIFDiskImage");
+        assert_eq!(plain_image_info(udif.as_bytes()).unwrap(), Some(false));
+        assert!(plain_image_info(b"<plist version=\"1.0\"><dict/></plist>").is_err());
+    }
+
     #[test]
     fn private_backends_precede_compatibility_installations() {
         let paths = private_veracrypt_candidates(Path::new(
