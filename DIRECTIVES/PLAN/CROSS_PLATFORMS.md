@@ -1,6 +1,6 @@
 # Cross-platform implementation plan
 
-Status: implementation plan, recorded 2026-11-14. This document describes intended work; it does not claim the planned backends or packaging changes are implemented or validated. `DIRECTIVES/LLM/CIPHER.md` remains authoritative for backend selection and existing crypto profiles.
+Status: implementation plan, recorded 2026-11-14. This document records the approved scope and acceptance gates. Current implementation and qualification results are tracked in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`; the baseline below is historical. `DIRECTIVES/LLM/CIPHER.md` remains authoritative for backend selection and crypto profiles.
 
 ## 1. Required outcome
 
@@ -40,7 +40,7 @@ Do not expand this matrix implicitly while solving packaging problems. Windows, 
 
 Apple images mean the existing `hdiutil` backend, not FileVault or general native APFS-encryption management. macOS remains file-container/directory oriented; physical-device creation stays Linux-only in the product. BSD disk-encryption adapters must initially use disposable file-backed devices; selecting a native disk format does not authorize exposing destructive BSD physical-device creation.
 
-## 3. Current implementation and gaps
+## 3. Baseline before this implementation
 
 | Area | Current behavior | Required change |
 | --- | --- | --- |
