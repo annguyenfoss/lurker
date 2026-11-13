@@ -5,7 +5,7 @@ use super::{Credential, args, exec};
 use crate::{AppError, AppResult, CreateCipher};
 use std::ffi::OsString;
 use std::fs;
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 
@@ -138,6 +138,35 @@ pub(super) fn verify_mapping(source: &Path, mountpoint: &Path) -> AppResult<()> 
         ));
     }
     Ok(())
+}
+
+/// PEFS's statfs implementation copies f_flags from its underlying filesystem,
+/// so getmntinfo/statfs can report read-write for a genuinely read-only layer.
+/// Qualify the effective access check instead, after confirming a key is loaded:
+/// PEFS also returns EROFS when no keys exist. This performs no write operation.
+/// Upstream: https://github.com/freebsd-pefs/pefs/blob/master/sys/fs/pefs/pefs_vfsops.c
+pub(super) fn is_readonly(mountpoint: &Path) -> AppResult<bool> {
+    exec(
+        PEFS,
+        &[
+            "showkeys".into(),
+            "-t".into(),
+            mountpoint.as_os_str().to_owned(),
+        ],
+        None,
+    )?;
+    let path = std::ffi::CString::new(mountpoint.as_os_str().as_bytes())
+        .map_err(|_| AppError::new("The PEFS mountpoint contains a NUL byte."))?;
+    // SAFETY: path is a NUL-terminated string valid for the duration of access.
+    if unsafe { libc::access(path.as_ptr(), libc::W_OK) } == 0 {
+        return Ok(false);
+    }
+    let error = std::io::Error::last_os_error();
+    if error.raw_os_error() == Some(libc::EROFS) {
+        Ok(true)
+    } else {
+        Err(AppError::io("Failed to verify PEFS read-only state", error))
+    }
 }
 
 fn validate_profile(source: &Path) -> AppResult<()> {
