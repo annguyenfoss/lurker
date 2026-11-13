@@ -875,9 +875,11 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output) -> AppResult<()
     session.mounted_directory = None;
     save(&dir, &session)?;
     if let Some(process) = &session.process {
-        // Only after native unmount drained the filesystem may a matching
-        // foreground process receive graceful termination.
-        if alive(process) {
+        // FUSE unmount returns before the daemon's final destructor/metadata
+        // flush has necessarily finished. gocryptfs/CryFS exit naturally;
+        // signalling them here can discard buffered root metadata. The private
+        // Java helper uses a shutdown hook and stays alive awaiting a signal.
+        if session.backend == VolumeType::Cryptomator && alive(process) {
             unsafe {
                 libc::kill(process.pid as i32, libc::SIGTERM);
             }
