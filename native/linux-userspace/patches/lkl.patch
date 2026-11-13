@@ -178,7 +178,7 @@ index 446966a12..630acd1f2 100644
  int main(int argc, char **argv)
  {
 +	if (argc == 2 && !strcmp(argv[1], "--lurker-userspace-version")) {
-+		puts("lurker-userspace-2");
++		puts("lurker-userspace-3");
 +		return 0;
 +	}
 +	if (geteuid() == 0) {

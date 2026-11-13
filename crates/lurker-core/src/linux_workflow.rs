@@ -5,12 +5,13 @@ use crate::linux::{
     absolute_path, is_block_device_target, mapper_device_path, mapper_name_for_source,
     read_mountinfo, resolve_umount_target, size_gb_to_mib, source_kind_for_path,
 };
+use crate::linux_source::lock_file_source;
 use crate::model::{CreateCipher, SourceKind, VolumeType};
 use crate::output::Output;
 use crate::system::{trim_stdout, AppContext};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, IsTerminal, Read, Write};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -44,6 +45,13 @@ fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> 
         validate_veracrypt_passphrase(command.passphrase.as_deref())?;
     }
     assert_create_target(ctx, &command)?;
+    let _source_guard = if command.source_kind == SourceKind::File && command.target.exists() {
+        let source = lock_file_source(&command.target)?;
+        assert_file_not_attached(ctx, &source)?;
+        Some(source)
+    } else {
+        None
+    };
     assert_mapper_available(&mapper_name_for_source(&command.target, None)?)?;
     match command.volume_type {
         VolumeType::Veracrypt => veracrypt_create_device(ctx, &command),
@@ -69,6 +77,13 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
     }
     command.source = absolute_path(&command.source)?;
     command.mountpoint = absolute_path(&command.mountpoint)?;
+    let source_guard = if command.source.is_file() {
+        let source = lock_file_source(&command.source)?;
+        assert_file_not_attached(ctx, &source)?;
+        Some(source)
+    } else {
+        None
+    };
     let mountpoint = &command.mountpoint;
     if read_mountinfo()?
         .iter()
@@ -87,6 +102,7 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
                 command.passphrase.as_deref(),
                 command.keyfile.as_deref(),
                 command.readonly,
+                source_guard.as_ref(),
             )
         }
         VolumeType::Luks | VolumeType::Luks1 => luks_mount_device(
@@ -97,6 +113,7 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
             command.passphrase.as_deref(),
             command.keyfile.as_deref(),
             command.readonly,
+            source_guard.as_ref(),
         ),
         VolumeType::Apple => Err(AppError::new("Apple encrypted disk images require macOS.")),
         other => Err(AppError::new(format!(
@@ -539,6 +556,7 @@ fn luks_mount_device(
     passphrase: Option<&str>,
     keyfile: Option<&Path>,
     readonly: bool,
+    locked_source: Option<&File>,
 ) -> AppResult<()> {
     require_passphrase(passphrase, keyfile)?;
     let mapper_name = mapper_name_for_source(source_path, tag_override)?;
@@ -565,6 +583,9 @@ fn luks_mount_device(
         readonly,
     )?;
     ctx.set_cleanup_mapper(mapper_name.clone());
+    if let Some(source) = locked_source {
+        verify_mapper_source(ctx, &mapper_name, source, source_path)?;
+    }
     mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
 
@@ -584,6 +605,7 @@ fn tcrypt_mount_device(
     passphrase: Option<&str>,
     keyfile: Option<&Path>,
     readonly: bool,
+    locked_source: Option<&File>,
 ) -> AppResult<()> {
     require_passphrase(passphrase, keyfile)?;
     let mapper_name = mapper_name_for_source(source_path, None)?;
@@ -606,6 +628,9 @@ fn tcrypt_mount_device(
         readonly,
     )?;
     ctx.set_cleanup_mapper(mapper_name.clone());
+    if let Some(source) = locked_source {
+        verify_mapper_source(ctx, &mapper_name, source, source_path)?;
+    }
     mount_open_mapper(ctx, &mapper_name, mountpoint, readonly)?;
     ctx.clear_cleanup_mapper();
 
@@ -655,6 +680,145 @@ fn dmcrypt_umount_device(
     ctx.output
         .msg2(&format!("Resolved input kind: {}", resolved.target_kind));
     Ok(())
+}
+
+fn parse_device_pair(value: &str) -> AppResult<(u64, u64)> {
+    let (major, minor) = value
+        .trim()
+        .split_once(':')
+        .ok_or_else(|| AppError::new("Invalid native device identity."))?;
+    Ok((
+        major
+            .parse()
+            .map_err(|_| AppError::new("Invalid native device major number."))?,
+        minor
+            .parse()
+            .map_err(|_| AppError::new("Invalid native device minor number."))?,
+    ))
+}
+
+fn loop_source_identities(bytes: &[u8]) -> AppResult<Vec<(String, (u64, u64, u64))>> {
+    let value: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|error| AppError::new(format!("Invalid native loop metadata: {error}")))?;
+    let devices = value
+        .get("loopdevices")
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| AppError::new("Native loop metadata has no device inventory."))?;
+    devices
+        .iter()
+        .map(|entry| {
+            let name = entry
+                .get("name")
+                .and_then(|value| value.as_str())
+                .ok_or_else(|| AppError::new("Cannot identify an active loop device."))?;
+            let inode = entry
+                .get("back-ino")
+                .and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok()))
+                .ok_or_else(|| {
+                    AppError::new("Cannot verify an active loop device's backing inode.")
+                })?;
+            let device = entry
+                .get("back-maj:min")
+                .and_then(|value| value.as_str())
+                .ok_or_else(|| {
+                    AppError::new("Cannot verify an active loop device's backing filesystem.")
+                })?;
+            let (major, minor) = parse_device_pair(device)?;
+            Ok((name.to_string(), (major, minor, inode)))
+        })
+        .collect()
+}
+
+fn native_loop_sources(ctx: &mut AppContext) -> AppResult<Vec<(String, (u64, u64, u64))>> {
+    let program = crate::trusted_privileged_executable(ctx.losetup_path()?)?;
+    let result = ctx.capture_command(
+        &program,
+        &[
+            "--json".into(),
+            "--list".into(),
+            "--output".into(),
+            "NAME,BACK-INO,BACK-MAJ:MIN".into(),
+        ],
+        true,
+        "Failed to inspect active loop identities",
+    )?;
+    if !result.status.success() {
+        return Err(AppError::new(
+            "Cannot verify native loop backing identities. Refusing an ambiguous open.",
+        ));
+    }
+    loop_source_identities(&result.stdout)
+}
+
+fn file_source_identity(source: &File) -> AppResult<(u64, u64, u64)> {
+    let metadata = source
+        .metadata()
+        .map_err(|error| AppError::io("Cannot inspect source identity", error))?;
+    Ok((
+        libc::major(metadata.dev()) as u64,
+        libc::minor(metadata.dev()) as u64,
+        metadata.ino(),
+    ))
+}
+
+fn assert_file_not_attached(ctx: &mut AppContext, source: &File) -> AppResult<()> {
+    let identity = file_source_identity(source)?;
+    if native_loop_sources(ctx)?
+        .iter()
+        .any(|(_, backing)| *backing == identity)
+    {
+        return Err(AppError::new("Container is already attached to a kernel loop device. Unmount it before opening it again."));
+    }
+    Ok(())
+}
+
+fn verify_mapper_source(
+    ctx: &mut AppContext,
+    mapper: &str,
+    source: &File,
+    path: &Path,
+) -> AppResult<()> {
+    crate::linux_source::verify_path_identity(source, path)?;
+    let expected = file_source_identity(source)?;
+    let mapper_device = fs::metadata(mapper_device_path(mapper))
+        .map_err(|error| AppError::io("Cannot inspect newly opened mapper", error))?
+        .rdev();
+    let slaves = PathBuf::from(format!(
+        "/sys/dev/block/{}:{}/slaves",
+        libc::major(mapper_device),
+        libc::minor(mapper_device)
+    ));
+    let entries = fs::read_dir(slaves)
+        .map_err(|error| AppError::io("Cannot inspect mapper backing device", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::io("Cannot inspect mapper backing device", error))?;
+    if entries.len() != 1 {
+        return Err(AppError::new(
+            "Cannot verify an ambiguous mapper backing device.",
+        ));
+    }
+    let device = fs::read_to_string(entries[0].path().join("dev"))
+        .map_err(|error| AppError::io("Cannot identify mapper backing device", error))?;
+    let expected_device = parse_device_pair(&device)?;
+    for (name, backing) in native_loop_sources(ctx)? {
+        let loop_device = fs::metadata(name)
+            .map_err(|error| AppError::io("Cannot inspect loop device identity", error))?
+            .rdev();
+        if (
+            libc::major(loop_device) as u64,
+            libc::minor(loop_device) as u64,
+        ) == expected_device
+        {
+            if backing != expected {
+                return Err(AppError::new("Opened mapper does not match the locked container. Refusing filesystem access."));
+            }
+            crate::linux_source::verify_path_identity(source, path)?;
+            return Ok(());
+        }
+    }
+    Err(AppError::new(
+        "Cannot verify the opened mapper's backing file. Refusing filesystem access.",
+    ))
 }
 
 fn assert_mapper_available(mapper_name: &str) -> AppResult<()> {
@@ -1509,6 +1673,36 @@ impl Drop for TempFileGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_lock_is_shared_by_hardlink_aliases() {
+        let root = std::env::temp_dir().join(format!("lurker-inode-lock-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("source");
+        let alias = root.join("alias");
+        fs::write(&source, b"not a real container").unwrap();
+        fs::hard_link(&source, &alias).unwrap();
+        let guard = lock_file_source(&source).unwrap();
+        assert!(lock_file_source(&alias).is_err());
+        drop(guard);
+        assert!(lock_file_source(&alias).is_ok());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn loop_identity_uses_kernel_inode_and_device_without_filenames() {
+        assert_eq!(
+            loop_source_identities(
+                br#"{"loopdevices":[{"name":"/dev/loop0","back-ino":7241,"back-maj:min":"0:43"}]}"#
+            )
+            .unwrap(),
+            vec![("/dev/loop0".into(), (0, 43, 7241))]
+        );
+        assert!(loop_source_identities(
+            br#"{"loopdevices":[{"back-ino":null,"back-maj:min":"0:43"}]}"#
+        )
+        .is_err());
+    }
 
     #[test]
     fn luks1_profile_never_inherits_luks2_kdf_or_sector_arguments() {

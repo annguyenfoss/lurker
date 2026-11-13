@@ -13,6 +13,8 @@ mod folder;
 mod keyslots;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+mod linux_source;
 #[cfg(target_os = "macos")]
 mod macos;
 mod model;

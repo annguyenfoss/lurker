@@ -95,6 +95,14 @@ The architectural advantage is a smaller initial privilege scope for some failur
 
 Further work should verify memory/dump/debugger policies, assess a dedicated process sandbox, and extend fault injection to resource exhaustion and abrupt termination across startup/shutdown stages. Benchmark performance and exercise full cross-mode persistence before making stronger comparative claims. These are open review/verification items, not implemented protections.
 
+## Source identity and cross-mode exclusion
+
+Native Linux file mounts hold a nonblocking exclusive inode lock through mapper startup, query loop backing filesystem/inode identifiers through administrator-controlled `losetup`, and verify the opened mapper still uses that locked source before mounting its filesystem. Hard links and renamed backing files cannot bypass the inode check. The CLI needs read access to lock the source; run the privileged CLI as root for root-owned unreadable containers. Missing or ambiguous native identity metadata fails closed.
+
+The private userspace crypto driver holds the same exclusive inode lock for the mounted volume's entire lifetime, including read-only opens. It checks active loop backing identities again **after** taking that lock, closing the kernel-first startup race. Unprivileged startup refuses deleted or inaccessible active loop backing paths when it cannot establish their identity. It does not elevate to bypass that check. Forced replacement also locks an existing destination before staging the new volume.
+
+Native bundle protocol 3 is required. Before upgrading a protocol-2 installation, close its existing userspace volumes using the old installed Lurker; already-running old drivers do not acquire the new locks merely because files on disk were updated. Do not kill mounted drivers as an upgrade procedure. This work does not install or replace the production Lurker on endeavour.
+
 ## Unprivileged session safety and recovery
 
 Each uid has a private directory under `XDG_RUNTIME_DIR`, or a private uid-specific temporary directory when no runtime directory exists. Session records contain paths and resource identities, never passphrases. JSON is published atomically. A per-user operation lock serializes userspace changes.
@@ -112,7 +120,7 @@ Unmount first releases the filesystem, remounts its internal disk read-only to c
 - Disable terminal echo before printing a password prompt. Fast automated input exposed a race in the convenience prompt’s ordering. The current wrapper also restores terminal settings on typed Ctrl-C; this does not establish correct cleanup for every externally delivered signal.
 - wxWidgets needs a UTF-8 locale for Unicode filenames and secrets. The wrapper uses C.UTF-8, preserves spaces, rejects NUL/newline secrets, and sends secrets over stdin rather than argv.
 - Build caches cannot substitute for patch verification. GNU patch can guess the opposite direction during a reverse dry run unless forced. The builder checks the actual patch state on each run, resolves symlinked source paths, and regenerates the fixed LKL configuration so old caches cannot silently omit filesystem drivers.
-- The desktop checks helper protocol 2 and unprivileged capability before sending an operation; native helpers must report `lurker-userspace-2`. An old helper must be rejected before it could ignore the new privilege field and elevate.
+- The desktop negotiates helper JSON capabilities and requires userspace backend protocol 3 before sending an unprivileged operation; native helpers must report `lurker-userspace-3`. An old helper must be rejected before it could ignore the new privilege field and elevate.
 
 ## Build and verification
 

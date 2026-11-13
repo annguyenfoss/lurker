@@ -105,7 +105,7 @@ index 247eca7..052974a 100644
  {
 +	if (argc == 2 && strcmp (argv[1], "--lurker-userspace-version") == 0)
 +	{
-+		std::cout << "lurker-userspace-2" << std::endl;
++		std::cout << "lurker-userspace-3" << std::endl;
 +		return 0;
 +	}
 +	if (geteuid() == 0)
@@ -117,3 +117,96 @@ index 247eca7..052974a 100644
  #ifdef TC_LINUX
  	// The requester helper must never initialize a core service or handle secrets.
  	if (argc > 1 && strcmp (argv[1], TC_REQUESTER_HELPER_CMDLINE_OPTION) == 0)
+diff --git a/src/Platform/File.h b/src/Platform/File.h
+--- a/src/Platform/File.h
++++ b/src/Platform/File.h
+@@ -55 +55,2 @@
+-			AllowRequesterAccess = 1 << 2
++			AllowRequesterAccess = 1 << 2,
++			LurkerVolumeSource = 1 << 3
+@@ -96,0 +98,2 @@
++		// Private Linux driver: retain an exclusive source-inode lock until close.
++		void LockVolumeSource () const;
+diff --git a/src/Platform/Unix/File.cpp b/src/Platform/Unix/File.cpp
+--- a/src/Platform/Unix/File.cpp
++++ b/src/Platform/Unix/File.cpp
+@@ -19,0 +20,3 @@
++#include <sys/file.h>
++#include <dirent.h>
++#include <memory>
+@@ -288,0 +292,58 @@
++#ifdef TC_LINUX
++	void File::LockVolumeSource () const
++	{
++		ValidateState();
++		struct stat source;
++		throw_sys_sub_if (fstat (FileHandle, &source) != 0, L"Cannot inspect container identity");
++		if (!S_ISREG (source.st_mode))
++			throw ParameterIncorrect (SRC_POS);
++		throw_sys_sub_if (flock (FileHandle, LOCK_EX | LOCK_NB) != 0, L"Container is already in use");
++
++		// Check after acquiring flock: a kernel opener may have completed after
++		// the Rust preflight but before this process acquired its source lock.
++		std::unique_ptr <DIR, int (*)(DIR *)> directory (opendir ("/sys/class/block"), closedir);
++		throw_sys_sub_if (!directory, L"Cannot inspect active file devices");
++		for (;;)
++		{
++			errno = 0;
++			struct dirent *entry = readdir (directory.get());
++			if (!entry)
++			{
++				throw_sys_sub_if (errno != 0, L"Cannot inspect active file devices");
++				break;
++			}
++			if (strncmp (entry->d_name, "loop", 4) != 0)
++				continue;
++			std::string metadata = std::string ("/sys/class/block/") + entry->d_name + "/loop/backing_file";
++			int descriptor = open (metadata.c_str(), O_RDONLY | O_CLOEXEC);
++			if (descriptor < 0 && errno == ENOENT)
++				continue;
++			throw_sys_sub_if (descriptor < 0, L"Cannot identify active loop backing file");
++			char bytes[8192];
++			ssize_t length = read (descriptor, bytes, sizeof (bytes));
++			int readError = errno;
++			close (descriptor);
++			errno = readError;
++			throw_sys_sub_if (length < 0, L"Cannot identify active loop backing file");
++			if (length == 0)
++				continue;
++			std::string path (bytes, static_cast <size_t> (length));
++			if (path.back() == '\n')
++				path.pop_back();
++			if (length == sizeof (bytes) || path.find ('\0') != std::string::npos
++				|| (path.size() >= 10 && path.compare (path.size() - 10, 10, " (deleted)") == 0))
++			{
++				errno = EBUSY;
++				throw SystemException (SRC_POS, L"Cannot verify a deleted or ambiguous loop backing file");
++			}
++			struct stat backing;
++			throw_sys_sub_if (stat (path.c_str(), &backing) != 0, L"Cannot verify active loop backing identity");
++			if (source.st_dev == backing.st_dev && source.st_ino == backing.st_ino)
++			{
++				errno = EBUSY;
++				throw SystemException (SRC_POS, L"Container is already attached to a kernel loop device");
++			}
++		}
++	}
++#endif
++
+@@ -294,0 +356,5 @@
++#endif
++
++#ifdef TC_LINUX
++		if (flags & File::LurkerVolumeSource)
++			sysFlags |= O_NONBLOCK | O_NOFOLLOW;
+diff --git a/src/Volume/Volume.cpp b/src/Volume/Volume.cpp
+--- a/src/Volume/Volume.cpp
++++ b/src/Volume/Volume.cpp
+@@ -81 +81 @@
+-		flags = static_cast <File::FileOpenFlags> (flags | File::AllowRequesterAccess);
++		flags = static_cast <File::FileOpenFlags> (flags | File::AllowRequesterAccess | File::LurkerVolumeSource);
+@@ -108,0 +109,4 @@
++#ifdef TC_LINUX
++		if (!volumePath.IsDevice())
++			file->LockVolumeSource();
++#endif

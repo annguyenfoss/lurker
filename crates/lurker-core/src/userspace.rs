@@ -18,7 +18,7 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const HELPER_VERSION: &str = "lurker-userspace-2";
+const HELPER_VERSION: &str = "lurker-userspace-3";
 const READY_TIMEOUT: Duration = Duration::from_secs(45);
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -739,10 +739,12 @@ fn assert_unused(runtime: &Runtime, source: &Path) -> AppResult<()> {
                     ))
                 }
             };
-            let path = backing
-                .trim_end_matches('\n')
-                .trim_end_matches(" (deleted)");
-            if fs::metadata(path).ok().map(|m| (m.dev(), m.ino())) == identity {
+            let path = backing.trim_end_matches('\n');
+            if path.ends_with(" (deleted)") {
+                return Err(AppError::new("An active loop backing file was deleted or is ambiguous. Cannot prove the container is unused."));
+            }
+            let metadata = fs::metadata(path).map_err(|error| AppError::io("Cannot identify an active loop backing file. Refusing an ambiguous userspace open", error))?;
+            if Some((metadata.dev(), metadata.ino())) == identity {
                 return Err(AppError::new(
                     "Container is already attached to a kernel loop device. Unmount it first.",
                 ));
@@ -916,6 +918,11 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
         crate::credentials::ensure_distinct_target(&target, keyfile)?;
     }
     assert_create_target(&target, c.force)?;
+    let _existing_source_guard = if target.exists() {
+        Some(crate::linux_source::lock_file_source(&target)?)
+    } else {
+        None
+    };
     assert_unused(runtime, &target)?;
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)

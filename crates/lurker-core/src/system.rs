@@ -19,6 +19,7 @@ pub struct ToolPaths {
     pub umount: Option<PathBuf>,
     pub blkid: Option<PathBuf>,
     pub lsblk: Option<PathBuf>,
+    pub losetup: Option<PathBuf>,
     pub veracrypt: Option<PathBuf>,
 }
 
@@ -73,6 +74,13 @@ impl AppContext {
             .lsblk
             .as_deref()
             .ok_or_else(|| AppError::new("Required command not found: lsblk"))
+    }
+
+    pub fn losetup_path(&self) -> AppResult<&Path> {
+        self.tools
+            .losetup
+            .as_deref()
+            .ok_or_else(|| AppError::new("Required command not found: losetup"))
     }
 
     pub fn blkid_path(&self) -> Option<&Path> {
@@ -320,6 +328,7 @@ impl ToolPaths {
             umount: None,
             blkid,
             lsblk: find_executable("lsblk"),
+            losetup: find_executable("losetup"),
             veracrypt,
         };
 
@@ -431,6 +440,11 @@ pub fn probe_system() -> AppResult<SystemProbe> {
                 required: true,
             },
             ToolStatus {
+                name: "losetup".into(),
+                path: find_executable("losetup"),
+                required: true,
+            },
+            ToolStatus {
                 name: "blkid".into(),
                 path: find_executable("blkid"),
                 required: false,
@@ -515,6 +529,7 @@ mod tests {
                 umount: None,
                 blkid: None,
                 lsblk: None,
+                losetup: None,
                 veracrypt: None,
             },
             is_root: false,
