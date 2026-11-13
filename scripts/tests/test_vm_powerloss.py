@@ -229,6 +229,15 @@ class GuestFixture(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 VM.guest_directory("test1234")
 
+    def test_new_guest_fixture_ancestry_is_published_durably(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(VM.Path, "home", return_value=Path(temporary)), patch.object(VM.platform, "system", return_value="FreeBSD"), patch.object(VM, "fsync_path", wraps=VM.fsync_path) as sync:
+            home = Path(temporary)
+            VM.guest_directory("test1234", create=True)
+            calls = [entry.args[0] for entry in sync.call_args_list]
+            self.assertIn(home, calls)
+            self.assertIn(home / ".cache", calls)
+            self.assertIn(home / ".cache/lurker", calls)
+
     def test_cache_symlink_rejected_before_fixture_creation(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as other:
             home = Path(temporary)

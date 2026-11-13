@@ -426,12 +426,15 @@ def guest_directory(run_id, create=False):
     parent = home / ".cache" / "lurker"
     for path in (home, home / ".cache", parent):
         require(not path.is_symlink(), "Guest fixture ancestry contains symlink")
-        if create:
-            path.mkdir(mode=0o700, exist_ok=True)
+        if create and not path.exists():
+            path.mkdir(mode=0o700)
+            fsync_path(path.parent)
+            fsync_path(path)
         require(path.is_dir() and path.stat().st_uid == os.geteuid(), "Guest cache is not owned")
     directory = parent / ("fault-" + run_id)
     if create:
         directory.mkdir(mode=0o700)
+        fsync_path(parent)
         write_json(directory / "owner.json", {"run": run_id, "uid": os.geteuid()})
     require(not directory.is_symlink(), "Guest fixture symlink forbidden")
     state = directory.stat()
