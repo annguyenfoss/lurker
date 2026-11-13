@@ -114,6 +114,34 @@ Keep upstream formats interoperable. Do not invent Lurker-specific cryptography,
 
 ## 6. Shared architecture
 
+### Reuse boundaries for platform implementers
+
+The architecture is **one shared core, reusable backend integrations, and small OS-specific adapters**. Five KVM OS implementation targets do not mean five encryption implementations. These are implementation rules for future agents, not a description of a completed refactor.
+
+| Layer | Shared responsibility | Platform-specific responsibility |
+| --- | --- | --- |
+| Product and core | CLI/desktop command model, validation, credential policy, capability contracts, lifecycle state machine, error categories and recovery rules | Presentation of capabilities actually available on that host |
+| Encryption backend | Upstream format/crypto implementation, backend-specific argument/protocol construction, credential transport and profile validation where semantics match | Necessary upstream build options and narrowly scoped integration patches |
+| OS adapter | Common attach/open/mount/close contract and resource-ownership rules | Device attachment, filesystem mounting, authorization, mount/device discovery, process identity and native session hooks |
+| Build and packaging | Source pins, checksums, patch provenance, backend build recipes and dependency inventory | Target compilation, package dependencies/layout, ABI/library resolution, signing and kernel/FUSE prerequisites |
+
+For example, VeraCrypt's upstream encryption engine is reusable across selected Linux, macOS, FreeBSD and OpenBSD integrations. Build it for each target and adapt attachment/mounting; do not reimplement AES or duplicate an entire Lurker workflow per OS. Linux's kernel cryptsetup route, Linux's unprivileged FUSE/LKL route and macOS's FUSE/disk-image route remain distinct execution adapters beneath that shared backend policy. Reusable source does not mean the same executable runs on every OS.
+
+Native facilities remain OS-specific: GELI on FreeBSD, CGD on NetBSD and softraid crypto on OpenBSD need separate adapters. They should still use the common command, credential, capability, session and error contracts. Similar lifecycle steps do not make their formats, KDFs or credential operations interchangeable.
+
+All six Linux distributions use the **same Linux integration code**. Handle dependency names, package layouts and library/tool versions in build/packaging metadata and capability probes. Do not fork crypto behavior into Arch/Ubuntu/openSUSE/Fedora/Debian/Gentoo implementations. A demonstrated tool incompatibility may need a narrow, tested version/capability adaptation; distribution name alone is not a reason for a separate workflow.
+
+When adding another platform:
+
+1. Read the existing shared and backend-specific implementations first. Extract genuinely common behavior with regression coverage rather than copying a platform workflow into a new file wholesale.
+2. Keep domain types and backend policy in `lurker-core`; put native operations behind explicit adapter boundaries. Keep OS-specific imports and conditional compilation at those boundaries instead of scattering platform branches through frontend and credential code.
+3. Share each backend's profile/command builders where its native interface has the same semantics. Keep OS-specific flags and filesystem decisions explicit; never hide meaningful differences behind an abstraction that silently ignores unsupported options.
+4. Reuse the backend source pin and common patches across targets where compatible. Keep unavoidable target patches small and documented; avoid maintaining independent platform forks without a demonstrated need.
+5. Run shared contract/conformance tests against each adapter, plus native lifecycle tests and packaging checks. A successful adapter on one OS is not proof that another OS's mounts, privileges or recovery behave identically.
+6. Expose unsupported operations through capabilities. Do not manufacture feature parity by weakening safety rules, adding an unapproved backend/OS pair, or changing an existing format/profile.
+
+Container interoperability also depends on the inner filesystem: sharing VeraCrypt support does not make a Linux-created Btrfs container mountable on macOS. Report filesystem support separately from encryption-format support. Directory backends likewise require their own cross-platform filename, permission and locking qualification.
+
 ### Backend discovery and capabilities
 
 Introduce a backend registry in `lurker-core`, with per-platform adapters. Each entry describes supported source types, operations, credentials, filesystem choices, privilege route, runtime prerequisites and implementation version. Keep supported profile choices hardcoded; build manifests are provenance/dependency data, not user-editable crypto policy.
@@ -219,6 +247,25 @@ Exit: each advertised pair has native operation tests and a complete package. Fr
 Exit: published support matches tested behavior, all bundled code has provenance and an update owner, and shutdown integration preserves data rather than forcing success.
 
 ## 8. Validation and release gates
+
+### KVM development and validation topology
+
+Use **five primary OS development VMs and ten total KVM build/functional-test VMs**. The five development VMs are a subset of the ten, not five additional machines. These are guest environments, not a requirement for ten physical hosts.
+
+| OS implementation target | Primary development | Native build, packaging and functional tests |
+| --- | --- | --- |
+| Linux | One of the six Linux VMs | Arch Linux, Ubuntu, openSUSE, Fedora, Debian, Gentoo |
+| FreeBSD | FreeBSD VM | FreeBSD VM |
+| DragonFly BSD | DragonFly BSD VM | DragonFly BSD VM |
+| NetBSD | NetBSD VM | NetBSD VM |
+| OpenBSD | OpenBSD VM | OpenBSD VM |
+| Total | 5 VMs | 10 VMs |
+
+Develop shared features and the Linux adapter primarily on one Linux distribution, and native adapters on their respective BSDs. Then build and run functional tests on all ten guests for each applicable selected backend. Testing the other Linux distributions means exercising the installed artifacts and operations, not compilation alone. Maintain the same source revision and record each guest's toolchain, dependency and kernel/FUSE versions so failures can be attributed correctly.
+
+The ten guests cover Linux and the four BSDs. macOS remains a separate native Mac build/test target under the approved matrix. BSD CLI/core and desktop qualification remain separate; no guest may be marked fully supported merely because its CLI compiles.
+
+### Required checks
 
 Run Rust checks for implementation changes: `cargo check --workspace`, `cargo test --workspace`, and desktop tests when desktop behavior changes. Preserve and extend the real Linux userspace suite (`scripts/test-linux-userspace.sh`, normal user) and macOS disposable native tests. Unit tests alone cannot qualify a filesystem backend or packaged runtime.
 
