@@ -35,7 +35,7 @@ network has no forwarding or DNS; no change is made to the primary network.
 Original hostnames and SSH keys are copied, so SSH requires the already trusted
 original domain host key through `HostKeyAlias` with strict checking. The address
 must come from the clone MAC's DHCP lease inside its verified isolated subnet.
-No private SSH key is copied into a guest.
+No hypervisor private SSH key is transferred to a guest; disk copies naturally retain existing guest keys.
 
 `inspect DIRECTORY`, `ssh DIRECTORY COMMAND`, `poweroff DIRECTORY` and
 `boot DIRECTORY` resume from the saved manifest. Poweroff uses `virsh destroy`
@@ -96,3 +96,14 @@ pool name, UUID and target before stopping that metadata registration with
 `pool-destroy`. It never uses `pool-delete`, deletes volumes, changes permissions
 or modifies existing pools. `copy-volume.xml` and `probe-pool.json` retain this
 inspection evidence.
+
+If host DHCP policy prevents a lease, configure only the owned clone with the
+manifest subnet's host 10 address and disable DHCP in that clone. Do not change
+host firewall or primary networking. `static-transport DIRECTORY` accepts no
+arbitrary address: it checks the owned domain/network, an exact direct host
+route over the owned bridge, and that the address's ARP neighbor is the clone's
+fresh MAC. The explicit assignment is saved in `static-transport.json`; every
+SSH connection repeats route and MAC verification and retains strict original
+`HostKeyAlias` trust. A changed bridge, gateway, neighbor MAC or incomplete ARP
+entry fails closed. Persist the clone's static guest configuration so recovery
+uses the same isolated address after reboot.

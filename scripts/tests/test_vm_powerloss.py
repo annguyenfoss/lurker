@@ -184,6 +184,20 @@ class Ownership(unittest.TestCase):
                 VM.inspect_private_copy(clone)
         self.assertEqual(call.call_count, 1)
 
+    def test_static_transport_rejects_route_and_mac_mismatch(self):
+        clone = VM.OwnedClone.load(self.directory)
+        route = {"dst": "192.168.231.10", "dev": self.m["bridge"]}
+        neighbor = {"dst": route["dst"], "dev": self.m["bridge"], "lladdr": self.m["mac"], "state": ["REACHABLE"]}
+        for wrong_route, wrong_neighbor in (({**route, "dev": "virbr-styx"}, neighbor),
+                                            ({**route, "gateway": "10.11.1.1"}, neighbor),
+                                            (route, {**neighbor, "lladdr": "52:54:00:00:00:00"}),
+                                            (route, {**neighbor, "state": ["INCOMPLETE"]})):
+            with self.subTest(route=wrong_route, neighbor=wrong_neighbor), patch.object(VM.OwnedClone, "verify_domain"), patch.object(VM, "run", side_effect=[json.dumps([wrong_route]), json.dumps([wrong_neighbor])]), patch.object(VM.subprocess, "run"):
+                with self.assertRaises(RuntimeError):
+                    clone.static_address()
+        with patch.object(VM.OwnedClone, "verify_domain"), patch.object(VM, "run", side_effect=[json.dumps([route]), json.dumps([neighbor])]), patch.object(VM.subprocess, "run"):
+            self.assertEqual(clone.static_address(), "192.168.231.10")
+
 
 class GuestFixture(unittest.TestCase):
     def test_owned_persistent_home_marker_and_permissions(self):

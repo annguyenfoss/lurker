@@ -215,10 +215,39 @@ class OwnedClone:
         require(self.manifest["uuid"] not in virsh("list", "--all", "--uuid").split(), "Transient clone remains defined")
         self.event("poweroff-complete", method="libvirt-destroy")
 
+    def static_address(self):
+        self.verify_domain()
+        address = str(ipaddress.ip_network(self.manifest["subnet"])[10])
+        route = json.loads(run(["ip", "-j", "route", "get", address]))
+        require(len(route) == 1 and route[0].get("dev") == self.manifest["bridge"] and
+                route[0].get("dst") == address and not route[0].get("gateway"), "Static clone route is not its owned bridge")
+        # ICMP need not succeed, but the owned subnet ARP must identify exactly
+        # the fresh clone MAC before any SSH connection is authorized.
+        subprocess.run(["ping", "-c", "1", "-W", "1", address], capture_output=True, timeout=3)
+        neighbors = json.loads(run(["ip", "-j", "neigh", "show", "to", address]))
+        require(len(neighbors) == 1 and neighbors[0].get("dst") == address and
+                neighbors[0].get("dev") == self.manifest["bridge"] and
+                neighbors[0].get("lladdr", "").lower() == self.manifest["mac"] and
+                not {"FAILED", "INCOMPLETE"}.intersection(neighbors[0].get("state", [])), "Static clone neighbor MAC is unconfirmed")
+        return address
+
+    def static_marker(self):
+        return {"run": self.manifest["run"], "address": str(ipaddress.ip_network(self.manifest["subnet"])[10]),
+                "bridge": self.manifest["bridge"], "mac": self.manifest["mac"],
+                "method": "explicit-clone-console-static-assignment"}
+
+    def register_static_transport(self):
+        self.static_address()
+        write_json(self.directory / "static-transport.json", self.static_marker())
+
     def lease(self):
         self.verify_domain()
         leases = virsh("net-dhcp-leases", self.manifest["network_uuid"], "--mac", self.manifest["mac"])
         addresses = re.findall(r"\b((?:\d+\.){3}\d+/\d+)\b", leases)
+        if not addresses and (self.directory / "static-transport.json").exists():
+            require(json.loads((self.directory / "static-transport.json").read_text()) == self.static_marker(),
+                    "Static transport ownership record changed")
+            return self.static_address()
         require(len(addresses) == 1, "Expected exactly one clone DHCP lease")
         address = ipaddress.ip_interface(addresses[0]).ip
         subnet = ipaddress.ip_network(self.manifest["subnet"])
@@ -570,7 +599,7 @@ def main():
     plan.add_argument("--run", required=True)
     plan.add_argument("--subnet", required=True)
     plan.add_argument("--bandwidth", type=int, default=32)
-    for action in ("copy-boot", "finish-copy-boot", "inspect", "poweroff", "boot", "ssh"):
+    for action in ("copy-boot", "finish-copy-boot", "static-transport", "inspect", "poweroff", "boot", "ssh"):
         command = commands.add_parser(action)
         command.add_argument("directory", type=Path)
         if action == "ssh":
@@ -606,6 +635,8 @@ def main():
         copy_and_boot(clone)
     elif args.action == "finish-copy-boot":
         finish_copy_and_boot(clone)
+    elif args.action == "static-transport":
+        clone.register_static_transport()
     elif args.action == "poweroff":
         clone.poweroff()
     elif args.action == "boot":
