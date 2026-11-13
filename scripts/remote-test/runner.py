@@ -59,7 +59,14 @@ def selected_environment(spec, job):
     env = os.environ.copy()
     home = Path.home()
     mode = spec["host"].get("rust", "rustup")
-    if mode == "rustup":
+    if spec["host"].get("rust_bin"):
+        binary_root = Path(spec["host"]["rust_bin"])
+        if not binary_root.is_absolute() or ".." in binary_root.parts or not binary_root.is_dir():
+            raise ValueError("rust_bin must be an existing absolute toolchain directory")
+        if not all(os.access(binary_root / name, os.X_OK) for name in ("cargo", "rustc")):
+            raise ValueError("configured rust_bin lacks executable cargo/rustc")
+        cargo, rustc = binary_root / "cargo", binary_root / "rustc"
+    elif mode == "rustup":
         cargo = home / ".cargo/bin/cargo"
         rustc = home / ".cargo/bin/rustc"
     else:
@@ -192,7 +199,8 @@ def run_job(job):
         verify_source(source, json.loads((job / "source-manifest.json").read_text()))
         result["stages"].append({"name": "source-verification", "status": "passed"})
         preflight_stage = None
-        result["toolchains"] = versions
+        result["toolchains"] = dict(versions, python={"path": sys.executable, "version": platform.python_version(),
+                                                     "manager": "uv" if spec["host"].get("uv") else "configured"})
         result["cache"] = str(cache)
         result["storage"] = {"run": {"path": str(job), "free_bytes": free},
                              "cache": {"path": str(cache.resolve()), "free_bytes": shutil.disk_usage(cache).free}}

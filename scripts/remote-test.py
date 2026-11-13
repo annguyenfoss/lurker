@@ -34,16 +34,35 @@ def ssh(host, code, args=(), data=None, timeout=60):
     return result.stdout
 
 
+def absolute_tool_path(value, label):
+    path = Path(value)
+    if not path.is_absolute() or ".." in path.parts or "\n" in value:
+        raise ValueError(label + " must be an absolute path without traversal")
+    return value
+
+
 def resolve_python(host):
-    command = ('for p in "$HOME/.local/bin/python3" /usr/local/bin/python3 '
-               '/usr/pkg/bin/python3 /usr/bin/python3; do '
-               '[ -x "$p" ] && "$p" -c \'import sys; print(sys.executable)\' && exit 0; done; exit 1')
+    if host.get("uv"):
+        uv = absolute_tool_path(host["uv"], "uv executable")
+        command = shlex.join([uv, "python", "find", "--offline", "--managed-python", "--no-python-downloads",
+                              "--no-project", "--no-config", host.get("python_request", "3")])
+    elif host.get("python"):
+        path = absolute_tool_path(host["python"], "Python executable")
+        command = shlex.join([path, "-c", "import sys; assert sys.version_info >= (3,9); print(sys.executable)"])
+    else:
+        command = ('for p in "$HOME/.local/bin/python3" /usr/local/bin/python3 '
+                   '/usr/pkg/bin/python3 /usr/bin/python3; do '
+                   '[ -x "$p" ] && "$p" -c \'import sys; assert sys.version_info >= (3,9); print(sys.executable)\' && exit 0; done; exit 1')
     result = subprocess.run([*SSH, host["ssh"], command], capture_output=True, text=True, timeout=30)
     if result.returncode:
-        raise RuntimeError("Python 3 unavailable or SSH failed: " + result.stderr[-600:])
+        raise RuntimeError("configured Python/uv unavailable or SSH failed: " + result.stderr[-600:])
     path = result.stdout.strip()
-    if not path.startswith("/") or "\n" in path:
-        raise RuntimeError("invalid remote Python path")
+    absolute_tool_path(path, "resolved Python executable")
+    if host.get("uv"):
+        probe = shlex.join([path, "-c", "import sys; assert sys.version_info >= (3,9); print(sys.executable)"])
+        checked = subprocess.run([*SSH, host["ssh"], probe], capture_output=True, text=True, timeout=30)
+        if checked.returncode or checked.stdout.strip() != path:
+            raise RuntimeError("uv-managed Python interpreter is unavailable or differs from its resolved path")
     return dict(host, python=path)
 
 

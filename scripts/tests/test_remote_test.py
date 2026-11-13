@@ -143,6 +143,47 @@ class RemoteRunnerTests(unittest.TestCase):
             self.assertFalse(cache.is_relative_to(job.parents[1]))
             self.assertEqual(str(cache / "target"), env["CARGO_TARGET_DIR"])
 
+    def test_explicit_rust_bin_uses_existing_shims_and_records_selected_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary_root = root / "managed-shims"
+            binary_root.mkdir()
+            for name in ("cargo", "rustc"):
+                path = binary_root / name
+                path.write_text("fixture; never executed")
+                path.chmod(0o755)
+            job = root / "jobs/run"
+            job.mkdir(parents=True)
+            (job / "source-manifest.json").write_text(json.dumps({"files": {}}))
+            spec = {"host": {"rust": "rustup", "rust_bin": str(binary_root)}, "stages": [],
+                    "commit": "a" * 40, "cache_root": str(root / "cache"), "minimum_cache_free_bytes": 1}
+            output = type("Process", (), {"returncode": 0, "stdout": "version", "stderr": ""})()
+            with mock.patch.object(runner.subprocess, "run", return_value=output):
+                env, versions, _ = runner.selected_environment(spec, job)
+            self.assertEqual(str(binary_root), env["PATH"].split(os.pathsep)[0])
+            self.assertEqual(str(binary_root / "cargo"), versions["cargo"]["path"])
+            spec["host"]["rust_bin"] = "relative/shims"
+            with self.assertRaisesRegex(ValueError, "absolute toolchain"):
+                runner.selected_environment(spec, job)
+
+    def test_uv_python_resolution_is_offline_and_never_falls_back(self):
+        host = {"ssh": "adjutant@buran", "uv": "/opt/homebrew/bin/uv", "python_request": "3.15"}
+        path = "/Users/adjutant/.local/share/uv/python/current/bin/python3.15"
+        output = type("Process", (), {"returncode": 0, "stdout": path + "\n", "stderr": ""})()
+        with mock.patch.object(coordinator.subprocess, "run", return_value=output) as run:
+            resolved = coordinator.resolve_python(host)
+        self.assertEqual(path, resolved["python"])
+        command = run.call_args_list[0].args[0][-1]
+        for flag in ("--offline", "--managed-python", "--no-python-downloads", "--no-project", "--no-config"):
+            self.assertIn(flag, command)
+        failed = type("Process", (), {"returncode": 1, "stdout": "", "stderr": "managed Python missing"})()
+        with mock.patch.object(coordinator.subprocess, "run", return_value=failed) as run:
+            with self.assertRaisesRegex(RuntimeError, "configured Python/uv unavailable"):
+                coordinator.resolve_python(host)
+            self.assertEqual(1, run.call_count)
+        with self.assertRaisesRegex(ValueError, "absolute path"):
+            coordinator.resolve_python(dict(host, uv="../uv"))
+
     def test_inventory_has_every_supplied_host(self):
         inventory = json.loads(coordinator.INVENTORY.read_text())
         self.assertEqual(11, len(inventory))
