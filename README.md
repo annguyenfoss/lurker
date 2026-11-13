@@ -123,6 +123,13 @@ The CLI exposes the same route:
 
 Mount points must be empty. A missing final directory is created when its parent exists. New containers belong to your user. Existing containers preserve their permissions. Read-only mounts protect both the encryption and filesystem layers. Standard user FUSE support, including access to `/dev/fuse` and the installed `fusermount3` helper, is required; that system helper performs the restricted FUSE mount without prompting for administrator credentials.
 
+Native userspace components now require transport protocol 3, which keeps an
+exclusive source-inode lock and prevents duplicate kernel/userspace attachment.
+Update the Rust helper and native components together. Close legacy protocol-2
+sessions before upgrading; do not replace live storage components in place.
+For kernel operations on unreadable root-owned images, run the CLI as root;
+the source-inode guard must open the image before permitting attachment.
+
 This mode is experimental. It supports ordinary file access rather than kernel Btrfs management ioctls such as snapshots or scrub. See `docs/linux-userspace.md` for architecture, supported filesystems, recovery, and tests. macOS keeps its existing native workflows.
 
 ## Linux Runtime Requirements

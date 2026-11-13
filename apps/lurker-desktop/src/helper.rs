@@ -70,6 +70,12 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
         if unprivileged && capabilities["unprivileged_veracrypt"] != true {
             return Err("Installed lurker-helper does not support unprivileged operation. Update it together with the desktop app.".into());
         }
+        if unprivileged
+            && (capabilities["protocol_version"] != 3
+                || capabilities["userspace_backend_protocol"] != 3)
+        {
+            return Err("Installed lurker-helper does not support the source-locking userspace backend protocol. Update the helper and native components together.".into());
+        }
         if (keyfile && capabilities["keyfile_authentication"] != true)
             || (keyslots && capabilities["luks_keyslots"] != true)
         {
@@ -219,6 +225,36 @@ fi
             .unwrap_err()
             .contains("does not support unprivileged"));
         assert!(!directory.join("old-helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn userspace_requests_reject_helpers_without_the_source_locking_protocol() {
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-transport-capability-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(&helper, r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":2}'
+else
+  touch "${0}.ran"
+fi
+"#).unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let command = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Unprivileged,
+            target: directory.join("unused"),
+            tag: None,
+            volume_type: VolumeType::Veracrypt,
+        });
+        assert!(run_helper(&helper, command)
+            .unwrap_err()
+            .contains("source-locking userspace backend protocol"));
+        assert!(!directory.join("helper.ran").exists());
         fs::remove_dir_all(directory).unwrap();
     }
 
