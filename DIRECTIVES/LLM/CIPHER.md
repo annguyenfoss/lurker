@@ -1,8 +1,26 @@
 # Lurker Cipher Directive
 
-Use this file as the source of truth for create-time cipher policy.
+Use this file as the source of truth for selected encryption backends and create-time cipher policy.
 
-## Scope
+## Approved Backend Scope
+
+✅ integrated; 🟦 selected for future integration; — outside approved scope. Backend/format names are distinct from cipher algorithms. This matrix records scope, not implementation of planned features.
+
+| Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD |
+| --- | --- | --- | --- | --- | --- | --- |
+| Apple encrypted disk images | ✅ | — | — | — | — | — |
+| LUKS2 | — | ✅ | — | — | — | — |
+| VeraCrypt | ✅ | ✅ | 🟦 | — | — | 🟦 |
+| age | 🟦 | 🟦 | 🟦 | 🟦 | 🟦 | 🟦 |
+| CryFS stable 1.x | — | 🟦 | — | — | — | — |
+| gocryptfs | 🟦 | 🟦 | 🟦 | — | — | — |
+
+- Do not add other backend/OS pairs without an explicit scope change. EncFS, encrypted archives, backups and rclone crypt are excluded. Research availability is not approval to integrate.
+- Apple disk images are the existing hdiutil backend, not FileVault/native APFS-encryption management. VeraCrypt on NetBSD/DragonFly remains an exploratory port outside approved integration scope.
+- Planned support requires native validation: gocryptfs macOS is beta and FreeBSD is basic; VeraCrypt targets FreeBSD x86-64 14+ and OpenBSD x86-64 7.8+, subject to inner-filesystem support. CryFS 2.0 alpha is excluded.
+- Existing profiles below remain authoritative. Select and document profiles for new backends during implementation; do not apply LUKS/VeraCrypt cipher options to age or folder backends automatically.
+
+## Create Profile Scope
 
 - Applies to create flows only.
 - Supported `--cipher` values: `aes`, `serpent`, `twofish` for LUKS/VeraCrypt. Apple images accept only `aes`.
