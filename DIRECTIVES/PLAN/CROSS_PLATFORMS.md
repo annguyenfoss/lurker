@@ -20,7 +20,7 @@ This changes the future dependency policy, not the approved cipher profiles. Bef
 
 ## 2. Locked backend scope
 
-✅ currently integrated; 🟦 selected for implementation; — outside approved scope. Integrated describes existing workflows, not completion of this distribution plan.
+This planning snapshot records the starting integration state: ✅ existing workflow; 🟦 selected for implementation; — outside approved scope. Current packaged CLI qualification is recorded in `DIRECTIVES/LLM/CIPHER.md`, not this historical table.
 
 | Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD |
 | --- | --- | --- | --- | --- | --- | --- |
