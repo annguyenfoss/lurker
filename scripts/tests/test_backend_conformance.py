@@ -93,6 +93,40 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(result["prompts"], 2)
         self.assertNotIn(secret, log.read_text())
 
+    def test_prompt_before_delayed_noecho_and_flush_preserves_both_inputs(self):
+        self.binary.write_text("""#!/usr/bin/env python3
+import sys, termios, time
+fd = sys.stdin.fileno()
+original = termios.tcgetattr(fd)
+answers = []
+for prompt in ['Passphrase: ', 'Verify passphrase: ']:
+    termios.tcsetattr(fd, termios.TCSANOW, original)
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    time.sleep(0.08)
+    hidden = termios.tcgetattr(fd)
+    hidden[3] &= ~termios.ECHO
+    termios.tcsetattr(fd, termios.TCSAFLUSH, hidden)
+    answers.append(sys.stdin.readline().rstrip('\\n'))
+termios.tcsetattr(fd, termios.TCSANOW, original)
+sys.exit(0 if answers == ['  密碼 delayed secret  '] * 2 else 1)
+""")
+        secret = "  密碼 delayed secret  "
+        log = self.root / "delayed-echo.log"
+        result = harness.terminal([str(self.binary)], secret, 3, log)
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["prompts"], 2)
+        self.assertFalse(result["timed_out"])
+        self.assertNotIn(secret, log.read_text())
+
+    def test_prompt_that_never_disables_echo_fails_without_sending_secret(self):
+        self.binary.write_text("#!/usr/bin/env python3\nimport sys, time\nsys.stdout.write('Password: '); sys.stdout.flush()\ntime.sleep(10)\n")
+        log = self.root / "never-noecho.log"
+        with mock.patch.object(harness, "ECHO_WAIT_TIMEOUT", 0.1):
+            with self.assertRaisesRegex(RuntimeError, "never disabled terminal echo"):
+                harness.terminal([str(self.binary)], "must-not-be-sent", 2, log)
+        self.assertNotIn("must-not-be-sent", log.read_text())
+
     def test_echoed_credential_fails_and_is_redacted(self):
         self.binary.write_text("#!/usr/bin/env python3\nimport getpass\nprint(getpass.getpass('Password: '))\n")
         secret = "must-never-be-logged"

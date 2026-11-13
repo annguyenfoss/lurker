@@ -19,6 +19,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import termios
 import time
 
 SCHEMA = 1
@@ -26,6 +27,23 @@ DIRECTORIES = {"gocryptfs", "cryfs", "cryptomator", "pefs"}
 BACKENDS = {"luks", "luks1", "veracrypt", "apple", "geli", "cgd", "softraid", *DIRECTORIES}
 PROMPT = re.compile(rb"(?i)(?:passphrase|password)[^\r\n:]{0,400}:[ \t]*")
 MAX_TRANSCRIPT = 2 * 1024 * 1024
+ECHO_WAIT_TIMEOUT = 5.0
+ECHO_STABLE_SECONDS = 0.02
+
+
+def stop_owned_child(pid):
+    """Reap or stop our unreaped child; its PID cannot be reused meanwhile."""
+    child, status = os.waitpid(pid, os.WNOHANG)
+    if child:
+        return status
+    os.kill(pid, signal.SIGTERM)
+    for _ in range(50):
+        child, status = os.waitpid(pid, os.WNOHANG)
+        if child:
+            return status
+        time.sleep(0.1)
+    os.kill(pid, signal.SIGKILL)
+    return os.waitpid(pid, 0)[1]
 
 
 def atomic_json(path, value):
@@ -89,9 +107,11 @@ def terminal(args, password, timeout, log):
     timed_out = False
     eof = False
     status = None
+    pending_prompt = None
+    echo_off_since = None
     try:
         while time.monotonic() < deadline:
-            ready = [] if eof else select.select([master], [], [], 0.1)[0]
+            ready = [] if eof else select.select([master], [], [], 0.01 if pending_prompt else 0.1)[0]
             if ready:
                 try:
                     chunk = os.read(master, 65536)
@@ -105,7 +125,7 @@ def terminal(args, password, timeout, log):
                     transcript.extend(chunk)
                     if len(transcript) > MAX_TRANSCRIPT:
                         raise RuntimeError("CLI exceeded bounded transcript limit")
-                    match = PROMPT.search(transcript, consumed)
+                    match = None if pending_prompt else PROMPT.search(transcript, consumed)
                     if match:
                         # This suite never supplies administrator credentials.
                         context = bytes(transcript[max(consumed, match.start() - 120):match.end()]).lower()
@@ -113,30 +133,38 @@ def terminal(args, password, timeout, log):
                             raise RuntimeError("Unexpected authorization prompt; run with the explicit required privilege route")
                         if password is None:
                             raise RuntimeError("Unexpected credential prompt")
-                        prompts += 1
-                        if prompts > 8:
-                            raise RuntimeError("CLI exceeded password prompt limit")
                         consumed = match.end()
-                        os.write(master, password.encode() + b"\n")
+                        pending_prompt = time.monotonic()
+                        echo_off_since = None
             child, status = os.waitpid(pid, os.WNOHANG)
             if child:
                 finished = True
                 break
+            if pending_prompt is not None:
+                # cryptsetup may print before tcsetattr(TCSAFLUSH) disables
+                # echo and flushes queued input. Prompt text is not readiness.
+                now = time.monotonic()
+                echo_off = not (termios.tcgetattr(master)[3] & termios.ECHO)
+                if echo_off:
+                    if echo_off_since is None:
+                        echo_off_since = now
+                    if now - echo_off_since >= ECHO_STABLE_SECONDS:
+                        prompts += 1
+                        if prompts > 8:
+                            raise RuntimeError("CLI exceeded password prompt limit")
+                        os.write(master, password.encode() + b"\n")
+                        pending_prompt = None
+                        echo_off_since = None
+                else:
+                    echo_off_since = None
+                if pending_prompt is not None and now - pending_prompt >= ECHO_WAIT_TIMEOUT:
+                    raise RuntimeError("Credential prompt never disabled terminal echo; no credential sent")
             if eof:
                 time.sleep(0.02)
         if not finished:
             timed_out = True
-            os.kill(pid, signal.SIGTERM)
-            for _ in range(50):
-                child, status = os.waitpid(pid, os.WNOHANG)
-                if child:
-                    finished = True
-                    break
-                time.sleep(0.1)
-            if not finished:
-                os.kill(pid, signal.SIGKILL)
-                _, status = os.waitpid(pid, 0)
-                finished = True
+            status = stop_owned_child(pid)
+            finished = True
         # Drain already available output after the child has exited.
         while not eof and select.select([master], [], [], 0)[0]:
             try:
@@ -158,9 +186,8 @@ def terminal(args, password, timeout, log):
         if not finished:
             # Direct owned child only, never an inferred PID/session or VM.
             try:
-                os.kill(pid, signal.SIGTERM)
-                os.waitpid(pid, 0)
-            except ProcessLookupError:
+                stop_owned_child(pid)
+            except (ProcessLookupError, ChildProcessError):
                 pass
         os.close(master)
         log.write_text(redact(bytes(transcript), [password]))
