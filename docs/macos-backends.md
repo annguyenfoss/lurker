@@ -82,6 +82,10 @@ TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-th
 
 Native developer qualification, macOS 27.2.1 arm64 / SDK 27.2:
 
+The `8aac707` artifact is a functional baseline. Later fault testing exposed
+plaintext fallthrough into a writable mount directory after unexpected detach;
+underlay fencing and fresh native qualification are required before release.
+
 - Full-scope candidate `8aac70784f3a4742cffacced4bbe3bd48841ead0` packages Apple,
   VeraCrypt, gocryptfs, CryFS and Cryptomator. The DMG and extracted standalone app
   pass strict nested-signature/dependency audits. This artifact requires macOS
