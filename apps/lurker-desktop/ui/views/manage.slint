@@ -15,6 +15,10 @@ export component ManageView inherits Rectangle {
     in property <bool> is-linux: true;
     in property <bool> supports-directories: true;
     in property <bool> supports-keyfile: true;
+    in property <bool> supports-raid1c: false;
+    in-out property <bool> mirrored: false;
+    in-out property <string> peer-source: "";
+    in-out property <bool> degraded: false;
     in property <bool> unprivileged: false;
     in property <bool> busy: false;
     in property <[VolumeRowData]> volumes;
@@ -161,6 +165,10 @@ export component ManageView inherits Rectangle {
             is-linux: root.is-linux;
             supports-directories: root.supports-directories;
             supports-keyfile: root.supports-keyfile;
+            supports-raid1c: root.supports-raid1c;
+            mirrored <=> root.mirrored;
+            peer-source <=> root.peer-source;
+            degraded <=> root.degraded;
             unprivileged: root.unprivileged;
             busy: root.busy;
             source-kind <=> root.mount-source-kind;

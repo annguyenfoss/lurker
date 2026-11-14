@@ -52,6 +52,7 @@ export component MainWindow inherits Window {
     in-out property <string> create-format: "luks";
     in-out property <string> create-file-path: "~/vaults/";
     in-out property <string> create-file-name: "archive.luks";
+    in-out property <string> create-peer-source: "";
     in-out property <string> create-partition: "/dev/sdb1";
     in-out property <string> create-size: "1.0";
     in-out property <string> create-size-unit: "GB";
@@ -75,6 +76,9 @@ export component MainWindow inherits Window {
     in-out property <string> keys-result: "";
 
     // Mount flow
+    in-out property <bool> mount-mirrored: false;
+    in-out property <string> mount-peer-source: "";
+    in-out property <bool> mount-degraded: false;
     in-out property <string> mount-source-kind: "file";
     in-out property <string> mount-source: "";
     in-out property <string> mount-point: "/mnt/";
@@ -290,6 +294,7 @@ export component MainWindow inherits Window {
                                 file-path <=> root.create-file-path;
                                 file-name <=> root.create-file-name;
                                 partition <=> root.create-partition;
+                                peer-source <=> root.create-peer-source;
                                 partition-label: root.create-partition-label;
                                 size <=> root.create-size;
                                 size-unit <=> root.create-size-unit;
@@ -326,6 +331,10 @@ export component MainWindow inherits Window {
                                 is-linux: root.is-linux;
                                 supports-directories: root.is-linux || root.is-macos || root.platform-os == "freebsd";
                                 supports-keyfile: root.platform-os != "netbsd";
+                                supports-raid1c: root.platform-os == "openbsd";
+                                mirrored <=> root.mount-mirrored;
+                                peer-source <=> root.mount-peer-source;
+                                degraded <=> root.mount-degraded;
                                 unprivileged: root.unprivileged;
                                 busy: root.operation-busy;
                                 volumes: root.volumes;

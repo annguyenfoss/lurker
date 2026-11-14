@@ -18,6 +18,14 @@ export component MountView inherits Card {
     in property <bool> is-linux: true;
     in property <bool> supports-directories: true;
     in property <bool> supports-keyfile: true;
+    in property <bool> supports-raid1c: false;
+    in-out property <bool> mirrored: false;
+    in-out property <string> peer-source: "";
+    in-out property <bool> degraded: false;
+    changed mirrored => {
+        root.peer-source = ""; root.degraded = false;
+        if root.mirrored { root.auth-method = "pass"; root.key-file = ""; root.readonly = false; }
+    }
     in property <bool> unprivileged: false;
     in property <bool> busy: false;
     in-out property <string> source-kind: "file";   // "file" | "partition"
@@ -136,6 +144,23 @@ export component MountView inherits Card {
         }
     }
 
+    if root.supports-raid1c: CardSection {
+        Toggle { label: "Mirrored softraid (RAID1C)"; checked <=> root.mirrored; }
+        if root.mirrored: VerticalLayout {
+            spacing: UiTheme.s3;
+            Field {
+                label: "Second member file";
+                hint: "optional when the saved array descriptor is available";
+                ThemedLineEdit { text <=> root.peer-source; }
+            }
+            Toggle {
+                label: "Allow degraded recovery";
+                hint: "open an existing mirror with one surviving member";
+                checked <=> root.degraded;
+            }
+        }
+    }
+
     // ── Unlock with section ───────────────────────────────────────────
     CardSection {
         SectionHead { title: "UNLOCK WITH"; hint: "passphrase or key file"; }
@@ -143,7 +168,7 @@ export component MountView inherits Card {
         VerticalLayout {
             spacing: UiTheme.s3;
 
-            if root.supports-keyfile: Segmented {
+            if root.supports-keyfile && !root.mirrored: Segmented {
                 value <=> root.auth-method;
                 options: [
                     { value: "pass", label: "Passphrase" },
@@ -187,7 +212,7 @@ export component MountView inherits Card {
                 }
             }
 
-            Toggle {
+            if !root.mirrored: Toggle {
                 label: "Mount read-only";
                 hint: "requires read-only support from the detected format";
                 checked <=> root.readonly;

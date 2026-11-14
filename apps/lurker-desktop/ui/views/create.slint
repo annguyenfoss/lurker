@@ -20,6 +20,7 @@ export component CreateView inherits Card {
     in-out property <string> file-path: "~/vaults/";
     in-out property <string> file-name: "archive.luks";
     in-out property <string> partition: "";
+    in-out property <string> peer-source: "";
     in-out property <string> partition-label: "";
     in-out property <string> size: "1.0";
     in-out property <string> size-unit: "GB";        // "MB" | "GB"
@@ -35,6 +36,7 @@ export component CreateView inherits Card {
         root.target-kind = root.directory-format ? "directory" : "file";
         if !root.variable-cipher { root.cipher = "aes"; }
         if !root.supports-keyfile { root.auth-method = "pass"; root.key-file = ""; }
+        if root.format != "raid1c" { root.peer-source = ""; }
     }
     changed auth-method => {
         root.passphrase = "";
@@ -51,7 +53,7 @@ export component CreateView inherits Card {
 
     private property <bool> pass-match: root.passphrase.character-count > 0 && root.passphrase == root.confirm;
     private property <bool> can-submit:
-        !root.busy &&
+        !root.busy && (root.format != "raid1c" || root.peer-source != "") &&
         (root.target-kind != "partition" ? root.file-path != "" && root.file-name != "" : root.partition != "")
         && (root.auth-method == "key" && root.supports-keyfile
             ? root.key-file != ""
@@ -121,6 +123,13 @@ export component CreateView inherits Card {
                     }
                 }
             }
+        }
+
+        if root.format == "raid1c": Field {
+            label: "Second member file";
+            hint: "new file path · size above applies to each member";
+            required: true;
+            ThemedLineEdit { text <=> root.peer-source; }
         }
 
         if root.target-kind == "partition": VerticalLayout {

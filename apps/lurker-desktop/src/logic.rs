@@ -23,6 +23,7 @@ pub fn create_formats(os: &str, unprivileged: bool) -> Vec<&'static str> {
         "geli",
         "cgd",
         "softraid",
+        "raid1c",
         "luks1",
         "vera",
         "gocryptfs",
@@ -168,6 +169,7 @@ pub fn build_create_command(
     Ok(CreateCommand {
         privilege_mode: lurker_core::PrivilegeMode::Privileged,
         target: PathBuf::from(target),
+        peer_sources: Vec::new(),
         size_gb,
         force: source_kind == SourceKind::Block,
         source_kind,
@@ -176,6 +178,43 @@ pub fn build_create_command(
         passphrase,
         keyfile,
     })
+}
+
+/// Add mirrored members only after the ordinary form has selected credentials.
+pub fn with_create_members(
+    mut command: CreateCommand,
+    member: &str,
+    os: &str,
+) -> Result<CreateCommand, String> {
+    if command.volume_type == VolumeType::Raid1c {
+        command
+            .peer_sources
+            .push(input_path(required_value("Second member file", member)?)?);
+    }
+    lurker_core::CommandAction::Create(command.clone())
+        .validate_raid1c_options(os)
+        .map_err(|error| error.message)?;
+    Ok(command)
+}
+
+pub fn with_mount_members(
+    mut command: MountCommand,
+    mirrored: bool,
+    member: &str,
+    degraded: bool,
+    os: &str,
+) -> Result<MountCommand, String> {
+    if mirrored {
+        command.volume_type = VolumeType::Raid1c;
+        command.allow_degraded = degraded;
+        if !member.trim().is_empty() {
+            command.peer_sources.push(input_path(member.trim())?);
+        }
+    }
+    lurker_core::CommandAction::Mount(command.clone())
+        .validate_raid1c_options(os)
+        .map_err(|error| error.message)?;
+    Ok(command)
 }
 
 pub fn build_mount_command(
@@ -199,6 +238,8 @@ pub fn build_mount_command(
     Ok(MountCommand {
         privilege_mode: lurker_core::PrivilegeMode::Privileged,
         source: PathBuf::from(source),
+        peer_sources: Vec::new(),
+        allow_degraded: false,
         mountpoint: PathBuf::from(mountpoint),
         tag: None,
         volume_type,
@@ -381,6 +422,50 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn mirrored_forms_validate_members_and_ignore_inactive_recovery_fields() {
+        let create = build_create_command(
+            "file", "raid1c", "/tmp", "mirror-a", "", "128", "MB", "twofish", "password",
+            "password", "pass", "",
+        )
+        .unwrap();
+        assert_eq!(create.cipher, CreateCipher::Aes);
+        assert!(super::with_create_members(create.clone(), "", "openbsd").is_err());
+        assert!(super::with_create_members(create.clone(), "/tmp/mirror-a", "openbsd").is_err());
+        assert!(super::with_create_members(create.clone(), "/tmp/mirror-b", "linux").is_err());
+        let created = super::with_create_members(create, "/tmp/mirror-b", "openbsd").unwrap();
+        assert_eq!(created.peer_sources, vec![PathBuf::from("/tmp/mirror-b")]);
+        let mount = build_mount_command(
+            "/tmp/mirror-a",
+            "/tmp/mount",
+            "pass",
+            "password",
+            "",
+            false,
+            "file",
+        )
+        .unwrap();
+        let full =
+            super::with_mount_members(mount.clone(), true, "/tmp/mirror-b", false, "openbsd")
+                .unwrap();
+        assert_eq!(full.volume_type, VolumeType::Raid1c);
+        assert_eq!(full.peer_sources, created.peer_sources);
+        let degraded = super::with_mount_members(mount.clone(), true, "", true, "openbsd").unwrap();
+        assert!(degraded.allow_degraded && degraded.peer_sources.is_empty());
+        let inferred =
+            super::with_mount_members(mount.clone(), true, "", false, "openbsd").unwrap();
+        assert!(inferred.peer_sources.is_empty());
+        assert!(
+            super::with_mount_members(mount.clone(), true, "/tmp/mirror-a", false, "openbsd")
+                .is_err()
+        );
+        assert!(super::with_mount_members(mount.clone(), true, "", true, "freebsd").is_err());
+        let ordinary =
+            super::with_mount_members(mount, false, "stale peer", true, "linux").unwrap();
+        assert_eq!(ordinary.volume_type, VolumeType::Auto);
+        assert!(ordinary.peer_sources.is_empty() && !ordinary.allow_degraded);
+    }
+
+    #[test]
     fn create_matrix_defaults_and_directory_profiles_follow_the_core() {
         use lurker_core::PrivilegeMode;
         for (os, default, expected_count) in [
@@ -388,7 +473,7 @@ mod tests {
             ("macos", "apple", 5),
             ("freebsd", "geli", 4),
             ("netbsd", "cgd", 1),
-            ("openbsd", "softraid", 2),
+            ("openbsd", "softraid", 3),
             ("dragonfly", "luks1", 1),
         ] {
             let formats = super::create_formats(os, false);
@@ -426,6 +511,9 @@ mod tests {
                         VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
                     )
                 );
+                let command =
+                    super::with_create_members(command, "/tmp/desktop-validation-peer", os)
+                        .unwrap();
                 super::validate_create_platform(&command, os, PrivilegeMode::Privileged).unwrap();
                 let unprivileged =
                     super::validate_create_platform(&command, os, PrivilegeMode::Unprivileged);

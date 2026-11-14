@@ -103,7 +103,10 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             &w.get_create_confirm(),
             &w.get_create_auth_method(),
             &w.get_create_key_file(),
-        ) {
+        )
+        .and_then(|command| {
+            logic::with_create_members(command, &w.get_create_peer_source(), std::env::consts::OS)
+        }) {
             Ok(command) => {
                 let mode = selected_privilege_mode(&w);
                 if let Err(message) =
@@ -138,7 +141,16 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             &w.get_mount_key_file(),
             w.get_mount_readonly(),
             &w.get_mount_source_kind(),
-        ) {
+        )
+        .and_then(|command| {
+            logic::with_mount_members(
+                command,
+                w.get_mount_mirrored(),
+                &w.get_mount_peer_source(),
+                w.get_mount_degraded(),
+                std::env::consts::OS,
+            )
+        }) {
             Ok(command) => ms.run_operation(
                 "Volume mounted",
                 CommandAction::Mount(command).with_privilege_mode(selected_privilege_mode(&w)),
@@ -199,6 +211,9 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             w.set_mount_key_file("".into());
             w.set_mount_auth_method("pass".into());
             w.set_mount_readonly(false);
+            w.set_mount_mirrored(false);
+            w.set_mount_peer_source("".into());
+            w.set_mount_degraded(false);
         }
     });
 
@@ -565,6 +580,46 @@ mod tests {
             }
             std::fs::write(directory.join(format!("{name}.ppm")), ppm).unwrap();
         });
+    }
+
+    #[test]
+    fn openbsd_mirror_fields_render_and_clear_when_ordinary_storage_is_selected() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        super::configure_platform(&ui, "openbsd");
+        ui.show().unwrap();
+        ui.set_create_format("raid1c".into());
+        render(&window);
+        ui.set_create_peer_source("/tmp/mirror-peer".into());
+        ui.set_create_auth_method("key".into());
+        ui.set_create_cipher("twofish".into());
+        ui.set_create_format("softraid".into());
+        render(&window);
+        assert_eq!(ui.get_create_peer_source(), "");
+        assert_eq!(ui.get_create_auth_method(), "pass");
+        assert_eq!(ui.get_create_cipher(), "aes");
+        ui.set_current_view("manage".into());
+        render(&window);
+        ui.set_mount_key_file("/tmp/stale-key".into());
+        ui.set_mount_auth_method("key".into());
+        ui.set_mount_readonly(true);
+        ui.set_mount_mirrored(true);
+        render(&window);
+        assert_eq!(ui.get_mount_auth_method(), "pass");
+        assert_eq!(ui.get_mount_key_file(), "");
+        assert!(!ui.get_mount_readonly());
+        ui.set_mount_peer_source("/tmp/mirror-peer".into());
+        ui.set_mount_degraded(true);
+        for scale in [0.8, 1.0, 1.2] {
+            ui.set_ui_scale(scale);
+            render(&window);
+        }
+        ui.set_mount_mirrored(false);
+        render(&window);
+        assert_eq!(ui.get_mount_peer_source(), "");
+        assert!(!ui.get_mount_degraded());
+        ui.hide().unwrap();
     }
 
     #[test]

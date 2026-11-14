@@ -49,7 +49,21 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
         CommandAction::Unmount(_) => false,
     };
     let keyslots = matches!(&command, CommandAction::Keyslots(_));
-    if privileged_tools || directory_backend || unprivileged || keyfile || keyslots {
+    // OpenBSD Auto unmounts can refer to mirrored sessions by mountpoint alone.
+    // Require the member-aware helper there before sending any native request.
+    let raid1c = (cfg!(target_os = "openbsd") && !directory_backend)
+        || command.volume_type() == lurker_core::VolumeType::Raid1c
+        || match &command {
+            CommandAction::Create(c) => !c.peer_sources.is_empty(),
+            CommandAction::Mount(c) => {
+                !c.peer_sources.is_empty()
+                    || c.allow_degraded
+                    || std::path::PathBuf::from(format!("{}.raid1c.json", c.source.display()))
+                        .exists()
+            }
+            _ => false,
+        };
+    if privileged_tools || directory_backend || unprivileged || keyfile || keyslots || raid1c {
         let result = Command::new(helper_path)
             .arg("capabilities")
             .stdin(Stdio::null())
@@ -86,6 +100,26 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
                 || capabilities["trusted_privileged_tools"] != true)
         {
             return Err("Installed lurker-helper does not enforce trusted privileged tool paths. Update it together with the desktop app.".into());
+        }
+        if cfg!(target_os = "linux")
+            && privileged_tools
+            && capabilities["linux_loop_lease_protocol"] != 1
+        {
+            return Err("Installed lurker-helper does not support the owned loop-device lease protocol. Update it together with the desktop app.".into());
+        }
+        if raid1c
+            && (capabilities["protocol_version"] != 3 || capabilities["raid1c_members"] != true)
+        {
+            return Err("Installed lurker-helper does not support RAID1C members and degraded recovery. Update it together with the desktop app.".into());
+        }
+        if privileged_tools
+            && matches!(
+                std::env::consts::OS,
+                "freebsd" | "dragonfly" | "netbsd" | "openbsd"
+            )
+            && capabilities["noninteractive_sudo"] != true
+        {
+            return Err("Installed lurker-helper does not support desktop authorization without a terminal. Update it together with the desktop app.".into());
         }
     }
     let payload = serde_json::to_vec(&command)
@@ -150,6 +184,118 @@ fn is_executable(path: &Path) -> bool {
 mod tests {
     use super::*;
     use lurker_core::{PrivilegeMode, UnmountCommand, VolumeType};
+
+    #[test]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    fn bsd_native_requests_require_terminal_free_authorization_support() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-bsd-auth-helper-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(
+            &helper,
+            r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"trusted_privileged_tools":true,"raid1c_members":true}'
+else
+  touch "${0}.ran"
+fi
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let command = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            target: directory.join("unused"),
+            tag: None,
+            volume_type: VolumeType::default_create(),
+        });
+        let error = run_helper(&helper, command).unwrap_err();
+        assert!(
+            error.contains("authorization without a terminal"),
+            "{error}"
+        );
+        assert!(!directory.join("helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn privileged_linux_requests_require_owned_loop_lease_capability() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-loop-helper-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(
+            &helper,
+            r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"trusted_privileged_tools":true}'
+else
+  touch "${0}.ran"
+fi
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let command = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            target: directory.join("unused"),
+            tag: None,
+            volume_type: VolumeType::Luks,
+        });
+        let error = run_helper(&helper, command).unwrap_err();
+        assert!(
+            error.contains("owned loop-device lease protocol"),
+            "{error}"
+        );
+        assert!(!directory.join("helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn mirrored_requests_require_explicit_member_capability_before_stdin() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-raid1c-helper-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        let command = CommandAction::Mount(lurker_core::MountCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            source: directory.join("primary"),
+            peer_sources: vec![directory.join("peer")],
+            allow_degraded: false,
+            mountpoint: directory.join("mount"),
+            tag: None,
+            volume_type: VolumeType::Raid1c,
+            passphrase: Some("fixture password".into()),
+            keyfile: None,
+            readonly: false,
+        });
+        fs::write(&helper, "#!/bin/sh\nif [ \"$1\" = capabilities ]; then printf '%s\\n' '{\"protocol_version\":3,\"trusted_privileged_tools\":true,\"linux_loop_lease_protocol\":1}'; else : > \"${0}.ran\"; fi\n").unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let error = run_helper(&helper, command.clone()).unwrap_err();
+        assert!(error.contains("does not support RAID1C"), "{error}");
+        assert!(!directory.join("helper.ran").exists());
+        fs::write(
+            &helper,
+            r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"trusted_privileged_tools":true,"linux_loop_lease_protocol":1,"raid1c_members":true,"noninteractive_sudo":true}'
+else
+  cat >/dev/null
+  printf '%s\n' '{"ok":true,"logs":[],"error":null}'
+fi
+"#,
+        )
+        .unwrap();
+        assert!(run_helper(&helper, command).unwrap().ok);
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn directory_requests_require_the_new_helper_contract() {
@@ -303,6 +449,8 @@ fi
         let keyfile = CommandAction::Mount(lurker_core::MountCommand {
             privilege_mode: PrivilegeMode::Privileged,
             source: "vault".into(),
+            peer_sources: Vec::new(),
+            allow_degraded: false,
             mountpoint: "mnt".into(),
             tag: None,
             volume_type: VolumeType::Auto,
