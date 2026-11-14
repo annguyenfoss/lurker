@@ -70,4 +70,24 @@ class BackendTest {
                     "The FUSE callback must be registered, not merely implemented; otherwise fsync silently loses open-file data on daemon death");
         }
     }
+    @Test void closeAcknowledgementRequiresBothResourcesAndAttemptsBoth() throws Exception {
+        var stdout = new java.io.ByteArrayOutputStream();
+        var stderr = new java.io.ByteArrayOutputStream();
+        var attempted = new java.util.concurrent.atomic.AtomicInteger();
+        AutoCloseable good = () -> attempted.incrementAndGet();
+        assertTrue(Main.closeResources(good, good, new java.io.PrintStream(stdout), new java.io.PrintStream(stderr)));
+        assertEquals(2, attempted.get());
+        assertEquals("{\"protocol\":1,\"status\":\"closed\"}", stdout.toString().trim());
+        stdout.reset();
+        attempted.set(0);
+        AutoCloseable bad = () -> { attempted.incrementAndGet(); throw new IOException("secret attacker-controlled message"); };
+        assertFalse(Main.closeResources(bad, good, new java.io.PrintStream(stdout), new java.io.PrintStream(stderr)));
+        assertEquals(2, attempted.get());
+        assertEquals("{\"protocol\":1,\"status\":\"close-failed\"}", stdout.toString().trim());
+        assertFalse(stderr.toString().contains("secret"));
+        stdout.reset();
+        assertFalse(Main.closeResources(good, bad, new java.io.PrintStream(stdout), new java.io.PrintStream(stderr)));
+        assertTrue(stdout.toString().contains("close-failed"));
+    }
+
 }

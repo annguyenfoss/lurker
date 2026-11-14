@@ -11,6 +11,7 @@ import org.cryptomator.integrations.mount.MountCapability;
 import org.cryptomator.integrations.mount.MountService;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.URI;
 import java.nio.CharBuffer;
 import java.nio.charset.CodingErrorAction;
@@ -134,6 +135,23 @@ public final class Main {
                 .findFirst().orElseThrow(() -> new IOException("Required Cryptomator provider unavailable: " + suffix));
     }
 
+    static boolean closeResources(AutoCloseable mount, AutoCloseable fs, PrintStream out, PrintStream err) {
+        boolean clean = true;
+        for (var resource : new AutoCloseable[] {mount, fs}) {
+            try {
+                resource.close();
+            } catch (Exception error) {
+                clean = false;
+                // Class names only: messages may contain attacker-controlled data.
+                err.println("Cryptomator graceful close failed (" + error.getClass().getSimpleName() + ")");
+            }
+        }
+        out.println(clean ? "{\"protocol\":1,\"status\":\"closed\"}"
+                : "{\"protocol\":1,\"status\":\"close-failed\"}");
+        out.flush();
+        return clean;
+    }
+
     private static void mount(Path vault, Path mountpoint, char[] password, boolean readonly) throws Exception {
         if (!Files.isDirectory(mountpoint, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Invalid mountpoint");
         try (var entries = Files.list(mountpoint)) {
@@ -154,11 +172,9 @@ public final class Main {
             var finished = new CountDownLatch(1);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
-                    // No unmountForced(), even on shutdown failure.
-                    mount.close();
-                    fs.close();
-                } catch (Exception error) {
-                    System.err.println("Cryptomator graceful close incomplete; retain session for recovery");
+                    // No unmountForced(), even on shutdown failure. The supervisor
+                    // accepts SIGTERM only after the explicit successful close ACK.
+                    closeResources(mount, fs, System.out, System.err);
                 } finally {
                     finished.countDown();
                 }
