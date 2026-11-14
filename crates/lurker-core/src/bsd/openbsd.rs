@@ -184,6 +184,7 @@ fn probe_crypto_reader(reader: &mut (impl Read + Seek)) -> AppResult<bool> {
         .map_err(|e| AppError::io("Seek softraid metadata", e))?;
     let mut bytes = [0u8; 56];
     match reader.read_exact(&mut bytes) {
+        Ok(()) if is_raid1c_header(&bytes) => Err(AppError::new("This is a native RAID1C member. Use --type raid1c --member PATH, its .raid1c.json descriptor, or explicit --degraded recovery; a member is not a single CRYPTO volume.")),
         Ok(()) => Ok(is_crypto_header(&bytes)),
         Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
         Err(error) => Err(AppError::io("Read softraid metadata", error)),
@@ -208,6 +209,14 @@ fn is_crypto_header(bytes: &[u8; 56]) -> bool {
         && u32::from_ne_bytes(bytes[8..12].try_into().unwrap()) == 6
         && u32::from_ne_bytes(bytes[32..36].try_into().unwrap()) == 1
         && u32::from_ne_bytes(bytes[52..56].try_into().unwrap()) == u32::from(b'C')
+}
+
+fn is_raid1c_header(bytes: &[u8; 56]) -> bool {
+    u64::from_ne_bytes(bytes[0..8].try_into().unwrap()) == 0x4d4152436372616d
+        && u32::from_ne_bytes(bytes[8..12].try_into().unwrap()) == 6
+        && u32::from_ne_bytes(bytes[32..36].try_into().unwrap()) == 2
+        && u32::from_ne_bytes(bytes[36..40].try_into().unwrap()) < 2
+        && u32::from_ne_bytes(bytes[52..56].try_into().unwrap()) == 0x1c
 }
 
 fn assemble(device: &str, credential: &Credential, creating: bool) -> AppResult<String> {
@@ -391,6 +400,18 @@ mod tests {
             malformed[8192 + field] ^= 1;
             assert!(!probe_crypto_reader(&mut std::io::Cursor::new(&malformed)).unwrap());
         }
+    }
+
+    #[test]
+    fn recognized_mirror_member_needs_explicit_membership_not_veracrypt_fallback() {
+        let mut bytes = vec![0u8; 8192 + 56];
+        bytes[8192..8200].copy_from_slice(&0x4d4152436372616du64.to_ne_bytes());
+        for (offset, value) in [(8, 6u32), (32, 2), (36, 1), (52, 0x1c)] {
+            bytes[8192 + offset..8192 + offset + 4].copy_from_slice(&value.to_ne_bytes());
+        }
+        let error = probe_crypto_reader(&mut std::io::Cursor::new(bytes)).unwrap_err();
+        assert!(error.message.contains("--type raid1c --member"));
+        assert!(error.message.contains("--degraded"));
     }
 
     #[test]
