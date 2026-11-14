@@ -106,6 +106,18 @@ fn diagnostic(mut bytes: Vec<u8>, secret: &[u8]) -> String {
         .collect()
 }
 
+fn session_for_directory(root: &Path, canonical_dir: &Path) -> AppResult<Session> {
+    // macOS exposes /tmp through /private/tmp. Compare paths from one canonical
+    // root rather than rejecting a validated session solely for that OS alias.
+    let root = fs::canonicalize(root)
+        .map_err(|e| AppError::io("Cannot resolve folder runtime directory", e))?;
+    session_snapshot(&root)?
+        .into_iter()
+        .find(|(path, _)| path == canonical_dir)
+        .map(|(_, session)| session)
+        .ok_or_else(|| AppError::new("Supervisor requires an existing private folder session."))
+}
+
 fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
     if crate::effective_uid() == 0 {
         return Err(AppError::new(
@@ -114,11 +126,7 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
     }
     let dir =
         fs::canonicalize(dir).map_err(|e| AppError::io("Cannot resolve folder session", e))?;
-    let session = session_snapshot(&runtime_path())?
-        .into_iter()
-        .find(|(path, _)| *path == dir)
-        .map(|(_, session)| session)
-        .ok_or_else(|| AppError::new("Supervisor requires an existing private folder session."))?;
+    let session = session_for_directory(&runtime_path(), &dir)?;
     if find_program(session.backend)? != executable {
         return Err(AppError::new(
             "Supervisor backend differs from the selected private executable.",
@@ -246,6 +254,38 @@ pub(super) fn dispatch() -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn supervisor_resolves_a_symlinked_runtime_root_without_recreating_state() {
+        let base = std::env::temp_dir().join(format!("lurker-supervisor-alias-{}", nonce()));
+        secure_dir(&base).unwrap();
+        let real = base.join("real-runtime");
+        secure_dir(&real).unwrap();
+        let dir = real.join("session-test");
+        secure_dir(&dir).unwrap();
+        let alias = base.join("runtime-alias");
+        std::os::unix::fs::symlink(&real, &alias).unwrap();
+        let session = Session {
+            schema: SCHEMA,
+            backend: VolumeType::Gocryptfs,
+            source: base.join("vault"),
+            source_identity: Identity { device: 1, inode: 2 },
+            mountpoint: base.join("mount"),
+            readonly: false,
+            mount_identity: None,
+            mounted_directory: None,
+            process: None,
+            supervisor: None,
+        };
+        write_record(&dir, "session.json", &session).unwrap();
+        let canonical = fs::canonicalize(&dir).unwrap();
+        let found = session_for_directory(&alias, &canonical).unwrap();
+        assert_eq!(found.source, session.source);
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(session_for_directory(&alias, &canonical).is_err());
+        assert!(!dir.exists());
+        fs::remove_dir_all(&base).unwrap();
+    }
+
     #[test]
     fn bounded_diagnostics_redact_complete_and_truncated_credentials() {
         assert_eq!(
