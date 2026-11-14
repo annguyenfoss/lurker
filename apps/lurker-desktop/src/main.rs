@@ -618,6 +618,7 @@ mod tests {
     #[test]
     #[ignore = "requires an explicitly configured remote native fixture and real helper"]
     fn native_gui_callbacks_create_mount_reopen_and_unmount() {
+        use std::os::unix::fs::DirBuilderExt;
         use std::sync::atomic::Ordering;
         use std::time::{Duration, Instant};
         let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
@@ -664,7 +665,10 @@ mod tests {
         std::fs::create_dir(&fixture).unwrap();
         let source = fixture.join("encrypted");
         let mountpoint = fixture.join("mount");
-        std::fs::create_dir(&mountpoint).unwrap();
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&mountpoint)
+            .unwrap();
         let owns_volume = |volume: &lurker_core::ActiveVolume| {
             volume
                 .source_path
