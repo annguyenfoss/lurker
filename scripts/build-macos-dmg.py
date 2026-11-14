@@ -269,8 +269,12 @@ def main():
             "Apple encrypted disk images work with built-in macOS tools.\n"
             "VeraCrypt support is included. Install FUSE-T separately.\n"
             + ("Included directory backends: " + ", ".join(options.folder_backends) + ".\n"
-               "Directory backends require their qualified FUSE runtime; FUSE-T is not interchangeable with macFUSE.\n"
                if options.folder_backends else "")
+            + ("gocryptfs/CryFS require separately installed macFUSE.\n"
+               if any(name in options.folder_backends for name in ["gocryptfs", "cryfs"]) else "")
+            + ("Cryptomator requires FUSE-T with FSKit enabled (macOS 26+).\n"
+               "Enable FUSE-T in System Settings > General > Login Items & Extensions > File System Extensions.\n"
+               if "cryptomator" in options.folder_backends else "")
             +
             "The CLI is Lurker.app/Contents/MacOS/lurker.\n\n"
             + signature_note + f"Requires macOS {minimum} or later; architecture: {architecture}.\n",
