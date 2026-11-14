@@ -21,9 +21,14 @@ in base and offers `gmake yasm pcsc-lite`. Source archives and original source
 inputs are checked against pinned SHA-256 values before cache reuse. Use
 `--offline` after archives have been cached; build logs stay beside the output.
 The reviewed BSD-only `auxiliary-path.patch` adds the private auxiliary mount
-directory to verbose volume metadata. Lurker uses it to verify that the native
-device still backs this volume's FUSE image before cleanup. No encryption or
-format primitive is changed. The shared `native/veracrypt/utf8-console.patch`
+directory to verbose volume metadata and uses a fresh native CSPRNG 128-bit
+nonce in each BSD auxiliary mount pathname. Atomic root-private directory creation
+under fixed `/tmp` never reuses or removes a collision. Recovery proof v2 combines
+that generation name with source/vnode identity, native mount fsid and owner UID0;
+OpenBSD can recycle fsid and vnode numbers immediately. A present device with the
+saved auxiliary generation absent is rejected. Legacy numeric helpers/proof v1
+cannot establish the new recovery contract. No encryption or format primitive
+is changed. The shared `native/veracrypt/utf8-console.patch`
 fixes libc++ wide-stream listing output on BSD/macOS so a Unicode path cannot
 truncate the identity record. The manifest records both patch digests.
 
@@ -53,8 +58,8 @@ gate; engine tests cannot substitute for it.
 
 The Rust adapter is `crates/lurker-core/src/bsd/veracrypt.rs`, compiled only for
 FreeBSD/OpenBSD. Its opt-in `native_private_veracrypt_lifecycle` test passed on
-FreeBSD 15.1 amd64 and OpenBSD 8.0 amd64 with pinned VeraCrypt 1.26.30 and the
-reviewed patch: AES, Serpent and Twofish; password and binary keyfile separately;
+FreeBSD 15.1 amd64 and OpenBSD 8.0 amd64 with pinned VeraCrypt 1.26.31 and both
+reviewed patches: AES, Serpent and Twofish; password and binary keyfile separately;
 Unicode/spaced paths and passwords; incorrect credentials; native UFS/FFS2
 writes, fsync, close/reopen and retained data. FreeBSD read-only attachment was
 also verified for each case. OpenBSD read-only attachment fails explicitly.
@@ -74,13 +79,34 @@ busy failures retain state, partial cleanup can retry, and reused resources are
 rejected. Old proofless journals require live control. Acquisition also rejects
 native auxiliary mounts omitted by failed engine discovery. Native regressions verify unchanged
 image SHA-256 and original external attachments after rejected alias operations.
+The fresh 1.26.31 adapter lifecycle passed all six cipher/credential cells on
+both guests (FreeBSD 170 s, OpenBSD 180 s), including serialized recovery proofs
+and repeated normal close. A FreeBSD owned-daemon SIGKILL regression passed:
+drained UFS data survived reopen; orphan discovery blocked acquisition; partial
+cleanup retried; source replacement and actual device reuse were rejected;
+ciphertext stayed unchanged. No forced unmount or filesystem repair was used.
+
+OpenBSD **dead-daemon cleanup remains fail-closed**: its VNDIOCGET calls
+VOP_GETATTR on the backing FUSE vnode, which returns ENXIO after daemon death
+even while the vnd unit remains configured. ENXIO is not proof of absence.
+Lurker preserves the journal for administrator reconciliation; a cached disklabel,
+printed path or guessed unit cannot replace the missing identity. This differs
+from normal live-engine close and must not be presented as successful automated
+OpenBSD daemon recovery. Native OpenBSD partial-cleanup retry with live auxiliary control passed, including
+actual reused-unit rejection, old-proof rejection after same-source reopen and
+unchanged ciphertext.
+
 These are native **backend adapter** results; they do not claim whole CLI,
 desktop or release-package qualification.
 
 Upstream references:
 
-- https://github.com/veracrypt/VeraCrypt/blob/8172bc55f834485f67be271e02c1167981423621/src/Readme.txt
-- https://github.com/veracrypt/VeraCrypt/blob/8172bc55f834485f67be271e02c1167981423621/License.txt
+- https://github.com/veracrypt/VeraCrypt/blob/7afc449f2bc69366e8b67b82ad66201325d318c3/src/Readme.txt
+- https://github.com/veracrypt/VeraCrypt/blob/7afc449f2bc69366e8b67b82ad66201325d318c3/License.txt
 - https://github.com/wxWidgets/wxWidgets/tree/v3.2.8.1
 - https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz
 - https://github.com/veracrypt/VeraCrypt/releases/tag/VeraCrypt_1.26.31
+
+OpenBSD identity ABI reference:
+
+- https://github.com/openbsd/src/blob/master/sys/dev/vnd.c#L548-L567

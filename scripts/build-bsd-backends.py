@@ -19,9 +19,10 @@ import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
-PATCH_SHA256 = "ab7d91fca203805dcd4b2708c995416f2acbe2354bd3b0585518a9718a64f730"
+PATCH_SHA256 = "b532ade3b7944a414162efe5d2b21a137698a0a05bbe3b6cdd146a861a4ace9d"
 COMMON_PATCH_SHA256 = "3d945f1ed832ffa61d7fb1ab817b36d5b15de858cd864a65ea181567cf6986e0"
 PATCH_TARGET = "src/Main/UserInterface.cpp"
+PATCH_TARGETS = (PATCH_TARGET, "src/Core/Unix/CoreUnix.cpp")
 PINS = {
     "veracrypt": {
         "url": "https://codeload.github.com/veracrypt/VeraCrypt/tar.gz/7afc449f2bc69366e8b67b82ad66201325d318c3",
@@ -46,33 +47,48 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def patched_input(archive):
+def patched_inputs(archive):
+    originals = {}
     with tarfile.open(archive) as tar:
         top = tar.getmembers()[0].name.split("/")[0]
-        original = tar.extractfile(top + "/" + PATCH_TARGET).read()
+        for target in PATCH_TARGETS:
+            originals[target] = tar.extractfile(top + "/" + target).read()
     for entry in patch_inventory():
         patch = ROOT / entry["path"]
         if digest(patch) != entry["sha256"]:
             raise RuntimeError("BSD private backend patch failed SHA-256 verification")
         lines = patch.read_bytes().splitlines(keepends=True)
-        if (lines[0].rstrip() != b"--- a/" + PATCH_TARGET.encode()
-                or lines[1].rstrip() != b"+++ b/" + PATCH_TARGET.encode()
-                or not lines[2].startswith(b"@@ ")
-                or any(not line.startswith((b" ", b"+", b"-", b"@@ ")) for line in lines[3:])):
-            raise RuntimeError("Expected reviewed private backend patch hunks")
-        hunks = []
-        for line in lines[2:]:
-            if line.startswith(b"@@ "):
-                hunks.append([])
-            else:
-                hunks[-1].append(line)
-        for hunk in hunks:
-            before = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"-"))
-            after = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"+"))
-            if original.count(before) != 1:
-                raise RuntimeError("Reviewed BSD private backend patch does not match pinned upstream")
-            original = original.replace(before, after, 1)
-    return original
+        index = 0
+        seen = set()
+        while index < len(lines):
+            if not lines[index].startswith(b"--- a/"):
+                raise RuntimeError("Expected reviewed private backend patch file header")
+            target = lines[index][6:].strip().decode("ascii")
+            if target not in PATCH_TARGETS or target in seen or index + 2 >= len(lines) or lines[index + 1].rstrip() != b"+++ b/" + target.encode():
+                raise RuntimeError("Unexpected private backend patch target")
+            seen.add(target)
+            index += 2
+            hunks = []
+            while index < len(lines) and not lines[index].startswith(b"--- a/"):
+                line = lines[index]
+                if line.startswith(b"@@ "):
+                    hunks.append([])
+                elif line.startswith((b" ", b"+", b"-")) and hunks:
+                    hunks[-1].append(line)
+                else:
+                    raise RuntimeError("Expected reviewed private backend patch hunks")
+                index += 1
+            if not hunks or any(not hunk for hunk in hunks):
+                raise RuntimeError("Empty private backend patch hunks")
+            original = originals[target]
+            for hunk in hunks:
+                before = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"-"))
+                after = b"".join(line[1:] for line in hunk if line[:1] in (b" ", b"+"))
+                if original.count(before) != 1:
+                    raise RuntimeError("Reviewed BSD private backend patch does not match pinned upstream")
+                original = original.replace(before, after, 1)
+            originals[target] = original
+    return originals
 
 
 def patch_inventory():
@@ -122,17 +138,18 @@ def prepare(name, cache, offline=False):
     recorded = json.loads(stamp.read_text())
     if recorded.get("archive") != pin["sha256"]:
         raise RuntimeError(f"Stale source cache {source}; use an empty --source-dir")
-    patched = patched_input(archive) if name == "veracrypt" else None
-    patched_hash = hashlib.sha256(patched).hexdigest() if patched is not None else None
+    patched = patched_inputs(archive) if name == "veracrypt" else {}
+    patched_hashes = {target: hashlib.sha256(data).hexdigest() for target, data in patched.items()}
     for relative, expected in recorded["inputs"].items():
         path = source / relative
         permitted = {expected}
-        if relative == PATCH_TARGET and patched_hash is not None:
-            permitted.add(patched_hash)
+        if relative in patched_hashes:
+            permitted.add(patched_hashes[relative])
         if path.is_symlink() or not path.is_file() or digest(path) not in permitted:
             raise RuntimeError(f"Modified source input {name}/{relative}; use an empty --source-dir")
-    if patched is not None and digest(source / PATCH_TARGET) != patched_hash:
-        (source / PATCH_TARGET).write_bytes(patched)
+    for target, data in patched.items():
+        if digest(source / target) != patched_hashes[target]:
+            (source / target).write_bytes(data)
     return source.resolve()
 
 

@@ -65,9 +65,15 @@ pub(super) fn backend() -> AppResult<PathBuf> {
     if let Some(path) = std::env::var_os("LURKER_BSD_VERACRYPT") {
         paths.push(PathBuf::from(path));
     }
-    paths.extend(candidates(
-        &std::env::current_exe().map_err(|e| AppError::io("Locate Lurker executable", e))?,
-    ));
+    match std::env::current_exe() {
+        Ok(current) => paths.extend(candidates(&current)),
+        Err(error) if paths.is_empty() => {
+            return Err(AppError::io("Locate Lurker executable", error))
+        }
+        // An explicitly configured administrator-controlled backend remains
+        // usable if a package upgrade replaced this running executable.
+        Err(_) => {}
+    }
     let Some(path) = paths.into_iter().find(|path| path.is_file()) else {
         return Err(AppError::new("Private BSD VeraCrypt backend is missing; build scripts/build-bsd-backends.py and install the complete administrator-owned Lurker package."));
     };
@@ -395,20 +401,84 @@ fn auxiliary_path(text: &str) -> AppResult<PathBuf> {
         return Err(AppError::new("The BSD private backend lacks the auxiliary identity contract; install the matching Lurker package."));
     }
     let auxiliary = Path::new(paths[0]);
-    let number = auxiliary
+    let suffix = auxiliary
         .file_name()
         .and_then(|s| s.to_str())
         .and_then(|s| s.strip_prefix(".veracrypt_aux_mnt"))
         .unwrap_or("");
+    let numeric_legacy = !suffix.is_empty() && suffix.bytes().all(|c| c.is_ascii_digit());
     if auxiliary.parent() != Some(Path::new("/tmp"))
-        || number.is_empty()
-        || !number.bytes().all(|c| c.is_ascii_digit())
+        || (!numeric_legacy && !nonce_auxiliary(auxiliary))
     {
         return Err(AppError::new(
             "Unexpected VeraCrypt auxiliary mount identity.",
         ));
     }
     Ok(auxiliary.to_owned())
+}
+
+fn nonce_auxiliary(path: &Path) -> bool {
+    path.parent() == Some(Path::new("/tmp"))
+        && path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.strip_prefix(".veracrypt_aux_mnt-"))
+            .is_some_and(|s| {
+                s.len() == 32
+                    && s.bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
+}
+
+/// Read only cached kernel mount metadata, without entering a dead FUSE vnode.
+/// Use an owned buffer: getmntinfo's global array can race another caller.
+fn auxiliary_owner(path: &Path) -> AppResult<Option<u32>> {
+    // SAFETY: a null buffer requests only the current mount count.
+    let count = unsafe { libc::getfsstat(std::ptr::null_mut(), 0, libc::MNT_NOWAIT) };
+    if count < 0 {
+        return Err(AppError::io(
+            "Count native auxiliary mounts",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    let mut entries = Vec::<std::mem::MaybeUninit<libc::statfs>>::with_capacity(count as usize + 8);
+    let bytes = entries
+        .capacity()
+        .checked_mul(std::mem::size_of::<libc::statfs>())
+        .ok_or_else(|| AppError::new("Mount inventory size overflow."))?;
+    // SAFETY: buffer has the advertised allocated byte capacity; only the
+    // returned initialized structures below are accessed.
+    let filled =
+        unsafe { libc::getfsstat(entries.as_mut_ptr().cast(), bytes as _, libc::MNT_NOWAIT) };
+    if filled < 0 || filled as usize >= entries.capacity() {
+        return Err(AppError::new(
+            "Native mount inventory changed or failed; retain the VeraCrypt session.",
+        ));
+    }
+    let mut owner = None;
+    for index in 0..filled as usize {
+        // SAFETY: the kernel initialized exactly filled records.
+        let entry = unsafe {
+            entries
+                .as_ptr()
+                .add(index)
+                .as_ref()
+                .unwrap()
+                .assume_init_ref()
+        };
+        let bytes: Vec<u8> = entry
+            .f_mntonname
+            .iter()
+            .take_while(|c| **c != 0)
+            .map(|c| *c as u8)
+            .collect();
+        if std::os::unix::ffi::OsStrExt::as_bytes(path.as_os_str()) == bytes {
+            if owner.replace(entry.f_owner as u32).is_some() {
+                return Err(AppError::new("Ambiguous native auxiliary mount ownership."));
+            }
+        }
+    }
+    Ok(owner)
 }
 
 /// Upstream discovery silently omits a dead FUSE control endpoint. Native
@@ -563,7 +633,9 @@ fn kernel_backing(device: &str) -> AppResult<Option<(u64, u64)>> {
     #[cfg(target_os = "freebsd")]
     return super::native::backing_identity(device);
     #[cfg(target_os = "openbsd")]
-    return super::native::vnode_identity(device);
+    return super::native::vnode_identity(device).map_err(|error| AppError::new(format!(
+        "Cannot revalidate the OpenBSD vnode backing; retain the recovery session for administrator reconciliation (a dead FUSE daemon can make VNDIOCGET fail): {}", error.message
+    )));
 }
 
 pub(super) fn capture_recovery_proof(source: &Path, mapped: &str) -> AppResult<RecoveryProof> {
@@ -578,6 +650,9 @@ pub(super) fn capture_recovery_proof(source: &Path, mapped: &str) -> AppResult<R
     let source_metadata =
         fs::metadata(source).map_err(|e| AppError::io("Capture VeraCrypt source identity", e))?;
     let auxiliary_path = auxiliary_path(&information)?;
+    if !nonce_auxiliary(&auxiliary_path) {
+        return Err(AppError::new("The BSD backend lacks unique auxiliary attachment generations; install the matching current Lurker package. Legacy sessions require live-control cleanup."));
+    }
     let auxiliary = super::mounts()?
         .into_iter()
         .find(|m| m.target == auxiliary_path)
@@ -585,7 +660,7 @@ pub(super) fn capture_recovery_proof(source: &Path, mapped: &str) -> AppResult<R
     let backing = kernel_backing(&raw_device(mapped)?)?
         .ok_or_else(|| AppError::new("VeraCrypt device disappeared during capture."))?;
     let proof = RecoveryProof {
-        version: 1,
+        version: 2,
         source: source.to_owned(),
         source_dev: source_metadata.dev(),
         source_ino: source_metadata.ino(),
@@ -607,15 +682,14 @@ fn recovery_resources(
     regular_file(source)?;
     let metadata =
         fs::metadata(source).map_err(|e| AppError::io("Verify VeraCrypt recovery source", e))?;
-    if proof.version != 1
-        || proof.source != source
+    if proof.version != 2 {
+        return Err(AppError::new("Legacy VeraCrypt recovery proof lacks a unique attachment generation; retain the session for live-control administrator reconciliation."));
+    }
+    if proof.source != source
         || proof.mapped != mapped
         || (metadata.dev(), metadata.ino()) != (proof.source_dev, proof.source_ino)
         || !matches!(proof.auxiliary.filesystem.as_str(), "fuse" | "fusefs")
-        || auxiliary_path(&format!(
-            "Lurker Auxiliary Directory: {}\n",
-            proof.auxiliary.target.display()
-        ))? != proof.auxiliary.target
+        || !nonce_auxiliary(&proof.auxiliary.target)
     {
         return Err(AppError::new(
             "VeraCrypt recovery proof identity changed; retain the session.",
@@ -640,6 +714,14 @@ fn recovery_resources(
             ))
         }
     };
+    if auxiliary && auxiliary_owner(&proof.auxiliary.target)? != Some(0) {
+        return Err(AppError::new(
+            "VeraCrypt auxiliary mount owner changed; refusing recovery cleanup.",
+        ));
+    }
+    if present && !auxiliary {
+        return Err(AppError::new("The original VeraCrypt auxiliary generation is absent while its device name is occupied; refusing cleanup."));
+    }
     Ok((present, auxiliary))
 }
 
@@ -657,6 +739,28 @@ pub(super) fn close_with_proof(
     proof: &RecoveryProof,
 ) -> AppResult<()> {
     let (device_present, auxiliary_present) = recovery_resources(source, mapped, proof)?;
+    if device_present {
+        let raw = raw_device(mapped)?;
+        // Refuse a mounted inner filesystem, including a different partition
+        // on the same OpenBSD virtual disk. Never force-detach kernel objects.
+        #[cfg(target_os = "freebsd")]
+        let stem = raw.clone();
+        #[cfg(target_os = "openbsd")]
+        let stem = raw.strip_suffix('c').unwrap().to_owned();
+        if super::mounts()?.iter().any(|m| {
+            m.source.to_str().is_some_and(|s| {
+                s == raw
+                    || s == mapped
+                    || s.strip_prefix(&stem).is_some_and(|tail| {
+                        !tail.is_empty() && tail.as_bytes()[0].is_ascii_alphabetic()
+                    })
+            })
+        }) {
+            return Err(AppError::new(
+                "VeraCrypt filesystem is still mounted; retain the session.",
+            ));
+        }
+    }
     if device_present && auxiliary_present {
         match listing(source) {
             Ok(information) => {
@@ -684,25 +788,6 @@ pub(super) fn close_with_proof(
     }
     if device_present {
         let raw = raw_device(mapped)?;
-        // Refuse a mounted inner filesystem, including a different partition
-        // on the same OpenBSD virtual disk. Never force-detach kernel objects.
-        #[cfg(target_os = "freebsd")]
-        let stem = raw.clone();
-        #[cfg(target_os = "openbsd")]
-        let stem = raw.strip_suffix('c').unwrap().to_owned();
-        if super::mounts()?.iter().any(|m| {
-            m.source.to_str().is_some_and(|s| {
-                s == raw
-                    || s == mapped
-                    || s.strip_prefix(&stem).is_some_and(|tail| {
-                        !tail.is_empty() && tail.as_bytes()[0].is_ascii_alphabetic()
-                    })
-            })
-        }) {
-            return Err(AppError::new(
-                "VeraCrypt filesystem is still mounted; retain the session.",
-            ));
-        }
         super::native::detach_file(&raw)?;
     }
     // Recheck exact mount fsid after detach; retries accept only proven absent
@@ -819,6 +904,20 @@ mod tests {
         let mut unrelated = mount;
         unrelated.target = PathBuf::from("/tmp/unrelated-fuse");
         assert!(verify_auxiliary_inventory(&[], &[unrelated]).is_ok());
+    }
+
+    #[test]
+    fn recovery_requires_a_full_random_attachment_generation() {
+        let valid = Path::new("/tmp/.veracrypt_aux_mnt-0123456789abcdef0123456789abcdef");
+        assert!(nonce_auxiliary(valid));
+        for invalid in [
+            "/tmp/.veracrypt_aux_mnt1",
+            "/tmp/.veracrypt_aux_mnt-0123",
+            "/root/.veracrypt_aux_mnt-0123456789abcdef0123456789abcdef",
+            "/tmp/.veracrypt_aux_mnt-0123456789abcdef0123456789abcdeg",
+        ] {
+            assert!(!nonce_auxiliary(Path::new(invalid)));
+        }
     }
 
     #[test]
@@ -979,6 +1078,212 @@ mod tests {
         )));
     }
 
+    fn owned_daemon(source: &Path) -> (u32, String) {
+        let executable = backend().unwrap();
+        #[cfg(target_os = "freebsd")]
+        let candidates: HashSet<u32> = exec("/usr/bin/procstat", &args(&["-a", "-f"]), None)
+            .unwrap()
+            .lines()
+            .filter(|line| line.ends_with(&format!(" {}", source.display())))
+            .filter_map(|line| line.split_whitespace().next()?.parse().ok())
+            .collect();
+        #[cfg(target_os = "openbsd")]
+        let candidates: HashSet<u32> =
+            exec("/usr/bin/fstat", &[source.as_os_str().to_owned()], None)
+                .unwrap()
+                .lines()
+                .skip(1)
+                .filter_map(|line| line.split_whitespace().nth(2)?.parse().ok())
+                .collect();
+        let mut matched = Vec::new();
+        for pid in candidates {
+            let pid_text = pid.to_string();
+            #[cfg(target_os = "freebsd")]
+            let identity = exec("/usr/bin/procstat", &args(&["-b", &pid_text]), None)
+                .unwrap()
+                .lines()
+                .any(|line| line.split_whitespace().last() == executable.to_str())
+                && exec("/usr/bin/procstat", &args(&["-f", &pid_text]), None)
+                    .unwrap()
+                    .contains("/dev/fuse");
+            #[cfg(target_os = "openbsd")]
+            let identity = exec(
+                "/bin/ps",
+                &args(&["-ww", "-p", &pid_text, "-o", "args="]),
+                None,
+            )
+            .unwrap()
+            .trim()
+            .split_whitespace()
+            .next()
+                == executable.to_str();
+            if identity {
+                let start =
+                    exec("/bin/ps", &args(&["-p", &pid_text, "-o", "lstart="]), None).unwrap();
+                matched.push((pid, start));
+            }
+        }
+        assert_eq!(
+            matched.len(),
+            1,
+            "must identify exactly the fixture's private-engine source FD owner"
+        );
+        matched.pop().unwrap()
+    }
+
+    #[cfg(target_os = "freebsd")]
+    #[test]
+    #[ignore = "root on a designated BSD guest; kills only the identified private daemon of a new /tmp fixture"]
+    fn native_saved_proof_recovers_dead_control_and_partial_cleanup() {
+        native_saved_proof_lifecycle(true);
+    }
+
+    #[cfg(target_os = "openbsd")]
+    #[test]
+    #[ignore = "root on a designated BSD guest; creates only new /tmp fixtures and retains a live auxiliary daemon"]
+    fn native_saved_proof_retries_partial_cleanup_without_device_adoption() {
+        // VNDIOCGET consults the backing FUSE vnode: daemon death makes its
+        // identity unprovable. Recovery must fail closed in that case, rather
+        // than pretending ENXIO means an unused device. Qualify partial cleanup
+        // here with live control; the real dead-daemon finding is documented.
+        native_saved_proof_lifecycle(false);
+    }
+
+    fn native_saved_proof_lifecycle(kill_daemon: bool) {
+        assert_eq!(crate::effective_uid(), 0);
+        eprintln!(
+            "private engine: {}",
+            invoke(&args(&["--text", "--version"]), None)
+                .unwrap()
+                .trim()
+        );
+        let root = std::env::temp_dir().join(format!("lurker-vc-fault-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        eprintln!("native VeraCrypt fault fixture: {}", root.display());
+        let source = root.join("owned.hc");
+        test_file(&source).set_len(96 * 1024 * 1024).unwrap();
+        let credential = Credential::Password(b"disposable native fault password".to_vec());
+        format(&source, 96, CreateCipher::Aes, &credential).unwrap();
+        let mapped = unlock(&source, false, &credential).unwrap();
+        let proof = capture_recovery_proof(&source, &mapped).unwrap();
+        make_filesystem(&mapped).unwrap();
+        let target = root.join("mount");
+        fs::create_dir(&target).unwrap();
+        let filesystem = if cfg!(target_os = "freebsd") {
+            "ufs"
+        } else {
+            "ffs"
+        };
+        exec(
+            "/sbin/mount",
+            &[
+                "-t".into(),
+                filesystem.into(),
+                mapped.clone().into(),
+                target.as_os_str().into(),
+            ],
+            None,
+        )
+        .unwrap();
+        let mut marker = test_file(&target.join("marker"));
+        marker
+            .write_all(b"fsynced before control daemon failure")
+            .unwrap();
+        marker.sync_all().unwrap();
+        drop(marker);
+        assert!(
+            close_with_proof(&source, &mapped, &proof).is_err(),
+            "a mounted inner filesystem must prevent any close"
+        );
+        verify_recovery_proof(&source, &mapped, &proof).unwrap();
+        exec("/sbin/umount", &[target.as_os_str().into()], None).unwrap();
+        let mut wrong = proof.clone();
+        wrong.source_ino ^= 1;
+        assert!(verify_recovery_proof(&source, &mapped, &wrong).is_err());
+        let mut wrong = proof.clone();
+        wrong.backing_ino ^= 1;
+        assert!(verify_recovery_proof(&source, &mapped, &wrong).is_err());
+        let mut wrong = proof.clone();
+        wrong.auxiliary.fsid.push(42);
+        assert!(verify_recovery_proof(&source, &mapped, &wrong).is_err());
+        let encrypted = fs::read(&source).unwrap();
+        let saved_source = root.join("saved-original.hc");
+        fs::rename(&source, &saved_source).unwrap();
+        test_file(&source).set_len(96 * 1024 * 1024).unwrap();
+        assert!(close_with_proof(&source, &mapped, &proof).is_err());
+        fs::remove_file(&source).unwrap();
+        fs::rename(&saved_source, &source).unwrap();
+        if kill_daemon {
+            let daemon = owned_daemon(&source);
+            assert_eq!(
+                owned_daemon(&source),
+                daemon,
+                "recheck exact source/executable/start identity immediately before signal"
+            );
+            exec("/bin/kill", &args(&["-KILL", &daemon.0.to_string()]), None).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            assert!(listing(&source).is_err());
+        }
+        verify_recovery_proof(&source, &mapped, &proof).unwrap();
+        let unrelated = root.join("unrelated.hc");
+        test_file(&unrelated).set_len(96 * 1024 * 1024).unwrap();
+        let blocked = ensure_source_available(&unrelated).unwrap_err();
+        assert!(blocked.message.contains(if kill_daemon {
+            "unlisted VeraCrypt auxiliary"
+        } else {
+            "unmanaged VeraCrypt volume"
+        }));
+        // Simulate a crash after device detach but before auxiliary unmount.
+        super::super::native::detach_file(&raw_device(&mapped).unwrap()).unwrap();
+        verify_recovery_proof(&source, &mapped, &proof).unwrap();
+        let replacement_device = super::super::native::attach_file(&unrelated, false).unwrap();
+        let raw = raw_device(&mapped).unwrap();
+        if replacement_device == raw {
+            assert!(verify_recovery_proof(&source, &mapped, &proof).is_err());
+            assert!(close_with_proof(&source, &mapped, &proof).is_err());
+        }
+        super::super::native::verify_backing(&replacement_device, &unrelated).unwrap();
+        super::super::native::detach_file(&replacement_device).unwrap();
+        assert_eq!(
+            replacement_device, raw,
+            "native allocation must exercise the reused-unit regression"
+        );
+        close_with_proof(&source, &mapped, &proof).unwrap();
+        close_with_proof(&source, &mapped, &proof).unwrap();
+        assert!(
+            fs::read(&source).unwrap() == encrypted,
+            "identity refusals and kernel cleanup must not alter ciphertext"
+        );
+        let mapped = unlock(&source, false, &credential).unwrap();
+        let reopened = capture_recovery_proof(&source, &mapped).unwrap();
+        assert!(
+            verify_recovery_proof(&source, &proof.mapped, &proof).is_err(),
+            "new auxiliary mount/backing must not match old proof"
+        );
+        exec(
+            "/sbin/mount",
+            &[
+                "-t".into(),
+                filesystem.into(),
+                mapped.clone().into(),
+                target.as_os_str().into(),
+            ],
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(target.join("marker")).unwrap(),
+            b"fsynced before control daemon failure"
+        );
+        exec("/sbin/umount", &[target.as_os_str().into()], None).unwrap();
+        close_with_proof(&source, &mapped, &reopened).unwrap();
+        fs::remove_dir(target).unwrap();
+        fs::remove_file(source).unwrap();
+        fs::remove_file(unrelated).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
+
     #[test]
     #[ignore = "root on a designated BSD guest with the private backend installed; creates /tmp file containers"]
     fn native_private_veracrypt_lifecycle() {
@@ -1102,6 +1407,14 @@ mod tests {
                 }
                 fs::remove_dir(target).unwrap();
                 fs::remove_file(source).unwrap();
+                eprintln!(
+                    "passed {cipher}/{}",
+                    if keyfile {
+                        "binary-keyfile"
+                    } else {
+                        "password"
+                    }
+                );
             }
         }
         fs::remove_file(key).unwrap();

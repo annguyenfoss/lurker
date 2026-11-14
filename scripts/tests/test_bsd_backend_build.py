@@ -100,11 +100,33 @@ class SourceProvenance(unittest.TestCase):
             member = tarfile.TarInfo("upstream/" + builder.PATCH_TARGET)
             member.size = len(original)
             tar.addfile(member, io.BytesIO(original))
+            # Preserve each exact reviewed CoreUnix hunk in a reduced fixture.
+            core_hunks = []
+            in_core = False
+            for line in (builder.ROOT / "native/bsd-veracrypt/auxiliary-path.patch").read_bytes().splitlines(keepends=True):
+                if line.startswith(b"--- a/"):
+                    in_core = line.rstrip() == b"--- a/src/Core/Unix/CoreUnix.cpp"
+                elif in_core and line.startswith(b"@@ "):
+                    core_hunks.append([])
+                elif in_core and core_hunks and line[:1] in (b" ", b"-"):
+                    core_hunks[-1].append(line[1:])
+            core_original = b"\n// reduced fixture separator\n".join(b"".join(h) for h in core_hunks)
+            member = tarfile.TarInfo("upstream/src/Core/Unix/CoreUnix.cpp")
+            member.size = len(core_original)
+            tar.addfile(member, io.BytesIO(core_original))
         pin = {"revision": "fixed", "url": "https://example.invalid/source", "sha256": builder.digest(archive)}
         with patch.dict(builder.PINS, {"veracrypt": pin}):
             source = builder.prepare("veracrypt", self.cache, offline=True)
             self.assertIn(b"Lurker Auxiliary Directory:", (source / builder.PATCH_TARGET).read_bytes())
             self.assertEqual(builder.prepare("veracrypt", self.cache, offline=True), source)
+            core = source / "src/Core/Unix/CoreUnix.cpp"
+            reviewed = core.read_bytes()
+            self.assertIn(b"arc4random_buf (nonce, sizeof (nonce))", reviewed)
+            self.assertIn(b'fuseMountPoint = "/tmp/"', reviewed)
+            core.write_bytes(reviewed + b"unreviewed source modification")
+            with self.assertRaisesRegex(RuntimeError, "Modified source input"):
+                builder.prepare("veracrypt", self.cache, offline=True)
+            core.write_bytes(reviewed)
             with (source / builder.PATCH_TARGET).open("ab") as stream:
                 stream.write(b"unreviewed source modification")
             with self.assertRaisesRegex(RuntimeError, "Modified source input"):

@@ -10,3 +10,49 @@
  			prop << LangString["MOUNT_POINT"] << L": " << wstring (volume.MountPoint) << L'\n';
  			prop << LangString["SIZE"] << L": " << SizeToString (volume.Size) << L'\n';
  			prop << LangString["TYPE"] << L": " << VolumeTypeToString (volume.Type, volume.Protection) << L'\n';
+--- a/src/Core/Unix/CoreUnix.cpp
++++ b/src/Core/Unix/CoreUnix.cpp
+@@ -28,6 +28,9 @@
+ #include <sys/utsname.h>
+ #endif
+ #include <stdio.h>
++#ifdef TC_BSD
++#include <stdlib.h>
++#endif
+ #include <unistd.h>
+ #include "Platform/FileStream.h"
+ #include "Platform/MemoryStream.h"
+@@ -1330,6 +1333,28 @@
+-		mountDirectory.push_back ('\0');
++		mountDirectory.push_back ('\0');
+-		throw_sys_if (mkdtemp (&mountDirectory[0]) == NULL);
++		throw_sys_if (mkdtemp (&mountDirectory[0]) == NULL);
+-		fuseMountPoint = &mountDirectory[0];
++		fuseMountPoint = &mountDirectory[0];
++#elif defined(TC_BSD)
++		// Kernel FUSE fsids/device numbers may be recycled immediately on BSD.
++		// A fresh, native CSPRNG generation name lets the root recovery journal
++		// distinguish the exact attachment even after its control daemon dies.
++		// Never honor TMPDIR, reuse an old directory, or delete a collision.
++		for (int attempt = 0; ; ++attempt)
++		{
++			uint8 nonce[16];
++			arc4random_buf (nonce, sizeof (nonce));
++			const char hex[] = "0123456789abcdef";
++			string suffix;
++			for (size_t i = 0; i < sizeof (nonce); ++i)
++			{
++				suffix += hex[nonce[i] >> 4];
++				suffix += hex[nonce[i] & 15];
++			}
++			fuseMountPoint = "/tmp/" + GetFuseMountDirPrefix() + "-" + suffix;
++			if (mkdir (fuseMountPoint.c_str(), S_IRUSR | S_IXUSR) == 0)
++				break;
++			if (errno != EEXIST || attempt >= 31)
++				throw TemporaryDirectoryFailure (SRC_POS, StringConverter::ToWide (fuseMountPoint));
++		}
+ #else
+-		// Find a free mount point for FUSE service
++		// Find a free mount point for FUSE service
+-		MountedFilesystemList mountedFilesystems = GetMountedFilesystems ();
++		MountedFilesystemList mountedFilesystems = GetMountedFilesystems ();
