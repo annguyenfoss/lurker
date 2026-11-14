@@ -23,7 +23,7 @@ class MacBackendTests(unittest.TestCase):
             self.assertFalse(backend.is_external_fuse(path))
 
     def test_runtime_flags_and_manifest_selection_do_not_silently_swap_fuse(self):
-        self.assertEqual(backend.FUSE_RUNTIMES["macfuse"]["flags"], ["WITHFUSET=0", "VC_OSX_FUSET=0"])
+        self.assertNotIn("flags", backend.FUSE_RUNTIMES["macfuse"])
         self.assertEqual(backend.FUSE_RUNTIMES["fuse-t"]["flags"], ["WITHFUSET=1", "VC_OSX_FUSET=1"])
         self.assertEqual(backend.manifest_fuse_runtime({"fuse_runtime": {"implementation": "macfuse"}}), "macfuse")
         self.assertEqual(backend.manifest_fuse_runtime({"external_libraries": ["/usr/local/lib/libfuse-t.dylib"]}), "fuse-t")

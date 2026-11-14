@@ -25,8 +25,7 @@ SOURCES = {
 }
 
 FUSE_RUNTIMES = {
-    "macfuse": {"package": "fuse", "library": "/usr/local/lib/libfuse.2.dylib",
-                "flags": ["WITHFUSET=0", "VC_OSX_FUSET=0"]},
+    "macfuse": {"package": "fuse", "library": "/usr/local/lib/libfuse.2.dylib"},
     "fuse-t": {"package": "fuse-t", "library": "/usr/local/lib/libfuse-t.dylib",
                "flags": ["WITHFUSET=1", "VC_OSX_FUSET=1"]},
 }
