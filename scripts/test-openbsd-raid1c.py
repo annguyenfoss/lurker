@@ -14,6 +14,7 @@ from pathlib import Path
 import platform
 import re
 import subprocess
+import struct
 import sys
 import time
 
@@ -59,6 +60,28 @@ def require_idle(state):
     for line in state["vnconfig"].splitlines():
         if not re.fullmatch(r"vnd\d+: not in use", line):
             raise AssertionError("Native vnode is active or unknown; preserve it and obtain a quiet test window")
+
+
+def native_headers(paths):
+    """Read bounded metadata of this suite's native whole-file RAID members.
+
+    The qualified disklabel RAID* layout starts its chunk at file offset0;
+    native softraid metadata begins8192 bytes into that chunk. No vnode needed.
+    """
+    result = {}
+    for path in paths:
+        with path.open("rb") as stream:
+            stream.seek(8192)
+            value = stream.read(168)
+        if len(value) != 168 or struct.unpack_from("=Q", value, 0)[0] != 0x4d4152436372616d:
+            raise AssertionError("Unexpected retained native member layout")
+        number = lambda offset: struct.unpack_from("=I", value, offset)[0]
+        if number(8) != 6 or number(32) != 2 or number(52) != 0x1c:
+            raise AssertionError("Unexpected retained native mirror profile")
+        result[path.name] = {"array_uuid": value[16:32].hex(), "members": number(32),
+                             "member_index": number(36), "level": hex(number(52)),
+                             "generation": struct.unpack_from("=Q", value, 152)[0]}
+    return result
 
 
 def private_binary(binary):
@@ -232,6 +255,7 @@ class MirrorSuite(BASE.Suite):
         self.result["limitations"].append("A recovered secondary may become native member0; returning stale primary0 is refused as a conflicting index. Continue explicit survivor recovery until a separate administrator rebuild; no automatic rejoin.")
         self.mount(source=self.peer, kind="raid1c", degraded=True)
         self.verify(); self.degraded_status("survivor-still-readable-after-conflicting-return-refused"); self.close()
+        self.result["native_member_headers"] = native_headers([self.source, self.peer]); self.save()
 
     def normal_cleanup(self):
         errors = []
@@ -410,6 +434,7 @@ class InvokingOwnerSuite(MirrorSuite):
         self.user("read", "degraded-primary-newest")
         self.degraded_status("stale-secondary-returned-offline")
         self.close(); self.file_owners()
+        self.result["native_member_headers"] = native_headers([self.source, self.peer]); self.save()
         self.result["limitations"].append("Returning secondary stays offline; newest invoking-user WAL/data must come from surviving primary. No rebuild attempted.")
 
     def run(self):

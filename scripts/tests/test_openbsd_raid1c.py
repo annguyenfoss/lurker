@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import unittest
 import time
+import struct
+import tempfile
 from types import SimpleNamespace
 from unittest import mock
 
@@ -84,6 +86,23 @@ class Raid1cHarnessTests(unittest.TestCase):
         self.assertNotIn("/usr/bin/env", mount)
         self.assertFalse(any("SUDO_UID" in argument for argument in mount))
         compile(SUITE.USER_WORKLOAD, "normal-user-workload.py", "exec")
+
+    def test_retained_header_capture_is_bounded_and_preserves_conflicting_roles(self):
+        with tempfile.TemporaryDirectory(prefix="lurker-raid1c-header-", dir="/tmp") as directory:
+            path = Path(directory) / "member.img"
+            value = bytearray(8192 + 168)
+            struct.pack_into("=Q", value, 8192, 0x4d4152436372616d)
+            for offset, number in [(8, 6), (32, 2), (36, 0), (52, 0x1c)]:
+                struct.pack_into("=I", value, 8192 + offset, number)
+            struct.pack_into("=Q", value, 8192 + 152, 12)
+            path.write_bytes(value)
+            before = path.read_bytes()
+            header = SUITE.native_headers([path])[path.name]
+            self.assertEqual(header["member_index"], 0)
+            self.assertEqual(header["generation"], 12)
+            self.assertEqual(path.read_bytes(), before)
+            path.write_bytes(b"truncated")
+            with self.assertRaises(AssertionError): SUITE.native_headers([path])
 
     def test_argument_validation_blocks_storage_runs_on_development_host(self):
         with mock.patch.object(SUITE.platform, "system", return_value="Linux"), \
