@@ -522,6 +522,7 @@ mod tests {
 
     slint::slint! {
         export component InlineZoomProbe inherits Window {
+            default-font-family: "Inter Tight";
             in-out property <length> size: 16px;
             out property <length> text_width: label.preferred-width;
             out property <length> text_ascent: label.font-metrics.ascent;
@@ -1115,6 +1116,11 @@ mod tests {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let window = setup_test_window();
         let ui = InlineZoomProbe::new().unwrap();
+        // The standalone zoom probe must work before MainWindow imports its
+        // fonts, including on BSD test hosts without a system font collection.
+        WindowAdapter::renderer(window.as_ref())
+            .register_font_from_memory(include_bytes!("../ui/fonts/InterTight-Regular.ttf"))
+            .unwrap();
         ui.show().unwrap();
         render(&window);
 
