@@ -1,5 +1,34 @@
 # Unix staging and package inputs
 
+From a clean checkout at an exact commit, `scripts/build-unix.py` builds both
+products, builds missing private engines, and stages the applicable locked scope:
+
+```bash
+python scripts/build-unix.py --source-commit "$(git rev-parse HEAD)" \
+  --java-home "$JAVA_HOME" --output target/packages/lurker-native
+```
+
+Run as the login user with the intended toolchains already selected. Linux needs
+the JDK/Maven for its private Cryptomator runtime; BSD native-only builds do not.
+The builder never installs prerequisites or runs storage tests. `--cli-only`
+explicitly requests a CLI-only development artifact. `--select BACKEND` limits a
+development build; omitting it selects every applicable locked backend.
+
+Pass existing engine outputs with repeated `--backend KIND=DIRECTORY` to reuse
+verified native builds, for example `--backend veracrypt-userspace=/path/to/output`.
+The stager still verifies their pins, patches, notices, file hashes and native
+dependencies. Cached engine recipes have separate input hashes; unrelated Rust
+changes reuse their native objects. Rust has its own reusable cache, or respects
+an explicit `CARGO_TARGET_DIR`. A cache lock prevents overlapping orchestrator
+builds; reconcile a recorded owner before removing a stale lock.
+
+Each invocation retains stage logs and `result.json` beneath
+`~/.cache/lurker/build-unix/`, printing only stage exits and result locations.
+`--cache-root`, `--jobs` and `--stage-timeout` bound build resources. The remote
+runner can supply `--source-manifest` for its verified deployed Git archive.
+Successful packaging is build evidence; native lifecycle qualification remains
+a separate required step.
+
 `scripts/stage-unix.py` stages Linux, FreeBSD, DragonFly BSD, NetBSD and OpenBSD artifacts. It does not build, install, elevate, run a payload, qualify encryption operations or change host permissions. macOS uses `scripts/build-macos-dmg.py` instead.
 
 The package layout is:

@@ -1,0 +1,117 @@
+"""Build orchestration contracts; no compiler or encryption backend executes."""
+import argparse
+import importlib.util
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+
+SCRIPT = Path(__file__).resolve().parents[1] / "build-unix.py"
+spec = importlib.util.spec_from_file_location("unix_builder", SCRIPT)
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+
+class UnixBuild(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="lurker-build-plan-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.module = builder.stager()
+        self.args = argparse.Namespace(source_commit="a" * 40, source_manifest=None,
+                                       output=self.root / "package", jobs=2, cli_only=False,
+                                       java_home=self.root / "jdk", maven="mvn",
+                                       native_keys={"veracrypt": "vc", "folders": "folders", "cryptomator": "java"})
+
+    def recipe(self, system, selected, artifacts=None):
+        with mock.patch.dict(builder.os.environ, {}, clear=True):
+            return builder.recipe(self.args, system, selected, artifacts or {}, self.root / "cache",
+                                  self.root / "work", self.module)
+
+    def test_default_package_builds_both_products_and_records_exact_commit(self):
+        stages = dict(self.recipe("NetBSD", {"cgd"}))
+        self.assertIn("lurker-desktop", stages["rust-build"])
+        self.assertIn("--desktop", stages["rust-provenance"])
+        self.assertIn("--desktop", stages["package"])
+        for name in ("rust-provenance", "package"):
+            command = stages[name]
+            self.assertEqual(command[command.index("--source-commit") + 1], "a" * 40)
+        self.assertFalse(any(name.startswith("build-") for name in stages))
+
+    def test_linux_default_veracrypt_includes_userspace_and_creator(self):
+        stages = dict(self.recipe("Linux", {"luks", "luks1", "veracrypt", "gocryptfs", "cryfs", "cryptomator"}))
+        self.assertNotIn("--only-creator", stages["build-veracrypt-userspace"])
+        self.assertIn("userspace-provenance", stages)
+        self.assertIn("build-gocryptfs", stages)
+        self.assertIn("build-cryfs", stages)
+        self.assertIn("build-cryptomator", stages)
+        self.assertTrue(any(value.startswith("veracrypt-userspace=") for value in stages["package"]))
+
+    def test_bsd_uses_native_engine_without_linux_builds(self):
+        stages = dict(self.recipe("FreeBSD", {"veracrypt", "gocryptfs", "geli", "pefs"}))
+        self.assertIn("build-veracrypt-bsd", stages)
+        self.assertNotIn("build-veracrypt-userspace", stages)
+        self.assertNotIn("build-cryptomator", stages)
+
+    def test_supplied_artifacts_are_verified_by_stager_without_rebuild(self):
+        artifact = self.root / "supplied"
+        artifact.mkdir()
+        supplied = builder.supplied_artifacts(["veracrypt-userspace=" + str(artifact)], {"veracrypt"}, "Linux", self.module)
+        stages = dict(self.recipe("Linux", {"veracrypt"}, supplied))
+        self.assertNotIn("build-veracrypt-userspace", stages)
+        self.assertNotIn("userspace-provenance", stages)
+        self.assertIn("veracrypt-userspace=" + str(artifact), stages["package"])
+
+    def test_artifact_alias_and_conflicting_creators_are_rejected(self):
+        actual = self.root / "actual"
+        actual.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(actual, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "real directory"):
+            builder.supplied_artifacts(["gocryptfs=" + str(alias)], {"gocryptfs"}, "Linux", self.module)
+        with self.assertRaisesRegex(ValueError, "already includes"):
+            builder.supplied_artifacts(["veracrypt-create=" + str(actual), "veracrypt-userspace=" + str(actual)],
+                                       {"veracrypt"}, "Linux", self.module)
+        with self.assertRaisesRegex(ValueError, "native OS"):
+            builder.supplied_artifacts(["veracrypt-bsd=" + str(actual)], {"veracrypt"}, "Linux", self.module)
+
+    def test_missing_java_blocks_before_any_build(self):
+        self.args.java_home = None
+        with self.assertRaisesRegex(ValueError, "java-home"):
+            self.recipe("Linux", {"cryptomator"})
+
+    def test_deployed_source_manifest_is_propagated(self):
+        self.args.source_manifest = self.root / "source-manifest.json"
+        stages = dict(self.recipe("OpenBSD", {"softraid"}))
+        for name in ("rust-provenance", "package"):
+            self.assertIn(str(self.args.source_manifest), stages[name])
+
+    def test_failed_stage_stops_and_retains_source_identity(self):
+        work = self.root / "work"
+        work.mkdir()
+        child = mock.Mock()
+        child.wait.return_value = 7
+        with mock.patch.object(builder.subprocess, "Popen", return_value=child) as launch:
+            result = builder.execute([("compile", ["compiler"]), ("package", ["stager"])], work, 60, "b" * 40)
+        self.assertEqual(launch.call_count, 1)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["source_commit"], "b" * 40)
+        self.assertTrue((work / "result.json").is_file())
+        self.assertFalse((work / "result.json.tmp").exists())
+
+    def test_prerequisites_report_missing_tools_before_expensive_builds(self):
+        stages = self.recipe("Linux", {"veracrypt", "cryfs"})
+        with mock.patch.object(builder.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(ValueError, "missing build prerequisites.*cmake.*wx-config"):
+                builder.prerequisites(stages, self.args)
+
+    def test_native_only_build_does_not_require_java_or_cxx(self):
+        needed = []
+        with mock.patch.object(builder.shutil, "which", side_effect=lambda name: needed.append(name) or "/bin/tool"):
+            builder.prerequisites(self.recipe("NetBSD", {"cgd"}), self.args)
+        self.assertNotIn("mvn", needed)
+        self.assertNotIn("c++", needed)
+
+
+if __name__ == "__main__":
+    unittest.main()
