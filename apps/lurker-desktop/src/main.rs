@@ -664,6 +664,13 @@ mod tests {
         std::fs::create_dir(&fixture).unwrap();
         let source = fixture.join("encrypted");
         let mountpoint = fixture.join("mount");
+        let owns_volume = |volume: &lurker_core::ActiveVolume| {
+            volume
+                .source_path
+                .as_ref()
+                .map(|path| path == &source)
+                .unwrap_or_else(|| volume.mountpoint.as_ref() == Some(&mountpoint))
+        };
         let window = setup_test_window_with_proxy(true);
         let ui = super::MainWindow::new().unwrap();
         super::configure_platform(&ui, std::env::consts::OS);
@@ -714,7 +721,14 @@ mod tests {
             );
             ui.set_create_file_path(fixture.to_string_lossy().as_ref().into());
             ui.set_create_file_name("encrypted".into());
-            ui.set_create_size("128".into());
+            ui.set_create_size(
+                if cfg!(target_os = "linux") {
+                    "256"
+                } else {
+                    "128"
+                }
+                .into(),
+            );
             ui.set_create_size_unit("MB".into());
             ui.set_create_passphrase("desktop native fixture password".into());
             ui.set_create_confirm("desktop native fixture password".into());
@@ -746,7 +760,7 @@ mod tests {
                     .lock()
                     .unwrap()
                     .iter()
-                    .position(|volume| volume.source_path.as_ref() == Some(&source))
+                    .position(|volume| owns_volume(volume))
                     .expect("own native session listed");
                 ui.invoke_unmount_volume(index as i32);
                 wait();
@@ -755,9 +769,22 @@ mod tests {
                     .lock()
                     .unwrap()
                     .iter()
-                    .any(|volume| volume.source_path.as_ref() == Some(&source)));
+                    .any(|volume| owns_volume(volume)));
             };
             mount();
+            if !backend.is_directory() && !cfg!(target_os = "macos") {
+                use std::os::unix::fs::{MetadataExt, PermissionsExt};
+                let image = std::fs::metadata(&source).unwrap();
+                let filesystem = std::fs::metadata(&mountpoint).unwrap();
+                assert_eq!(image.uid(), uid, "new image belongs to the invoking user");
+                assert_eq!(image.permissions().mode() & 0o777, 0o600);
+                assert_eq!(
+                    filesystem.uid(),
+                    uid,
+                    "new filesystem belongs to the invoking user"
+                );
+                assert_eq!(filesystem.permissions().mode() & 0o777, 0o700);
+            }
             let payload = (0..1048576)
                 .map(|index| (index % 251) as u8)
                 .collect::<Vec<_>>();
@@ -773,12 +800,10 @@ mod tests {
             );
             unmount();
         }));
-        // Clean up only a session whose listed source is this test's private fixture.
+        // Prefer the listed source identity. Linux native rows expose only the
+        // mapping, so accept this test's exact private mountpoint when absent.
         if let Ok(volumes) = super::list_desktop_volumes(Some(&helper)) {
-            if let Some(volume) = volumes
-                .iter()
-                .find(|volume| volume.source_path.as_ref() == Some(&source))
-            {
+            if let Some(volume) = volumes.iter().find(|volume| owns_volume(volume)) {
                 let response = super::run_helper(
                     &helper,
                     lurker_core::CommandAction::Unmount(
