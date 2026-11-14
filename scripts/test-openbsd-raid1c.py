@@ -220,10 +220,18 @@ class MirrorSuite(BASE.Suite):
         self.mount(source=self.peer, kind="raid1c", degraded=True)
         self.verify(); self.degraded_status("secondary-survives-primary-missing"); self.close()
         self.held.rename(self.source); self.held = None
-        # Reattach both files only under explicit degraded recovery. The stale
-        # returning primary stays offline; neither this suite nor Lurker rebuilds it.
-        self.mount(kind="raid1c", peer=self.peer, degraded=True)
-        self.verify(); self.degraded_status("returning-primary-stays-offline"); self.close()
+        # Qualified OpenBSD8 behavior: recovering lone secondary1 renumbers it
+        # to index0. Returning stale primary0 conflicts (observed generations
+        # 12 versus8); reject it without writes, never normalize native headers.
+        # Native sr_meta_save assigns current chunk indices; bioctl(8) requires
+        # a rebuild before missing members can rejoin:
+        # https://man.openbsd.org/bioctl.8
+        self.guarded_rejection(self.command("mount", kind="raid1c", peer=self.peer,
+                                            degraded=True, mountpoint=self.mountpoint),
+                               password=self.password, diagnostic="repeat a member index")
+        self.result["limitations"].append("A recovered secondary may become native member0; returning stale primary0 is refused as a conflicting index. Continue explicit survivor recovery until a separate administrator rebuild; no automatic rejoin.")
+        self.mount(source=self.peer, kind="raid1c", degraded=True)
+        self.verify(); self.degraded_status("survivor-still-readable-after-conflicting-return-refused"); self.close()
 
     def normal_cleanup(self):
         errors = []
