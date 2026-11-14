@@ -29,7 +29,7 @@ mod model;
 ))]
 mod new_filesystem;
 mod output;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 mod sha256;
 mod size;
 #[cfg(target_os = "linux")]

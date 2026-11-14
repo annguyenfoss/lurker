@@ -1,6 +1,12 @@
 //! One trust boundary for executables launched through administrator elevation.
 use crate::{AppError, AppResult};
 use std::fs;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use std::fs::OpenOptions;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use std::io::Read;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
@@ -17,17 +23,76 @@ pub fn trusted_privileged_executable(path: &Path) -> AppResult<PathBuf> {
             "Privileged component is not an executable file.",
         ));
     }
-    for ancestor in canonical.ancestors() {
-        let metadata = fs::metadata(ancestor)
+    validate_runtime_ownership(&canonical)?;
+    Ok(canonical)
+}
+
+fn validate_runtime_ownership(path: &Path) -> AppResult<()> {
+    if !path.is_absolute() {
+        return Err(AppError::new("Privileged runtime paths must be absolute."));
+    }
+    for ancestor in path.ancestors() {
+        let metadata = fs::symlink_metadata(ancestor)
             .map_err(|e| AppError::io("Cannot inspect privileged path ownership", e))?;
-        if metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
+        if metadata.file_type().is_symlink()
+            || metadata.uid() != 0
+            || metadata.permissions().mode() & 0o022 != 0
+        {
             return Err(AppError::new(format!(
                 "Refusing elevated execution through an untrusted path: {}. Install an administrator-owned Lurker package first.",
                 ancestor.display()
             )));
         }
     }
-    Ok(canonical)
+    Ok(())
+}
+
+/// Private loader companions are read from their actual installation paths,
+/// without following an alias into a different library or manifest inventory.
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+pub(crate) fn trusted_runtime_directory(path: &Path) -> AppResult<()> {
+    validate_runtime_ownership(path)?;
+    if !fs::symlink_metadata(path)
+        .map_err(|e| AppError::io("Inspect private runtime directory", e))?
+        .is_dir()
+    {
+        return Err(AppError::new(
+            "Private runtime directory is not a directory.",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+pub(crate) fn trusted_runtime_file(path: &Path, limit: u64) -> AppResult<Vec<u8>> {
+    validate_runtime_ownership(path)?;
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|e| AppError::io("Open private runtime file", e))?;
+    let metadata = file
+        .metadata()
+        .map_err(|e| AppError::io("Inspect private runtime file", e))?;
+    if !metadata.is_file()
+        || metadata.len() > limit
+        || metadata.uid() != 0
+        || metadata.permissions().mode() & 0o022 != 0
+    {
+        return Err(AppError::new(
+            "Private runtime must be a bounded administrator-controlled regular file.",
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|e| AppError::io("Read private runtime file", e))?;
+    if bytes.len() as u64 > limit {
+        return Err(AppError::new(
+            "Private runtime file exceeds its inventory limit.",
+        ));
+    }
+    Ok(bytes)
 }
 
 /// Authorization agents come from administrator-controlled system directories,
