@@ -170,11 +170,10 @@ pub(super) fn detach_file(device: &str) -> AppResult<()> {
 /// Match the kernel's backing vnode identity, not GEOM's printed filename:
 /// libgeom's XML conversion can corrupt Unicode/spaces in that display field.
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
-    let unit = md_unit(device)?;
+    md_unit(device)?;
     let metadata = fs::metadata(path)
         .map_err(|e| AppError::io("Failed to inspect the recorded md backing file", e))?;
-    let listing = exec("/sbin/geom", &args(&["md", "list", unit]), None)?;
-    if !metadata.is_file() || !backing_matches(&listing, unit, metadata.dev(), metadata.ino()) {
+    if !metadata.is_file() || backing_identity(device)? != Some((metadata.dev(), metadata.ino())) {
         return Err(AppError::new(
             "The FreeBSD md backing file changed; refusing cleanup.",
         ));
@@ -182,12 +181,37 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-fn backing_matches(listing: &str, unit: &str, device: u64, inode: u64) -> bool {
+/// Query a vnode-backed md device without attaching, detaching or reading its
+/// data. None means a successful native unit snapshot proved this unit absent;
+/// query failures and unrecognized providers are errors, never absence proofs.
+pub(super) fn backing_identity(device: &str) -> AppResult<Option<(u64, u64)>> {
+    let unit = md_unit(device)?;
+    let devices = exec(MDCONFIG, &args(&["-l"]), None)?;
+    if !listed_unit(&devices, unit)? {
+        return Ok(None);
+    }
+    let listing = exec("/sbin/geom", &args(&["md", "list", unit]), None)?;
+    parse_backing_identity(&listing, unit).map(Some)
+}
+
+fn listed_unit(listing: &str, unit: &str) -> AppResult<bool> {
+    let mut seen = std::collections::HashSet::new();
+    for device in listing.split_whitespace() {
+        if device.starts_with("/dev/") || md_unit(device)? != device || !seen.insert(device) {
+            return Err(AppError::new("Ambiguous FreeBSD md unit listing."));
+        }
+    }
+    Ok(seen.contains(unit))
+}
+
+fn parse_backing_identity(listing: &str, unit: &str) -> AppResult<(u64, u64)> {
+    fn invalid() -> AppError {
+        AppError::new("Unrecognized or ambiguous FreeBSD md backing identity.")
+    }
     let geom = format!("Geom name: {unit}");
     let provider = format!("1. Name: {unit}");
-    let ident = format!("ident: MD-DEV{device}-INO{inode}");
     let lines: Vec<&str> = listing.lines().map(str::trim).collect();
-    lines
+    let valid = lines
         .iter()
         .filter(|line| line.starts_with("Geom name:"))
         .count()
@@ -195,7 +219,10 @@ fn backing_matches(listing: &str, unit: &str, device: u64, inode: u64) -> bool {
         && lines.contains(&geom.as_str())
         && lines
             .iter()
-            .filter(|line| line.starts_with("1. Name:"))
+            .filter(|line| {
+                line.split_once(". Name:")
+                    .is_some_and(|(n, _)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+            })
             .count()
             == 1
         && lines.contains(&provider.as_str())
@@ -210,7 +237,26 @@ fn backing_matches(listing: &str, unit: &str, device: u64, inode: u64) -> bool {
             .filter(|line| line.starts_with("ident:"))
             .count()
             == 1
-        && lines.contains(&ident.as_str())
+        && lines.iter().filter(|line| **line == "Providers:").count() == 1;
+    if !valid {
+        return Err(invalid());
+    }
+    let ident = lines
+        .iter()
+        .find_map(|line| line.strip_prefix("ident: MD-DEV"))
+        .ok_or_else(invalid)?;
+    let (device, inode) = ident.split_once("-INO").ok_or_else(invalid)?;
+    let device = device.parse::<u64>().map_err(|_| invalid())?;
+    let inode = inode.parse::<u64>().map_err(|_| invalid())?;
+    if ident != format!("{device}-INO{inode}") {
+        return Err(invalid());
+    }
+    Ok((device, inode))
+}
+
+#[cfg(test)]
+fn backing_matches(listing: &str, unit: &str, device: u64, inode: u64) -> bool {
+    parse_backing_identity(listing, unit).ok() == Some((device, inode))
 }
 
 pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
@@ -307,10 +353,11 @@ pub(super) fn make_filesystem(device: &str) -> AppResult<()> {
 
 fn md_unit(value: &str) -> AppResult<&str> {
     let name = value.strip_prefix("/dev/").unwrap_or(value);
-    if name
-        .strip_prefix("md")
-        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
-    {
+    if name.strip_prefix("md").is_some_and(|n| {
+        n.parse::<u32>()
+            .ok()
+            .is_some_and(|value| value <= i32::MAX as u32 && n == value.to_string())
+    }) {
         Ok(name)
     } else {
         Err(AppError::new("Expected a file-backed FreeBSD md device."))
@@ -406,8 +453,43 @@ mod tests {
             "md0.eli",
             "md0\nmd1",
             "md0/../ada0",
+            "md00",
+            "md+1",
+            "md2147483648",
         ] {
             assert!(md_unit(value).is_err(), "accepted {value}");
+        }
+    }
+
+    #[test]
+    fn absence_requires_a_complete_unambiguous_unit_snapshot() {
+        assert!(!listed_unit("", "md42").unwrap());
+        assert!(!listed_unit("md0 md1\n", "md42").unwrap());
+        assert!(listed_unit("md0 md42\n", "md42").unwrap());
+        for listing in ["md0 md0", "md000", "md0 unknown", "/dev/md0"] {
+            assert!(listed_unit(listing, "md42").is_err(), "accepted {listing}");
+        }
+    }
+
+    #[test]
+    fn backing_parser_requires_canonical_vnode_identifiers() {
+        let listing = "Geom name: md42\nProviders:\n1. Name: md42\n type: vnode\n ident: MD-DEV64-INO240775\n";
+        assert_eq!(
+            parse_backing_identity(listing, "md42").unwrap(),
+            (64, 240775)
+        );
+        for invalid in [
+            listing.replace("MD-DEV64", "MD-DEV064"),
+            listing.replace("INO240775", "INO+240775"),
+            listing.replace("INO240775", "INO18446744073709551616"),
+            listing.replace("vnode", "swap"),
+            listing.replace("ident: MD-DEV64-INO240775", "ident: UNKNOWN"),
+            format!("{listing}2. Name: md43\n"),
+        ] {
+            assert!(
+                parse_backing_identity(&invalid, "md42").is_err(),
+                "accepted {invalid}"
+            );
         }
     }
 
