@@ -58,7 +58,7 @@ def main():
             with saved.open("x") as stream:
                 json.dump(previous, stream, indent=2)
             result["previous_attempt"] = str(saved)
-        with (root / "extract.log").open("w") as log:
+        with (root / "extract.log").open("a" if previous else "w") as log:
             if not previous:
                 subprocess.run(["/usr/bin/hdiutil", "attach", "-readonly", "-nobrowse", "-noautoopen",
                                 "-mountpoint", str(point), str(dmg)], check=True, stdout=log, stderr=log, timeout=120)
@@ -80,12 +80,14 @@ def main():
             cases += [(backend, None, False, False), (backend, None, False, True)]
         for index, (backend, cipher, keyfile, auto) in enumerate(cases):
             phase = f"{backend}-{cipher or 'fixed'}-{'keyfile' if keyfile else 'password'}-{'auto' if auto else 'explicit'}"
+            harness = scripts / ("test-veracrypt-keyfiles.py" if keyfile else "test-backends.py")
             if previous and index < len(previous["cases"]):
                 prior = previous["cases"][index]
-                if prior["case"] == phase and prior["exit"] == 0 and prior["summary"]["status"] == "passed":
+                if (prior["case"] == phase and prior["exit"] == 0 and prior["summary"]["status"] == "passed"
+                        and prior["summary"]["counts"] == {"passed": 13, "failed": 0, "skipped": 0}
+                        and prior["harness_sha256"] == hashlib.sha256(harness.read_bytes()).hexdigest()):
                     result["cases"].append(prior)
                     continue
-            harness = scripts / ("test-veracrypt-keyfiles.py" if keyfile else "test-backends.py")
             command = [sys.executable, str(harness), "--binary", str(binary), "--backend", backend,
                        "--commit", args.commit, "--root", str(root)]
             if cipher:
@@ -93,7 +95,7 @@ def main():
             if auto:
                 command += ["--auto-detect"]
             run = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=900)
-            log = root / f"suite-{index}{'-retry' if previous else ''}.log"
+            log = root / f"suite-{index}{f'-retry-{number}' if previous else ''}.log"
             log.write_text(run.stdout + run.stderr)
             summary = json.loads(run.stdout.strip().splitlines()[-1])
             result["cases"].append({"case": phase, "exit": run.returncode, "summary": summary,
