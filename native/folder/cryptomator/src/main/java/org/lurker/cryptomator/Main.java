@@ -119,16 +119,19 @@ public final class Main {
         return builder.build();
     }
 
-    private static MountService mountService() throws IOException {
-        var os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
-        String suffix;
-        if (os.contains("linux")) suffix = ".LinuxFuseMountProvider";
-        else if (os.contains("mac")) suffix = ".MacFuseMountProvider";
+    static String providerSuffix(String operatingSystem) throws IOException {
+        var os = operatingSystem.toLowerCase(Locale.ROOT);
+        if (os.contains("linux")) return ".LinuxFuseMountProvider";
+        else if (os.contains("mac")) return ".FuseTMountProvider";
         else throw new IOException("Unsupported Cryptomator platform");
+    }
+
+    private static MountService mountService() throws IOException {
+        var suffix = providerSuffix(System.getProperty("os.name"));
         // No WebDAV/network fallback and no user-selected provider or mount flags.
         return ServiceLoader.load(MountService.class).stream().map(ServiceLoader.Provider::get)
                 .filter(service -> service.getClass().getName().endsWith(suffix) && service.isSupported())
-                .findFirst().orElseThrow(() -> new IOException("Required FUSE provider unavailable"));
+                .findFirst().orElseThrow(() -> new IOException("Required Cryptomator provider unavailable: " + suffix));
     }
 
     private static void mount(Path vault, Path mountpoint, char[] password, boolean readonly) throws Exception {

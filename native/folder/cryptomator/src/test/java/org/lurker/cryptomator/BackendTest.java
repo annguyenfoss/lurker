@@ -20,6 +20,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class BackendTest {
     @TempDir Path vault;
 
+    @Test void providerPolicyNeverFallsBackToMacFuse() throws Exception {
+        assertEquals(".LinuxFuseMountProvider", Main.providerSuffix("Linux"));
+        assertEquals(".FuseTMountProvider", Main.providerSuffix("Mac OS X"));
+        assertThrows(IOException.class, () -> Main.providerSuffix("FreeBSD"));
+    }
+
     @Test void initializesPersistsReopensAndEnforcesReadonly() throws Exception {
         char[] password = "  密碼 with spaces  ".toCharArray();
         Main.initialize(vault, password);

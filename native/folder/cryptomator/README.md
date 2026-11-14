@@ -33,9 +33,11 @@ python scripts/build-cryptomator.py --java-home /path/to/jdk25 --maven /path/to/
 
 The result contains its own reduced Java runtime. Ship the entire `cryptomator`
 directory without rearranging `mods` or `runtime`; no installed Java or
-Cryptomator application is required. Linux libfuse3/fusermount3 and a supported
-macOS macFUSE installation remain external OS prerequisites. This helper currently
-selects macFUSE, not FUSE-T. Build separately on each target OS/architecture.
+Cryptomator application is required. Linux libfuse3/fusermount3 and macOS FUSE-T
+remain external OS prerequisites. The macOS helper selects only the upstream
+FUSE-T provider; it never falls back to macFUSE. Application-filesystem
+qualification, including writable SQLite WAL, remains required before shipping
+this macOS backend. Build separately on each target OS/architecture.
 For native CryptoFS tests, use `--test` only on dedicated test hosts with private
 temporary test directories; the default build skips runtime tests.
 
