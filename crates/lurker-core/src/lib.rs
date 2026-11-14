@@ -20,6 +20,14 @@ mod linux_source;
 #[cfg(target_os = "macos")]
 mod macos;
 mod model;
+#[cfg(any(
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+mod new_filesystem;
 mod output;
 #[cfg(target_os = "linux")]
 mod sha256;
