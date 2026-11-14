@@ -7,7 +7,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output as ProcessOutput, Stdio};
 
@@ -394,6 +394,125 @@ fn trusted_root_program(path: &Path) -> AppResult<PathBuf> {
     crate::trusted_privileged_executable(path)
 }
 
+// The dynamic loader follows the creator's $ORIGIN/lib before main(). A
+// trusted executable alone is insufficient when its companions are writable.
+fn trusted_backend_file(path: &Path, limit: u64) -> AppResult<Vec<u8>> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|err| AppError::io("Cannot inspect private backend file", err))?;
+    if !metadata.is_file() || metadata.len() > limit {
+        return Err(AppError::new(
+            "Private backend must be a bounded regular file, without symlinks.",
+        ));
+    }
+    for ancestor in path.ancestors() {
+        let metadata = fs::symlink_metadata(ancestor)
+            .map_err(|err| AppError::io("Cannot inspect private backend ownership", err))?;
+        if metadata.file_type().is_symlink()
+            || metadata.uid() != 0
+            || metadata.permissions().mode() & 0o022 != 0
+        {
+            return Err(AppError::new(format!(
+                "Refusing private backend through an untrusted path: {}",
+                ancestor.display()
+            )));
+        }
+    }
+    fs::read(path).map_err(|err| AppError::io("Cannot read trusted private backend", err))
+}
+
+fn creator_library_inventory(manifest: &serde_json::Value) -> AppResult<Vec<(String, String)>> {
+    let invalid = || {
+        AppError::new(
+            "Invalid private creator library manifest; reinstall the complete Lurker package.",
+        )
+    };
+    if manifest["schema"].as_u64() != Some(1) {
+        return Err(invalid());
+    }
+    let libraries = manifest["libraries"].as_array().ok_or_else(invalid)?;
+    if libraries.is_empty() || libraries.len() > 64 {
+        return Err(invalid());
+    }
+    let mut inventory = Vec::new();
+    for entry in libraries {
+        let name = entry["name"].as_str().ok_or_else(invalid)?;
+        let digest = entry["sha256"].as_str().ok_or_else(invalid)?;
+        if name.is_empty()
+            || name.len() > 128
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._+-".contains(&b))
+            || name == "."
+            || name == ".."
+            || entry["soname"].as_str() != Some(name)
+            || digest.len() != 64
+            || !digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || manifest["files"][format!("lib/{name}")]["sha256"].as_str() != Some(digest)
+            || inventory.iter().any(|(existing, _)| existing == name)
+        {
+            return Err(invalid());
+        }
+        inventory.push((name.to_owned(), digest.to_owned()));
+    }
+    Ok(inventory)
+}
+
+fn validate_creator_libraries(program: &Path) -> AppResult<()> {
+    let parent = program
+        .parent()
+        .ok_or_else(|| AppError::new("Invalid private creator path."))?;
+    let directory = parent.join("lib");
+    let manifest = parent.join("private-libraries.json");
+    // Older administrator-installed builds use only trusted host libraries.
+    if !directory
+        .try_exists()
+        .map_err(|err| AppError::io("Cannot inspect private libraries", err))?
+        && !manifest
+            .try_exists()
+            .map_err(|err| AppError::io("Cannot inspect backend manifest", err))?
+    {
+        return Ok(());
+    }
+    let bytes = trusted_backend_file(&manifest, 1024 * 1024)?;
+    let information: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|err| AppError::new(format!("Invalid private creator library manifest: {err}")))?;
+    let inventory = creator_library_inventory(&information)?;
+    let directory_metadata = fs::symlink_metadata(&directory)
+        .map_err(|err| AppError::io("Cannot inspect private library directory", err))?;
+    if !directory_metadata.is_dir()
+        || directory_metadata.uid() != 0
+        || directory_metadata.permissions().mode() & 0o022 != 0
+    {
+        return Err(AppError::new(
+            "Private library directory is an untrusted path.",
+        ));
+    }
+    for entry in fs::read_dir(&directory)
+        .map_err(|err| AppError::io("Cannot list private libraries", err))?
+    {
+        let entry = entry.map_err(|err| AppError::io("Cannot inspect private library", err))?;
+        if !inventory
+            .iter()
+            .any(|(name, _)| entry.file_name() == name.as_str())
+        {
+            return Err(AppError::new(
+                "Uninventoried private library; reinstall the complete Lurker package.",
+            ));
+        }
+    }
+    for (name, expected) in inventory {
+        let bytes = trusted_backend_file(&directory.join(name), 64 * 1024 * 1024)?;
+        if crate::sha256::hex_digest(&bytes) != expected {
+            return Err(AppError::new(
+                "Private library hash mismatch; reinstall the complete Lurker package.",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn resolve_veracrypt_creator(will_elevate: bool) -> AppResult<PathBuf> {
     let root = crate::effective_uid() == 0;
     for candidate in creator_candidates(root) {
@@ -401,7 +520,9 @@ fn resolve_veracrypt_creator(will_elevate: bool) -> AppResult<PathBuf> {
             continue;
         }
         let program = if root || will_elevate {
-            trusted_root_program(&candidate)?
+            let program = trusted_root_program(&candidate)?;
+            validate_creator_libraries(&program)?;
+            program
         } else {
             fs::canonicalize(&candidate)
                 .map_err(|err| AppError::io("Failed to resolve creator", err))?
@@ -548,6 +669,27 @@ mod tests {
             cleanup_mapper: None,
             loop_lease: None,
         }
+    }
+
+    #[test]
+    fn creator_manifest_rejects_escaping_duplicate_or_unbound_library_paths() {
+        let digest = "a".repeat(64);
+        let valid = serde_json::json!({"schema": 1, "libraries": [
+            {"name":"libtest.so.1", "soname":"libtest.so.1", "sha256":digest}],
+            "files":{"lib/libtest.so.1":{"sha256":digest}}});
+        assert_eq!(super::creator_library_inventory(&valid).unwrap().len(), 1);
+        let mut traversal = valid.clone();
+        traversal["libraries"][0]["name"] = "../outside.so".into();
+        assert!(super::creator_library_inventory(&traversal).is_err());
+        let mut duplicate = valid.clone();
+        duplicate["libraries"]
+            .as_array_mut()
+            .unwrap()
+            .push(valid["libraries"][0].clone());
+        assert!(super::creator_library_inventory(&duplicate).is_err());
+        let mut unbound = valid;
+        unbound["files"]["lib/libtest.so.1"]["sha256"] = "b".repeat(64).into();
+        assert!(super::creator_library_inventory(&unbound).is_err());
     }
 
     #[test]

@@ -2,6 +2,8 @@
 """Check the packaged private creator's argument boundary without creating a volume."""
 import argparse
 import json
+import hashlib
+import pwd
 import os
 import shlex
 import shutil
@@ -9,6 +11,51 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+
+def check_companion_trust(original_cli, cases, failures):
+    # /run and every executable ancestor are administrator-owned. The rejected
+    # boundary is therefore the library/receipt itself, not an unsafe /tmp CLI.
+    with tempfile.TemporaryDirectory(prefix="lurker-creator-library-", dir="/run") as directory:
+        root = Path(directory)
+        cli = root / "lurker"
+        shutil.copy2(original_cli, cli); cli.chmod(0o755)
+        backends = root / "backends"; backends.mkdir()
+        libraries = backends / "lib"; libraries.mkdir()
+        marker = root / "creator-executed"
+        creator = backends / "lurker-veracrypt-create"
+        creator.write_text("#!/bin/sh\ntouch -- " + shlex.quote(str(marker)) + "\nprintf 'lurker-creator-1\\n'\n")
+        creator.chmod(0o755)
+        name = "libfixture.so.1"
+        library = libraries / name
+        original = b"private-test-library-not-executable"
+        digest = hashlib.sha256(original).hexdigest()
+        receipt = backends / "private-libraries.json"
+        manifest = {"schema": 1, "libraries": [{"name": name, "soname": name, "sha256": digest}],
+                    "files": {"lib/" + name: {"sha256": digest}}}
+        key = root / "test.key"; key.write_bytes(os.urandom(32)); key.chmod(0o600)
+        target = root / "must-not-exist.hc"
+        user = pwd.getpwnam("adjutant")
+        for case in ["user-owned-library", "writable-library", "escaped-library-symlink", "changed-library-hash", "user-owned-manifest", "uninventoried-library"]:
+            if library.is_symlink() or library.exists(): library.unlink()
+            library.write_bytes(original); library.chmod(0o644)
+            receipt.write_text(json.dumps(manifest)); receipt.chmod(0o644); os.chown(receipt, 0, 0)
+            if case == "user-owned-library": os.chown(library, user.pw_uid, user.pw_gid)
+            elif case == "writable-library": library.chmod(0o666)
+            elif case == "escaped-library-symlink":
+                library.unlink(); library.symlink_to(key)
+            elif case == "changed-library-hash": library.write_bytes(b"changed")
+            elif case == "user-owned-manifest": os.chown(receipt, user.pw_uid, user.pw_gid)
+            elif case == "uninventoried-library": (libraries / "libunexpected.so").write_bytes(b"unexpected")
+            case_name = "elevated-" + case
+            cases[case_name] = []
+            outcome = subprocess.run([cli, "create", "--type", "veracrypt", "--key-file", key, target, "0.15"],
+                                     stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
+            diagnostic = (b"hash mismatch" if case == "changed-library-hash" else
+                          b"Uninventoried" if case == "uninventoried-library" else
+                          b"bounded regular file" if case == "escaped-library-symlink" else b"untrusted path")
+            if outcome.returncode == 0 or diagnostic not in outcome.stdout + outcome.stderr or marker.exists() or target.exists():
+                failures.append(case_name)
+            marker.unlink(missing_ok=True)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -63,6 +110,8 @@ def main():
             if (outcome.returncode == 0 or b"untrusted path" not in outcome.stderr + outcome.stdout
                     or marker.exists() or Path(target).exists()):
                 failures.append("elevated-backend-trust")
+    if args.cli:
+        check_companion_trust(args.cli.resolve(strict=True), cases, failures)
     print(json.dumps({"suite": "creator-argument-boundary", "passed": len(cases) - len(failures),
                       "total": len(cases), "failed": failures}))
     return bool(failures)
