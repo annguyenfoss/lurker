@@ -40,6 +40,7 @@ def main():
     parser.add_argument("backend", type=Path)
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--fault", choices=["create", "overwrite", "rename", "close"], default="overwrite")
+    parser.add_argument("--expected-error", choices=["ENOSPC", "EDQUOT"], default="ENOSPC")
     parser.add_argument("--runtime-tests", action="store_true", required=True)
     args = parser.parse_args()
     if platform.system() != "Linux" or os.geteuid() == 0 or platform.node().split(".")[0] == "endeavour":
@@ -66,6 +67,8 @@ def main():
     vault, mountpoint = backing / "vault", root / "mount"
     secret = "Lurker finite-storage disposable regression only"
     result = {"schema": 1, "backend": "cryfs", "backend_sha256": hashlib.sha256(args.backend.read_bytes()).hexdigest(), "fixture": str(root), "capacity_bytes": capacity.f_blocks * capacity.f_frsize, "repair": False, "fault": args.fault}
+    expected_errno = getattr(errno, args.expected_error)
+    result["expected_errno"] = expected_errno
     phase = "create"
     try:
         CLI_TEST.terminal([cli, "create", "--type", "cryfs", str(vault)], [secret, secret])
@@ -92,8 +95,9 @@ def main():
                 while True:
                     stream.write(b"\x00" * 65536)
             except OSError as error:
-                assert error.errno == errno.ENOSPC
+                assert error.errno == expected_errno
                 result["fill_errno"] = error.errno
+                result["remaining_backing_bytes"] = os.statvfs(backing).f_bavail * os.statvfs(backing).f_frsize
         phase = "mounted-write-fault"
         try:
             if args.fault in ("rename", "close"):
@@ -143,7 +147,7 @@ def main():
             result["failure_evidence"] = archives[0]
             result["outcome"] = "unclean-exit-reported-and-previous-commits-preserved"
         else:
-            assert result.get("write_errno") in (errno.ENOSPC, errno.EDQUOT), "Mounted write must report the real full-storage errno"
+            assert result.get("write_errno") == expected_errno, "Mounted write must report the real full-storage errno"
             assert result["close_exit"] == 0, "Backend did not recover a clean close after restoring space"
             result["outcome"] = "storage-error-returned-and-clean-close-recovered"
         result["status"] = "passed"

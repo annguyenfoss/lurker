@@ -48,6 +48,22 @@ retains fixtures/results/logs.
   SQLite row/integrity. The harness labels this an **unclean exit reported with
   previous commits preserved**, separately from a clean recovery.
 
+- Fixture `20261114-06`: the same mounted write/fsync returned actual `EDQUOT`
+  from a new private 8 MiB tmpfs with a per-instance 4 MiB user hard limit. The
+  filesystem still had 4 MiB free when quota stopped writes. Removing only its
+  filler allowed clean close/reopen with the committed file and SQLite row intact.
+  The host /tmp quota and system configuration were untouched. The quota default
+  existed only on this disposable mount; see the kernel's tmpfs quota options:
+  https://docs.kernel.org/filesystems/tmpfs.html
+
+- Fixture `20261114-07`: close while the private quota was exhausted produced
+  the same explicit, retained SIGABRT failure and preserved the prior committed
+  file/SQLite data after reopen. This is safe failure reporting, not a clean flush.
+
+All seven finite backing mounts were ordinarily unmounted after their complete
+ciphertext trees were copied into each fixture's `retained-backing/`. Results,
+backend logs and failed-session exit evidence remain retained.
+
 CryFS still lacks a fully recoverable mounted full-storage shutdown path when
 pending directory metadata reaches a throwing destructor. Supervision exposes
 that failure; it does not suppress the exception or turn it into a clean close.

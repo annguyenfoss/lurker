@@ -16,7 +16,9 @@ the directory blob and its parent metadata through the existing blob flush graph
 New child blobs, including empty files/directories and symlinks, are flushed
 before their directory entries are published. It bypasses the production
 write-back **block** cache, retaining the blob caches and parallel-access layers.
-Errors from file/directory fsync reach FUSE callers; there is no global `sync()`.
+Errors from file/directory fsync and other FUSE operations retain the real
+`std::system_error` errno, including backing `ENOSPC` and `EDQUOT`; they are not
+collapsed into `EIO`. There is no global `sync()`.
 
 Encrypted block updates write a same-directory temporary, check short writes,
 fsync it, publish by atomic rename, and fsync the prefix and root directories.
@@ -34,30 +36,30 @@ upstream and may slow write-heavy workloads. A smoke comparison on the guest's
 /tmp tmpfs measured 32 SQLite FULL/WAL commits at 0.0388 seconds upstream versus
 0.1792 seconds patched, and a 1 MiB write/fsync at 0.0012 versus 0.0041 seconds.
 These tiny samples illustrate the I/O cost; they are not disk benchmarks.
-It does not make a multi-block
-filesystem transaction atomic across arbitrary power loss. Upstream still has
-write paths in destructors: the primitive ENOSPC regression below does not qualify
-the full mounted filesystem's ENOSPC recovery behavior. An additional application
-probe encountered the guest's per-user /tmp EDQUOT limit and the daemon exited;
-its failed vault was retained and ordinarily detached after reclaiming only
-redundant test executables. The unchanged backend passed the same 32-commit
-application workload once quota headroom was restored. Do not advertise complete
-power-loss or full-storage recovery qualification from these results.
+It does not make a multi-block filesystem transaction atomic across arbitrary
+power loss. Mounted existing-file write/fsync tests now demonstrate actual
+ENOSPC and EDQUOT propagation, clean close after restoring reserved space, and
+preservation of previous committed file/SQLite data. However, close while full
+can still abort in an upstream dirty-block destructor. The supervised frontend
+reports that unclean exit and retains diagnostics; it does not claim a successful
+flush. Full-storage shutdown recovery and arbitrary power-loss safety remain
+unqualified. Detailed retained native fixtures are in
+`docs/folder-supervision.md`.
 
 ## Native verification
 
 All runtime encryption/storage tests ran as the ordinary `adjutant` user on
 `archlinux-core-01`, kernel `7.2.15-arch1-1`, on private `/tmp` fixtures. Endeavour
 only compiled code. The final patch SHA-256 is
-`b4cdbb30ae1895386d4f174aa0c52f6aa3aceb4f9619395d07a106cfc2e3564a`;
+`407bde343553b88077eaec342213f4f0c5d735e148e504ed04351ed60e34a68f`;
 the tested Linux backend SHA-256 is
-`321eace42ad37a87fa70f9f3ec074e6037838dc627b02e3d5b673183f69f1320`.
+`21cd2c9c1b8eb42f1ea3e71d7b6c0565c46f325b5da5aa61cb072da7fc12aa42`.
 
 - The strong `scripts/test-folder-crash.py` test passed all 10 checks on that
   exact backend: atomic file rename, file and directory fsync, SQLite WAL/FULL
   with an uncheckpointed 24752-byte WAL and an open application connection,
   verified owned-daemon SIGKILL, ordinary unmount/reopen, SQLite integrity check
-  and the exact committed row/file payload. Duration: 13.85 seconds. No repair.
+  and the exact committed row/file payload. Duration: 13.67 seconds. No repair.
 - `durability-test.cpp` passed no-clobber creation, replacement, real kernel
   short-write `EFBIG`, preservation of the previous ciphertext and temporary
   cleanup. Eight concurrent writers repeatedly created and removed distinct
