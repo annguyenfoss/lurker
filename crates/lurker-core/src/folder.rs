@@ -33,6 +33,10 @@ pub(crate) fn is_folder(kind: VolumeType) -> bool {
     )
 }
 
+pub(crate) fn requires_fence_protocol(kind: VolumeType, macos: bool) -> bool {
+    macos && matches!(kind, VolumeType::Auto | VolumeType::Cryptomator)
+}
+
 pub(crate) fn handles(command: &CommandAction) -> AppResult<bool> {
     let kind = command.volume_type();
     if is_folder(kind) {
@@ -1159,6 +1163,16 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn helper_fence_contract_is_conservative_for_mac_auto_and_unchanged_elsewhere() {
+        assert!(requires_fence_protocol(VolumeType::Auto, true));
+        assert!(requires_fence_protocol(VolumeType::Cryptomator, true));
+        for kind in [VolumeType::Auto, VolumeType::Cryptomator, VolumeType::Gocryptfs, VolumeType::Cryfs, VolumeType::Apple] {
+            assert!(!requires_fence_protocol(kind, false));
+        }
+        assert!(!requires_fence_protocol(VolumeType::Gocryptfs, true));
+        assert!(!requires_fence_protocol(VolumeType::Apple, true));
+    }
     #[test]
     fn only_definite_process_absence_authorizes_exit_recovery() {
         assert!(process_query_absent(-1, 1088, Some(libc::ESRCH)));

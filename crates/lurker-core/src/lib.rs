@@ -102,6 +102,13 @@ pub fn request_requires_user_session(command: &CommandAction) -> AppResult<bool>
     folder::handles(command)
 }
 
+/// Negotiate the macOS Cryptomator mountpoint fence before sending secrets.
+/// Auto is deliberately conservative: paths/formats may change before helper
+/// execution, and an older helper cannot be trusted to detect a fenced vault.
+pub fn request_requires_cryptomator_fence(command: &CommandAction) -> AppResult<bool> {
+    Ok(folder::requires_fence_protocol(command.volume_type(), cfg!(target_os = "macos")))
+}
+
 fn native_directory_request(command: &CommandAction) -> bool {
     #[cfg(any(
         target_os = "freebsd",
