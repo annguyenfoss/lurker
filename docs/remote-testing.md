@@ -91,3 +91,22 @@ These later checks qualify specific revisions; they do not relabel the earlier e
 For the NetBSD test, official binary `sudo-1.9.17p1` was installed from the configured NetBSD repository. A temporary drop-in authorized only the root-owned test helper with fixed `--as-root run` and `--as-root list-native` arguments. `visudo` validated it before use. After the test, that exact drop-in was removed, preexisting policy hashes were verified unchanged, the native list was empty and all CGD/VND devices were idle. No broad or permanent passwordless delegation was added. Reports and policy/cleanup proofs remain in ignored `target/remote-test/native-desktop-development-f92c5e8/`.
 
 DragonFly's first full desktop build exposed an upstream `rustix 1.1.4` target-cfg bug: unsupported IPv4 source-membership bindings were included through `freebsdlike`. The lockfile now selects official `rustix 1.1.6`, whose upstream cfg restricts those APIs to FreeBSD. This changes no kernel ABI or encryption code. Upstream source: https://github.com/bytecodealliance/rustix/blob/v1.1.6/src/backend/libc/net/sockopt.rs
+
+
+Actual BSD workspace binaries were subsequently built at `ecc9175932650880afbb003e480adc28beb0555b`: DragonFly run `20261114T120401Z-5d15afad`, FreeBSD run `20261114T121544Z-2c47b13d`. All three products were archived with per-file digests under ignored `target/remote-test/{dragonfly,freebsd}-desktop-ecc9175/`. FreeBSD's software-renderer desktop suite passed **32/0/1 ignored** at `ed65cd90d91cd0da5189b71e3550d4fd84a666a0`, run `20261114T122722Z-72d85d40`, after giving the standalone zoom probe an explicit bundled font. The production window already rendered using its bundled fonts.
+
+FreeBSD used an explicitly approved temporary 2 GiB build-only tmpfs, one worker, debug information/incremental compilation disabled, and RAM/swap/disk guards. Earlier conservative guard stops remain recorded as resource failures. The final cache, sources and relocated dependency files were archived and all 22,052 file/link entries verified before ordinary unmount. Only the exact temporary persistent caches were reclaimed, restoring about 1 GiB; native engines, sessions, failure fixtures and all result/log evidence stayed intact. Restore inventory and exact bytes remain in `target/remote-test/freebsd-desktop-ecc9175/complete-build-cache.tar.zst` and its JSON inventory.
+
+## Real platform-window probe
+
+`test-desktop-window.py` launches the actual desktop executable through winit/X11 and its software renderer. This is separate from the MinimalSoftwareWindow callback tests. It requires the login user's exact UID, an independently verified source commit and binary digest, plus test-only `Xvfb`, `xauth`, `xdpyinfo`, `xwininfo` and `xwd` binaries. It installs nothing and never creates/mounts encrypted storage.
+
+```bash
+python scripts/test-desktop-window.py \
+  --binary /var/run/lurker-package/bin/lurker-desktop \
+  --binary-sha256 EXPECTED_SHA256 --commit FULL_SOURCE_COMMIT --expected-uid LOGIN_UID
+```
+
+The probe creates a private authenticated display with TCP disabled, removes loader environment overrides, requires a real named window and varied rendered pixels, retains its XWD frame/logs, then reaps only its owned processes and removes the authority file. Standard output contains one JSON result reference; exit 0 is passed, 1 failed, 2 missing prerequisites. The result retains the probe's own digest. The caller supplies the commit/digest from its build/package provenance; the probe does not attest the build itself.
+
+NetBSD's real window initially exposed runtime-library discovery missing from ELF `NEEDED`: xkbcommon is loaded dynamically. After installing official `libxkbcommon-1.13.2`, commit `3be5898e88b49d09fdfd697813ef6eb5ae526f0c` records the standard administrator-controlled `/usr/pkg/lib` and `/usr/X11R7/lib` paths in the desktop binary. Its actual native window rendered **1280×860 with 1,179 sampled pixel colors** without `LD_*` overrides. The private display, authority file and child processes were cleaned afterward. This proves the X11 route; Wayland and other BSD platform-window routes need separate evidence.
