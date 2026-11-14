@@ -111,7 +111,8 @@ def firmware_policy(manifest):
 def validate_firmware_xml(domain, firmware, private=False):
     loader, nvram = domain.find("os/loader"), domain.find("os/nvram")
     if firmware is None:
-        require(loader is None and nvram is None and domain.find("os/varstore") is None,
+        require(domain.find("os").get("firmware") in (None, "bios") and
+                loader is None and nvram is None and domain.find("os/varstore") is None,
                 "Firmware writable paths require a separately reviewed private copy")
         return
     require(domain.find("os").get("firmware") == "efi" and loader is not None and nvram is not None,

@@ -92,6 +92,10 @@ class Ownership(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             VM.clone_xml(SOURCE.replace("</os>", "<nvram>/original</nvram></os>"), self.m)
 
+    def test_unreviewed_automatic_uefi_rejected(self):
+        with self.assertRaises(RuntimeError):
+            VM.clone_xml(SOURCE.replace("<os>", '<os firmware="efi">'), self.m)
+
     def test_network_has_no_forward(self):
         network = ET.fromstring(VM.network_xml(self.m))
         self.assertIsNone(network.find("forward"))
