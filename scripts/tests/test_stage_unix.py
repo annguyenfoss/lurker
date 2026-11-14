@@ -100,6 +100,17 @@ class PackagingPolicy(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "outside approved scope"):
                 stager.stage(args)
 
+    def test_raid1c_staging_rejects_other_unix_targets_before_output(self):
+        source = mock.Mock()
+        args = argparse.Namespace(source_root=self.root, source_commit="a" * 40, source_manifest=None,
+                                  select=["raid1c"], backend=[], output=self.root / "package")
+        for system in ("Linux", "FreeBSD", "DragonFly", "NetBSD"):
+            with self.subTest(system=system):
+                with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value=system):
+                    with self.assertRaisesRegex(ValueError, "outside approved scope: raid1c/" + system):
+                        stager.stage(args)
+                self.assertFalse(args.output.exists())
+
     def test_unresolved_library_and_developer_rpath_fail_closed(self):
         binary = self.root / "binary"
         binary.write_bytes(b"not executed")
@@ -227,6 +238,38 @@ class PackagingPolicy(unittest.TestCase):
                                   select=["luks"], backend=[], binaries=binaries, binary_manifest=manifest,
                                   output=self.root / "package", desktop=False)
         return args, source
+
+    def _raid1c_stage_fixture(self):
+        args, source = self._stage_fixture()
+        args.select = ["raid1c"]
+        provenance = json.loads(args.binary_manifest.read_text())
+        provenance["os"] = "OpenBSD"
+        args.binary_manifest.write_text(json.dumps(provenance))
+        return args, source
+
+    def test_raid1c_stages_base_tools_without_private_runtime_or_qualification_claim(self):
+        args, source = self._raid1c_stage_fixture()
+        tools = ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="OpenBSD"), mock.patch.object(stager.shutil, "which", side_effect=lambda name, **kwargs: "/sbin/" + name) as lookup, mock.patch.object(stager, "audit_dependencies", return_value=[]), mock.patch.object(stager, "validate_backend") as private_runtime:
+            self.assertEqual(0, stager.stage(args))
+        self.assertEqual(tools, [call.args[0] for call in lookup.call_args_list])
+        private_runtime.assert_not_called()
+        manifest = json.loads((args.output / "share/lurker/manifest.json").read_text())
+        self.assertEqual(["raid1c"], manifest["selected_backends"])
+        self.assertEqual({"raid1c": tools}, manifest["host_tool_requirements"])
+        self.assertEqual({tool: "/sbin/" + tool for tool in tools}, manifest["host_tools"])
+        self.assertEqual([], manifest["bundled_artifacts"])
+        self.assertFalse(manifest["self_contained"])
+        self.assertEqual("not performed by staging", manifest["native_operation_qualification"])
+        self.assertEqual([], list((args.output / "libexec/lurker/backends").iterdir()))
+
+    def test_raid1c_missing_native_tool_blocks_publication(self):
+        args, source = self._raid1c_stage_fixture()
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="OpenBSD"), mock.patch.object(stager.shutil, "which", side_effect=lambda name, **kwargs: None if name == "bioctl" else "/sbin/" + name):
+            with self.assertRaisesRegex(ValueError, "host tool missing: bioctl"):
+                stager.stage(args)
+        self.assertFalse(args.output.exists())
+        self.assertFalse(list(self.root.glob(".package-*")))
 
     def test_competing_output_creation_is_preserved(self):
         args, source = self._stage_fixture()

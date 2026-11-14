@@ -23,7 +23,7 @@ ALLOW = {
     "veracrypt": {"Linux", "FreeBSD", "OpenBSD"},
     "gocryptfs": {"Linux", "FreeBSD"}, "cryfs": {"Linux"},
     "cryptomator": {"Linux"}, "geli": {"FreeBSD"}, "pefs": {"FreeBSD"},
-    "cgd": {"NetBSD"}, "softraid": {"OpenBSD"},
+    "cgd": {"NetBSD"}, "softraid": {"OpenBSD"}, "raid1c": {"OpenBSD"},
 }
 ARTIFACTS = {"veracrypt-create": "veracrypt", "veracrypt-userspace": "veracrypt",
              "veracrypt-bsd": "veracrypt", "gocryptfs": "gocryptfs",
@@ -40,7 +40,8 @@ TOOLS = {
     "FreeBSD": {"geli": ["geli", "mdconfig", "newfs", "mount", "umount"],
                 "pefs": ["pefs", "mount", "umount"], "gocryptfs": ["mount_fusefs"]},
     "NetBSD": {"cgd": ["cgdconfig", "vnconfig", "newfs", "mount", "umount"]},
-    "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
+    "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"],
+                "raid1c": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
     "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "newfs", "mount", "umount"]},
 }
 
