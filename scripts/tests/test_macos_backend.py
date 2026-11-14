@@ -14,11 +14,27 @@ SPEC.loader.exec_module(backend)
 
 class MacBackendTests(unittest.TestCase):
     def test_external_fuse_allowlist_does_not_allow_homebrew_or_arbitrary_libraries(self):
-        for path in ["/usr/local/lib/libfuse-t.dylib", "/usr/local/lib/libfuse-t-1.2.9.dylib"]:
+        for path in ["/usr/local/lib/libfuse-t.dylib", "/usr/local/lib/libfuse-t-1.2.9.dylib",
+                     "/usr/local/lib/libfuse.2.dylib", "/usr/local/lib/libosxfuse.2.dylib"]:
             self.assertTrue(backend.is_external_fuse(path))
         for path in ["/opt/homebrew/lib/libfuse-t.dylib", "/usr/local/lib/libcrypto.dylib",
                      "/tmp/libfuse-t.dylib", "/usr/local/lib/libfuse-t-malicious.dylib"]:
             self.assertFalse(backend.is_external_fuse(path))
+
+    def test_runtime_flags_and_manifest_selection_do_not_silently_swap_fuse(self):
+        self.assertEqual(backend.FUSE_RUNTIMES["macfuse"]["flags"], ["WITHFUSET=0", "VC_OSX_FUSET=0"])
+        self.assertEqual(backend.FUSE_RUNTIMES["fuse-t"]["flags"], ["WITHFUSET=1", "VC_OSX_FUSET=1"])
+        self.assertEqual(backend.manifest_fuse_runtime({"fuse_runtime": {"implementation": "macfuse"}}), "macfuse")
+        self.assertEqual(backend.manifest_fuse_runtime({"external_libraries": ["/usr/local/lib/libfuse-t.dylib"]}), "fuse-t")
+        with self.assertRaisesRegex(RuntimeError, "one supported"):
+            backend.manifest_fuse_runtime({"external_libraries": ["/usr/local/lib/libfuse-t.dylib", "/usr/local/lib/libfuse.2.dylib"]})
+
+    def test_external_runtime_rejects_user_writable_ancestors(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            library = Path(temporary) / "library.dylib"
+            library.write_bytes(b"library")
+            with self.assertRaisesRegex(RuntimeError, "administrator-controlled"):
+                backend.require_administrator_controlled(library)
 
     def test_corrupt_cached_download_is_rejected_even_with_existing_source(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -52,6 +68,22 @@ class MacBackendTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "source input changed"):
                     backend.source("fixture", cache, offline=True, patch=approved_patch)
 
+    def test_runtime_source_caches_keep_distinct_native_object_trees(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary)
+            archive = cache / "fixture.tar"
+            with tarfile.open(archive, "w") as stream:
+                info = tarfile.TarInfo("project/input.txt"); info.size = 4
+                stream.addfile(info, io.BytesIO(b"same"))
+            digest = backend.sha256(archive)
+            archive.rename(cache / f"fixture-{digest[:16]}.archive")
+            with patch.dict(backend.SOURCES, {"fixture": ("unused", digest)}):
+                a = backend.source("fixture", cache, offline=True, variant="macfuse")
+                b = backend.source("fixture", cache, offline=True, variant="fuse-t")
+                self.assertNotEqual(a, b)
+                (a / "generated.o").write_bytes(b"native objects")
+                self.assertFalse((b / "generated.o").exists())
+
     def test_private_dependency_closure_is_rewritten_and_fuse_stays_external(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -74,6 +106,7 @@ class MacBackendTests(unittest.TestCase):
 
             with patch.object(backend, "dependencies", side_effect=deps), \
                  patch.object(backend, "architectures", return_value={"arm64"}), \
+                 patch.object(backend, "require_administrator_controlled"), \
                  patch.object(backend, "run", side_effect=run):
                 targets, external = backend.stage_macho(source, destination, frameworks, "arm64")
             self.assertEqual(len(targets), 2)
@@ -115,12 +148,33 @@ class MacBackendTests(unittest.TestCase):
             calls = []
             with patch.object(backend, "architectures", return_value={"arm64"}), \
                  patch.object(backend, "dependencies", side_effect=[["@rpath/libfuse-t.dylib"], []]), \
-                 patch.object(Path, "is_file", return_value=True), \
+                 patch.object(backend, "require_administrator_controlled"), \
                  patch.object(backend, "run", side_effect=lambda *a, **kw: calls.append(a) or ""):
                 _, external = backend.stage_macho(source, destination, root / "output/Frameworks", "arm64")
             self.assertEqual(external, ["/usr/local/lib/libfuse-t.dylib"])
             self.assertIn(("install_name_tool", "-change", "@rpath/libfuse-t.dylib",
                            "/usr/local/lib/libfuse-t.dylib", destination), calls)
+
+    def test_wrong_runtime_dependency_blocks_staging_instead_of_copying_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = root / "source"; source.write_bytes(b"exe")
+            with patch.object(backend, "architectures", return_value={"arm64"}), \
+                 patch.object(backend, "dependencies", return_value=["/usr/local/lib/libfuse-t.dylib"]):
+                with self.assertRaisesRegex(RuntimeError, "differs from selected runtime"):
+                    backend.stage_macho(source, root / "out/backend", root / "out/Frameworks", "arm64", fuse_runtime="macfuse")
+
+    def test_macfuse_stays_external_and_is_not_added_to_private_frameworks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = root / "source"; source.write_bytes(b"exe")
+            with patch.object(backend, "architectures", return_value={"arm64"}), \
+                 patch.object(backend, "dependencies", side_effect=[["/usr/local/lib/libfuse.2.dylib"], []]), \
+                 patch.object(backend, "require_administrator_controlled") as trusted, \
+                 patch.object(backend, "run", return_value=""):
+                targets, external = backend.stage_macho(source, root / "out/backend", root / "out/Frameworks", "arm64", fuse_runtime="macfuse")
+            trusted.assert_called_once_with("/usr/local/lib/libfuse.2.dylib")
+            self.assertEqual(external, ["/usr/local/lib/libfuse.2.dylib"])
+            self.assertEqual(len(targets), 1)
+            self.assertFalse((root / "out/Frameworks/libfuse.2.dylib").exists())
 
 
 if __name__ == "__main__":

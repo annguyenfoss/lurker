@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a pinned private macOS VeraCrypt backend; FUSE-T stays host-installed."""
+"""Build a pinned private macOS VeraCrypt backend; the selected FUSE stays external."""
 import argparse
 import json
 import os
@@ -8,17 +8,19 @@ import platform
 import shutil
 import sys
 
-from macos_backend import SOURCES, VC_REVISION, run, sha256, source, stage_macho, write_json
+from macos_backend import FUSE_RUNTIMES, SOURCES, VC_REVISION, fuse_runtime_info, run, sha256, source, stage_macho, write_json
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cache-dir", type=Path, default=ROOT / "target/macos-backends")
+    parser.add_argument("--cache-dir", type=Path, default=Path.home() / ".cache/lurker/macos-backends")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "target/release/macos-backends")
     parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 2))
     parser.add_argument("--offline", action="store_true")
+    parser.add_argument("--fuse-runtime", choices=sorted(FUSE_RUNTIMES), default="macfuse",
+                        help="External runtime to link against; defaults to macFUSE")
     args = parser.parse_args()
     if sys.platform != "darwin" or os.geteuid() == 0:
         parser.error("Build on macOS as the login user, without sudo.")
@@ -27,21 +29,24 @@ def main():
     for tool in ["make", "clang", "xcrun", "pkg-config", "otool", "lipo", "install_name_tool", "codesign", "patch"]:
         if not shutil.which(tool):
             parser.error(f"Missing build prerequisite: {tool}")
-    run("pkg-config", "--exists", "fuse-t")
-    fuse_version = run("pkg-config", "--modversion", "fuse-t", capture=True).strip()
-    cache = args.cache_dir.resolve()
+    runtime = fuse_runtime_info(args.fuse_runtime)
+    cache = args.cache_dir.expanduser().absolute()
+    cache.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if cache.is_symlink() or cache.stat().st_uid != os.geteuid() or cache.stat().st_mode & 0o022:
+        parser.error("--cache-dir must be a real, user-owned directory without group/world write access")
+    cache = cache.resolve()
     patch = ROOT / "native/veracrypt/utf8-console.patch"
-    vc = source("veracrypt", cache, args.offline, patch=patch)
+    vc = source("veracrypt", cache, args.offline, patch=patch, variant=args.fuse_runtime)
     wx = source("wxwidgets", cache, args.offline)
     # Use the supported native Cocoa build with a static wxWidgets dependency;
     # Lurker calls only its text interface. Console-only and reduced GUI builds
     # have incomplete wx feature guards on this Mac toolchain.
-    flags = ["WXSTATIC=FULL", f"WX_ROOT={wx}", f"WX_BUILD_DIR={cache / 'wx-build'}",
-             "WITHFUSET=1", "LOCAL_DEVELOPMENT_BUILD=true",
-             "WX_CONFIGURE_EXTRA_FLAGS=--with-regex=builtin"]
+    wx_flags = ["WXSTATIC=FULL", f"WX_ROOT={wx}", f"WX_BUILD_DIR={cache / 'wx-build'}",
+                "LOCAL_DEVELOPMENT_BUILD=true", "WX_CONFIGURE_EXTRA_FLAGS=--with-regex=builtin"]
+    flags = wx_flags + FUSE_RUNTIMES[args.fuse_runtime]["flags"]
     specification = {"schema": 1, "sources": SOURCES, "architecture": platform.machine(),
                      "patches": {"native/veracrypt/utf8-console.patch": sha256(patch)},
-                     "flags": flags, "fuse_t": fuse_version,
+                     "flags": flags, "fuse_runtime": runtime,
                      "sdk": run("xcrun", "--show-sdk-version", capture=True).strip(),
                      "compiler": run("clang", "--version", capture=True).splitlines()[0]}
     stamp = vc / ".lurker-native-build-spec.json"
@@ -49,7 +54,8 @@ def main():
     if stamp.exists() and stamp.read_text() != serialized:
         raise RuntimeError("Native build inputs changed; use a new --cache-dir to avoid stale objects.")
     stamp.write_text(serialized)
-    wx_specification = {key: specification[key] for key in ["architecture", "flags", "sdk", "compiler"]}
+    wx_specification = {key: specification[key] for key in ["architecture", "sdk", "compiler"]}
+    wx_specification["flags"] = wx_flags
     wx_specification.update(wxwidgets=SOURCES["wxwidgets"], veracrypt_build_revision=VC_REVISION)
     wx_serialized = json.dumps(wx_specification, sort_keys=True)
     wx_stamp = cache / "wx-built.json"
@@ -65,7 +71,7 @@ def main():
     temporary.mkdir(parents=True)
     try:
         targets, external = stage_macho(vc / "src/Main/VeraCrypt", temporary / "lurker-veracrypt",
-                                       temporary / "Frameworks", platform.machine())
+                                       temporary / "Frameworks", platform.machine(), fuse_runtime=args.fuse_runtime)
         licenses = temporary / "licenses"
         licenses.mkdir()
         shutil.copyfile(vc / "License.txt", licenses / "VeraCrypt-LICENSE.txt")
@@ -99,7 +105,7 @@ def main():
     finally:
         if temporary.exists():
             shutil.rmtree(temporary)
-    print(json.dumps({"status": "built", "backend": str(output / "lurker-veracrypt"), "fuse_t": fuse_version}))
+    print(json.dumps({"status": "built", "backend": str(output / "lurker-veracrypt"), "fuse_runtime": runtime}))
 
 
 if __name__ == "__main__":

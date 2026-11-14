@@ -1,23 +1,33 @@
 # macOS private encryption backends
 
 `scripts/build-macos-backends.py` builds a pinned native VeraCrypt backend and
-static wxWidgets under `target/`, without installing either application. Source
+static wxWidgets, without installing either application. Verified source and wx
+caches default to `~/.cache/lurker/macos-backends`; staged artifacts stay under
+`target/release/macos-backends`. Source
 archives are SHA-256 checked. The build records target, compiler, SDK, FUSE
-version, source URLs/hashes and staged artifact hashes in `provenance.json`.
+implementation/version, source URLs/hashes and staged artifact hashes in `provenance.json`.
 Its text interface uses the existing VeraCrypt profiles and stdin credentials.
 The shared `native/veracrypt/utf8-console.patch` preserves complete Unicode paths
 in libc++ volume listings; its digest and patched input hashes are recorded and
 checked on cache reuse. It changes no encryption or storage format.
 
 Build on a Mac using the user's Rust and Python toolchains, Xcode command-line
-tools, GNU-compatible make and pkg-config. Install FUSE-T separately, including
-its development headers for building. The build never installs FUSE or changes
+tools, GNU-compatible make and pkg-config. Install the selected FUSE separately,
+including its development headers for building. The default is macFUSE; the
+previous FUSE-T route requires an explicit selection. The build never installs FUSE or changes
 system permissions:
 
 ```bash
-python scripts/build-macos-backends.py --jobs 4
+python scripts/build-macos-backends.py --fuse-runtime macfuse --jobs 4
 python scripts/build-macos-dmg.py
 ```
+
+Use `--fuse-runtime fuse-t` only for that distinct runtime. The build sets both
+native FUSE-selection variables explicitly, keeps separate VeraCrypt object
+trees per runtime and shares only the matching wx build. The manifest records
+the runtime implementation and version separately from its FUSE API version
+(for example macFUSE 5.5.0 implements API 2.9.9). Changing a runtime never
+recertifies an old binary or substitutes the other runtime's dylib.
 
 After building directory backends into `target/release/backends`, include them
 explicitly with `--folder-backends gocryptfs cryfs cryptomator`. The packager
@@ -38,8 +48,9 @@ internal helper, private backend, private non-system dylibs, notices and build
 provenance. Backends are resolved relative to the running app/CLI before the
 compatibility lookup for separately installed VeraCrypt. Missing private build
 artifacts stop packaging. Architecture slices, deployment targets and rewritten
-dependency paths are checked before nested code is signed. The FUSE-T library is
-an explicit external dependency; unrelated Homebrew/developer paths are not
+dependency paths are checked before nested code is signed. The selected FUSE library is
+an explicit external dependency; its path, resolved target and ancestors must be
+administrator-controlled. Unrelated Homebrew/developer paths are not
 allowed to survive packaging.
 
 The private VeraCrypt executable alone receives the hardened-runtime library
@@ -51,7 +62,7 @@ https://developer.apple.com/documentation/bundleresources/entitlements/com.apple
 Apple encrypted disk images continue using built-in `hdiutil`/`diskutil` and need
 no FUSE. Ad-hoc packages are development builds; public releases still require
 Developer ID signing and notarization. Each release must qualify the exact
-FUSE-T/OS combination and test the final package without a separate VeraCrypt
+FUSE/OS combination and test the final package without a separate VeraCrypt
 installation. Bundling alone does not prove native operation or durability.
 
 Use only disposable `/tmp/lurker-*` files for native tests:
@@ -60,7 +71,7 @@ Use only disposable `/tmp/lurker-*` files for native tests:
 TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 ```
 
-Native development evidence on macOS 27.2.1 arm64 / SDK 27.2:
+Baseline development evidence before macFUSE qualification, macOS 27.2.1 arm64 / SDK 27.2:
 
 - The app/DMG builds, nested signatures and dependency checks pass; the packaged
   private VeraCrypt, gocryptfs and Java helper start without external Go/Java/

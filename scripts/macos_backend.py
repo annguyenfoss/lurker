@@ -3,8 +3,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import plistlib
 import re
 import shutil
+import stat
 import subprocess
 import tarfile
 import urllib.request
@@ -21,6 +23,13 @@ SOURCES = {
     ),
 }
 
+FUSE_RUNTIMES = {
+    "macfuse": {"package": "fuse", "library": "/usr/local/lib/libfuse.2.dylib",
+                "flags": ["WITHFUSET=0", "VC_OSX_FUSET=0"]},
+    "fuse-t": {"package": "fuse-t", "library": "/usr/local/lib/libfuse-t.dylib",
+               "flags": ["WITHFUSET=1", "VC_OSX_FUSET=1"]},
+}
+
 
 def run(*argv, capture=False, cwd=None, env=None):
     return subprocess.run(
@@ -34,10 +43,14 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def source(name, cache, offline=False, *, patch=None):
+def source(name, cache, offline=False, *, patch=None, variant=None):
     url, digest = SOURCES[name]
     archive = cache / f"{name}-{digest[:16]}.archive"
     tag = f"{name}-{digest[:16]}" + (f"-patch-{sha256(patch)[:16]}" if patch else "")
+    if variant is not None:
+        if not re.fullmatch(r"[a-z0-9-]+", variant):
+            raise ValueError("Unsafe native source cache variant")
+        tag += "-" + variant
     destination = cache / tag
     manifest = cache / f"{tag}-inputs.json"
     cache.mkdir(parents=True, exist_ok=True)
@@ -102,10 +115,63 @@ def is_system(path):
     return path.startswith(("/System/Library/", "/usr/lib/"))
 
 
-def is_external_fuse(path):
+def external_fuse_runtime(path):
     # Deliberately leave the separately installed runtime out of our bundle.
     # Do not allow arbitrary /usr/local or Homebrew libraries through this rule.
-    return bool(re.fullmatch(r"/usr/local/lib/libfuse-t(?:-[0-9.]+)?\.dylib", path))
+    if re.fullmatch(r"/usr/local/lib/libfuse-t(?:-[0-9.]+)?\.dylib", path):
+        return "fuse-t"
+    if path in {"/usr/local/lib/libfuse.2.dylib", "/usr/local/lib/libfuse.dylib",
+                "/usr/local/lib/libosxfuse.2.dylib"}:
+        return "macfuse"
+    return None
+
+
+def is_external_fuse(path):
+    return external_fuse_runtime(path) is not None
+
+
+def require_administrator_controlled(path):
+    """The external runtime is system-installed code, never a private dev library."""
+    path = Path(path).absolute()
+    try:
+        resolved = path.resolve(strict=True)
+        for item in dict.fromkeys([path, *path.parents, resolved, *resolved.parents]):
+            info = item.lstat()
+            if info.st_uid != 0 or (not stat.S_ISLNK(info.st_mode) and info.st_mode & 0o022):
+                raise RuntimeError(f"External FUSE path is not administrator-controlled: {item}")
+        if not resolved.is_file():
+            raise RuntimeError(f"External FUSE library is not a regular file: {path}")
+    except OSError as error:
+        raise RuntimeError(f"Missing/inaccessible external FUSE runtime: {path}: {error}") from error
+
+
+def fuse_runtime_info(runtime):
+    configuration = FUSE_RUNTIMES[runtime]
+    package = configuration["package"]
+    run("pkg-config", "--exists", package)
+    api_version = run("pkg-config", "--modversion", package, capture=True).strip()
+    library = configuration["library"]
+    require_administrator_controlled(library)
+    version = api_version
+    if runtime == "macfuse":
+        info = Path("/Library/Filesystems/macfuse.fs/Contents/Info.plist")
+        require_administrator_controlled(info)
+        version = plistlib.loads(info.read_bytes())["CFBundleShortVersionString"]
+    return {"implementation": runtime, "version": version, "api_version": api_version,
+            "pkg_config": package, "library": library, "library_sha256": sha256(library)}
+
+
+def manifest_fuse_runtime(provenance):
+    runtime = provenance.get("fuse_runtime", {}).get("implementation")
+    if runtime is None:
+        # Existing developer FUSE-T manifests precede explicit runtime selection.
+        choices = {external_fuse_runtime(path) for path in provenance.get("external_libraries", [])}
+        if len(choices) != 1 or None in choices:
+            raise RuntimeError("Backend manifest does not identify one supported FUSE runtime")
+        runtime = choices.pop()
+    if runtime not in FUSE_RUNTIMES:
+        raise RuntimeError(f"Unsupported FUSE runtime in backend manifest: {runtime}")
+    return runtime
 
 
 def minimum_version(binary):
@@ -124,7 +190,7 @@ def architectures(binary):
     return set(run("lipo", "-archs", binary, capture=True).split())
 
 
-def stage_macho(source_binary, destination, frameworks, architecture):
+def stage_macho(source_binary, destination, frameworks, architecture, *, fuse_runtime=None):
     """Copy a complete private dylib closure and rewrite it relative to each image.
 
     Reject unresolved rpaths and frameworks instead of leaking developer paths.
@@ -154,18 +220,22 @@ def stage_macho(source_binary, destination, frameworks, architecture):
                 continue
             if is_system(dependency):
                 continue
-            if dependency == "@rpath/libfuse-t.dylib":
-                # FUSE-T's pkg-config emits an rpath install name. Pin this
-                # external dependency to its administrator-installed location
-                # before removing all developer/build rpaths below.
-                external_fuse = "/usr/local/lib/libfuse-t.dylib"
-                if not Path(external_fuse).is_file():
-                    raise RuntimeError(f"Missing external FUSE-T runtime: {external_fuse}")
-                run("install_name_tool", "-change", dependency, external_fuse, target)
+            # Rewrite only known external FUSE install names. The two runtimes
+            # have distinct ABIs/lifecycles and must never be silently swapped.
+            external_fuse = dependency
+            if dependency.startswith("@rpath/"):
+                external_fuse = "/usr/local/lib/" + dependency.removeprefix("@rpath/")
+            runtime = external_fuse_runtime(external_fuse)
+            if runtime is not None:
+                if fuse_runtime is not None and runtime != fuse_runtime:
+                    raise RuntimeError(f"FUSE dependency {dependency} differs from selected runtime {fuse_runtime}")
+                require_administrator_controlled(external_fuse)
+                resolved_runtime = external_fuse_runtime(str(Path(external_fuse).resolve()))
+                if resolved_runtime is not None and resolved_runtime != runtime:
+                    raise RuntimeError(f"External FUSE alias resolves to a different runtime: {external_fuse}")
+                if external_fuse != dependency:
+                    run("install_name_tool", "-change", dependency, external_fuse, target)
                 externals.add(external_fuse)
-                continue
-            if is_external_fuse(dependency):
-                externals.add(dependency)
                 continue
             if dependency.startswith("@loader_path/"):
                 resolved = original.parent / dependency.removeprefix("@loader_path/")
@@ -189,7 +259,7 @@ def stage_macho(source_binary, destination, frameworks, architecture):
         if target.parent == frameworks:
             run("install_name_tool", "-id", f"@rpath/{target.name}", target)
         # Never preserve build-time rpaths. All private deps now use loader_path;
-        # FUSE-T's absolute install name remains the sole external exception.
+        # Approved absolute FUSE install names remain the external exceptions.
         load_commands = run("otool", "-l", target, capture=True)
         for rpath in re.findall(r"cmd LC_RPATH\s+cmdsize \d+\s+path (.*?) \(offset", load_commands):
             run("install_name_tool", "-delete_rpath", rpath, target)

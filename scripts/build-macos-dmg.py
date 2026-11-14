@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 
-from macos_backend import architectures, minimum_version, sha256, stage_macho
+from macos_backend import architectures, manifest_fuse_runtime, minimum_version, sha256, stage_macho
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -91,6 +91,7 @@ def main():
     if not provenance_file.is_file():
         raise SystemExit("Build the private backend first: python scripts/build-macos-backends.py")
     provenance = json.loads(provenance_file.read_text())
+    selected_fuse = manifest_fuse_runtime(provenance)
     if "lurker-veracrypt" not in provenance.get("artifacts", {}):
         raise SystemExit("Private backend manifest does not cover lurker-veracrypt.")
     for name, digest in provenance["artifacts"].items():
@@ -115,6 +116,7 @@ def main():
         native_targets, external = stage_macho(
             backend_root / "lurker-veracrypt", helper_dir / "lurker-veracrypt",
             frameworks, architecture,
+            fuse_runtime=selected_fuse,
         )
         shutil.copytree(backend_root / "licenses", resources / "backend-licenses")
         shutil.copyfile(provenance_file, resources / "backend-provenance.json")
@@ -258,7 +260,8 @@ def main():
             "Drag Lurker.app onto Applications, then eject this disk image.\n"
             "Open Lurker from Applications. No package installer or terminal install is needed.\n\n"
             "Apple encrypted disk images work with built-in macOS tools.\n"
-            "VeraCrypt support is included. Install the matching FUSE-T runtime separately.\n"
+            "VeraCrypt support is included. Install its matching "
+            + {"macfuse": "macFUSE", "fuse-t": "FUSE-T"}[selected_fuse] + " runtime separately.\n"
             + ("Included directory backends: " + ", ".join(options.folder_backends) + ".\n"
                "Directory backends require their qualified FUSE runtime; FUSE-T is not interchangeable with macFUSE.\n"
                if options.folder_backends else "")
