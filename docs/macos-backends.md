@@ -84,8 +84,8 @@ Native developer qualification, macOS 27.2.1 arm64 / SDK 27.2:
   app passes 78 CLI checks: AES/Serpent/Twofish, password-only and binary-keyfile-only
   authentication, explicit/Auto discovery, 256 MiB containers, SQLite WAL,
   fsync, persistence, busy/alias rejection and read-only enforcement.
-- No separate VeraCrypt application or development tool was available through
-  the test PATH. Every owned mount closed normally; no private VeraCrypt or
+- No separate VeraCrypt application was installed; the test PATH contained only
+  macOS system directories. Every owned mount closed normally; no private VeraCrypt or
   FUSE-T SMB transport process remained after each suite. Evidence is retained
   in `dist/macos/d330b20/vc-evidence.tar.gz` with the exact CLI/engine hashes.
 - This supersedes the previous 1.26.30 native creation-timeout result for this
