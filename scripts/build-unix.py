@@ -80,6 +80,13 @@ def supplied_artifacts(values, selected, system, module):
     return result
 
 
+def veracrypt_inputs(system):
+    if system == "Linux":
+        return ["scripts/build-linux-userspace.py", "scripts/linux_wx.py",
+                "scripts/linux_private_elf.py", "native/linux-userspace", "native/veracrypt"]
+    return ["scripts/build-bsd-backends.py", "native/bsd-veracrypt", "native/veracrypt"]
+
+
 def native_key(source, system, prefixes, java_home=None):
     """Changes to native recipes/patches get fresh objects, not stale stamps."""
     digest = hashlib.sha256()
@@ -345,8 +352,7 @@ def main():
             raise ValueError("package output must not exist")
         artifacts = supplied_artifacts(args.backend, selected, system, module)
         args.native_keys = {
-            "veracrypt": native_key(source, system, ["scripts/build-linux-userspace.py" if system == "Linux" else "scripts/build-bsd-backends.py",
-                                                     "native/linux-userspace" if system == "Linux" else "native/bsd-veracrypt", "native/veracrypt"]),
+            "veracrypt": native_key(source, system, veracrypt_inputs(system)),
             "folders": native_key(source, system, ["scripts/build-folder-backends.py", "native/folder/cryfs"]),
             "cryptomator": native_key(source, system, ["scripts/build-cryptomator.py", "native/folder/cryptomator"], args.java_home),
         }

@@ -112,6 +112,24 @@ class UnixBuild(unittest.TestCase):
                 freebsd = builder.native_key(source, "Linux", [])
         self.assertNotEqual(linux, freebsd)
 
+    def test_imported_linux_native_recipes_invalidate_cached_payload(self):
+        files = {"scripts/build-linux-userspace.py": b"builder",
+                 "scripts/linux_wx.py": b"wx pins/flags",
+                 "scripts/linux_private_elf.py": b"ELF closure rules",
+                 "scripts/build-bsd-backends.py": b"BSD builder"}
+        source = mock.Mock(manifest={"files": {name: {} for name in files}}, commit="a" * 40)
+        source.read.side_effect = lambda name: files[name]
+        version = mock.Mock(returncode=0, stdout="same compiler", stderr="")
+        with mock.patch.object(builder.subprocess, "run", return_value=version):
+            baseline = builder.native_key(source, "Linux", builder.veracrypt_inputs("Linux"))
+            bsd = builder.native_key(source, "FreeBSD", builder.veracrypt_inputs("FreeBSD"))
+            for name in ("scripts/linux_wx.py", "scripts/linux_private_elf.py"):
+                original = files[name]
+                files[name] += b" changed"
+                self.assertNotEqual(baseline, builder.native_key(source, "Linux", builder.veracrypt_inputs("Linux")))
+                self.assertEqual(bsd, builder.native_key(source, "FreeBSD", builder.veracrypt_inputs("FreeBSD")))
+                files[name] = original
+
     def test_cached_userspace_helpers_are_checked_before_rebinding(self):
         directory = self.root / "native"
         directory.mkdir()
