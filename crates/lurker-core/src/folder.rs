@@ -380,6 +380,17 @@ fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
                 size as i32,
             )
         };
+        // A disappearing Darwin task can report ESRCH while its unreaped BSD
+        // process still answers kill(pid, 0). Capture libproc's errno before
+        // another syscall and trust only this explicit native absence result.
+        let query_error = if result == 0 {
+            std::io::Error::last_os_error().raw_os_error()
+        } else {
+            None
+        };
+        if query_error == Some(libc::ESRCH) {
+            return Ok(None);
+        }
         if result != size as i32 {
             // kill(pid, 0) performs an existence/permission query, no signal.
             if unsafe { libc::kill(pid as i32, 0) } == -1
@@ -1125,6 +1136,33 @@ mod tests {
         drop(child.stdin.take()); // EOF exits only this test's child, no signal.
         assert!(child.wait().unwrap().success());
         assert!(process_snapshot(pid).unwrap().is_none());
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_process_query_recognizes_exit_before_child_reaping() {
+        let mut child = Command::new("/bin/cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        assert!(process_snapshot(pid).unwrap().is_some());
+        drop(child.stdin.take());
+        // Keep our Child unreaped, reproducing the initialization close path.
+        let started = Instant::now();
+        let result = loop {
+            match process_snapshot(pid) {
+                Ok(None) => break Ok(()),
+                Err(error) => break Err(error),
+                Ok(Some(_)) if started.elapsed() < Duration::from_secs(5) => {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Ok(Some(_)) => break Err(AppError::new("Owned child did not exit")),
+            }
+        };
+        assert!(child.wait().unwrap().success());
+        result.unwrap();
     }
     fn snapshot_record() -> Session {
         Session {
