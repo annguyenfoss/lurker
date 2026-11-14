@@ -294,6 +294,53 @@ mod tests {
     }
 
     #[test]
+    fn guardian_subprocess() {
+        let Some(directory) = std::env::var_os("LURKER_FENCE_UNIT_DIR") else { return; };
+        let directory = PathBuf::from(directory);
+        let descriptor = std::env::var("LURKER_FENCE_UNIT_FD").unwrap().parse().unwrap();
+        let session = supervisor::read_record::<Session>(&directory, "fixture-session.json").unwrap().unwrap();
+        let held = inherited(Some(descriptor), &session).unwrap().unwrap();
+        supervisor::write_record(&directory, "guardian-ready.json", &true).unwrap();
+        guard_until_requested(&directory, &session, &held).unwrap();
+    }
+
+    #[test]
+    fn killed_guardian_cannot_authorize_path_based_restoration() {
+        let (root, source, target) = fixture();
+        let (mut journal, file) = prepare(&target).unwrap();
+        arm(&target, &file, &mut journal).unwrap();
+        let mut session = record(&source, &target, journal);
+        let state = root.join("session"); secure_dir(&state).unwrap();
+        supervisor::write_record(&state, "fixture-session.json", &session).unwrap();
+        let fd = file.as_raw_fd();
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command.args(["--exact", "folder::fence::tests::guardian_subprocess", "--nocapture"])
+            .env("LURKER_FENCE_UNIT_DIR", &state).env("LURKER_FENCE_UNIT_FD", fd.to_string())
+            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        unsafe {
+            command.pre_exec(move || {
+                if libc::fcntl(fd, libc::F_SETFD, 0) == -1 { return Err(std::io::Error::last_os_error()); }
+                Ok(())
+            });
+        }
+        let mut child = command.spawn().unwrap();
+        let started = Instant::now();
+        while !state.join("guardian-ready.json").exists() && started.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let ready = state.join("guardian-ready.json").exists();
+        session.supervisor = process_identity(child.id());
+        // Child owns the inherited descriptor, and is still our unreaped child.
+        child.kill().unwrap(); child.wait().unwrap();
+        assert!(ready, "Guardian did not accept its inherited descriptor");
+        assert!(request_restore(&state, &session).unwrap_err().message.contains("descriptor was lost"));
+        assert_eq!(target.metadata().unwrap().mode() & 0o7777, 0);
+        if crate::effective_uid() != 0 { assert!(fs::write(target.join("plaintext"), b"forbidden").is_err()); }
+        // Only the test controller's original FD authorizes fixture cleanup.
+        cleanup(root, &file, 0o700);
+    }
+
+    #[test]
     fn contents_added_before_arm_are_detected_through_the_held_descriptor() {
         let (root, _, target) = fixture();
         let (mut journal, file) = prepare(&target).unwrap();
