@@ -150,7 +150,7 @@ def main():
             with source.open('xb') as stream: stream.truncate(16 * 1024 * 1024)
             key = directory / 'key.bin'; key.write_bytes(os.urandom(32)); key.chmod(0o600)
             point = directory / 'mount'; point.mkdir(mode=0o700)
-            tools = options.result.parent / 'loop-fault-tools'; tools.mkdir(mode=0o755)
+            tools = Path(tempfile.mkdtemp(prefix='loop-fault-tools-', dir=options.result.parent)); tools.chmod(0o755)
             wrapper = tools / 'cryptsetup'
             wrapper.write_text("#!/usr/bin/python\nimport json,os,sys,time\nfrom pathlib import Path\np=Path(os.environ['LURKER_LOOP_GATE'])\np.joinpath('ready.json').write_text(json.dumps({'pid':os.getpid(),'parent':os.getppid()}))\nparent=os.getppid();deadline=time.monotonic()+20\nwhile os.getppid()==parent and time.monotonic()<deadline:time.sleep(.01)\nraise SystemExit(71)\n")
             wrapper.chmod(0o755); trusted(wrapper)
@@ -167,7 +167,7 @@ def main():
                 gone(source)
                 with source.open('rb') as stream:fcntl.flock(stream,fcntl.LOCK_EX|fcntl.LOCK_NB)
             report['cases'].append({'name':'real-cli-sigkill-before-header-query','status':'passed','no_crypto_tool_executed':True})
-        report['status'] = 'passed' 
+        report['status'] = 'passed'
     except Exception as error:
         report.update(status='failed', diagnostic=str(error))
         if report['cases']: report['cases'][-1]['status'] = 'failed'
