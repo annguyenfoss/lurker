@@ -174,6 +174,7 @@ fn ensure_distinct(members: &[Member]) -> AppResult<()> {
 
 fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     require_root()?;
+    let owner = crate::new_filesystem::invoking_owner()?;
     CommandAction::Create(c.clone()).validate_raid1c_options("openbsd")?;
     let bytes = crate::size::size_gb_to_mib(
         c.size_gb
@@ -256,6 +257,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
                 .map_err(|e| AppError::io("Create staged mirror member", e))?;
             state_mut(&mut session)?.members[index].identity = Some(Identity::read(&image)?);
             registry.save(&session)?;
+            crate::new_filesystem::assign_file(&file, owner)?;
             file.set_len(bytes)
                 .and_then(|()| file.sync_all())
                 .map_err(|e| AppError::io("Size and sync staged mirror member", e))?;
@@ -270,13 +272,19 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         registry.save(&session)?;
         verify(&session)?;
         driver::make_filesystem(session.mapped.as_deref().unwrap())?;
+        let target = state(&session)?.members[0]
+            .stage_dir
+            .as_ref()
+            .unwrap()
+            .join("root");
+        super::initialize_new_filesystem_owner(&registry, &mut session, &target, owner)?;
         close_resources(&registry, &mut session)?;
         for member in &state(&session)?.members {
             File::open(&member.path)
                 .and_then(|f| f.sync_all())
                 .map_err(|e| AppError::io("Sync encrypted mirror member", e))?;
         }
-        prepare_descriptor(&registry, &mut session)?;
+        prepare_descriptor(&registry, &mut session, owner)?;
         publish(&registry, &mut session)?;
         Ok(())
     })();
@@ -361,7 +369,11 @@ fn relative_path(base: &Path, target: &Path) -> PathBuf {
     result
 }
 
-fn prepare_descriptor(registry: &Registry, session: &mut Session) -> AppResult<()> {
+fn prepare_descriptor(
+    registry: &Registry,
+    session: &mut Session,
+    owner: crate::new_filesystem::Owner,
+) -> AppResult<()> {
     let mirror = state(session)?;
     let descriptor = Descriptor {
         version: 1,
@@ -386,6 +398,7 @@ fn prepare_descriptor(registry: &Registry, session: &mut Session) -> AppResult<(
         .mode(0o600)
         .open(&path)
         .map_err(|e| AppError::io("Create mirror descriptor", e))?;
+    crate::new_filesystem::assign_file(&file, owner)?;
     file.write_all(&bytes)
         .and_then(|()| file.sync_all())
         .map_err(|e| AppError::io("Sync mirror descriptor", e))?;
@@ -835,6 +848,16 @@ fn remove_staging(session: &Session) -> AppResult<()> {
                         .map_err(|e| AppError::io("Remove owned staged descriptor", e))?;
                 }
             }
+            let root = directory.join("root");
+            if root.exists() {
+                if mounts()?.iter().any(|m| m.target == root) {
+                    return Err(AppError::new(
+                        "Initialization root remains mounted; preserve staging.",
+                    ));
+                }
+                fs::remove_dir(&root)
+                    .map_err(|e| AppError::io("Remove empty initialization mountpoint", e))?;
+            }
             fs::remove_dir(directory)
                 .map_err(|e| AppError::io("Remove empty mirror staging directory", e))?;
             sync_directory(directory.parent().unwrap())?;
@@ -903,7 +926,12 @@ mod tests {
         );
         state_mut(&mut session).unwrap().uuid = Some("1234567890abcdef1234567890abcdef".into());
         registry.save(&session).unwrap();
-        prepare_descriptor(&registry, &mut session).unwrap();
+        prepare_descriptor(
+            &registry,
+            &mut session,
+            crate::new_filesystem::invoking_owner().unwrap(),
+        )
+        .unwrap();
         let foreign = state(&session).unwrap().members[1].target.clone();
         fs::write(&foreign, b"foreign file must survive").unwrap();
         assert!(publish(&registry, &mut session).is_err());

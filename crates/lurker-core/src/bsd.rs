@@ -432,6 +432,7 @@ fn params_path(path: &Path) -> PathBuf {
 }
 
 fn create(c: CreateCommand, output: Output) -> AppResult<()> {
+    let owner = crate::new_filesystem::invoking_owner()?;
     let backend = check_backend(c.volume_type)?;
     if c.source_kind != SourceKind::File {
         return Err(AppError::new(
@@ -496,6 +497,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         .mode(0o600)
         .open(&source)
         .map_err(|e| AppError::io("Create staged container", e))?;
+    crate::new_filesystem::assign_file(&file, owner)?;
     file.set_len(size)
         .map_err(|e| AppError::io("Size staged container", e))?;
     let mut session = Session {
@@ -531,6 +533,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
                 &managed_veracrypt(&registry)?,
             )?);
             initialize_acquired_mapping(&registry, &session, veracrypt::make_filesystem)?;
+            initialize_new_filesystem_owner(&registry, &mut session, &stage.join("root"), owner)?;
             return Ok(());
         }
         session.backing = Some(native::attach_file(&source, false)?);
@@ -558,6 +561,17 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         // Persist every acquired crypto device before filesystem work. Failed
         // or interrupted newfs must leave an explicitly recoverable mapping.
         initialize_acquired_mapping(&registry, &session, native::make_filesystem)?;
+        #[cfg(target_os = "netbsd")]
+        {
+            let params = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .custom_flags(libc::O_NOFOLLOW)
+                .open(params_path(&source))
+                .map_err(|e| AppError::io("Open new CGD recovery parameters", e))?;
+            crate::new_filesystem::assign_file(&params, owner)?;
+        }
+        initialize_new_filesystem_owner(&registry, &mut session, &stage.join("root"), owner)?;
         Ok(())
     })();
     let cleaned = cleanup(&registry, &mut session);
@@ -588,6 +602,56 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         target.display()
     ));
     Ok(())
+}
+
+/// A new filesystem's root belongs to the invoking login user. Its temporary
+/// mount is recorded before changing ownership and closed through normal cleanup.
+fn initialize_new_filesystem_owner(
+    registry: &Registry,
+    session: &mut Session,
+    target: &Path,
+    owner: crate::new_filesystem::Owner,
+) -> AppResult<()> {
+    fs::create_dir(target)
+        .map_err(|e| AppError::io("Create new filesystem initialization mountpoint", e))?;
+    fs::set_permissions(target, fs::Permissions::from_mode(0o700))
+        .map_err(|e| AppError::io("Protect new filesystem mountpoint", e))?;
+    session.intended_mountpoint = Some(target.to_owned());
+    registry.save(session)?;
+    verify_session(session)?;
+    let mapped = session
+        .mapped
+        .as_deref()
+        .ok_or_else(|| AppError::new("New filesystem has no recorded crypto mapping."))?;
+    let mut argv = args(&["-t", filesystem(), "-o", "rw"]);
+    argv.push(mapped.into());
+    argv.push(target.as_os_str().to_owned());
+    exec("/sbin/mount", &argv, None)?;
+    let mounted = mounts()?
+        .into_iter()
+        .find(|m| m.target == target)
+        .ok_or_else(|| {
+            AppError::new("New filesystem mount identity missing; preserve initialization journal.")
+        })?;
+    if mounted.source != Path::new(mapped) || mounted.filesystem != filesystem() || mounted.readonly
+    {
+        return Err(AppError::new(
+            "New filesystem mount identity differs; preserve initialization journal.",
+        ));
+    }
+    session.mounted = Some(mounted.clone());
+    registry.save(session)?;
+    let directory = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+        .open(target)
+        .map_err(|e| AppError::io("Open new filesystem root", e))?;
+    if !mounts()?.iter().any(|m| m == &mounted) {
+        return Err(AppError::new(
+            "New filesystem mount changed before ownership initialization.",
+        ));
+    }
+    crate::new_filesystem::assign_root(&directory, owner)
 }
 
 fn absolute_destination(path: &Path) -> AppResult<PathBuf> {
@@ -820,6 +884,7 @@ fn create_pefs(c: CreateCommand, output: Output) -> AppResult<()> {
             "PEFS creation requires a directory and does not take --size.",
         ));
     }
+    let owner = crate::new_filesystem::invoking_owner()?;
     let registry = Registry::open()?;
     pefs::check_runtime()?;
     let target = absolute_destination(&c.target)?;
@@ -839,9 +904,19 @@ fn create_pefs(c: CreateCommand, output: Output) -> AppResult<()> {
     if let Err(error) = pefs::initialize(&target, c.cipher, &credential) {
         return Err(AppError::new(format!("{error}; incomplete private PEFS directory retained at {}. Inspect it before retrying.", target.display())));
     }
-    File::open(target.join(".pefs.db"))
-        .and_then(|f| f.sync_all())
-        .map_err(|e| AppError::io("Sync PEFS verification database", e))?;
+    let database = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(target.join(".pefs.db"))
+        .map_err(|e| AppError::io("Open new PEFS database", e))?;
+    crate::new_filesystem::assign_file(&database, owner)?;
+    let directory = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+        .open(&target)
+        .map_err(|e| AppError::io("Open new PEFS root", e))?;
+    crate::new_filesystem::assign_root(&directory, owner)?;
     sync_directory(&target)?;
     sync_directory(target.parent().unwrap())?;
     output.success(&format!("Created PEFS directory: {}", target.display()));
