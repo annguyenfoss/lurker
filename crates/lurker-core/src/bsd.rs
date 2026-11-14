@@ -99,6 +99,9 @@ struct Session {
     source: PathBuf,
     #[serde(default)]
     peer_sources: Vec<PathBuf>,
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    #[serde(default)]
+    veracrypt_proof: Option<veracrypt::RecoveryProof>,
     identity: Identity,
     backing: Option<String>,
     mapped: Option<String>,
@@ -346,6 +349,18 @@ fn managed_veracrypt(registry: &Registry) -> AppResult<Vec<veracrypt::ManagedAtt
     Ok(managed)
 }
 
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+fn capture_veracrypt_recovery(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    // Journal the acquired mapping even if control/proof capture fails next.
+    registry.save(session)?;
+    let mapped = session
+        .mapped
+        .as_deref()
+        .ok_or_else(|| AppError::new("VeraCrypt mapping missing during recovery capture."))?;
+    session.veracrypt_proof = Some(veracrypt::capture_recovery_proof(&session.source, mapped)?);
+    registry.save(session)
+}
+
 fn credential(
     password: Option<&str>,
     keyfile: Option<&Path>,
@@ -510,6 +525,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         mapped: None,
         mounted: None,
         peer_sources: Vec::new(),
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+        veracrypt_proof: None,
         #[cfg(target_os = "openbsd")]
         mirror: None,
         intended_mountpoint: None,
@@ -532,6 +549,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
                 &credential,
                 &managed_veracrypt(&registry)?,
             )?);
+            capture_veracrypt_recovery(&registry, &mut session)?;
             initialize_acquired_mapping(&registry, &session, veracrypt::make_filesystem)?;
             initialize_new_filesystem_owner(&registry, &mut session, &stage.join("root"), owner)?;
             return Ok(());
@@ -773,6 +791,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         mapped: None,
         mounted: None,
         peer_sources: Vec::new(),
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+        veracrypt_proof: None,
         #[cfg(target_os = "openbsd")]
         mirror: None,
         intended_mountpoint: Some(target.clone()),
@@ -788,7 +808,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                 &credential,
                 &managed_veracrypt(&registry)?,
             )?);
-            registry.save(&session)?;
+            capture_veracrypt_recovery(&registry, &mut session)?;
         }
         if session.mapped.is_none() {
             session.backing = Some(attach_native_file(&source, c.readonly)?);
@@ -816,7 +836,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                     &credential,
                     &managed_veracrypt(&registry)?,
                 )?);
-                registry.save(&session)?;
+                capture_veracrypt_recovery(&registry, &mut session)?;
             }
             if session.mapped.is_none() {
                 #[cfg(target_os = "netbsd")]
@@ -979,6 +999,8 @@ fn mount_pefs(c: MountCommand, output: Output) -> AppResult<()> {
         mapped: None,
         mounted: None,
         peer_sources: Vec::new(),
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+        veracrypt_proof: None,
         #[cfg(target_os = "openbsd")]
         mirror: None,
         intended_mountpoint: Some(target.clone()),
@@ -1088,7 +1110,12 @@ fn verify_session(s: &Session) -> AppResult<()> {
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
     if s.backend == VolumeType::Veracrypt {
         if let Some(mapped) = &s.mapped {
-            veracrypt::verify_mapping(&s.source, mapped)?;
+            if let Some(proof) = &s.veracrypt_proof {
+                veracrypt::verify_recovery_proof(&s.source, mapped, proof)?;
+            } else {
+                // Old journals require the live engine's complete identity.
+                veracrypt::verify_mapping(&s.source, mapped)?;
+            }
         }
         return Ok(());
     }
@@ -1165,7 +1192,11 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
 fn close_mapping(s: &Session, mapped: &str) -> AppResult<()> {
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
     if s.backend == VolumeType::Veracrypt {
-        return veracrypt::close(&s.source);
+        return if let Some(proof) = &s.veracrypt_proof {
+            veracrypt::close_with_proof(&s.source, mapped, proof)
+        } else {
+            veracrypt::close(&s.source)
+        };
     }
     let _ = s;
     native::close(mapped)
@@ -1491,6 +1522,8 @@ mod tests {
             mapped: None,
             mounted: None,
             peer_sources: Vec::new(),
+            #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+            veracrypt_proof: None,
             #[cfg(target_os = "openbsd")]
             mirror: None,
             intended_mountpoint: None,

@@ -116,6 +116,7 @@ fn empty_session(
         version: 1,
         id: unique_id(),
         backend: VolumeType::Raid1c,
+        veracrypt_proof: None,
         peer_sources: members.iter().skip(1).map(|m| m.target.clone()).collect(),
         source: primary,
         identity,
