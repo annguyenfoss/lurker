@@ -6,6 +6,9 @@ import tarfile
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
+import json
+from types import SimpleNamespace
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'build-linux-userspace.py'
 
@@ -150,6 +153,54 @@ class NativeSourcePreparation(unittest.TestCase):
         binding = json.loads((self.source / '.lurker-source-inputs.json').read_text())
         self.assertEqual(binding['revision'], 'fixed-revision')
         self.assertEqual(binding['verified_source_files'], 2)
+
+
+class NativePrivatePackaging(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location('userspace_builder', SCRIPT)
+        self.builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.builder)
+        temporary = tempfile.TemporaryDirectory(prefix='lurker-native-package-test-')
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+
+    def test_changed_static_build_inputs_clean_only_the_affected_cpp_tree(self):
+        source = self.root / 'creator'
+        (source / 'src').mkdir(parents=True)
+        (source / 'src/old.o').write_bytes(b'old-object')
+        metadata = {'inputs': {'version': 'one'}, 'static_libraries': {'base.a': 'hash'}}
+        with mock.patch.object(self.builder, 'run') as run:
+            self.builder.build_cpp(source, ['WX_CONFIG=private'], metadata, 2)
+            self.assertEqual(run.call_args_list[0].args[0], ['make', '-C', source / 'src', 'clean', 'WX_CONFIG=private'])
+            run.reset_mock()
+            self.builder.build_cpp(source, ['WX_CONFIG=private'], metadata, 2)
+            self.assertEqual(run.call_count, 1)
+            metadata['static_libraries']['base.a'] = 'new-hash'
+            run.reset_mock()
+            self.builder.build_cpp(source, ['WX_CONFIG=private'], metadata, 2)
+            self.assertEqual(run.call_count, 2)
+
+    def test_static_notices_and_final_creator_hash_are_bound_to_manifest(self):
+        output = self.root / 'output'; output.mkdir()
+        creator = output / 'lurker-veracrypt-create'; creator.write_bytes(b'unpatched')
+        (output / 'creator-source.json').write_text('{}')
+        upstream = self.root / 'wx'
+        license = upstream / 'docs/licence.txt'; license.parent.mkdir(parents=True)
+        license.write_text('upstream-notice')
+        metadata = {'inputs': {'version': 'one'}, 'static_libraries': {'base.a': 'hash'},
+                    'source_dir': str(upstream), 'license_paths': [str(license)]}
+        def bundle(*args):
+            creator.write_bytes(b'ELF-after-rpath-patch')
+            return {'files': {}, 'libraries': []}
+        with mock.patch.object(self.builder, 'build_module', return_value=SimpleNamespace(bundle=bundle)):
+            manifest = self.builder.finalize_private_libraries(output, [creator.name], metadata, self.root, True)
+        expected = 'licenses/wxwidgets/docs/licence.txt'
+        self.assertEqual(manifest['static_libraries'][0]['license_files'], [expected])
+        for relative, details in manifest['files'].items():
+            self.assertEqual(details['sha256'], hashlib.sha256((output / relative).read_bytes()).hexdigest())
+        info = json.loads((output / 'creator-source.json').read_text())
+        self.assertEqual(info['binary_sha256'], hashlib.sha256(creator.read_bytes()).hexdigest())
+        self.assertEqual(info['private_libraries_sha256'], hashlib.sha256((output / 'private-libraries.json').read_bytes()).hexdigest())
 
 
 if __name__ == '__main__':

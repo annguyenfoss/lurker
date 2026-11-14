@@ -6,6 +6,7 @@ Only the small, reviewed integration patches are part of the Lurker repository.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -227,10 +228,64 @@ def publish_creator(source, output):
     }, indent=2) + "\n")
 
 
+
+def build_module(name):
+    location = Path(__file__).with_name(name + '.py')
+    spec = importlib.util.spec_from_file_location(name, location)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def build_cpp(source, flags, wx_metadata, jobs):
+    wanted = {"flags": flags, "wx_inputs": wx_metadata["inputs"], "wx_static_libraries": wx_metadata["static_libraries"]}
+    binding = source / '.lurker-build-inputs.json'
+    previous = json.loads(binding.read_text()) if binding.exists() else None
+    if previous != wanted and any((source / 'src').rglob('*.o')):
+        # Only these small VC trees are cleaned. Never discard the unchanged
+        # multi-gigabyte LKL object cache because a wx/toolchain input changed.
+        run(['make', '-C', source / 'src', 'clean', *flags])
+    run(['make', '-C', source / 'src', f'-j{jobs}', *flags])
+    temporary = binding.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps(wanted, indent=2, sort_keys=True) + '\n')
+    temporary.replace(binding)
+
+
+def finalize_private_libraries(output, helper_names, wx_metadata, cache, offline):
+    module = build_module('linux_private_elf')
+    manifest = module.bundle(output, helper_names, cache, offline)
+    notices = []
+    directory = output / 'licenses/wxwidgets'
+    directory.mkdir(parents=True, exist_ok=True)
+    for path in wx_metadata['license_paths']:
+        source = Path(path)
+        target = directory / source.relative_to(wx_metadata['source_dir'])
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target); target.chmod(0o644)
+        relative = str(target.relative_to(output)); notices.append(relative)
+        manifest['files'][relative] = {'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
+    provenance = directory / 'provenance.json'
+    provenance.write_text(json.dumps({'schema': 1, 'inputs': wx_metadata['inputs'],
+        'static_libraries': wx_metadata['static_libraries'], 'license_files': notices}, indent=2, sort_keys=True) + '\n')
+    provenance.chmod(0o644)
+    relative = str(provenance.relative_to(output))
+    manifest['files'][relative] = {'sha256': hashlib.sha256(provenance.read_bytes()).hexdigest()}
+    manifest['static_libraries'] = [{'name': 'wxWidgets', 'provenance': relative, 'license_files': notices}]
+    (output / 'private-libraries.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+    creator = output / 'creator-source.json'
+    information = json.loads(creator.read_text())
+    information['binary_sha256'] = hashlib.sha256((output / 'lurker-veracrypt-create').read_bytes()).hexdigest()
+    information['private_libraries_sha256'] = hashlib.sha256((output / 'private-libraries.json').read_bytes()).hexdigest()
+    creator.write_text(json.dumps(information, indent=2, sort_keys=True) + '\n')
+    return manifest
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, default=ROOT / "target/userspace/src")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "target/release/userspace")
+    parser.add_argument("--wx-cache-dir", type=Path, default=ROOT / "target/private-wx-linux")
+    parser.add_argument("--tool-cache-dir", type=Path, default=ROOT / "target/private-elf-cache")
     parser.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 2))
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--only-creator", action="store_true", help="Build only the private header/container creator; omit FUSE/LKL helpers")
@@ -241,7 +296,7 @@ def main():
         parser.error("Build as your normal user, without sudo.")
     if args.jobs < 1:
         parser.error("--jobs must be positive.")
-    required = ["gcc", "g++", "make", "wx-config", "pkg-config", "patch", "strip"]
+    required = ["gcc", "g++", "make", "pkg-config", "patch", "strip", "readelf"]
     if not args.only_creator:
         required.extend(["flex", "bison", "bc", "perl"])
     for tool in required:
@@ -251,14 +306,16 @@ def main():
     names = ["veracrypt-create"] if args.only_creator else list(SOURCES)
     sources = {name: prepare(name, args.source_dir.resolve(), args.offline) for name in names}
     vc = sources["veracrypt-create"]
-    flags = ["NOGUI=1", "WITHFUSE3=1"]
+    wx_config, wx_metadata = build_module("linux_wx").build(args.wx_cache_dir, args.jobs, args.offline)
+    flags = ["NOGUI=1", "WITHFUSE3=1", "WX_CONFIG=" + str(wx_config)]
     if not shutil.which("yasm"):
         flags.append("NOASM=1")
-    run(["make", "-C", vc / "src", f"-j{args.jobs}", *flags])
+    build_cpp(vc, flags, wx_metadata, args.jobs)
     if args.only_creator:
         publish_creator(vc, args.output_dir.resolve())
+        finalize_private_libraries(args.output_dir.resolve(), ["lurker-veracrypt-create"], wx_metadata, args.tool_cache_dir, args.offline)
         return
-    run(["make", "-C", sources["veracrypt"] / "src", f"-j{args.jobs}", *flags])
+    build_cpp(sources["veracrypt"], flags, wx_metadata, args.jobs)
     lkl = sources["lkl"]
     # tools/lkl regenerates this from our patched defconfig plus host settings.
     # Never inherit filesystem selections from an earlier upstream/cache build.
@@ -288,6 +345,7 @@ def main():
     shutil.copytree(lkl / "LICENSES", licenses / "Linux", dirs_exist_ok=True)
     (output / "source-archives.json").write_text(json.dumps(SOURCE_ARCHIVE_SHA256, indent=2) + "\n")
     (output / "sources.json").write_text(json.dumps(SOURCES, indent=2) + "\n")
+    finalize_private_libraries(output, ["lurker-veracrypt", "lurker-fs", "lurker-veracrypt-create"], wx_metadata, args.tool_cache_dir, args.offline)
     print(f"Userspace helpers built in {output}. Nothing was installed.")
 
 
