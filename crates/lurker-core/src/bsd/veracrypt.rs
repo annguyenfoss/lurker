@@ -907,6 +907,35 @@ mod tests {
     }
 
     #[test]
+    fn legacy_proofs_fail_before_any_native_device_query() {
+        let source =
+            std::env::temp_dir().join(format!("lurker-vc-legacy-proof-{}", std::process::id()));
+        test_file(&source);
+        let metadata = fs::metadata(&source).unwrap();
+        let proof = RecoveryProof {
+            version: 1,
+            source: source.clone(),
+            source_dev: metadata.dev(),
+            source_ino: metadata.ino(),
+            // Deliberately outside every native namespace. Legacy rejection
+            // must happen before even a read-only query can use this device.
+            mapped: "/dev/not-a-lurker-device".into(),
+            backing_dev: 0,
+            backing_ino: 0,
+            auxiliary: super::super::Mounted {
+                source: "fusefs".into(),
+                target: "/tmp/.veracrypt_aux_mnt1".into(),
+                fsid: vec![],
+                filesystem: "fuse".into(),
+                readonly: false,
+            },
+        };
+        let error = verify_recovery_proof(&source, &proof.mapped, &proof).unwrap_err();
+        assert!(error.message.contains("Legacy VeraCrypt recovery proof"));
+        fs::remove_file(source).unwrap();
+    }
+
+    #[test]
     fn recovery_requires_a_full_random_attachment_generation() {
         let valid = Path::new("/tmp/.veracrypt_aux_mnt-0123456789abcdef0123456789abcdef");
         assert!(nonce_auxiliary(valid));
