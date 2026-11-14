@@ -664,6 +664,7 @@ mod tests {
         std::fs::create_dir(&fixture).unwrap();
         let source = fixture.join("encrypted");
         let mountpoint = fixture.join("mount");
+        std::fs::create_dir(&mountpoint).unwrap();
         let owns_volume = |volume: &lurker_core::ActiveVolume| {
             volume
                 .source_path
