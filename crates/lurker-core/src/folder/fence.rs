@@ -44,7 +44,14 @@ fn no_extended_acl(file: &File) -> AppResult<()> {
     // Darwin's extended ACL entries can grant writes despite POSIX mode 000.
     // Refuse them rather than modifying or approximating an owner's ACL.
     let acl = unsafe { acl_get_fd_np(file.as_raw_fd(), 0x100) };
-    if acl.is_null() { return Err(AppError::io("Cannot inspect mountpoint ACL", std::io::Error::last_os_error())); }
+    if acl.is_null() {
+        let error = std::io::Error::last_os_error();
+        // Darwin represents the absence of an extended ACL as ENOENT, rather
+        // than returning an allocated ACL with no entries. Other failures must
+        // still prevent arming the fence.
+        return if error.raw_os_error() == Some(libc::ENOENT) { Ok(()) }
+            else { Err(AppError::io("Cannot inspect mountpoint ACL", error)) };
+    }
     let mut entry = std::ptr::null_mut();
     let result = unsafe { acl_get_entry(acl, 0, &mut entry) };
     let error = std::io::Error::last_os_error().raw_os_error();
@@ -266,6 +273,16 @@ mod tests {
         assert!(arm(&target, &file, &mut journal).is_err());
         assert_eq!(target.metadata().unwrap().mode() & 0o7777, 0);
         cleanup(root, &file, 0o700);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn absent_extended_acl_is_accepted_without_changing_permissions() {
+        let (root, _, target) = fixture();
+        let held = File::open(&target).unwrap();
+        no_extended_acl(&held).unwrap();
+        assert_eq!(held.metadata().unwrap().mode() & 0o7777, 0o700);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(target_os = "macos")]
