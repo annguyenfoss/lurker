@@ -66,7 +66,13 @@ backing must match. Any unmanaged attachment blocks all new VeraCrypt work until
 closed with its original tool; a printed pathname cannot prove the engine's
 opened inode after replacement. Multiple verified managed sessions can coexist.
 Cleanup remains source-scoped, so unrelated unresolved external sessions cannot
-block closing an identified owned volume. Native regressions verify unchanged
+block closing an identified owned volume. New root journals save a recovery proof
+while control is alive: source inode, native backing vnode and auxiliary mount
+fsid. Normal close still uses the live engine. After daemon death, only matching
+saved kernel identities permit ordinary device detach and auxiliary unmount;
+busy failures retain state, partial cleanup can retry, and reused resources are
+rejected. Old proofless journals require live control. Acquisition also rejects
+native auxiliary mounts omitted by failed engine discovery. Native regressions verify unchanged
 image SHA-256 and original external attachments after rejected alias operations.
 These are native **backend adapter** results; they do not claim whole CLI,
 desktop or release-package qualification.

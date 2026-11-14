@@ -4,6 +4,7 @@
 //! The shared lifecycle owns publication, mount identity and recovery records.
 use super::{args, exec_utf8 as exec, Credential};
 use crate::{AppError, AppResult, CreateCipher};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
@@ -209,7 +210,9 @@ pub(super) fn ensure_source_available_with_managed(
         .map_err(|e| AppError::io("Cannot inspect requested VeraCrypt source identity", e))?;
     let text = match invoke(&args(&["--text", "--list", "--verbose"]), None) {
         Ok(text) => text,
-        Err(error) if not_mounted(&error) && managed.is_empty() => return Ok(()),
+        Err(error) if not_mounted(&error) && managed.is_empty() => {
+            return verify_auxiliary_inventory(&[], &super::mounts()?);
+        }
         Err(error) if not_mounted(&error) => return Err(AppError::new("Managed VeraCrypt attachment inventory changed; reconcile existing sessions before acquisition.")),
         Err(error) => return Err(error),
     };
@@ -224,6 +227,7 @@ fn ensure_listing_available(
 ) -> AppResult<()> {
     let records = attached_sources(text)?;
     correlate_managed(&records, managed)?;
+    verify_auxiliary_inventory(&records, &super::mounts()?)?;
     for record in &records {
         verify_backing(&record.information, &record.mapped)?;
     }
@@ -382,7 +386,7 @@ fn listed_device(text: &str, source: &Path) -> AppResult<String> {
     }
 }
 
-fn verify_backing(text: &str, mapped: &str) -> AppResult<()> {
+fn auxiliary_path(text: &str) -> AppResult<PathBuf> {
     let paths: Vec<_> = text
         .lines()
         .filter_map(|line| line.strip_prefix("Lurker Auxiliary Directory: "))
@@ -404,8 +408,37 @@ fn verify_backing(text: &str, mapped: &str) -> AppResult<()> {
             "Unexpected VeraCrypt auxiliary mount identity.",
         ));
     }
+    Ok(auxiliary.to_owned())
+}
+
+/// Upstream discovery silently omits a dead FUSE control endpoint. Native
+/// mount inventory must therefore agree even when it reports "no volumes".
+fn verify_auxiliary_inventory(
+    records: &[AttachedRecord],
+    mounts: &[super::Mounted],
+) -> AppResult<()> {
+    let known: HashSet<PathBuf> = records
+        .iter()
+        .map(|r| auxiliary_path(&r.information))
+        .collect::<AppResult<_>>()?;
+    for mount in mounts {
+        if mount
+            .target
+            .file_name()
+            .and_then(|p| p.to_str())
+            .is_some_and(|p| p.starts_with(".veracrypt_aux_mnt"))
+            && !known.contains(&mount.target)
+        {
+            return Err(AppError::new("An unlisted VeraCrypt auxiliary mount remains. Recover and close its original session before acquiring another volume; Lurker will not adopt or close it."));
+        }
+    }
+    Ok(())
+}
+
+fn verify_backing(text: &str, mapped: &str) -> AppResult<()> {
+    let auxiliary = auxiliary_path(text)?;
     let image = auxiliary.join("volume");
-    for (path, directory) in [(auxiliary, true), (image.as_path(), false)] {
+    for (path, directory) in [(auxiliary.as_path(), true), (image.as_path(), false)] {
         let metadata = fs::symlink_metadata(path)
             .map_err(|e| AppError::io("Inspect VeraCrypt auxiliary identity", e))?;
         if metadata.uid() != 0
@@ -492,6 +525,209 @@ pub(super) fn verify_mapping(source: &Path, mapped: &str) -> AppResult<()> {
     verify_backing(&information, mapped)
 }
 
+/// Root-journaled while the control daemon is alive. No pathname/control-file
+/// read under a failed FUSE mount is needed to prove later kernel ownership.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(super) struct RecoveryProof {
+    version: u32,
+    source: PathBuf,
+    source_dev: u64,
+    source_ino: u64,
+    mapped: String,
+    auxiliary: super::Mounted,
+    backing_dev: u64,
+    backing_ino: u64,
+}
+
+fn raw_device(mapped: &str) -> AppResult<String> {
+    #[cfg(target_os = "freebsd")]
+    let unit = mapped.strip_prefix("/dev/md");
+    #[cfg(target_os = "openbsd")]
+    let unit = mapped
+        .strip_prefix("/dev/vnd")
+        .and_then(|s| s.strip_suffix('a'));
+    let unit = unit.ok_or_else(|| AppError::new("Invalid VeraCrypt recovery device."))?;
+    let number: u32 = unit
+        .parse()
+        .map_err(|_| AppError::new("Invalid VeraCrypt recovery unit."))?;
+    if number > i32::MAX as u32 || number.to_string() != unit {
+        return Err(AppError::new("Noncanonical VeraCrypt recovery unit."));
+    }
+    #[cfg(target_os = "freebsd")]
+    return Ok(mapped.to_owned());
+    #[cfg(target_os = "openbsd")]
+    return Ok(format!("/dev/vnd{unit}c"));
+}
+
+fn kernel_backing(device: &str) -> AppResult<Option<(u64, u64)>> {
+    #[cfg(target_os = "freebsd")]
+    return super::native::backing_identity(device);
+    #[cfg(target_os = "openbsd")]
+    return super::native::vnode_identity(device);
+}
+
+pub(super) fn capture_recovery_proof(source: &Path, mapped: &str) -> AppResult<RecoveryProof> {
+    let information = listing(source)?;
+    if listed_device(&information, source)? != mapped {
+        return Err(AppError::new(
+            "VeraCrypt mapping changed before recovery capture.",
+        ));
+    }
+    verify_backing(&information, mapped)?;
+    regular_file(source)?;
+    let source_metadata =
+        fs::metadata(source).map_err(|e| AppError::io("Capture VeraCrypt source identity", e))?;
+    let auxiliary_path = auxiliary_path(&information)?;
+    let auxiliary = super::mounts()?
+        .into_iter()
+        .find(|m| m.target == auxiliary_path)
+        .ok_or_else(|| AppError::new("VeraCrypt auxiliary mount disappeared during capture."))?;
+    let backing = kernel_backing(&raw_device(mapped)?)?
+        .ok_or_else(|| AppError::new("VeraCrypt device disappeared during capture."))?;
+    let proof = RecoveryProof {
+        version: 1,
+        source: source.to_owned(),
+        source_dev: source_metadata.dev(),
+        source_ino: source_metadata.ino(),
+        mapped: mapped.to_owned(),
+        auxiliary,
+        backing_dev: backing.0,
+        backing_ino: backing.1,
+    };
+    verify_recovery_proof(source, mapped, &proof)?;
+    Ok(proof)
+}
+
+fn recovery_resources(
+    source: &Path,
+    mapped: &str,
+    proof: &RecoveryProof,
+) -> AppResult<(bool, bool)> {
+    source_name(source)?;
+    regular_file(source)?;
+    let metadata =
+        fs::metadata(source).map_err(|e| AppError::io("Verify VeraCrypt recovery source", e))?;
+    if proof.version != 1
+        || proof.source != source
+        || proof.mapped != mapped
+        || (metadata.dev(), metadata.ino()) != (proof.source_dev, proof.source_ino)
+        || !matches!(proof.auxiliary.filesystem.as_str(), "fuse" | "fusefs")
+        || auxiliary_path(&format!(
+            "Lurker Auxiliary Directory: {}\n",
+            proof.auxiliary.target.display()
+        ))? != proof.auxiliary.target
+    {
+        return Err(AppError::new(
+            "VeraCrypt recovery proof identity changed; retain the session.",
+        ));
+    }
+    let present = match kernel_backing(&raw_device(mapped)?)? {
+        Some(identity) if identity == (proof.backing_dev, proof.backing_ino) => true,
+        None => false,
+        Some(_) => {
+            return Err(AppError::new(
+                "VeraCrypt device was reused; refusing recovery cleanup.",
+            ))
+        }
+    };
+    let mounts = super::mounts()?;
+    let auxiliary = match mounts.iter().find(|m| m.target == proof.auxiliary.target) {
+        Some(mount) if mount == &proof.auxiliary => true,
+        None => false,
+        Some(_) => {
+            return Err(AppError::new(
+                "VeraCrypt auxiliary mount was replaced; refusing recovery cleanup.",
+            ))
+        }
+    };
+    Ok((present, auxiliary))
+}
+
+pub(super) fn verify_recovery_proof(
+    source: &Path,
+    mapped: &str,
+    proof: &RecoveryProof,
+) -> AppResult<()> {
+    recovery_resources(source, mapped, proof).map(|_| ())
+}
+
+pub(super) fn close_with_proof(
+    source: &Path,
+    mapped: &str,
+    proof: &RecoveryProof,
+) -> AppResult<()> {
+    let (device_present, auxiliary_present) = recovery_resources(source, mapped, proof)?;
+    if device_present && auxiliary_present {
+        match listing(source) {
+            Ok(information) => {
+                if listed_device(&information, source)? != mapped {
+                    return Err(AppError::new(
+                        "VeraCrypt control identity changed; refusing cleanup.",
+                    ));
+                }
+                verify_backing(&information, mapped)?;
+                // Preserve the normal engine shutdown/bookkeeping when its
+                // control endpoint is alive. An engine close error is never
+                // permission to escalate to a forced kernel cleanup.
+                close(source)?;
+                let (device, auxiliary) = recovery_resources(source, mapped, proof)?;
+                if device || auxiliary {
+                    return Err(AppError::new(
+                        "VeraCrypt normal close left resources; retain recovery state.",
+                    ));
+                }
+                return Ok(());
+            }
+            Err(error) if not_mounted(&error) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    if device_present {
+        let raw = raw_device(mapped)?;
+        // Refuse a mounted inner filesystem, including a different partition
+        // on the same OpenBSD virtual disk. Never force-detach kernel objects.
+        #[cfg(target_os = "freebsd")]
+        let stem = raw.clone();
+        #[cfg(target_os = "openbsd")]
+        let stem = raw.strip_suffix('c').unwrap().to_owned();
+        if super::mounts()?.iter().any(|m| {
+            m.source.to_str().is_some_and(|s| {
+                s == raw
+                    || s == mapped
+                    || s.strip_prefix(&stem).is_some_and(|tail| {
+                        !tail.is_empty() && tail.as_bytes()[0].is_ascii_alphabetic()
+                    })
+            })
+        }) {
+            return Err(AppError::new(
+                "VeraCrypt filesystem is still mounted; retain the session.",
+            ));
+        }
+        super::native::detach_file(&raw)?;
+    }
+    // Recheck exact mount fsid after detach; retries accept only proven absent
+    // devices and the original mount, never a reused unit or replacement FUSE.
+    let (_, auxiliary_now) = recovery_resources(source, mapped, proof)?;
+    if auxiliary_present && auxiliary_now {
+        let mut argv = Vec::new();
+        argv.push(proof.auxiliary.target.as_os_str().to_owned());
+        exec("/sbin/umount", &argv, None)?;
+    }
+    let (device, auxiliary) = recovery_resources(source, mapped, proof)?;
+    if device || auxiliary {
+        return Err(AppError::new(
+            "VeraCrypt cleanup is incomplete; retain the recovery session.",
+        ));
+    }
+    // Only remove an empty, root-owned plain directory after its mount is gone.
+    if fs::symlink_metadata(&proof.auxiliary.target)
+        .is_ok_and(|m| m.is_dir() && m.uid() == 0 && m.mode() & 0o022 == 0)
+    {
+        let _ = fs::remove_dir(&proof.auxiliary.target);
+    }
+    Ok(())
+}
+
 pub(super) fn make_filesystem(mapped: &str) -> AppResult<()> {
     #[cfg(target_os = "freebsd")]
     {
@@ -566,6 +802,43 @@ mod tests {
             format!("/dev/vnd{unit}c")
         };
         format!("Slot: {slot}\nVolume: {source}\nVirtual Device: {device}\nLurker Auxiliary Directory: /tmp/.veracrypt_aux_mnt{unit}\nMount Directory: \n\n")
+    }
+
+    #[test]
+    fn unlisted_auxiliary_mount_blocks_acquisition_even_with_empty_engine_inventory() {
+        let mount = super::super::Mounted {
+            source: PathBuf::from("VeraCrypt"),
+            target: PathBuf::from("/tmp/.veracrypt_aux_mnt1"),
+            fsid: vec![1, 2],
+            filesystem: "fuse".into(),
+            readonly: false,
+        };
+        assert!(verify_auxiliary_inventory(&[], std::slice::from_ref(&mount)).is_err());
+        let records = attached_sources(&inventory_record(1, "/tmp/vault.hc", 1)).unwrap();
+        assert!(verify_auxiliary_inventory(&records, std::slice::from_ref(&mount)).is_ok());
+        let mut unrelated = mount;
+        unrelated.target = PathBuf::from("/tmp/unrelated-fuse");
+        assert!(verify_auxiliary_inventory(&[], &[unrelated]).is_ok());
+    }
+
+    #[test]
+    fn recovery_device_names_must_be_canonical_and_platform_specific() {
+        #[cfg(target_os = "freebsd")]
+        let valid = "/dev/md2";
+        #[cfg(target_os = "openbsd")]
+        let valid = "/dev/vnd2a";
+        assert!(raw_device(valid).is_ok());
+        for bad in [
+            "/dev/sd0a",
+            "/dev/md02",
+            "/dev/vnd02a",
+            "/dev/md2147483648",
+            "/dev/vnd2147483648a",
+            "/dev/md2/other",
+            "/dev/vnd2c",
+        ] {
+            assert!(raw_device(bad).is_err(), "accepted {bad}");
+        }
     }
 
     #[test]
@@ -743,6 +1016,9 @@ mod tests {
                 format(&source, 96, cipher, &credential).unwrap();
                 let mapped = unlock(&source, false, &credential).unwrap();
                 verify_mapping(&source, &mapped).unwrap();
+                let proof = capture_recovery_proof(&source, &mapped).unwrap();
+                let proof: RecoveryProof =
+                    serde_json::from_str(&serde_json::to_string(&proof).unwrap()).unwrap();
                 make_filesystem(&mapped).unwrap();
                 let target = root.join("mount");
                 fs::create_dir(&target).unwrap();
@@ -768,7 +1044,8 @@ mod tests {
                 data.sync_all().unwrap();
                 drop(data);
                 exec("/sbin/umount", &[target.as_os_str().into()], None).unwrap();
-                close(&source).unwrap();
+                close_with_proof(&source, &proof.mapped, &proof).unwrap();
+                close_with_proof(&source, &proof.mapped, &proof).unwrap();
                 assert!(unlock(
                     &source,
                     false,
@@ -777,6 +1054,9 @@ mod tests {
                 .is_err());
                 let mapped = unlock(&source, false, &credential).unwrap();
                 verify_mapping(&source, &mapped).unwrap();
+                let proof = capture_recovery_proof(&source, &mapped).unwrap();
+                let proof: RecoveryProof =
+                    serde_json::from_str(&serde_json::to_string(&proof).unwrap()).unwrap();
                 exec(
                     "/sbin/mount",
                     &[
@@ -793,11 +1073,15 @@ mod tests {
                     b"durable private backend marker"
                 );
                 exec("/sbin/umount", &[target.as_os_str().into()], None).unwrap();
-                close(&source).unwrap();
+                close_with_proof(&source, &proof.mapped, &proof).unwrap();
+                close_with_proof(&source, &proof.mapped, &proof).unwrap();
                 #[cfg(target_os = "freebsd")]
                 {
                     let mapped = unlock(&source, true, &credential).unwrap();
                     verify_mapping(&source, &mapped).unwrap();
+                    let proof = capture_recovery_proof(&source, &mapped).unwrap();
+                    let proof: RecoveryProof =
+                        serde_json::from_str(&serde_json::to_string(&proof).unwrap()).unwrap();
                     exec(
                         "/sbin/mount",
                         &[
@@ -813,7 +1097,8 @@ mod tests {
                     .unwrap();
                     assert!(fs::write(target.join("must-fail"), b"forbidden").is_err());
                     exec("/sbin/umount", &[target.as_os_str().into()], None).unwrap();
-                    close(&source).unwrap();
+                    close_with_proof(&source, &proof.mapped, &proof).unwrap();
+                    close_with_proof(&source, &proof.mapped, &proof).unwrap();
                 }
                 fs::remove_dir(target).unwrap();
                 fs::remove_file(source).unwrap();
