@@ -510,7 +510,7 @@ mod tests {
     use slint::platform::software_renderer::{
         MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel,
     };
-    use slint::platform::{Platform, PlatformError, WindowAdapter};
+    use slint::platform::{EventLoopProxy, Platform, PlatformError, WindowAdapter};
     use slint::ComponentHandle;
     use slint::PhysicalSize;
     use std::rc::Rc;
@@ -536,22 +536,49 @@ mod tests {
 
     static TEST_LOCK: Mutex<()> = Mutex::new(());
 
-    struct TestPlatform;
+    type TestEvent = Box<dyn FnOnce() + Send>;
+    static TEST_EVENTS: Mutex<Vec<TestEvent>> = Mutex::new(Vec::new());
+    struct TestProxy;
+    impl EventLoopProxy for TestProxy {
+        fn quit_event_loop(&self) -> Result<(), slint::EventLoopError> {
+            Ok(())
+        }
+        fn invoke_from_event_loop(&self, event: TestEvent) -> Result<(), slint::EventLoopError> {
+            TEST_EVENTS.lock().unwrap().push(event);
+            Ok(())
+        }
+    }
+
+    struct TestPlatform {
+        with_proxy: bool,
+    }
 
     impl Platform for TestPlatform {
+        fn new_event_loop_proxy(&self) -> Option<Box<dyn EventLoopProxy>> {
+            self.with_proxy
+                .then(|| Box::new(TestProxy) as Box<dyn EventLoopProxy>)
+        }
         fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
             Ok(TEST_WINDOW.with(|window| window.clone()))
         }
     }
 
     fn setup_test_window() -> Rc<MinimalSoftwareWindow> {
-        slint::platform::set_platform(Box::new(TestPlatform)).ok();
+        setup_test_window_with_proxy(false)
+    }
+
+    fn setup_test_window_with_proxy(with_proxy: bool) -> Rc<MinimalSoftwareWindow> {
+        slint::platform::set_platform(Box::new(TestPlatform { with_proxy })).ok();
         let window = TEST_WINDOW.with(|test_window| test_window.clone());
         window.set_size(PhysicalSize::new(1280, 900));
         window
     }
 
     fn render(window: &Rc<MinimalSoftwareWindow>) {
+        let events = std::mem::take(&mut *TEST_EVENTS.lock().unwrap());
+        for event in events {
+            event();
+        }
         slint::platform::update_timers_and_animations();
         slint::private_unstable_api::re_exports::ChangeTracker::run_change_handlers();
         window.request_redraw();
@@ -580,6 +607,175 @@ mod tests {
             }
             std::fs::write(directory.join(format!("{name}.ppm")), ppm).unwrap();
         });
+    }
+
+    /// Real helper/backend test: opt in only on a disposable remote test host.
+    /// The normal workspace suite never starts encryption or mount operations.
+    #[test]
+    #[ignore = "requires an explicitly configured remote native fixture and real helper"]
+    fn native_gui_callbacks_create_mount_reopen_and_unmount() {
+        use std::sync::atomic::Ordering;
+        use std::time::{Duration, Instant};
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        assert_eq!(
+            std::env::var("LURKER_DESKTOP_NATIVE_TEST").as_deref(),
+            Ok("1")
+        );
+        let fixture_parent = std::path::PathBuf::from(
+            std::env::var_os("LURKER_DESKTOP_NATIVE_ROOT").expect("explicit /tmp fixture root"),
+        );
+        let fixture_parent = fixture_parent.canonicalize().unwrap();
+        assert!(
+            fixture_parent.starts_with("/tmp") && fixture_parent != std::path::Path::new("/tmp")
+        );
+        let helper = std::path::PathBuf::from(
+            std::env::var_os("LURKER_DESKTOP_NATIVE_HELPER").expect("explicit real helper path"),
+        )
+        .canonicalize()
+        .unwrap();
+        let format =
+            std::env::var("LURKER_DESKTOP_NATIVE_FORMAT").unwrap_or_else(|_| "gocryptfs".into());
+        let backend = lurker_core::VolumeType::parse(&format).expect("backend name");
+        assert!(backend.supports_platform(std::env::consts::OS));
+        assert_ne!(
+            backend,
+            lurker_core::VolumeType::Raid1c,
+            "mirror lifecycle has its own native suite"
+        );
+        let fixture = fixture_parent.join(format!("gui-{}", std::process::id()));
+        std::fs::create_dir(&fixture).unwrap();
+        let source = fixture.join("encrypted");
+        let mountpoint = fixture.join("mount");
+        let window = setup_test_window_with_proxy(true);
+        let ui = super::MainWindow::new().unwrap();
+        super::configure_platform(&ui, std::env::consts::OS);
+        let state = super::AppState {
+            window: ui.as_weak(),
+            helper_path: Some(helper.clone()),
+            helper_error: None,
+            active_volumes: std::sync::Arc::new(Mutex::new(Vec::new())),
+            toasts: std::sync::Arc::new(Mutex::new(Vec::new())),
+            operation_busy: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        };
+        super::bind_callbacks(&ui, &state);
+        ui.show().unwrap();
+        let wait = || {
+            let deadline = Instant::now() + Duration::from_secs(120);
+            loop {
+                render(&window);
+                if !state.operation_busy.load(Ordering::SeqCst) && !ui.get_operation_busy() {
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "native GUI operation timed out; fixture {}",
+                    fixture.display()
+                );
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let toasts = state.toasts.lock().unwrap();
+            assert!(
+                !toasts.iter().any(|toast| toast.kind == "err"),
+                "GUI operation failed: {:?}",
+                toasts
+                    .iter()
+                    .map(|toast| (&toast.title, &toast.detail))
+                    .collect::<Vec<_>>()
+            );
+        };
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ui.set_create_format(format.as_str().into());
+            render(&window);
+            ui.set_create_target_kind(
+                if backend.is_directory() {
+                    "directory"
+                } else {
+                    "file"
+                }
+                .into(),
+            );
+            ui.set_create_file_path(fixture.to_string_lossy().as_ref().into());
+            ui.set_create_file_name("encrypted".into());
+            ui.set_create_size("128".into());
+            ui.set_create_size_unit("MB".into());
+            ui.set_create_passphrase("desktop native fixture password".into());
+            ui.set_create_confirm("desktop native fixture password".into());
+            ui.invoke_submit_create();
+            wait();
+            assert!(source.exists());
+            assert_eq!(ui.get_create_passphrase(), "");
+            ui.set_current_view("manage".into());
+            render(&window);
+            let mount = || {
+                ui.set_mount_source_kind(
+                    if backend.is_directory() {
+                        "directory"
+                    } else {
+                        "file"
+                    }
+                    .into(),
+                );
+                ui.set_mount_source(source.to_string_lossy().as_ref().into());
+                ui.set_mount_point(mountpoint.to_string_lossy().as_ref().into());
+                ui.set_mount_passphrase("desktop native fixture password".into());
+                ui.invoke_submit_mount();
+                wait();
+                assert_eq!(ui.get_mount_passphrase(), "");
+            };
+            let unmount = || {
+                let index = state
+                    .active_volumes
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .position(|volume| volume.source_path.as_ref() == Some(&source))
+                    .expect("own native session listed");
+                ui.invoke_unmount_volume(index as i32);
+                wait();
+                assert!(!state
+                    .active_volumes
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|volume| volume.source_path.as_ref() == Some(&source)));
+            };
+            mount();
+            let payload = (0..1048576)
+                .map(|index| (index % 251) as u8)
+                .collect::<Vec<_>>();
+            let mut file = std::fs::File::create(mountpoint.join("payload.bin")).unwrap();
+            std::io::Write::write_all(&mut file, &payload).unwrap();
+            file.sync_all().unwrap();
+            drop(file);
+            unmount();
+            mount();
+            assert_eq!(
+                std::fs::read(mountpoint.join("payload.bin")).unwrap(),
+                payload
+            );
+            unmount();
+        }));
+        // Clean up only a session whose listed source is this test's private fixture.
+        if let Ok(volumes) = lurker_core::list_active_volumes() {
+            if let Some(volume) = volumes
+                .iter()
+                .find(|volume| volume.source_path.as_ref() == Some(&source))
+            {
+                let response = super::run_helper(
+                    &helper,
+                    lurker_core::CommandAction::Unmount(
+                        super::logic::build_unmount_command_for_volume(volume),
+                    ),
+                );
+                eprintln!("native GUI fixture cleanup: {response:?}");
+            }
+        }
+        ui.hide().unwrap();
+        if let Err(failure) = outcome {
+            eprintln!("retained native GUI fixture: {}", fixture.display());
+            std::panic::resume_unwind(failure);
+        }
+        std::fs::remove_dir_all(&fixture).unwrap();
     }
 
     #[test]
