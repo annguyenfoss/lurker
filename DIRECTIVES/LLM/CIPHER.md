@@ -104,6 +104,7 @@ Use this file as the source of truth for selected encryption backends and create
 - gocryptfs, CryFS and Cryptomator accept a password and their fixed format profile. They take no size, keyfile, alternate `--cipher` or destructive replacement option. PEFS has a separate native FreeBSD profile and module qualification.
 - FreeBSD PEFS: AES-256-XTS with PBKDF2/600000, a verifier chain in `.pefs.db` and profile metadata in `.pefs.conf`; password or binary keyfile. Requires the matching kernel module and native utility. Preserve these metadata files with the encrypted directory.
 - Profiles describe implementation policy, not completed platform qualification. Keep matrix entries marked selected until packaged native lifecycle tests pass.
+- Newly created Linux/BSD container files and recovery metadata belong to the authorized invoking user (mode 0600); newly formatted filesystem roots are private to that user (0700). Linux initializes Btrfs root metadata through an empty `mkfs.btrfs --rootdir` seed; BSD uses a journaled private initialization mount. Never change ownership while unlocking existing storage.
 
 ## LUKS Keyslot Management (Linux)
 

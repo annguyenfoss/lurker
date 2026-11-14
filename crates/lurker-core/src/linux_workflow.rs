@@ -11,7 +11,8 @@ use crate::output::Output;
 use crate::system::{trim_stdout, AppContext};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, IsTerminal, Read, Write};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -36,6 +37,8 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
 }
 
 fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> {
+    // Resolve the authorized caller before any header or filesystem mutation.
+    let owner = crate::new_filesystem::invoking_owner()?;
     if command.volume_type == VolumeType::Auto {
         return Err(AppError::new(
             "Option --type auto is not valid with create.",
@@ -54,9 +57,11 @@ fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> 
     };
     assert_mapper_available(&mapper_name_for_source(&command.target, None)?)?;
     match command.volume_type {
-        VolumeType::Veracrypt => veracrypt_create_device(ctx, &command, source_guard.as_ref()),
+        VolumeType::Veracrypt => {
+            veracrypt_create_device(ctx, &command, source_guard.as_ref(), owner)
+        }
         VolumeType::Luks | VolumeType::Luks1 => {
-            luks_create_device(ctx, &command, source_guard.as_ref())
+            luks_create_device(ctx, &command, source_guard.as_ref(), owner)
         }
         VolumeType::Apple => Err(AppError::new("Apple encrypted disk images require macOS.")),
         VolumeType::Auto => Err(AppError::new(
@@ -307,6 +312,7 @@ fn luks_create_device(
     ctx: &mut AppContext,
     command: &CreateCommand,
     existing_source: Option<&File>,
+    owner: crate::new_filesystem::Owner,
 ) -> AppResult<()> {
     require_passphrase(command.passphrase.as_deref(), command.keyfile.as_deref())?;
     let profile = cipher_profile(command.cipher);
@@ -364,7 +370,7 @@ fn luks_create_device(
 
             ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2("Creating Btrfs filesystem");
-            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name))?;
+            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name), owner)?;
 
             ctx.output.msg2(&format!(
                 "Closing mapper {}",
@@ -373,6 +379,7 @@ fn luks_create_device(
             crypt_close(ctx, &mapper_name)?;
             ctx.clear_cleanup_mapper();
 
+            assign_new_image_owner(&temp_path, owner)?;
             publish_container(&temp_path, &command.target, command.force, existing_source)?;
             temp_guard.persist();
         }
@@ -415,7 +422,7 @@ fn luks_create_device(
 
             ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2("Creating Btrfs filesystem");
-            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name))?;
+            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name), owner)?;
 
             ctx.output.msg2(&format!(
                 "Closing mapper {}",
@@ -439,6 +446,7 @@ fn veracrypt_create_device(
     ctx: &mut AppContext,
     command: &CreateCommand,
     existing_source: Option<&File>,
+    owner: crate::new_filesystem::Owner,
 ) -> AppResult<()> {
     require_passphrase(command.passphrase.as_deref(), command.keyfile.as_deref())?;
     let profile = cipher_profile(command.cipher);
@@ -496,7 +504,7 @@ fn veracrypt_create_device(
 
             ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2("Creating Btrfs filesystem");
-            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name))?;
+            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name), owner)?;
 
             ctx.output.msg2(&format!(
                 "Closing mapper {}",
@@ -505,6 +513,7 @@ fn veracrypt_create_device(
             crypt_close(ctx, &mapper_name)?;
             ctx.clear_cleanup_mapper();
 
+            assign_new_image_owner(&temp_path, owner)?;
             publish_container(&temp_path, &command.target, command.force, existing_source)?;
             temp_guard.persist();
         }
@@ -547,7 +556,7 @@ fn veracrypt_create_device(
 
             ctx.set_cleanup_mapper(mapper_name.clone());
             ctx.output.msg2("Creating Btrfs filesystem");
-            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name))?;
+            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name), owner)?;
 
             ctx.output.msg2(&format!(
                 "Closing mapper {}",
@@ -1562,8 +1571,20 @@ fn veracrypt_create(
     }
 }
 
-fn mkfs_btrfs(ctx: &mut AppContext, device_path: &Path) -> AppResult<()> {
-    let args = vec![OsString::from("-q"), device_path.as_os_str().to_os_string()];
+fn mkfs_btrfs(
+    ctx: &mut AppContext,
+    device_path: &Path,
+    owner: crate::new_filesystem::Owner,
+) -> AppResult<()> {
+    // mkfs copies the seed root's owner/mode. This initializes the new Btrfs
+    // inode without mounting it or changing ownership during later unlocks.
+    let seed = EmptyFilesystemRoot::new(owner)?;
+    let args = vec![
+        OsString::from("-q"),
+        OsString::from("--rootdir"),
+        seed.descriptor_path().into_os_string(),
+        device_path.as_os_str().to_os_string(),
+    ];
     let mkfs_btrfs = ctx.mkfs_btrfs_path()?.to_path_buf();
     ctx.run_command(
         &mkfs_btrfs,
@@ -1572,6 +1593,94 @@ fn mkfs_btrfs(ctx: &mut AppContext, device_path: &Path) -> AppResult<()> {
         false,
         "Failed to create Btrfs filesystem",
     )
+}
+
+fn assign_new_image_owner(path: &Path, owner: crate::new_filesystem::Owner) -> AppResult<()> {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|e| AppError::io("Open newly created container for ownership", e))?;
+    crate::linux_source::verify_path_identity(&file, path)?;
+    if file
+        .metadata()
+        .map_err(|e| AppError::io("Inspect new container", e))?
+        .nlink()
+        != 1
+    {
+        return Err(AppError::new(
+            "New container acquired an unexpected hard link before publication.",
+        ));
+    }
+    crate::new_filesystem::assign_file(&file, owner)?;
+    crate::linux_source::verify_path_identity(&file, path)
+}
+
+struct EmptyFilesystemRoot {
+    parent: PathBuf,
+    path: PathBuf,
+    directory: File,
+}
+
+impl EmptyFilesystemRoot {
+    fn new(owner: crate::new_filesystem::Owner) -> AppResult<Self> {
+        let mut random = [0u8; 16];
+        File::open("/dev/urandom")
+            .and_then(|mut file| file.read_exact(&mut random))
+            .map_err(|e| AppError::io("Generate private filesystem seed name", e))?;
+        let nonce: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let parent = std::env::temp_dir().join(format!("lurker-new-filesystem-{nonce}"));
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&parent)
+            .map_err(|e| AppError::io("Create private filesystem seed parent", e))?;
+        let path = parent.join("root");
+        let prepared = (|| {
+            fs::DirBuilder::new()
+                .mode(0o700)
+                .create(&path)
+                .map_err(|e| AppError::io("Create empty filesystem root seed", e))?;
+            let directory = OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+                .open(&path)
+                .map_err(|e| AppError::io("Open new filesystem root seed", e))?;
+            crate::new_filesystem::assign_root(&directory, owner)?;
+            Ok(directory)
+        })();
+        match prepared {
+            Ok(directory) => Ok(Self {
+                parent,
+                path,
+                directory,
+            }),
+            Err(error) => {
+                let _ = fs::remove_dir(&path);
+                let _ = fs::remove_dir(&parent);
+                Err(error)
+            }
+        }
+    }
+
+    fn descriptor_path(&self) -> PathBuf {
+        // sudo may close inherited descriptors; the parent keeps this exact
+        // directory open while the privileged formatter reads its proc path.
+        format!(
+            "/proc/{}/fd/{}",
+            std::process::id(),
+            self.directory.as_raw_fd()
+        )
+        .into()
+    }
+}
+
+impl Drop for EmptyFilesystemRoot {
+    fn drop(&mut self) {
+        // Never recursively remove data if an unexpected entry appeared.
+        let _ = fs::remove_dir(&self.path);
+        let _ = fs::remove_dir(&self.parent);
+    }
 }
 
 fn command_success(
@@ -1703,6 +1812,31 @@ impl Drop for TempFileGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_filesystem_seed_is_private_and_pinned_after_rename() {
+        let owner = crate::new_filesystem::Owner {
+            uid: unsafe { libc::geteuid() },
+            gid: unsafe { libc::getegid() },
+        };
+        let seed = EmptyFilesystemRoot::new(owner).unwrap();
+        let parent = seed.parent.clone();
+        let renamed = parent.with_extension("renamed");
+        let original = seed.directory.metadata().unwrap();
+        assert_eq!(original.uid(), owner.uid);
+        assert_eq!(original.gid(), owner.gid);
+        assert_eq!(original.mode() & 0o777, 0o700);
+        fs::rename(&parent, &renamed).unwrap();
+        let pinned = fs::metadata(seed.descriptor_path()).unwrap();
+        assert_eq!(
+            (pinned.dev(), pinned.ino()),
+            (original.dev(), original.ino())
+        );
+        assert_eq!(fs::read_dir(seed.descriptor_path()).unwrap().count(), 0);
+        fs::rename(&renamed, &parent).unwrap();
+        drop(seed);
+        assert!(!parent.exists());
+    }
 
     #[test]
     fn source_lock_is_shared_by_hardlink_aliases() {

@@ -245,7 +245,7 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - The desktop app offers passphrase or keyfile authentication for LUKS and VeraCrypt. Passphrase creation requires confirmation; the Generate button uses system randomness (128 bits). Linux Privileged mode also offers a LUKS keys screen to list, add and remove independent credentials.
 - The desktop app does not call the CLI binary. It talks to `lurker-helper` over a local stdin/stdout JSON contract.
 - The CLI supports interactive terminal prompting; macOS create also confirms the passphrase. Passphrases are passed to crypto tools through terminal input or stdin, never command-line arguments.
-- Privileged creates initially produce root-owned Btrfs directories. After mounting a new personal volume, set its ownership once with `sudo chown "$(id -u):$(id -g)" /your/mountpoint` if needed. Unprivileged creates assign the filesystem to your login user directly.
+- New Linux/BSD containers and recovery metadata belong to the user who authorized creation. Newly formatted filesystem roots use that user's ownership and private permissions, so ordinary applications can write after mounting. Existing filesystem owners and permissions remain unchanged when unlocked.
 
 ### Credentials and LUKS keyslots
 
