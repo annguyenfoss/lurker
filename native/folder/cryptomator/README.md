@@ -34,10 +34,13 @@ python scripts/build-cryptomator.py --java-home /path/to/jdk25 --maven /path/to/
 The result contains its own reduced Java runtime. Ship the entire `cryptomator`
 directory without rearranging `mods` or `runtime`; no installed Java or
 Cryptomator application is required. Linux libfuse3/fusermount3 and macOS FUSE-T
-remain external OS prerequisites. The macOS helper selects only the upstream
-FUSE-T provider; it never falls back to macFUSE. Application-filesystem
-qualification, including writable SQLite WAL, remains required before shipping
-this macOS backend. Build separately on each target OS/architecture.
+remain external OS prerequisites. On macOS 26 or later the helper selects the
+upstream FUSE-T provider with explicit `backend=fskit`; there is no SMB, NFS or
+macFUSE fallback. Install FUSE-T with FSKit support separately, open
+`/Applications/fuse-t.app`, and enable its file-system extension in System
+Settings > General > Login Items & Extensions > File System Extensions.
+Build separately on each target OS/architecture. The manifest binds the native
+provider, runtime, transport and minimum OS alongside the helper source hashes.
 For native CryptoFS tests, use `--test` only on dedicated test hosts with private
 temporary test directories; the default build skips runtime tests.
 
@@ -77,15 +80,17 @@ retains a concise result with evidence. As with ordinary SQLite WAL databases,
 read-only access may need existing shared-memory files or SQLite immutable mode;
 the smoke suite uses immutable mode only after the sole writable connection has
 closed/checkpointed. This is not a claim of concurrent-writer or crash safety.
-macOS arm64 builds and five Java tests pass with a private reduced Java 27
-runtime. Mounted qualification remains incomplete: FUSE-T 1.2.9's default SMB
-transport returns `ENOTSUP` for byte-range locks and SQLite reports
-`SQLITE_IOERR_LOCK`. File writes alone do not qualify application I/O. An
-experimental `backend=fskit` transport reached the installed FUSE-T extension,
-but mounting was refused while that extension was disabled. `pluginkit -e use`
-sets its user election without granting FSKit Settings consent. Do not bypass
-these failures with library symlinks or a macFUSE fallback. Sign the private JVM
-with narrowly scoped JIT/external-library entitlements when packaging.
+The macOS 27 arm64 prototype passed the strict 13-case CLI lifecycle suite with
+FUSE-T 1.2.9/FSKit and a private Java 27 runtime, including SQLite WAL, read-only,
+busy close, credentials and reopen. Every production image/package still needs
+its own native qualification. The upstream FUSE-T default SMB transport returns
+`ENOTSUP` for byte-range locks (`SQLITE_IOERR_LOCK`); NFS refuses WAL mode. Neither
+is accepted. `pluginkit -e use` sets a user election without granting FSKit
+Settings consent; a disabled extension still refuses mounting. Sign the private
+JVM with narrowly scoped JIT/external-library entitlements when packaging.
+FUSE-T documents its FSKit backend for macOS 26+, independent of Cryptomator's
+separate native FSKit adapter:
+https://github.com/macos-fuse-t/fuse-t
 
 Upstream also offers a separate native FSKit adapter for macOS 27/Apple silicon.
 Embedding it requires an app extension with an Apple-issued provisioning profile

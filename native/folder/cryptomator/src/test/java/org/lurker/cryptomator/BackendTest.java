@@ -26,6 +26,22 @@ class BackendTest {
         assertThrows(IOException.class, () -> Main.providerSuffix("FreeBSD"));
     }
 
+    @Test void macTransportRequiresFskitAndRejectsUnsupportedHostOrDefaults() throws Exception {
+        String defaults = "-ononamedattr -obackend=smb -orwsize=262144 -ouid=501 -ogid=20";
+        for (String version : new String[] {"26.0", "26.6.2", "27.2"}) {
+            assertEquals(defaults.replace("backend=smb", "backend=fskit"), Main.transportFlags("Mac OS X", version, defaults));
+        }
+        assertEquals("-oauto_unmount", Main.transportFlags("Linux", "6.18", "-oauto_unmount"));
+        for (String version : new String[] {"15.4", "25.9", "", "secret-attacker-value"}) {
+            var error = assertThrows(IOException.class, () -> Main.transportFlags("Mac OS X", version, defaults));
+            assertTrue(error.getMessage().contains("macOS 26"));
+            assertFalse(error.getMessage().contains("secret"));
+        }
+        for (String flags : new String[] {"-obackend=nfs", "-obackend=fskit", "-obackend=smb-unqualified", "-obackend=smb -obackend=nfs"}) {
+            assertThrows(IOException.class, () -> Main.transportFlags("Mac OS X", "27.2", flags));
+        }
+    }
+
     @Test void initializesPersistsReopensAndEnforcesReadonly() throws Exception {
         char[] password = "  密碼 with spaces  ".toCharArray();
         Main.initialize(vault, password);

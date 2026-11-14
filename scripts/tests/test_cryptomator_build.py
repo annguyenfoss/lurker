@@ -35,6 +35,13 @@ class DependencyLockTests(unittest.TestCase):
 
 
 class RuntimeLinkTests(unittest.TestCase):
+    def test_reviewed_native_mount_profiles_do_not_fall_back_to_network_or_macfuse(self):
+        self.assertEqual(BUILD.MOUNT_PROFILES["Darwin"], {
+            "provider": "org.cryptomator.frontend.fuse.mount.FuseTMountProvider",
+            "runtime": "fuse-t", "transport": "fskit", "minimum_os": "26.0",
+        })
+        self.assertEqual(BUILD.MOUNT_PROFILES["Linux"]["transport"], "fuse3")
+
     def test_traditional_jdk_uses_jmods(self):
         with tempfile.TemporaryDirectory(prefix="lurker-jdk-link-") as directory:
             root = Path(directory)

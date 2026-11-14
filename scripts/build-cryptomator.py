@@ -19,6 +19,12 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "native/folder/cryptomator"
+MOUNT_PROFILES = {
+    "Linux": {"provider": "org.cryptomator.frontend.fuse.mount.LinuxFuseMountProvider",
+              "runtime": "libfuse3", "transport": "fuse3"},
+    "Darwin": {"provider": "org.cryptomator.frontend.fuse.mount.FuseTMountProvider",
+               "runtime": "fuse-t", "transport": "fskit", "minimum_os": "26.0"},
+}
 
 
 def digest(path: Path) -> str:
@@ -124,6 +130,7 @@ exec "$LURKER_CRYPTOMATOR_ROOT/runtime/bin/java" \\
         manifest = {
             "schema": 1, "backend": "cryptomator", "protocol": 1,
             "os": platform.system(), "architecture": platform.machine(), "java": java_version,
+            "mount": MOUNT_PROFILES[platform.system()],
             "cryptofs": "2.8.0", "fuse_nio": "5.1.0", "helper_license": "AGPL-3.0-only",
             "sources": json.loads((SOURCE / "dependencies.lock.json").read_text()),
             "tests": test_summary,
