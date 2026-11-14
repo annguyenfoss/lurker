@@ -204,6 +204,15 @@ pub struct ActiveVolume {
     pub filesystem_type: Option<String>,
 }
 
+/// Administrator-authorized native BSD sessions. The private registry remains
+/// root-owned; login-user directory sessions are merged by the frontend.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NativeVolumeListResponse {
+    pub ok: bool,
+    pub volumes: Vec<ActiveVolume>,
+    pub error: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OperationResponse {
     pub ok: bool,

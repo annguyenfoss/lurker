@@ -1,4 +1,6 @@
-use lurker_core::{CommandAction, OperationResponse};
+use lurker_core::{
+    ActiveVolume, CommandAction, NativeVolumeListResponse, OperationResponse, PrivilegeMode,
+};
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -30,6 +32,70 @@ pub fn resolve_helper_path() -> Result<PathBuf, String> {
     find_executable("lurker-helper").ok_or_else(|| {
         "Failed to locate lurker-helper. Expected a sibling executable named `lurker-helper`, a PATH entry, or LURKER_HELPER_PATH.".into()
     })
+}
+
+/// BSD native sessions remain in a private root registry and are listed only
+/// through the same authorization boundary as native mount/unmount operations.
+pub fn list_desktop_volumes(helper_path: Option<&Path>) -> Result<Vec<ActiveVolume>, String> {
+    let local = lurker_core::list_active_volumes().map_err(|error| error.message)?;
+    if matches!(
+        std::env::consts::OS,
+        "freebsd" | "dragonfly" | "netbsd" | "openbsd"
+    ) {
+        let helper_path = helper_path.ok_or("Native volume listing requires lurker-helper.")?;
+        let native = list_native_from_helper(helper_path)?;
+        Ok(merge_native_and_user_volumes(local, native))
+    } else {
+        Ok(local)
+    }
+}
+
+fn merge_native_and_user_volumes(
+    local: Vec<ActiveVolume>,
+    native: Vec<ActiveVolume>,
+) -> Vec<ActiveVolume> {
+    // The administrator-authorized native namespace is global, as in the CLI.
+    // Folder records always come from the desktop's own login-user session.
+    local
+        .into_iter()
+        .filter(|volume| volume.privilege_mode == PrivilegeMode::Unprivileged)
+        .chain(
+            native
+                .into_iter()
+                .filter(|volume| volume.privilege_mode == PrivilegeMode::Privileged),
+        )
+        .collect()
+}
+
+fn list_native_from_helper(helper_path: &Path) -> Result<Vec<ActiveVolume>, String> {
+    let capabilities = Command::new(helper_path)
+        .arg("capabilities")
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("Failed to check helper listing capabilities: {error}"))?;
+    let values: serde_json::Value =
+        serde_json::from_slice(&capabilities.stdout).unwrap_or_default();
+    if !capabilities.status.success()
+        || values["protocol_version"] != 3
+        || values["native_volume_listing"] != 1
+        || values["trusted_privileged_tools"] != true
+        || values["noninteractive_sudo"] != true
+    {
+        return Err("Installed lurker-helper does not support authorized native volume listing. Update it together with the desktop app.".into());
+    }
+    let output = Command::new(helper_path)
+        .arg("list-native")
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("Failed to list native volumes through lurker-helper: {error}"))?;
+    let response: NativeVolumeListResponse = serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("Invalid native volume list from lurker-helper: {error}"))?;
+    if !output.status.success() || !response.ok {
+        return Err(response
+            .error
+            .unwrap_or_else(|| "Native volume listing failed.".into()));
+    }
+    Ok(response.volumes)
 }
 
 pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<OperationResponse, String> {
@@ -191,6 +257,87 @@ mod tests {
     // Parallel script creation and subprocess spawning can briefly inherit a
     // sibling fixture's writable descriptor before exec (ETXTBSY on Linux).
     static HELPER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn native_listing_requires_a_new_capability_and_preserves_authorization_errors() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let directory =
+            std::env::temp_dir().join(format!("lurker-native-list-helper-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(
+            &helper,
+            r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"trusted_privileged_tools":true,"noninteractive_sudo":true}'
+else
+  touch "${0}.ran"
+fi
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(list_native_from_helper(&helper)
+            .unwrap_err()
+            .contains("authorized native volume listing"));
+        assert!(!directory.join("helper.ran").exists());
+        fs::write(&helper, r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"trusted_privileged_tools":true,"noninteractive_sudo":true,"native_volume_listing":1}'
+else
+  printf '%s\n' '{"ok":false,"volumes":[],"error":"sudo: a password is required"}'
+fi
+"#).unwrap();
+        assert_eq!(
+            list_native_from_helper(&helper).unwrap_err(),
+            "sudo: a password is required"
+        );
+        fs::write(&helper, r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"trusted_privileged_tools":true,"noninteractive_sudo":true,"native_volume_listing":1}'
+else
+  printf '%s\n' '{"ok":true,"volumes":[],"error":null}'
+fi
+"#).unwrap();
+        assert!(list_native_from_helper(&helper).unwrap().is_empty());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn native_list_merge_uses_only_callers_folders_and_authorized_native_rows() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        fn row(name: &str, mode: PrivilegeMode) -> ActiveVolume {
+            ActiveVolume {
+                privilege_mode: mode,
+                source_path: Some(format!("/tmp/{name}").into()),
+                readonly: false,
+                mapper_name: name.into(),
+                mapper_path: format!("/tmp/{name}-device").into(),
+                mountpoint: Some(format!("/tmp/{name}-mount").into()),
+                filesystem_type: None,
+            }
+        }
+        let local = vec![
+            row("my-folder", PrivilegeMode::Unprivileged),
+            row("duplicate-native", PrivilegeMode::Privileged),
+        ];
+        let native = vec![
+            row("authorized-native", PrivilegeMode::Privileged),
+            row("root-folder-excluded", PrivilegeMode::Unprivileged),
+        ];
+        let merged = merge_native_and_user_volumes(local, native);
+        assert_eq!(
+            merged
+                .iter()
+                .map(|volume| volume.mapper_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["my-folder", "authorized-native"]
+        );
+    }
 
     #[test]
     #[cfg(any(

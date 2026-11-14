@@ -33,7 +33,7 @@ mod workflow;
 
 pub use api::{
     ActiveVolume, CommandAction, CreateCommand, KeyslotOperation, KeyslotsCommand, MountCommand,
-    OperationResponse, SystemProbe, ToolStatus, UnmountCommand,
+    NativeVolumeListResponse, OperationResponse, SystemProbe, ToolStatus, UnmountCommand,
 };
 pub use error::{AppError, AppResult};
 #[doc(hidden)]

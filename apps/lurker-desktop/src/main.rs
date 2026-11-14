@@ -3,12 +3,12 @@ mod helper;
 mod logic;
 
 use crate::devices::list_block_devices;
-use crate::helper::{resolve_helper_path, run_helper};
+use crate::helper::{list_desktop_volumes, resolve_helper_path, run_helper};
 use crate::logic::{
     build_create_command, build_keyslots_command, build_mount_command,
     build_unmount_command_for_volume, response_error, volume_rows,
 };
-use lurker_core::{list_active_volumes, ActiveVolume, CommandAction, PrivilegeMode};
+use lurker_core::{ActiveVolume, CommandAction, PrivilegeMode};
 use slint::{BackendSelector, ComponentHandle, ModelRc, Timer, VecModel, Weak};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -266,7 +266,7 @@ impl AppState {
         let store = Arc::clone(&self.active_volumes);
         let state = self.clone();
         thread::spawn(move || {
-            let result = list_active_volumes().map_err(|err| err.message);
+            let result = list_desktop_volumes(state.helper_path.as_deref());
             let _ = window.upgrade_in_event_loop(move |ui| match result {
                 Ok(volumes) => {
                     replace_active_volumes(&store, &ui, volumes);
@@ -353,7 +353,7 @@ impl AppState {
         thread::spawn(move || {
             let helper_result = run_helper(&helper_path, command);
             let refreshed_volumes = match &helper_result {
-                Ok(response) if response.ok => list_active_volumes().ok(),
+                Ok(response) if response.ok => Some(list_desktop_volumes(Some(&helper_path))),
                 _ => None,
             };
             state.operation_busy.store(false, Ordering::SeqCst);
@@ -374,8 +374,12 @@ impl AppState {
                                     .into(),
                             );
                         }
-                        if let Some(volumes) = refreshed_volumes {
-                            replace_active_volumes(&store, &ui, volumes);
+                        match refreshed_volumes {
+                            Some(Ok(volumes)) => replace_active_volumes(&store, &ui, volumes),
+                            Some(Err(message)) => {
+                                state.push_toast("err", "Volume refresh failed", &message)
+                            }
+                            None => {}
                         }
                         state.push_toast("ok", success_message, "");
                     }
@@ -642,6 +646,21 @@ mod tests {
             lurker_core::VolumeType::Raid1c,
             "mirror lifecycle has its own native suite"
         );
+        let uid = lurker_core::effective_uid();
+        if let Ok(expected) = std::env::var("LURKER_DESKTOP_NATIVE_EXPECT_UID") {
+            assert_eq!(uid, expected.parse::<u32>().expect("expected test uid"));
+        }
+        eprintln!(
+            "native GUI callback uid={uid} backend={format} helper={}",
+            helper.display()
+        );
+        if !backend.is_directory() && uid != 0 {
+            eprintln!(
+                "native authorization tools: pkexec={:?} sudo={:?}",
+                lurker_core::trusted_system_executable("pkexec"),
+                lurker_core::trusted_system_executable("sudo")
+            );
+        }
         let fixture = fixture_parent.join(format!("gui-{}", std::process::id()));
         std::fs::create_dir(&fixture).unwrap();
         let source = fixture.join("encrypted");
@@ -756,7 +775,7 @@ mod tests {
             unmount();
         }));
         // Clean up only a session whose listed source is this test's private fixture.
-        if let Ok(volumes) = lurker_core::list_active_volumes() {
+        if let Ok(volumes) = super::list_desktop_volumes(Some(&helper)) {
             if let Some(volume) = volumes
                 .iter()
                 .find(|volume| volume.source_path.as_ref() == Some(&source))

@@ -1,4 +1,6 @@
-use lurker_core::{run_buffered, CommandAction, OperationResponse, OutputEntry};
+use lurker_core::{
+    run_buffered, CommandAction, NativeVolumeListResponse, OperationResponse, OutputEntry,
+};
 use std::env;
 use std::io::{IsTerminal, Read, Write};
 use std::process::{Command, Output, Stdio};
@@ -26,6 +28,7 @@ fn run() -> i32 {
                 serde_json::json!({
                     "protocol_version": 3,
                     "directory_backends": true,
+                    "native_volume_listing": if native_listing_supported() { Some(1) } else { None },
                     "folder_supervision_protocol": 1,
                     "raid1c_members": cfg!(target_os = "openbsd"),
                     "noninteractive_sudo": !cfg!(target_os = "macos"),
@@ -55,6 +58,14 @@ fn run() -> i32 {
                 }
             }
         }
+        Some("list-native") if args.next().is_none() => {
+            let response = handle_native_list(as_root);
+            let mut stdout = std::io::stdout().lock();
+            let _ = serde_json::to_writer(&mut stdout, &response);
+            let _ = stdout.write_all(b"\n");
+            let _ = stdout.flush();
+            0
+        }
         Some("run") => {
             let response = handle_run(as_root);
             let mut stdout = std::io::stdout().lock();
@@ -64,10 +75,67 @@ fn run() -> i32 {
             0
         }
         _ => {
-            eprintln!("usage: lurker-helper [--as-root] run | capabilities");
+            eprintln!("usage: lurker-helper [--as-root] run | list-native | capabilities");
             64
         }
     }
+}
+
+fn native_listing_supported() -> bool {
+    cfg!(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))
+}
+
+fn native_list_error(message: impl Into<String>) -> NativeVolumeListResponse {
+    NativeVolumeListResponse {
+        ok: false,
+        volumes: Vec::new(),
+        error: Some(message.into()),
+    }
+}
+
+fn handle_native_list(as_root: bool) -> NativeVolumeListResponse {
+    if !native_listing_supported() {
+        return native_list_error("Authorized native listing is supported on BSD only.");
+    }
+    if is_root() {
+        return match lurker_core::list_active_volumes() {
+            Ok(volumes) => NativeVolumeListResponse {
+                ok: true,
+                volumes: volumes
+                    .into_iter()
+                    .filter(|volume| {
+                        volume.privilege_mode == lurker_core::PrivilegeMode::Privileged
+                    })
+                    .collect(),
+                error: None,
+            },
+            Err(error) => native_list_error(error.message),
+        };
+    }
+    if as_root {
+        return native_list_error("Authorized native listing requires an effective root identity.");
+    }
+    match rerun_native_list("pkexec") {
+        Ok(response) => response,
+        Err(pkexec_error) => match rerun_native_list("sudo") {
+            Ok(response) => response,
+            Err(sudo_error) => native_list_error(format!("{pkexec_error}\n\n{sudo_error}")),
+        },
+    }
+}
+
+fn rerun_native_list(program: &str) -> Result<NativeVolumeListResponse, String> {
+    let current_exe = env::current_exe()
+        .map_err(|error| format!("Failed to locate helper executable: {error}"))?;
+    let current_exe =
+        lurker_core::trusted_privileged_executable(&current_exe).map_err(|error| error.message)?;
+    let output = spawn_reexec_action(program, &current_exe, b"", "list-native")?;
+    decode_json_output(program, output)
 }
 
 fn handle_run(as_root: bool) -> OperationResponse {
@@ -148,8 +216,23 @@ fn spawn_reexec(
     current_exe: &std::path::Path,
     payload: &[u8],
 ) -> Result<Output, String> {
+    spawn_reexec_action(program, current_exe, payload, "run")
+}
+
+fn spawn_reexec_action(
+    program: &str,
+    current_exe: &std::path::Path,
+    payload: &[u8],
+    action: &str,
+) -> Result<Output, String> {
     let executable = lurker_core::trusted_system_executable(program).map_err(|e| e.message)?;
-    let mut command = reexec_command(&executable, program, current_exe, has_terminal_for_sudo());
+    let mut command = reexec_command(
+        &executable,
+        program,
+        current_exe,
+        has_terminal_for_sudo(),
+        action,
+    );
 
     let mut child = command
         .spawn()
@@ -179,6 +262,7 @@ fn reexec_command(
     program: &str,
     current_exe: &std::path::Path,
     terminal: bool,
+    action: &str,
 ) -> Command {
     let mut command = Command::new(executable);
     if program == "sudo" && !terminal {
@@ -187,7 +271,7 @@ fn reexec_command(
     command
         .arg(current_exe)
         .arg("--as-root")
-        .arg("run")
+        .arg(action)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
     if program == "sudo" && terminal {
@@ -199,6 +283,13 @@ fn reexec_command(
 }
 
 fn decode_reexec_output(program: &str, output: Output) -> Result<OperationResponse, String> {
+    decode_json_output(program, output)
+}
+
+fn decode_json_output<T: serde::de::DeserializeOwned>(
+    program: &str,
+    output: Output,
+) -> Result<T, String> {
     if output.stdout.is_empty() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         if stderr.is_empty() {
@@ -210,7 +301,7 @@ fn decode_reexec_output(program: &str, output: Output) -> Result<OperationRespon
         return Err(stderr);
     }
 
-    serde_json::from_slice::<OperationResponse>(&output.stdout)
+    serde_json::from_slice::<T>(&output.stdout)
         .map_err(|err| format!("Failed to decode privileged helper response from {program}: {err}"))
 }
 
@@ -248,6 +339,48 @@ mod tests {
     use std::os::unix::process::ExitStatusExt;
 
     #[test]
+    fn authorized_listing_reexec_uses_its_own_role_without_password_arguments() {
+        let command = reexec_command(
+            std::path::Path::new("/usr/bin/sudo"),
+            "sudo",
+            std::path::Path::new("/usr/libexec/lurker-helper"),
+            false,
+            "list-native",
+        );
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            vec![
+                "-n",
+                "/usr/libexec/lurker-helper",
+                "--as-root",
+                "list-native"
+            ]
+        );
+        assert!(
+            serde_json::from_slice::<NativeVolumeListResponse>(
+                br#"{"ok":true,"logs":[],"error":null}"#
+            )
+            .is_err(),
+            "an old operation response cannot silently mean an empty native list"
+        );
+        let response = native_list_error("authorization required");
+        assert!(!response.ok && response.volumes.is_empty());
+    }
+
+    #[test]
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    fn native_listing_is_unavailable_without_attempting_authorization_on_other_platforms() {
+        let response = handle_native_list(false);
+        assert!(!response.ok && response.volumes.is_empty());
+        assert!(response.error.unwrap().contains("BSD only"));
+    }
+
+    #[test]
     fn nonterminal_sudo_cannot_prompt_or_consume_a_password_from_json() {
         let helper = std::path::Path::new("/usr/libexec/lurker/lurker-helper");
         for (program, terminal, expected) in [
@@ -273,7 +406,7 @@ mod tests {
             ),
         ] {
             let executable = std::path::Path::new("/usr/bin").join(program);
-            let command = reexec_command(&executable, program, helper, terminal);
+            let command = reexec_command(&executable, program, helper, terminal, "run");
             assert_eq!(command.get_program(), executable);
             assert_eq!(command.get_args().collect::<Vec<_>>(), expected);
         }
