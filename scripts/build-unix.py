@@ -23,8 +23,26 @@ ROOT = Path(__file__).resolve().parents[1]
 def stager():
     spec = importlib.util.spec_from_file_location("lurker_unix_stager", ROOT / "scripts/stage-unix.py")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Execute the reviewed source directly; loading a generated pyc would also
+    # mutate an otherwise immutable deployed snapshot before verification.
+    exec(compile((ROOT / "scripts/stage-unix.py").read_bytes(), str(ROOT / "scripts/stage-unix.py"), "exec"), module.__dict__)
     return module
+
+
+def verify_immutable_source(source, metadata_path=None):
+    source.verify_clean_build_source()
+    if not source.manifest:
+        return
+    expected = set(source.manifest["files"])
+    allowed_metadata = set()
+    if metadata_path:
+        metadata = Path(metadata_path).resolve()
+        if metadata.is_relative_to(source.root):
+            allowed_metadata.add(str(metadata.relative_to(source.root)))
+    actual = {str(path.relative_to(source.root)) for path in source.root.rglob("*")
+              if path.is_file() or path.is_symlink()}
+    if actual - allowed_metadata != expected:
+        raise ValueError("deployed source contains unexpected/missing inputs; use a fresh immutable snapshot with build caches outside it")
 
 
 def supplied_artifacts(values, selected, system, module):
@@ -56,7 +74,8 @@ def native_key(source, system, prefixes, java_home=None):
     identity = {"os": system, "release": platform.release(), "architecture": platform.machine(),
                 "java_home": str(java_home or ""),
                 "environment": {key: os.environ.get(key, "") for key in
-                                ("CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "JAVA_HOME")}}
+                                ("CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "JAVA_HOME", "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR", "WX_CONFIG",
+                                 "GOOS", "GOARCH", "GOAMD64", "GOARM64", "GOFLAGS", "CGO_ENABLED")}}
     for tool in ("cc", "c++", "go"):
         try:
             probe = subprocess.run([tool, "version" if tool == "go" else "--version"],
@@ -89,7 +108,7 @@ def recipe(args, system, selected, artifacts, cache, work, module):
     stages = []
     cargo_target = Path(os.environ.get("CARGO_TARGET_DIR", str(cache / "cargo"))).expanduser().absolute()
     binaries = cargo_target / "release"
-    build = ["cargo", "build", "--release", "--jobs", str(args.jobs), "--target-dir", str(cargo_target),
+    build = ["cargo", "build", "--locked", "--release", "--jobs", str(args.jobs), "--target-dir", str(cargo_target),
              "-p", "lurker-cli", "-p", "lurker-helper"]
     if not args.cli_only:
         build += ["-p", "lurker-desktop"]
@@ -244,7 +263,7 @@ def main():
         if any(system not in module.ALLOW.get(name, ()) for name in selected):
             raise ValueError("selected backend is outside the locked scope for this OS")
         source = module.Source(ROOT, args.source_commit, args.source_manifest)
-        source.verify_clean_build_source()
+        verify_immutable_source(source, args.source_manifest)
         args.output = args.output.expanduser().absolute()
         if args.output.exists() or args.output.is_symlink():
             raise ValueError("package output must not exist")

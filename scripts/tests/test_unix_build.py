@@ -31,6 +31,7 @@ class UnixBuild(unittest.TestCase):
     def test_default_package_builds_both_products_and_records_exact_commit(self):
         stages = dict(self.recipe("NetBSD", {"cgd"}))
         self.assertIn("lurker-desktop", stages["rust-build"])
+        self.assertIn("--locked", stages["rust-build"])
         self.assertIn("--desktop", stages["rust-provenance"])
         self.assertIn("--desktop", stages["package"])
         for name in ("rust-provenance", "package"):
@@ -85,6 +86,25 @@ class UnixBuild(unittest.TestCase):
         stages = dict(self.recipe("OpenBSD", {"softraid"}))
         for name in ("rust-provenance", "package"):
             self.assertIn(str(self.args.source_manifest), stages[name])
+
+    def test_manifest_snapshot_rejects_untracked_cargo_configuration(self):
+        source = mock.Mock(root=self.root, manifest={"files": {"Cargo.toml": {}}})
+        (self.root / "Cargo.toml").write_text("reviewed manifest")
+        builder.verify_immutable_source(source)
+        (self.root / ".cargo").mkdir()
+        (self.root / ".cargo/config.toml").write_text("untracked build override")
+        with self.assertRaisesRegex(ValueError, "unexpected/missing inputs"):
+            builder.verify_immutable_source(source)
+
+    def test_native_cache_distinguishes_go_cross_targets(self):
+        source = mock.Mock(manifest={"files": {}}, commit="a" * 40)
+        version = mock.Mock(returncode=0, stdout="same compiler version", stderr="")
+        with mock.patch.object(builder.subprocess, "run", return_value=version):
+            with mock.patch.dict(builder.os.environ, {"GOOS": "linux", "GOARCH": "amd64"}, clear=True):
+                linux = builder.native_key(source, "Linux", [])
+            with mock.patch.dict(builder.os.environ, {"GOOS": "freebsd", "GOARCH": "amd64"}, clear=True):
+                freebsd = builder.native_key(source, "Linux", [])
+        self.assertNotEqual(linux, freebsd)
 
     def test_failed_stage_stops_and_retains_source_identity(self):
         work = self.root / "work"
