@@ -182,6 +182,31 @@ def veracrypt_fuse_runtime(provenance):
     return runtime
 
 
+def verify_manifest_files(root, files):
+    """Check digest-bound payload paths before following any private dependency."""
+    root = Path(root).resolve(strict=True)
+    for relative, expected in files.items():
+        path = root / relative
+        if (Path(relative).is_absolute() or ".." in Path(relative).parts
+                or not path.resolve(strict=True).is_relative_to(root) or sha256(path) != expected):
+            raise RuntimeError(f"Private backend provenance mismatch: {relative}")
+
+
+def verify_veracrypt_manifest(root, provenance, project_root):
+    runtime = veracrypt_fuse_runtime(provenance)
+    expected = {name: {"url": spec[0], "sha256": spec[1]} for name, spec in SOURCES.items()}
+    patch_name = "native/veracrypt/utf8-console.patch"
+    if (provenance.get("veracrypt_revision") != VC_REVISION
+            or provenance.get("source_archives") != expected
+            or provenance.get("patches") != {patch_name: sha256(Path(project_root) / patch_name)}):
+        raise RuntimeError("Private VeraCrypt manifest differs from the current reviewed source/patch pins")
+    artifacts = provenance.get("artifacts", {})
+    if "lurker-veracrypt" not in artifacts:
+        raise RuntimeError("Private backend manifest does not cover lurker-veracrypt")
+    verify_manifest_files(root, artifacts)
+    return runtime
+
+
 def minimum_version(binary):
     info = run("xcrun", "vtool", "-show-build", binary, capture=True)
     versions = re.findall(r"\bminos\s+([\d.]+)", info)

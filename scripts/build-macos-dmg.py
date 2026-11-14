@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 
-from macos_backend import architectures, veracrypt_fuse_runtime, minimum_version, sha256, stage_macho
+from macos_backend import architectures, verify_veracrypt_manifest, minimum_version, sha256, stage_macho
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -91,13 +91,7 @@ def main():
     if not provenance_file.is_file():
         raise SystemExit("Build the private backend first: python scripts/build-macos-backends.py")
     provenance = json.loads(provenance_file.read_text())
-    selected_fuse = veracrypt_fuse_runtime(provenance)
-    if "lurker-veracrypt" not in provenance.get("artifacts", {}):
-        raise SystemExit("Private backend manifest does not cover lurker-veracrypt.")
-    for name, digest in provenance["artifacts"].items():
-        path = backend_root / name
-        if Path(name).is_absolute() or ".." in Path(name).parts or sha256(path) != digest:
-            raise SystemExit(f"Private backend provenance mismatch: {name}")
+    selected_fuse = verify_veracrypt_manifest(backend_root, provenance, ROOT)
     output = ROOT / "dist"
     output.mkdir(exist_ok=True)
     name = f"Lurker-{version}-macos-{architecture}.dmg"

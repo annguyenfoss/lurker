@@ -36,6 +36,26 @@ class MacBackendTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "VeraCrypt requires FUSE-T"):
                 backend.veracrypt_fuse_runtime(manifest)
 
+    def test_veracrypt_package_rejects_stale_pins_and_escaping_artifacts(self):
+        import copy
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "lurker-veracrypt").write_bytes(b"private")
+            patch_name = "native/veracrypt/utf8-console.patch"
+            project_root = Path(__file__).parents[2]
+            manifest = {"fuse_runtime": {"implementation": "fuse-t"},
+                        "veracrypt_revision": backend.VC_REVISION,
+                        "source_archives": {n: {"url": s[0], "sha256": s[1]} for n, s in backend.SOURCES.items()},
+                        "patches": {patch_name: backend.sha256(project_root / patch_name)},
+                        "artifacts": {"lurker-veracrypt": backend.sha256(root / "lurker-veracrypt")}}
+            self.assertEqual(backend.verify_veracrypt_manifest(root, manifest, project_root), "fuse-t")
+            old = copy.deepcopy(manifest); old["veracrypt_revision"] = "old"
+            with self.assertRaisesRegex(RuntimeError, "reviewed source/patch"):
+                backend.verify_veracrypt_manifest(root, old, project_root)
+            escaped = copy.deepcopy(manifest); escaped["artifacts"]["../outside"] = "unused"
+            with self.assertRaisesRegex(RuntimeError, "provenance mismatch"):
+                backend.verify_veracrypt_manifest(root, escaped, project_root)
+
     def test_external_runtime_rejects_user_writable_ancestors(self):
         with tempfile.TemporaryDirectory() as temporary:
             library = Path(temporary) / "library.dylib"
