@@ -715,7 +715,25 @@ where
             }
 
             let source = PathBuf::from(&action_args[0]);
-            let source_kind = path_source_kind(&source).ok_or_else(|| ParseFailure {
+            let source_kind = if volume_type == VolumeType::Raid1c {
+                // A missing logical primary can identify an existing mirrored
+                // array through its descriptor and explicit surviving peer.
+                // lstat distinguishes an absent entry from a dangling symlink.
+                match fs::symlink_metadata(&source) {
+                    Ok(metadata) if metadata.file_type().is_file() => Some(SourceKind::File),
+                    Err(err)
+                        if err.kind() == std::io::ErrorKind::NotFound
+                            && allow_degraded
+                            && peer_sources.len() == 1 =>
+                    {
+                        Some(SourceKind::File)
+                    }
+                    _ => None,
+                }
+            } else {
+                path_source_kind(&source)
+            };
+            let source_kind = source_kind.ok_or_else(|| ParseFailure {
                 message: Some(format!(
                     "Source does not exist or is not a regular file, directory or supported device: {}",
                     source.display()
@@ -1143,6 +1161,88 @@ mod tests {
                 "{args:?}"
             );
         }
+    }
+
+    #[test]
+    fn raid1c_degraded_mount_accepts_absent_primary_but_rejects_invalid_entries() {
+        use std::fs;
+        use std::os::unix::fs::symlink;
+        use std::time::{SystemTime, UNIX_EPOCH};
+        struct Fixture(std::path::PathBuf);
+        impl Drop for Fixture {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let fixture = Fixture(
+            std::env::temp_dir().join(format!("lurker-cli-raid1c-{}-{nonce}", std::process::id())),
+        );
+        fs::create_dir(&fixture.0).unwrap();
+        let missing = fixture.0.join("missing-primary.img");
+        let peer = fixture.0.join("surviving-peer.img");
+        let mountpoint = fixture.0.join("mount");
+        let link = fixture.0.join("dangling-link.img");
+        fs::write(&peer, b"fixture only; no native storage operations").unwrap();
+        fs::create_dir(&mountpoint).unwrap();
+        symlink(&missing, &link).unwrap();
+        let parse = |source: &std::path::Path, flags: &[&str], with_peer: bool| {
+            let mut args = vec![OsString::from("lurker"), "mount".into()];
+            args.extend(flags.iter().map(OsString::from));
+            if with_peer {
+                args.extend([OsString::from("--member"), peer.clone().into_os_string()]);
+            }
+            args.extend([
+                source.as_os_str().to_owned(),
+                mountpoint.as_os_str().to_owned(),
+            ]);
+            super::parse_args_for_platform(args, "openbsd")
+        };
+        let ParseOutcome::Run(cli) =
+            parse(&missing, &["--type=raid1c", "--degraded"], true).unwrap()
+        else {
+            panic!()
+        };
+        let CommandAction::Mount(c) = cli.command else {
+            panic!()
+        };
+        assert_eq!(c.source, missing);
+        assert_eq!(c.peer_sources, vec![peer.clone()]);
+        assert!(c.allow_degraded);
+        // Auto + member is normalized before the missing-source exception.
+        assert!(parse(&missing, &["--degraded"], true).is_ok());
+        assert!(parse(&missing, &["--type=raid1c"], true).is_err());
+        assert!(parse(&missing, &["--type=raid1c", "--degraded"], false).is_err());
+        assert!(parse(&missing, &["--type=softraid"], false).is_err());
+        assert!(parse(&missing, &["--type=veracrypt"], false).is_err());
+        assert!(parse(&link, &["--type=raid1c", "--degraded"], true).is_err());
+        fs::remove_file(&link).unwrap();
+        symlink(&peer, &link).unwrap();
+        assert!(parse(&link, &["--type=raid1c", "--degraded"], true).is_err());
+        assert!(parse(&mountpoint, &["--type=raid1c", "--degraded"], true).is_err());
+        assert!(parse(
+            std::path::Path::new("/dev/null"),
+            &["--type=raid1c", "--degraded"],
+            true
+        )
+        .is_err());
+        let args = [
+            OsString::from("lurker"),
+            "unmount".into(),
+            "--type=raid1c".into(),
+            missing.as_os_str().to_owned(),
+        ];
+        let ParseOutcome::Run(cli) = super::parse_args_for_platform(args, "openbsd").unwrap()
+        else {
+            panic!()
+        };
+        let CommandAction::Unmount(c) = cli.command else {
+            panic!()
+        };
+        assert_eq!(c.target, missing);
     }
 
     #[test]
