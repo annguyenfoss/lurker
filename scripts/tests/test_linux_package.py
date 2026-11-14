@@ -44,6 +44,20 @@ class ReclaimPolicy(unittest.TestCase):
             self.assertEqual([], runner.reclaim_passed_image(self.result, self.job))
             self.assertTrue(self.image.exists())
 
+    def test_directory_backend_keeps_ciphertext_and_its_intentional_alias(self):
+        self.image.unlink()
+        self.image.mkdir()
+        ciphertext = self.image / "encrypted-block"
+        ciphertext.write_bytes(b"retained ciphertext")
+        alias = self.root / "source alias"
+        alias.symlink_to(self.image, target_is_directory=True)
+        for backend in ("gocryptfs", "cryfs", "cryptomator"):
+            with self.subTest(backend=backend):
+                self.result["backend"] = backend
+                self.assertEqual([], runner.reclaim_passed_image(self.result, self.job))
+                self.assertEqual(b"retained ciphertext", ciphertext.read_bytes())
+                self.assertTrue(alias.is_symlink())
+
     def test_unexpected_fixture_parent_is_refused(self):
         with self.assertRaisesRegex(ValueError, "Unexpected conformance fixture"):
             runner.reclaim_passed_image(self.result, self.job.parent)

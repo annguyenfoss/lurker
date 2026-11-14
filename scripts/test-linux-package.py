@@ -52,6 +52,10 @@ def reclaim_passed_image(result, job):
         raise ValueError("Unexpected conformance fixture; refusing cleanup")
     if result["status"] != "passed" or result["mount_present"]:
         return []
+    # Directory suites deliberately create a symlink alias. They have no large
+    # container image to reclaim; retain their ciphertext and alias as evidence.
+    if result.get("backend") in {"gocryptfs", "cryfs", "cryptomator"}:
+        return []
     mounts = Path("/proc/self/mountinfo").read_text()
     if str(root) + "/" in mounts:
         raise ValueError("Passed fixture still owns a native mount; retained")
