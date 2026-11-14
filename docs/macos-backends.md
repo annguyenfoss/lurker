@@ -12,22 +12,22 @@ in libc++ volume listings; its digest and patched input hashes are recorded and
 checked on cache reuse. It changes no encryption or storage format.
 
 Build on a Mac using the user's Rust and Python toolchains, Xcode command-line
-tools, GNU-compatible make and pkg-config. Install the selected FUSE separately,
-including its development headers for building. The default is macFUSE; the
-previous FUSE-T route requires an explicit selection. The build never installs FUSE or changes
-system permissions:
+tools, GNU-compatible make and pkg-config. VeraCrypt uses separately installed
+FUSE-T and its development headers exclusively. macFUSE is reserved for
+gocryptfs/CryFS; Cryptomator requires a qualified FUSE-T or native provider.
+The build never installs FUSE or changes system permissions:
 
 ```bash
-python scripts/build-macos-backends.py --fuse-runtime macfuse --jobs 4
+python scripts/build-macos-backends.py --jobs 4
 python scripts/build-macos-dmg.py
 ```
 
-Use `--fuse-runtime fuse-t` only for that distinct runtime. The build sets both
-native FUSE-selection variables explicitly, keeps separate VeraCrypt object
-trees per runtime and shares only the matching wx build. The manifest records
-the runtime implementation and version separately from its FUSE API version
-(for example macFUSE 5.5.0 implements API 2.9.9). Changing a runtime never
-recertifies an old binary or substitutes the other runtime's dylib.
+`--fuse-runtime fuse-t` is accepted explicitly; macFUSE selection is rejected.
+The build records both FUSE-selection flags, runtime implementation/version and
+FUSE API version. Verified source, patched inputs and build specifications keep
+old native objects from being recertified under different inputs. The packager
+rejects a macFUSE VeraCrypt manifest, while its generic dependency auditor still
+supports macFUSE for the directory engines.
 
 After building directory backends into `target/release/backends`, include them
 explicitly with `--folder-backends gocryptfs cryfs cryptomator`. The packager
@@ -71,7 +71,7 @@ Use only disposable `/tmp/lurker-*` files for native tests:
 TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 ```
 
-Baseline development evidence before macFUSE qualification, macOS 27.2.1 arm64 / SDK 27.2:
+Baseline development evidence before current FUSE-T qualification, macOS 27.2.1 arm64 / SDK 27.2:
 
 - The app/DMG builds, nested signatures and dependency checks pass; the packaged
   private VeraCrypt, gocryptfs and Java helper start without external Go/Java/
@@ -85,7 +85,7 @@ Baseline development evidence before macFUSE qualification, macOS 27.2.1 arm64 /
   does not establish reliable create/mount behavior across sizes or load.
 - gocryptfs requires macFUSE, absent on that host. CryFS/FUSE-T cannot enable
   SQLite WAL; Cryptomator's experimental upstream FUSE-T provider also failed WAL.
-  Cryptomator uses its macFUSE provider in production. These directory backends
-  still need native application/lifecycle qualification with compatible macFUSE.
+  These directory backends still need native application/lifecycle qualification
+  with the backend-specific runtime required above.
 
 These are development results, not a full macOS support or public-release claim.

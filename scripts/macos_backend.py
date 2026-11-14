@@ -174,6 +174,14 @@ def manifest_fuse_runtime(provenance):
     return runtime
 
 
+def veracrypt_fuse_runtime(provenance):
+    """VeraCrypt has one approved macOS runtime; other engines differ."""
+    runtime = manifest_fuse_runtime(provenance)
+    if runtime != "fuse-t":
+        raise RuntimeError("macOS VeraCrypt requires FUSE-T; macFUSE is reserved for directory backends")
+    return runtime
+
+
 def minimum_version(binary):
     info = run("xcrun", "vtool", "-show-build", binary, capture=True)
     versions = re.findall(r"\bminos\s+([\d.]+)", info)

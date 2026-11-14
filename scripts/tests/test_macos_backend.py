@@ -29,6 +29,13 @@ class MacBackendTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "one supported"):
             backend.manifest_fuse_runtime({"external_libraries": ["/usr/local/lib/libfuse-t.dylib", "/usr/local/lib/libfuse.2.dylib"]})
 
+    def test_veracrypt_manifest_rejects_macfuse_even_though_folder_staging_supports_it(self):
+        self.assertEqual(backend.veracrypt_fuse_runtime({"fuse_runtime": {"implementation": "fuse-t"}}), "fuse-t")
+        for manifest in [{"fuse_runtime": {"implementation": "macfuse"}},
+                         {"external_libraries": ["/usr/local/lib/libfuse.2.dylib"]}]:
+            with self.assertRaisesRegex(RuntimeError, "VeraCrypt requires FUSE-T"):
+                backend.veracrypt_fuse_runtime(manifest)
+
     def test_external_runtime_rejects_user_writable_ancestors(self):
         with tempfile.TemporaryDirectory() as temporary:
             library = Path(temporary) / "library.dylib"

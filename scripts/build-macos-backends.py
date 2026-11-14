@@ -19,8 +19,8 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=ROOT / "target/release/macos-backends")
     parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 2))
     parser.add_argument("--offline", action="store_true")
-    parser.add_argument("--fuse-runtime", choices=sorted(FUSE_RUNTIMES), default="macfuse",
-                        help="External runtime to link against; defaults to macFUSE")
+    parser.add_argument("--fuse-runtime", choices=["fuse-t"], default="fuse-t",
+                        help="VeraCrypt requires separately installed FUSE-T")
     args = parser.parse_args()
     if sys.platform != "darwin" or os.geteuid() == 0:
         parser.error("Build on macOS as the login user, without sudo.")
