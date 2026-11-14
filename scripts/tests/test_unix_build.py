@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 import platform
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -143,6 +145,43 @@ class UnixBuild(unittest.TestCase):
         self.assertEqual(result["source_commit"], "b" * 40)
         self.assertTrue((work / "result.json").is_file())
         self.assertFalse((work / "result.json.tmp").exists())
+
+    def test_missing_executable_records_terminal_failure(self):
+        work = self.root / "missing-tool"
+        work.mkdir()
+        with mock.patch.object(builder.subprocess, "Popen", side_effect=FileNotFoundError("missing compiler")):
+            result = builder.execute([("compile", ["missing-compiler"])], work, 1, "a" * 40)
+        self.assertEqual("failed", result["status"])
+        self.assertEqual(127, result["stages"][0]["exit_code"])
+        self.assertEqual("failed", json.loads((work / "result.json").read_text())["status"])
+
+    def test_disk_floor_prevents_launch_and_preserves_a_result(self):
+        work = self.root / "disk-floor"
+        work.mkdir()
+        with mock.patch.object(builder.shutil, "disk_usage", return_value=mock.Mock(free=0)), mock.patch.object(builder.subprocess, "Popen") as launch:
+            result = builder.execute([("compile", ["compiler"])], work, 1, "a" * 40, minimum_free_bytes=1)
+        launch.assert_not_called()
+        self.assertEqual("resource-stop", result["stages"][0]["status"])
+        self.assertTrue((work / "result.json").is_file())
+
+    def test_real_timeout_terminates_only_the_spawned_build_group(self):
+        work = self.root / "timeout"
+        work.mkdir()
+        result = builder.execute([("compile", [sys.executable, "-c", "import time;time.sleep(60)"])], work, 0.05, "a" * 40)
+        self.assertEqual("timeout", result["stages"][0]["status"])
+        self.assertEqual(124, result["stages"][0]["exit_code"])
+
+    def test_interrupt_terminates_owned_child_and_records_cancelled(self):
+        work = self.root / "interrupted"
+        work.mkdir()
+        child = mock.Mock(pid=987654321)
+        child.poll.return_value = None
+        child.wait.side_effect = [KeyboardInterrupt(), 0]
+        with mock.patch.object(builder.subprocess, "Popen", return_value=child), mock.patch.object(builder.os, "killpg") as kill:
+            result = builder.execute([("compile", ["compiler"])], work, 1, "a" * 40)
+        kill.assert_called_once_with(child.pid, builder.signal.SIGTERM)
+        self.assertEqual("cancelled", result["status"])
+        self.assertEqual(130, result["stages"][0]["exit_code"])
 
     def test_prerequisites_report_missing_tools_before_expensive_builds(self):
         stages = self.recipe("Linux", {"veracrypt", "cryfs"})

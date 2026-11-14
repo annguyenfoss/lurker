@@ -185,31 +185,81 @@ def recipe(args, system, selected, artifacts, cache, work, module):
     return stages
 
 
-def execute(stages, work, timeout, commit):
+def stop_child(process):
+    # A live/unreaped direct child reserves this process-group ID. Never signal
+    # a saved PID from another invocation or a process already reaped by poll.
+    if process is None or process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+
+
+def execute(stages, work, timeout, commit, minimum_free_bytes=0, resource_paths=None):
     result = {"schema": 1, "source_commit": commit, "status": "running", "stages": []}
+    paths = resource_paths or [work]
     for name, command in stages:
         log = work / (name + ".log")
         started = time.monotonic()
+        process = None
+        status, diagnostic = "passed", None
         with log.open("xb") as output:
             try:
-                process = subprocess.Popen(command, cwd=ROOT, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
-                code = process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                # The direct child is unreaped, so its process-group ID cannot
-                # have been reused. Terminate only this build's descendants.
-                try:
-                    os.killpg(process.pid, signal.SIGTERM)
-                    time.sleep(1)
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                process.wait()
-                code = 124
-        result["stages"].append({"name": name, "exit_code": code,
-                                 "seconds": round(time.monotonic() - started, 2), "log": str(log)})
-        result["status"] = "failed" if code else "running"
+                if any(shutil.disk_usage(path).free < minimum_free_bytes for path in paths):
+                    status, code = "resource-stop", 70
+                    diagnostic = "Build filesystem is below the configured free-space floor"
+                else:
+                    process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
+                                               stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+                    deadline = time.monotonic() + timeout
+                    while True:
+                        if any(shutil.disk_usage(path).free < minimum_free_bytes for path in paths):
+                            stop_child(process)
+                            status, code = "resource-stop", 70
+                            diagnostic = "Build filesystem crossed the configured free-space floor"
+                            break
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            stop_child(process)
+                            status, code = "timeout", 124
+                            break
+                        try:
+                            code = process.wait(timeout=min(0.5, remaining))
+                            if code:
+                                status = "failed"
+                            break
+                        except subprocess.TimeoutExpired:
+                            continue
+            except KeyboardInterrupt:
+                stop_child(process)
+                status, code, diagnostic = "cancelled", 130, "Build interrupted"
+            except OSError as error:
+                stop_child(process)
+                status, code, diagnostic = "failed", 127, str(error)
+            if diagnostic:
+                output.write((diagnostic + "\n").encode())
+        log_digest = hashlib.sha256()
+        with log.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                log_digest.update(chunk)
+        stage = {"name": name, "status": status, "exit_code": code,
+                 "seconds": round(time.monotonic() - started, 2), "log": str(log),
+                 "log_sha256": log_digest.hexdigest()}
+        if diagnostic:
+            stage["diagnostic"] = diagnostic
+        result["stages"].append(stage)
+        result["status"] = "cancelled" if code == 130 else ("failed" if code else "running")
         write_result(work, result)
-        print(json.dumps(result["stages"][-1]), flush=True)
+        print(json.dumps(stage), flush=True)
         if code:
             return result
     result["status"] = "built"
@@ -275,14 +325,16 @@ def main():
     parser.add_argument("--maven", default="mvn")
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--stage-timeout", type=int, default=3600)
+    parser.add_argument("--minimum-free-mib", type=int, default=512,
+                        help="stop owned build processes before a build filesystem drops below this floor")
     args = parser.parse_args()
     module = stager()
     try:
         system = platform.system()
         if system not in module.SUPPORTED or os.geteuid() == 0:
             raise ValueError("Build natively on Linux or a supported BSD as the login user, without sudo")
-        if args.jobs < 1 or args.stage_timeout < 1:
-            raise ValueError("worker count and stage timeout must be positive")
+        if args.jobs < 1 or args.stage_timeout < 1 or args.minimum_free_mib < 1:
+            raise ValueError("worker count, stage timeout and free-space floor must be positive")
         selected = set(args.select) or {name for name, systems in module.ALLOW.items() if system in systems}
         if any(system not in module.ALLOW.get(name, ()) for name in selected):
             raise ValueError("selected backend is outside the locked scope for this OS")
@@ -317,13 +369,17 @@ def main():
                                                         "work": str(work)}) + "\n")
             stages = recipe(args, system, selected, artifacts, cache, work, module)
             prerequisites(stages, args)
-            result = execute(stages, work, args.stage_timeout, args.source_commit)
+            cargo_target = Path(os.environ.get("CARGO_TARGET_DIR", str(cache / "cargo"))).expanduser().absolute()
+            cargo_target.mkdir(parents=True, exist_ok=True)
+            result = execute(stages, work, args.stage_timeout, args.source_commit,
+                             minimum_free_bytes=args.minimum_free_mib * 1024 * 1024,
+                             resource_paths=[work, cargo_target])
         finally:
             (lock / "owner.json").unlink(missing_ok=True)
             lock.rmdir()
         print(json.dumps({"status": result["status"], "source_commit": args.source_commit,
                           "output": str(args.output), "result": str(work / "result.json")}))
-        return 0 if result["status"] == "built" else 1
+        return 0 if result["status"] == "built" else (130 if result["status"] == "cancelled" else 1)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(json.dumps({"status": "blocked", "error": str(error)}), file=sys.stderr)
         return 2
