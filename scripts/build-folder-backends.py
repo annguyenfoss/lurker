@@ -186,6 +186,28 @@ def patched_source(name: str, pristine: Path, cache: Path, log) -> tuple[Path, d
         return worktree, identities
 
 
+def stage_macos_cryfs(binary: Path, output: Path) -> dict:
+    """Keep compiler libraries private and leave only genuine macFUSE external."""
+    from macos_backend import fuse_runtime_info, sha256 as native_digest, stage_macho
+    destination, libraries = output / "cryfs", output / "cryfs-libs"
+    if destination.exists() or libraries.exists():
+        raise RuntimeError("macOS CryFS output already exists; choose a fresh output directory")
+    with tempfile.TemporaryDirectory(prefix=".cryfs-stage-", dir=output) as temporary:
+        root = Path(temporary)
+        targets, external = stage_macho(binary, root / "cryfs", root / "cryfs-libs",
+                                       platform.machine(), fuse_runtime="macfuse")
+        for target in reversed(targets):
+            subprocess.run(["codesign", "--force", "--sign", "-", str(target)], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        # Publish the manifest only after every library and executable is ready.
+        (root / "cryfs-libs").rename(libraries)
+        (root / "cryfs").rename(destination)
+    return {"fuse_runtime": fuse_runtime_info("macfuse"),
+            "external_libraries": external,
+            "private_libraries": {str(path.relative_to(output)): native_digest(path)
+                                  for path in sorted(libraries.iterdir()) if path.is_file()}}
+
+
 def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
     url, revision, version = PINS[name]
     logpath = cache / f"{name}.log"
@@ -193,6 +215,7 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         pristine = source(name, cache, log)
         src, patches = patched_source(name, pristine, cache, log)
         env = os.environ.copy()
+        native_manifest = {}
         env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(jobs)
         if name == "gocryptfs":
             if not shutil.which("go"):
@@ -231,7 +254,10 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
                          "-o", "&:build_tests=False", "-o", "&:update_checks=False",
                          "--lockfile", str(lock)] + build_options, src, log, env)
             binary = src / "build/Release/src/cryfs-cli/cryfs"
-            shutil.copy2(binary, output / name)
+            if platform.system() == "Darwin":
+                native_manifest = stage_macos_cryfs(binary, output)
+            else:
+                shutil.copy2(binary, output / name)
             run([str(output / name), "--version"], src, log, env)
             toolchain = capture(["cmake", "--version"], src).splitlines()[0]
             license_paths = [src / "LICENSE.txt"]
@@ -286,7 +312,7 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
                 "dependency_identities": dependencies,
                 "license_files": {str(path.relative_to(license_dir)): sha256(path)
                                   for path in sorted(license_dir.rglob("*")) if path.is_file()},
-                "native_dependencies": native_dependencies, "log": str(logpath)}
+                "native_dependencies": native_dependencies, "log": str(logpath), **native_manifest}
 
 
 def main() -> int:

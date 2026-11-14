@@ -36,6 +36,9 @@ libc++/range-v3 compatibility, recording both patch digests. This patch preserve
 the ordinary `fuse` ABI and requires separately installed macFUSE; the older
 experimental FUSE-T patch is not a production CryFS input. `--jobs` bounds Go,
 Conan and CMake build parallelism, including dependency compilation.
+The macOS CryFS artifact stores compiler dylibs beside it in `cryfs-libs/` with
+relative loader paths and hashes in `private_libraries`; only macFUSE remains
+external. Ship this closure together or restage it through the DMG builder.
 
 FreeBSD's Go FUSE route needs the base `fusefs` kernel module, access to
 `/dev/fuse`, `/sbin/mount_fusefs` and native permission for user mounts. Its CLI

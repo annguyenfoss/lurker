@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import subprocess
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("folder_build", Path(__file__).parents[1] / "build-folder-backends.py")
@@ -64,6 +65,38 @@ class PlatformPatchTests(unittest.TestCase):
         self.assertNotIn("fuse-t", compiler)
         self.assertNotIn("src/fspp/fuse/CMakeLists.txt", compiler)
         self.assertEqual(BUILD.selected_patches("gocryptfs", "Darwin"), [])
+
+
+class MacStagingTests(unittest.TestCase):
+    def test_failed_signing_does_not_publish_private_code(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def stage(binary, destination, libraries, architecture, *, fuse_runtime):
+                self.assertEqual(fuse_runtime, "macfuse")
+                libraries.mkdir()
+                destination.write_bytes(b"executable")
+                library = libraries / "libomp.dylib"
+                library.write_bytes(b"library")
+                return [destination, library], ["/usr/local/lib/libfuse.2.dylib"]
+            module = SimpleNamespace(stage_macho=stage, fuse_runtime_info=lambda _: {}, sha256=BUILD.sha256)
+            with patch.dict("sys.modules", {"macos_backend": module}), patch.object(
+                    BUILD.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "codesign")):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    BUILD.stage_macos_cryfs(root / "input", root)
+            self.assertFalse((root / "cryfs").exists())
+            self.assertFalse((root / "cryfs-libs").exists())
+            self.assertFalse(list(root.glob(".cryfs-stage-*")))
+
+    def test_existing_macos_artifact_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "cryfs"
+            binary.write_bytes(b"previous artifact")
+            module = SimpleNamespace(stage_macho=None, fuse_runtime_info=None, sha256=None)
+            with patch.dict("sys.modules", {"macos_backend": module}):
+                with self.assertRaisesRegex(RuntimeError, "already exists"):
+                    BUILD.stage_macos_cryfs(root / "input", root)
+            self.assertEqual(binary.read_bytes(), b"previous artifact")
 
 
 class PatchedSourceTests(unittest.TestCase):
