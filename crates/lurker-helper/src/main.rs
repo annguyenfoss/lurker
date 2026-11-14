@@ -23,6 +23,7 @@ fn run() -> i32 {
                 serde_json::json!({
                     "protocol_version": 3,
                     "directory_backends": true,
+                    "noninteractive_sudo": !cfg!(target_os = "macos"),
                     "trusted_privileged_tools": !cfg!(target_os = "macos"),
                     "unprivileged_veracrypt": cfg!(target_os = "linux"),
                     "userspace_backend_protocol": if cfg!(target_os = "linux") { Some(3) } else { None },
@@ -92,16 +93,10 @@ fn run_direct(payload: &[u8]) -> OperationResponse {
 fn rerun_with_elevation(payload: &[u8]) -> OperationResponse {
     match rerun_with_pkexec(payload) {
         Ok(response) => response,
-        Err(pkexec_error) => {
-            if !has_terminal_for_sudo() {
-                return operation_error(pkexec_error);
-            }
-
-            match rerun_with_sudo(payload) {
-                Ok(response) => response,
-                Err(sudo_error) => operation_error(format!("{pkexec_error}\n\n{sudo_error}")),
-            }
-        }
+        Err(pkexec_error) => match rerun_with_sudo(payload) {
+            Ok(response) => response,
+            Err(sudo_error) => operation_error(format!("{pkexec_error}\n\n{sudo_error}")),
+        },
     }
 }
 
@@ -132,33 +127,53 @@ fn spawn_reexec(
     payload: &[u8],
 ) -> Result<Output, String> {
     let executable = lurker_core::trusted_system_executable(program).map_err(|e| e.message)?;
+    let mut command = reexec_command(&executable, program, current_exe, has_terminal_for_sudo());
+
+    let mut child = command
+        .spawn()
+        .map_err(|err| format!("Failed to start {program} for privileged action: {err}"))?;
+
+    let write_error = child
+        .stdin
+        .take()
+        .and_then(|mut stdin| stdin.write_all(payload).err());
+    let output = child
+        .wait_with_output()
+        .map_err(|err| format!("Failed waiting for {program} helper: {err}"))?;
+    // An authorization denial can close stdin before the JSON is delivered.
+    // Preserve sudo/polkit's actual diagnosis and always reap the child.
+    if let Some(error) = write_error {
+        if output.stdout.is_empty() && output.stderr.is_empty() {
+            return Err(format!(
+                "Failed to forward helper request to {program}: {error}"
+            ));
+        }
+    }
+    Ok(output)
+}
+
+fn reexec_command(
+    executable: &std::path::Path,
+    program: &str,
+    current_exe: &std::path::Path,
+    terminal: bool,
+) -> Command {
     let mut command = Command::new(executable);
+    if program == "sudo" && !terminal {
+        command.arg("-n");
+    }
     command
         .arg(current_exe)
         .arg("--as-root")
         .arg("run")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
-
-    if program == "sudo" && has_terminal_for_sudo() {
+    if program == "sudo" && terminal {
         command.stderr(Stdio::inherit());
     } else {
         command.stderr(Stdio::piped());
     }
-
-    let mut child = command
-        .spawn()
-        .map_err(|err| format!("Failed to start {program} for privileged action: {err}"))?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(payload)
-            .map_err(|err| format!("Failed to forward helper request to {program}: {err}"))?;
-    }
-
-    child
-        .wait_with_output()
-        .map_err(|err| format!("Failed waiting for {program} helper: {err}"))
+    command
 }
 
 fn decode_reexec_output(program: &str, output: Output) -> Result<OperationResponse, String> {
@@ -209,6 +224,51 @@ fn operation_error(message: impl Into<String>) -> OperationResponse {
 mod tests {
     use super::*;
     use std::os::unix::process::ExitStatusExt;
+
+    #[test]
+    fn nonterminal_sudo_cannot_prompt_or_consume_a_password_from_json() {
+        let helper = std::path::Path::new("/usr/libexec/lurker/lurker-helper");
+        for (program, terminal, expected) in [
+            (
+                "sudo",
+                false,
+                vec![
+                    "-n",
+                    "/usr/libexec/lurker/lurker-helper",
+                    "--as-root",
+                    "run",
+                ],
+            ),
+            (
+                "sudo",
+                true,
+                vec!["/usr/libexec/lurker/lurker-helper", "--as-root", "run"],
+            ),
+            (
+                "pkexec",
+                false,
+                vec!["/usr/libexec/lurker/lurker-helper", "--as-root", "run"],
+            ),
+        ] {
+            let executable = std::path::Path::new("/usr/bin").join(program);
+            let command = reexec_command(&executable, program, helper, terminal);
+            assert_eq!(command.get_program(), executable);
+            assert_eq!(command.get_args().collect::<Vec<_>>(), expected);
+        }
+    }
+
+    #[test]
+    fn noninteractive_authorization_denial_is_preserved() {
+        let output = Output {
+            status: std::process::ExitStatus::from_raw(256),
+            stdout: Vec::new(),
+            stderr: b"sudo: a password is required".to_vec(),
+        };
+        assert_eq!(
+            decode_reexec_output("sudo", output).unwrap_err(),
+            "sudo: a password is required"
+        );
+    }
 
     #[test]
     fn malformed_payload_is_a_structured_error() {
