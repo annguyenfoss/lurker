@@ -171,6 +171,26 @@ pub(super) fn request_restore(dir: &Path, session: &Session) -> AppResult<()> {
         return if metadata_matches(journal, &metadata, journal.original_mode) { Ok(()) }
             else { Err(AppError::new("Incomplete fence intent retained; explicit manual recovery is required.")) };
     }
+    // The guardian persists its ACK before exiting. A frontend may die after
+    // that ACK but before updating the session journal. Recognize completion
+    // without reopening/chmodding a path after the original descriptor is lost.
+    if let (Some(request), Some(receipt)) = (
+        supervisor::read_record::<Request>(dir, "fence-restore-request.json")?,
+        supervisor::read_record::<Receipt>(dir, "fence-restore-result.json")?,
+    ) {
+        if !request.nonce.is_empty() && request.nonce == receipt.nonce && receipt.restored {
+            let metadata = fs::symlink_metadata(&session.mountpoint)
+                .map_err(|e| AppError::io("Cannot verify completed fence restoration", e))?;
+            return if metadata_matches(journal, &metadata, journal.original_mode)
+                && Identity::read(&session.source)? == session.source_identity
+                && mount_identity(&session.mountpoint)?.is_none()
+                && !session.process.as_ref().is_some_and(|p| alive(p).unwrap_or(true)) {
+                Ok(())
+            } else {
+                Err(AppError::new("Completed fence restoration no longer matches its session; directory left untouched."))
+            };
+        }
+    }
     let monitor = session.supervisor.as_ref().ok_or_else(|| AppError::new("Fence guardian identity missing; permissions left unchanged."))?;
     if !alive(monitor)? {
         return Err(AppError::new("Original mountpoint descriptor was lost with its guardian; permissions left unchanged. Explicit manual recovery is required."));
@@ -230,6 +250,14 @@ mod tests {
         request_restore(&state, &session).unwrap();
         thread.join().unwrap().unwrap();
         assert_eq!(target.metadata().unwrap().mode() & 0o7777, 0o750);
+        // Retry after the guardian has exited and the frontend has not yet
+        // persisted armed=false. The durable receipt proves completion.
+        let mut retry = session.clone();
+        retry.supervisor = None;
+        request_restore(&state, &retry).unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(request_restore(&state, &retry).is_err());
+        assert_eq!(target.metadata().unwrap().mode() & 0o7777, 0o700);
         fs::remove_dir_all(root).unwrap();
     }
 
