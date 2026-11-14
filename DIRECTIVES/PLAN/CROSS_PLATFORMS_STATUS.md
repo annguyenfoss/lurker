@@ -5,21 +5,25 @@ Active completion pass, 2026-11-14. The earlier frozen candidate was
 The current integration is not yet frozen or fully qualified. Scope/profiles:
 `DIRECTIVES/LLM/CIPHER.md`. Public-release qualification remains separate.
 
-## Paused work checkpoint
+## Resumed checkpoint
 
-The user stopped implementation and requested committing/pushing the current
-work. The pending Cryptomator mountpoint fence and its helper capability gate
-are an unfinished checkpoint, not a qualified release. Last native Mac fence
-tests: 14 passed, 4 failed because an absent ACL is treated as an inspection
-error. Native fenced-helper and recovery tests remain incomplete. The expanded
-VM power-loss prerequisite/route checks are also partial; RAID1C power-loss execution and
-the final cross-host packaged matrix have not run.
+The paused WIP was committed/pushed, then implementation resumed. Darwin's
+absent-ACL handling and discarded capability output are fixed. Native Mac fence
+tests now pass 21/21, including inherited-descriptor guardian SIGKILL; the fenced
+Java image passes its integration tests and helper negotiation passes. Explicit/
+Auto CLI lifecycles pass 26/26. Supervised JVM crash, plaintext write denial,
+replacement refusal, explicit recovery, committed file/SQLite WAL integrity and
+normal close pass five checks. These results retain their individual revisions
+in `docs/folder-supervision.md`; the final Mac package still needs rebuilding.
+RAID1C power-loss setup/reopening now supplies both recorded members; runner unit
+tests pass 31/31. Actual RAID1C power-loss and final cross-host packages remain pending.
 
 The earlier full-scope Mac `8aac707` package passed 156 normal CLI checks, 11
 rapid-close checks and an Apple desktop lifecycle, but crash testing exposed
 writable plaintext underlay after automatic detach. It is not release-qualified.
-OpenBSD desktop code generation later failed with OOM/ENOSPC; pause cleanup
-removed only failed generated objects and restored 512 MiB of disk headroom.
+OpenBSD desktop code generation failed with OOM/ENOSPC; pause cleanup restored
+512 MiB of disk headroom. On resumption its console is in single-user mode with
+read-only root and networking down; filesystem inspection precedes further builds.
 
 ## Current completion pass
 
@@ -37,7 +41,8 @@ removed only failed generated objects and restored 512 MiB of disk headroom.
 - New Linux/BSD filesystems and images receive the invoking user's private
   ownership. Real normal-user GUI/helper lifecycles passed for NetBSD CGD and
   Arch LUKS2/gocryptfs. Native FreeBSD/DragonFly desktop builds passed after the
-  upstream rustix 1.1.6 fix; one separate fontless-host zoom fixture needs repair.
+  upstream rustix 1.1.6 fix; the fontless zoom fixture is fixed and passes.
+  Actual native X11 windows pass on FreeBSD, NetBSD and DragonFly; OpenBSD remains pending.
 - Linux loop leases, persistent directory-backend exit results and Cryptomator
   close acknowledgements are implemented. Mounted CryFS ENOSPC/EDQUOT write
   recovery passed. A close while still full may abort upstream; Lurker reports
@@ -122,8 +127,8 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 ## Remaining qualification work and limits
 
 - Complete the five-backend Mac package with the production Cryptomator FSKit profile and readiness fix. macOS FUSE remains separately installed; older checkpoint results do not qualify new binaries automatically.
-- Finish final packaged native tests at one frozen source across all six Linux distributions and four BSDs. Linux private VeraCrypt is being rebuilt with minimal pinned wxBase to avoid newer GLib ABI dependencies; installed developer tools do not establish clean-machine independence.
-- Finish current BSD VeraCrypt generation/recovery proof qualification. FreeBSD daemon-death recovery passes; OpenBSD can return ENXIO for a configured vnode after its FUSE daemon dies, making source identity unverifiable. Production preserves that session rather than guessing or force-detaching it.
+- Finish final packaged native tests at one frozen source across all six Linux distributions and four BSDs. Minimal pinned wxBase/private ELF payloads now pass dependency audits on the six Linux distributions; installed developer tools do not establish clean-machine independence.
+- Repeat BSD VeraCrypt generation/recovery proofs against final packages. Current native generation guards pass, including FreeBSD daemon-death recovery. OpenBSD can return ENXIO for a configured vnode after its FUSE daemon dies, making source identity unverifiable. Production preserves that session rather than guessing or force-detaching it.
 - The DragonFly IDE/UEFI clone adapter is implemented and its isolated clone is ready; power-loss testing awaits the current package. OpenBSD FFS still requires checking after the characterized power cut; no automatic repair is performed.
 - Native BSD support remains file-container oriented. Full-home/session automation, clean-machine/public-release qualification, signing/notarization and broader fault/security review remain separate gates.
 

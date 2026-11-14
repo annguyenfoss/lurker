@@ -26,9 +26,35 @@ They remain available for inspection while an explicit reopen can inspect the
 vault. This does not claim that pending writes were recovered. Older sessions
 without a supervisor cannot acquire a manufactured successful exit result.
 
+## macOS Cryptomator underlay protection
+
+Before mounting, core opens the original empty directory without following
+symlinks, refuses extended ACLs, journals its identity/mode and sets mode 000.
+The supervisor inherits that descriptor and retains it after backend exit.
+Unexpected FSKit detach therefore leaves a protected underlay, rather than a
+writable plaintext directory. The private Java backend and desktop helper must
+advertise fence protocol 1; macOS Auto requests are gated too.
+
+Explicit unmount/recovery restores the original mode only through that held
+descriptor after checking the source, mount, process, directory identity, ACLs
+and emptiness. Replacement or changed permissions leave the directory untouched.
+Wrong passwords retain the fence until explicit recovery; recovery still reports
+the backend's failed exit. A durable matching acknowledgement permits retry after
+an interrupted frontend. Losing the guardian/descriptor leaves mode 000 and
+requires manual recovery; there is no path-based chmod fallback.
+
+Native Buran evidence: source `2b56da973f` passes 26 explicit/Auto lifecycle
+checks; `6aeed62b69` passes five supervised crash/recovery checks using a test-only
+wrapper that SIGKILLs its own unreaped JVM child. Plaintext writes are denied,
+replacement is refused, original permissions restore explicitly, committed file
+and SQLite WAL data recover with integrity, and normal close succeeds. Source
+`cce7249719` passes 21 folder tests, including actual guardian descriptor
+inheritance/SIGKILL. This is development evidence; final packaged tests remain
+separate. Harness: `scripts/test-cryptomator-fence.py`.
+
 ## Native fault evidence
 
-Runtime tests ran only on Arch, as the ordinary test user, using a separate
+CryFS full-storage runtime tests ran on Arch, as the ordinary test user, using a separate
 8 MiB tmpfs mounted beneath private `/tmp/lurker-folder-fault-*` fixtures. The
 harness refuses ordinary backing filesystems and tmpfs mounts larger than
 16 MiB. It changes no host quotas, forces no unmounts, performs no repair and

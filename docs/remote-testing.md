@@ -111,5 +111,16 @@ The probe creates a private authenticated display with TCP disabled, removes loa
 
 NetBSD's real window initially exposed runtime-library discovery missing from ELF `NEEDED`: xkbcommon is loaded dynamically. After installing official `libxkbcommon-1.13.2`, commit `3be5898e88b49d09fdfd697813ef6eb5ae526f0c` records the standard administrator-controlled `/usr/pkg/lib` and `/usr/X11R7/lib` paths in the desktop binary. Its actual native window rendered **1280×860 with 1,179 sampled pixel colors** without `LD_*` overrides. The private display, authority file and child processes were cleaned afterward. This proves the X11 route; Wayland and other BSD platform-window routes need separate evidence.
 
+FreeBSD's archived `ecc9175932650880afbb003e480adc28beb0555b` desktop
+(`c90e350e1002568cc6dd99417a3930f886fcd2a2aed134fe09e279828f4f655d`)
+also passes the real-window probe as UID 1300: **1280×860, 1,154 sampled colors**,
+with no app/client loader overrides. The test-only official Xvfb 21.1.25 and
+seven small dependency archives were extracted privately; GLX, XVideo, XTEST and
+X-Resource were verified disabled, TCP was disabled and private Xauthority used.
+Official binary `xkbcomp-1.5.0` was installed to supply its missing keyboard
+compiler. All owned children, authority files, X locks and sockets were removed.
+This known-vulnerable server was used only for the approved isolated renderer
+smoke test; it is neither shipped nor security-qualified. Receipt:
+`target/remote-test/freebsd-x11-native/qualified-ecc9175/result.json`.
 
 A separately approved private Xvfb bootstrap can use `--xvfb`, its required `--xvfb-sha256`, and repeated `--server-library-path` arguments. Those library paths apply only to the server; the tested app and X11 client tools retain no `LD_*` overrides. Repeated `--disable-extension` arguments must match advertised server options, and `xdpyinfo` must confirm the extensions are absent before the app starts. `--server-note` records the exact server version/exception. A renderer smoke result does not qualify the server's security; known vulnerabilities and the one-off test authorization remain explicit in its evidence.
