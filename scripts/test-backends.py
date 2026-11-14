@@ -403,9 +403,24 @@ class Suite:
             raise AssertionError("Renamed/truncated file did not survive")
 
     def incorrect(self):
+        original_mode = self.mountpoint.stat().st_mode & 0o7777
         self.mount(password=self.wrong, expected=False)
         if os.path.ismount(self.mountpoint):
             raise AssertionError("Incorrect credential left an attached mount")
+        if platform.system() == "Darwin" and self.options.backend == "cryptomator":
+            if self.mountpoint.stat().st_mode & 0o7777:
+                raise AssertionError("Failed Cryptomator startup exposed a writable underlay")
+            try:
+                (self.mountpoint / "forbidden plaintext").write_bytes(b"owned test")
+            except PermissionError:
+                pass
+            else:
+                raise AssertionError("Failed Cryptomator startup allowed plaintext fallthrough")
+            # Recovery restores the held inode, but still reports the original
+            # failed backend exit. A following authenticated mount must work.
+            self.cli(self.args("unmount", self.source), expected=False)
+            if self.mountpoint.stat().st_mode & 0o7777 != original_mode:
+                raise AssertionError("Explicit failed-startup recovery did not restore mountpoint mode")
 
     def readonly_unsupported(self):
         # A native limitation must fail closed, never silently attach writable
