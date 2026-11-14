@@ -11,7 +11,6 @@ use crate::output::Output;
 use crate::system::{trim_stdout, AppContext};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, IsTerminal, Read, Write};
-use std::os::fd::AsRawFd;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -804,30 +803,9 @@ fn attach_locked_source(
     readonly: bool,
 ) -> AppResult<PathBuf> {
     crate::linux_source::verify_path_identity(source, path)?;
-    let program = crate::trusted_privileged_executable(ctx.losetup_path()?)?;
-    let pinned = format!("/proc/{}/fd/{}", std::process::id(), source.as_raw_fd());
-    let mut args = vec!["--find".into(), "--show".into()];
-    if readonly {
-        args.push("--read-only".into());
-    }
-    args.push(OsString::from(pinned));
-    let result = ctx.capture_command(&program, &args, true, "Failed to attach locked container")?;
-    if !result.status.success() {
-        return Err(AppError::new(format!(
-            "Cannot attach the locked container: {}",
-            String::from_utf8_lossy(&result.stderr).trim()
-        )));
-    }
-    let device = trim_stdout(&result);
-    if !device.strip_prefix("/dev/loop").is_some_and(|suffix| {
-        !suffix.is_empty() && suffix.bytes().all(|byte| byte.is_ascii_digit())
-    }) {
-        return Err(AppError::new(
-            "Cannot identify newly attached source loop. Refusing an ambiguous device.",
-        ));
-    }
-    let device = PathBuf::from(device);
-    ctx.set_cleanup_loop(device.clone());
+    let lease = crate::linux_loop::LoopLease::start(ctx, source, readonly)?;
+    let device = lease.device().to_path_buf();
+    ctx.set_loop_lease(lease);
     let expected = file_source_identity(source)?;
     if !native_loop_sources(ctx)?
         .iter()

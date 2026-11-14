@@ -23,15 +23,33 @@ fn run() -> i32 {
                 serde_json::json!({
                     "protocol_version": 3,
                     "directory_backends": true,
+                    "raid1c_members": cfg!(target_os = "openbsd"),
                     "noninteractive_sudo": !cfg!(target_os = "macos"),
                     "trusted_privileged_tools": !cfg!(target_os = "macos"),
                     "unprivileged_veracrypt": cfg!(target_os = "linux"),
                     "userspace_backend_protocol": if cfg!(target_os = "linux") { Some(3) } else { None },
+                    "linux_loop_lease_protocol": if cfg!(target_os = "linux") { Some(1) } else { None },
                     "keyfile_authentication": true,
                     "luks_keyslots": cfg!(target_os = "linux"),
                 })
             );
             0
+        }
+        #[cfg(target_os = "linux")]
+        Some("loop-lease") => {
+            let Some(endpoint) = args.next().filter(|_| !as_root) else {
+                return 64;
+            };
+            if args.next().is_some() {
+                return 64;
+            }
+            match lurker_core::serve_loop_lease(std::path::Path::new(&endpoint)) {
+                Ok(()) => 0,
+                Err(error) => {
+                    eprintln!("{}", error.message);
+                    error.exit_code
+                }
+            }
         }
         Some("run") => {
             let response = handle_run(as_root);

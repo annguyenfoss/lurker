@@ -14,6 +14,8 @@ mod keyslots;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
+mod linux_loop;
+#[cfg(target_os = "linux")]
 mod linux_source;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -34,6 +36,9 @@ pub use api::{
     OperationResponse, SystemProbe, ToolStatus, UnmountCommand,
 };
 pub use error::{AppError, AppResult};
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub use linux_loop::serve_loop_lease;
 pub use model::{
     ColorMode, CreateCipher, PrivilegeMode, ResolvedTargetKind, SourceKind, VolumeType,
 };

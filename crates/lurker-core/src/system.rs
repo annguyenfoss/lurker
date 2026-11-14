@@ -29,7 +29,7 @@ pub struct AppContext {
     is_root: bool,
     sudo_ready: bool,
     cleanup_mapper: Option<String>,
-    cleanup_loop: Option<PathBuf>,
+    loop_lease: Option<crate::linux_loop::LoopLease>,
 }
 
 impl AppContext {
@@ -42,7 +42,7 @@ impl AppContext {
             is_root,
             sudo_ready: false,
             cleanup_mapper: None,
-            cleanup_loop: None,
+            loop_lease: None,
         })
     }
 
@@ -104,25 +104,15 @@ impl AppContext {
         self.cleanup_mapper = None;
     }
 
-    pub fn set_cleanup_loop(&mut self, device: PathBuf) {
-        self.cleanup_loop = Some(device);
+    pub(crate) fn set_loop_lease(&mut self, lease: crate::linux_loop::LoopLease) {
+        self.loop_lease = Some(lease);
     }
 
     pub fn release_cleanup_loop(&mut self) -> AppResult<()> {
-        let Some(device) = self.cleanup_loop.as_ref().cloned() else {
-            return Ok(());
-        };
-        let losetup = self.losetup_path()?.to_path_buf();
-        self.run_command(
-            &losetup,
-            &["--detach".into(), device.as_os_str().into()],
-            true,
-            false,
-            "Failed to release the owned source loop device",
-        )?;
-        // An open mapper keeps the loop alive with LO_FLAGS_AUTOCLEAR. Otherwise
-        // detach removes it now, including on failed authentication.
-        self.cleanup_loop = None;
+        if let Some(lease) = self.loop_lease.as_mut() {
+            lease.release()?;
+        }
+        self.loop_lease = None;
         Ok(())
     }
 
@@ -324,20 +314,9 @@ impl Drop for AppContext {
                 }
             }
         }
-        if let Some(device) = self.cleanup_loop.take() {
-            let released = self.tools.losetup.clone().is_some_and(|losetup| {
-                self.try_run_privileged_silent(
-                    &losetup,
-                    &["--detach".into(), device.as_os_str().into()],
-                )
-            });
-            if !released {
-                self.output.warn(&format!(
-                    "Failed to release owned loop {} during cleanup.",
-                    device.display()
-                ));
-            }
-        }
+        // Closing our control connection releases only the descriptor opened
+        // by the trusted lease helper. Never detach a reusable device pathname.
+        self.loop_lease.take();
     }
 }
 
@@ -567,7 +546,7 @@ mod tests {
             is_root: false,
             sudo_ready: false,
             cleanup_mapper: None,
-            cleanup_loop: None,
+            loop_lease: None,
         }
     }
 
