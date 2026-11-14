@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -42,6 +43,116 @@ def verify_archive(name, archive):
 def run(command, **kwargs):
     print("+", " ".join(map(str, command)), flush=True)
     return subprocess.run(list(map(str, command)), check=True, **kwargs)
+
+
+
+
+# These are outputs of the pinned make recipes, not independently supplied source.
+GENERATED_INPUTS = {
+    "veracrypt": {"src/License.txt.h", "src/Common/Language.xml.h"},
+    "veracrypt-create": {"src/License.txt.h", "src/Common/Language.xml.h"},
+    "lkl": {".vmlinux.export.c", "init/utsversion-tmp.h", "kernel/bounds.s", "lib/crc32table.h",
+            "tools/lkl/include/lkl_autoconf.h", "tools/lkl/tests/autoconf.sh", "tools/lkl/Makefile.conf",
+            "scripts/kconfig/lexer.lex.c", "scripts/kconfig/parser.tab.h", "scripts/kconfig/parser.tab.c",
+            "scripts/mod/devicetable-offsets.s", "scripts/mod/devicetable-offsets.h", "scripts/mod/elfconfig.h",
+            "lib/raid6/int1.c", "lib/raid6/int2.c", "lib/raid6/int4.c", "lib/raid6/int8.c", "lib/raid6/tables.c",
+            "arch/lkl/kernel/asm-offsets.s"},
+}
+
+def generated_input(name, relative):
+    if relative in GENERATED_INPUTS.get(name, set()): return True
+    return name == 'lkl' and relative.startswith(('tools/lkl/include/lkl/', 'include/generated/',
+           'arch/lkl/include/generated/', '.checked-atomic-', '.tmp_vmlinux'))
+
+
+def verify_source_cache(name, source, archive, patch):
+    """Bind cached tracked inputs to the verified archive plus the exact patch.
+
+    Build outputs absent from the archive are deliberately ignored; every
+    upstream input, including entire patched files, is verified on each reuse.
+    """
+    source = source.resolve()
+    inputs = {"repository": SOURCES[name][0], "revision": SOURCES[name][1],
+              "archive_sha256": SOURCE_ARCHIVE_SHA256[name],
+              "patch_sha256": hashlib.sha256(patch.read_bytes()).hexdigest()}
+    binding = source / '.lurker-source-inputs.json'
+    if binding.exists():
+        previous = json.loads(binding.read_text())
+        if any(previous.get(key) != value for key, value in inputs.items()):
+            raise RuntimeError(f"Source cache inputs changed: {source}. Use a fresh source directory for the new revision/patch.")
+    affected = set()
+    for line in patch.read_text().splitlines():
+        if line.startswith(('--- a/', '+++ b/')):
+            relative = Path(line.split()[1][2:])
+            if relative.is_absolute() or '..' in relative.parts:
+                raise RuntimeError('Unsafe source patch path')
+            affected.add(relative.as_posix())
+    manifest, mismatches = {}, []
+    def compare(relative, expected, kind='file'):
+        actual = source / relative
+        if kind == 'link':
+            expected = os.path.normpath(expected)
+            valid = actual.is_symlink() and os.path.normpath(os.readlink(actual)) == expected
+        elif kind == 'deleted':
+            valid = not actual.exists() and not actual.is_symlink()
+        else:
+            valid = actual.is_file() and not actual.is_symlink()
+            if valid:
+                with actual.open('rb') as stream:
+                    valid = hashlib.file_digest(stream, 'sha256').hexdigest() == expected
+        manifest[relative] = {kind: expected}
+        if not valid and len(mismatches) < 10: mismatches.append(relative)
+    with tempfile.TemporaryDirectory(prefix='lurker-source-verify-') as directory:
+        expected_root = Path(directory)
+        top = None
+        with tarfile.open(archive, 'r|gz') as tar:
+            for member in tar:
+                parts = Path(member.name).parts
+                if not parts or Path(member.name).is_absolute() or '..' in parts:
+                    raise RuntimeError('Unsafe pinned archive path')
+                if top is None: top = parts[0]
+                if parts[0] != top: raise RuntimeError('Pinned archive has multiple source roots')
+                if len(parts) == 1: continue
+                relative = Path(*parts[1:]); key = relative.as_posix()
+                if member.isdir():
+                    actual = source / relative
+                    if (not actual.is_dir() or actual.is_symlink()) and len(mismatches) < 10: mismatches.append(key)
+                elif member.issym():
+                    compare(key, member.linkname, 'link')
+                    if key in affected:
+                        target = expected_root / relative; target.parent.mkdir(parents=True, exist_ok=True)
+                        target.symlink_to(member.linkname)
+                elif member.isfile():
+                    stream = tar.extractfile(member)
+                    if key in affected:
+                        target = expected_root / relative; target.parent.mkdir(parents=True, exist_ok=True)
+                        with target.open('wb') as output: shutil.copyfileobj(stream, output)
+                    else:
+                        compare(key, hashlib.file_digest(stream, 'sha256').hexdigest())
+                else: raise RuntimeError('Unsupported pinned source archive member')
+        applied = subprocess.run(['patch', '-p1', '--forward', '--force', '--batch', '--fuzz=0', '-i', str(patch.resolve())],
+                                 cwd=expected_root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if applied.returncode: raise RuntimeError('Cannot derive exact patched source inputs from the pinned archive: ' + applied.stdout.decode(errors='replace')[-2000:])
+        for key in affected:
+            expected = expected_root / key
+            if expected.is_symlink(): compare(key, os.readlink(expected), 'link')
+            elif expected.is_file(): compare(key, hashlib.sha256(expected.read_bytes()).hexdigest())
+            else: compare(key, True, 'deleted')
+    source_suffixes = {'.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx', '.S', '.s', '.asm', '.inc', '.py', '.sh', '.pl', '.in'}
+    for actual in source.rglob('*'):
+        if not (actual.is_file() or actual.is_symlink()): continue
+        relative = actual.relative_to(source).as_posix()
+        if relative in manifest or generated_input(name, relative): continue
+        if (actual.suffix in source_suffixes or actual.name.startswith(('Makefile', 'Kconfig')) or actual.name == 'Kbuild') and len(mismatches) < 10:
+            mismatches.append(relative + ' (unexpected source input)')
+    if mismatches:
+        raise RuntimeError('Source cache does not match pinned source inputs: ' + ', '.join(mismatches))
+    inputs['source_files_sha256'] = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    inputs['verified_source_files'] = len(manifest)
+    temporary = binding.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps(inputs, indent=2, sort_keys=True) + '\n')
+    temporary.replace(binding)
+    return inputs
 
 
 def prepare(name, cache, offline):
@@ -90,6 +201,7 @@ def prepare(name, cache, offline):
         if stamp.exists():
             raise RuntimeError(f"Cached sources do not match their patch: {source}. Restore pristine sources and remove the stamp.")
         run(["patch", "-p1", "--forward", "--force", "--batch", "-i", patch], cwd=source)
+    verify_source_cache(name, source, archive, patch)
     stamp.write_text(digest + "\n")
     return source.resolve()
 

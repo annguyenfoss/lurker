@@ -28,11 +28,15 @@ class NativeSourcePreparation(unittest.TestCase):
         self.source = self.cache / 'example'
         self.source.mkdir(parents=True)
         (self.source / 'example.c').write_text('upstream\n')
+        (self.source / 'version.h').write_text('old-version\n')
         self.archive = self.cache / 'example-fixed-revision.tar.gz'
         with tarfile.open(self.archive, 'w:gz') as archive:
             member = tarfile.TarInfo('example-fixed/example.c')
             member.size = len(b'upstream\n')
             archive.addfile(member, io.BytesIO(b'upstream\n'))
+            member = tarfile.TarInfo('example-fixed/version.h')
+            member.size = len(b'old-version\n')
+            archive.addfile(member, io.BytesIO(b'old-version\n'))
         self.builder.SOURCE_ARCHIVE_SHA256 = {'example': hashlib.sha256(self.archive.read_bytes()).hexdigest()}
 
     def prepare(self):
@@ -73,6 +77,79 @@ class NativeSourcePreparation(unittest.TestCase):
         self.patch.write_text(self.patch.read_text().replace('+patched', '+new-patch'))
         with self.assertRaisesRegex(RuntimeError, 'Patch changed'):
             self.prepare()
+
+
+    def test_legacy_old_tree_plus_new_archive_cannot_be_relabeled(self):
+        self.prepare()
+        (self.source / '.lurker-source-inputs.json').unlink()
+        self.builder.SOURCES['example'] = ('example/upstream', 'new-revision')
+        self.archive = self.cache / 'example-new-revision.tar.gz'
+        with tarfile.open(self.archive, 'w:gz') as archive:
+            for name, contents in [('example.c', b'upstream\n'), ('version.h', b'new-version\n')]:
+                entry = tarfile.TarInfo('new-source/' + name)
+                entry.size = len(contents)
+                archive.addfile(entry, io.BytesIO(contents))
+        self.builder.SOURCE_ARCHIVE_SHA256['example'] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        with self.assertRaisesRegex(RuntimeError, 'does not match pinned source inputs.*version.h'):
+            self.prepare()
+        self.assertFalse((self.source / '.lurker-source-inputs.json').exists())
+
+    def test_bound_cache_rejects_a_changed_revision_before_adoption(self):
+        self.prepare()
+        self.builder.SOURCES['example'] = ('example/upstream', 'new-revision')
+        new = self.cache / 'example-new-revision.tar.gz'
+        new.write_bytes(self.archive.read_bytes())
+        with self.assertRaisesRegex(RuntimeError, 'Source cache inputs changed'):
+            self.prepare()
+
+    def test_binding_cannot_hide_unpatched_or_extra_patched_file_changes(self):
+        self.prepare()
+        for name in ['version.h', 'example.c']:
+            original = (self.source / name).read_bytes()
+            (self.source / name).write_bytes(original + b'outside-patch-tampering\n')
+            with self.assertRaisesRegex(RuntimeError, 'does not match pinned source inputs'):
+                self.prepare()
+            (self.source / name).write_bytes(original)
+        self.prepare()
+
+    def test_tar_filter_symlink_normalization_preserves_source_identity(self):
+        with tarfile.open(self.cache / 'linked.tar.gz', 'w:gz') as archive:
+            for name, contents in [('example.c', b'upstream\n'), ('version.h', b'old-version\n')]:
+                entry = tarfile.TarInfo('source/' + name)
+                entry.size = len(contents)
+                archive.addfile(entry, io.BytesIO(contents))
+            entry = tarfile.TarInfo('source/source-alias')
+            entry.type = tarfile.SYMTYPE
+            entry.linkname = './example.c'
+            archive.addfile(entry)
+        (self.cache / 'linked.tar.gz').replace(self.archive)
+        self.builder.SOURCE_ARCHIVE_SHA256['example'] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        (self.source / 'source-alias').symlink_to('example.c')
+        self.prepare()
+
+    def test_legacy_deleted_upstream_source_is_not_mistaken_for_generated_output(self):
+        self.prepare()
+        (self.source / '.lurker-source-inputs.json').unlink()
+        with tarfile.open(self.cache / 'new.tar.gz', 'w:gz') as archive:
+            entry = tarfile.TarInfo('new-source/example.c')
+            entry.size = len(b'upstream\n')
+            archive.addfile(entry, io.BytesIO(b'upstream\n'))
+        (self.cache / 'new.tar.gz').replace(self.archive)
+        self.builder.SOURCE_ARCHIVE_SHA256['example'] = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        with self.assertRaisesRegex(RuntimeError, 'version.h.*unexpected source input'):
+            self.prepare()
+
+    def test_legitimate_generated_outputs_are_not_source_inputs(self):
+        self.prepare()
+        self.builder.GENERATED_INPUTS['example'] = {'build-output/config.h'}
+        (self.source / 'example.o').write_bytes(b'generated object code')
+        (self.source / 'build-output').mkdir()
+        (self.source / 'build-output/config.h').write_text('generated')
+        self.prepare()
+        import json
+        binding = json.loads((self.source / '.lurker-source-inputs.json').read_text())
+        self.assertEqual(binding['revision'], 'fixed-revision')
+        self.assertEqual(binding['verified_source_files'], 2)
 
 
 if __name__ == '__main__':
