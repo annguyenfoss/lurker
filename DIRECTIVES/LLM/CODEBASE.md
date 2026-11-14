@@ -39,7 +39,8 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
   - `src/main.rs`: parse -> run core
 - `crates/lurker-helper`
   - `src/main.rs`: desktop helper; reads `CommandAction` JSON on stdin and writes `OperationResponse` JSON on stdout
-  - Privileged Linux requests rerun via `pkexec` first, `sudo` fallback only when a TTY exists; unprivileged requests run directly; macOS runs directly as the login user
+  - Privileged Linux/BSD requests rerun through a trusted helper via `pkexec` first, then `sudo`; without a TTY, `sudo -n` uses existing authorization without prompting. Login-user directory engines and macOS operations run directly.
+  - BSD `list-native` uses the same authorization boundary to expose the global native session namespace without making its root-owned registry readable. The desktop merges those rows with its own login-user directory sessions.
 - `apps/lurker-desktop`
   - `src/main.rs`: UI callbacks, zoom state, background threading, refresh flow
   - `src/logic.rs`: form validation and conversion into shared commands
@@ -68,7 +69,7 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 - VeraCrypt tags are unsupported.
 - Do not implement VeraCrypt authentication requiring a password and keyfile together: losing either required credential can lose access to the data. This decision does not prohibit keyfile-only authentication; see the authentication decision in `CIPHER.md`.
 - The desktop app never invokes the installed CLI binary. Check helper capability flags before sending keyfile or keyslot requests so older helpers cannot ignore credential fields.
-- The helper is an implementation detail for desktop privilege escalation. Protocol 3 adds directory-backend capability negotiation; directory engines run as the login user even when an older request supplies the default privileged mode. Privileged operations require the protocol-3 trusted-tool capability, including plain password requests. Protocol 2 remains accepted only for compatible login-session credential operations.
+- The helper is an implementation detail for desktop privilege escalation. Protocol 3 adds directory-backend capability negotiation; directory engines run as the login user even when an older request supplies the default privileged mode. Privileged operations require the protocol-3 trusted-tool capability, including plain password requests. Protocol 2 remains accepted only for compatible login-session credential operations. Additive capabilities require supervised directory lifecycle (`folder_supervision_protocol: 1`), owned Linux loop leases (`linux_loop_lease_protocol: 1`), OpenBSD mirror members (`raid1c_members`), and authorized BSD native discovery (`native_volume_listing: 1`). Older helpers must fail before receiving unsupported requests.
 - File-backed create uses same-directory temp files, atomic no-clobber publication without force, and atomic rename with force.
 - Privileged Linux mounts use cryptsetup-managed `lurker_*` mappings; creation uses the packaged restricted private VeraCrypt creator. Its path and every ancestor must be administrator-controlled before elevated execution.
 - Linux native userspace transport 3 requires persistent source-inode locking and rejects older unlocked helper binaries; frontend capability negotiation must enforce it. Drain legacy sessions before component upgrades.
@@ -85,7 +86,7 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 
 - CLI: parse args -> build `CommandAction` -> `lurker_core::run()`
 - Desktop: gather form state -> `apps/lurker-desktop/src/logic.rs` builds shared command -> `lurker-helper` runs core -> desktop refreshes active volumes
-- Active volume listing comes from `lurker_core::list_active_volumes()`, which scans `/dev/mapper/lurker_*` and correlates mountinfo on Linux, merged with private directory sessions. BSD native volumes come from their identity-checked registry and native mount tables. On macOS it reads hdiutil plists and VeraCrypt verbose listings, showing the user's attached encrypted disk images and VeraCrypt volumes
+- Active volume listing comes from `lurker_core::list_active_volumes()`, which scans `/dev/mapper/lurker_*` and correlates mountinfo on Linux, merged with private directory sessions. BSD native volumes come from their identity-checked registry and native mount tables. The ordinary-user desktop obtains those private native records through authorized `lurker-helper list-native`, separately from its own folder sessions; root's unrelated folder registry is excluded. On macOS it reads hdiutil plists and VeraCrypt verbose listings, showing the user's attached encrypted disk images and VeraCrypt volumes
 
 ## What Lives Where
 
