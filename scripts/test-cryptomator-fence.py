@@ -61,9 +61,10 @@ def backend_child(backend, control, arguments):
             return 1
         if stopping:
             child.terminate()
-            return 0 if child.wait(timeout=20) == 0 else 1
+            status = child.wait(timeout=20)
+            return status if status >= 0 else 128 - status
         time.sleep(.025)
-    return 0 if child.returncode == 0 else 1
+    return child.returncode if child.returncode >= 0 else 128 - child.returncode
 
 
 def run(args):
