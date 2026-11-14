@@ -97,9 +97,15 @@ class MacBackendTests(unittest.TestCase):
                 path = root / "source" / relative
                 path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes((source / relative).read_bytes())
                 files["source/" + relative] = backend.sha256(path)
-            manifest = {"os": "Darwin", "architecture": "arm64", "files": files,
+            mount = {"provider": "org.cryptomator.frontend.fuse.mount.FuseTMountProvider",
+                     "runtime": "fuse-t", "transport": "fskit", "minimum_os": "26.0"}
+            manifest = {"os": "Darwin", "architecture": "arm64", "files": files, "mount": mount,
                         "sources": json.loads((source / "dependencies.lock.json").read_text())}
             backend.verify_cryptomator_manifest(root, manifest, project, "arm64")
+            manifest["mount"] = {**mount, "transport": "smb"}
+            with self.assertRaisesRegex(RuntimeError, "qualified FUSE-T FSKit"):
+                backend.verify_cryptomator_manifest(root, manifest, project, "arm64")
+            manifest["mount"] = mount
             files["source/src/main/java/org/lurker/cryptomator/Main.java"] = "old"
             with self.assertRaisesRegex(RuntimeError, "helper source differs"):
                 backend.verify_cryptomator_manifest(root, manifest, project, "arm64")

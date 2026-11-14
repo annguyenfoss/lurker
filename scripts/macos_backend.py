@@ -242,6 +242,10 @@ def verify_folder_manifest(root, backend, manifest, project_root, architecture):
 
 def verify_cryptomator_manifest(root, manifest, project_root, architecture):
     source = Path(project_root) / "native/folder/cryptomator"
+    expected_mount = {"provider": "org.cryptomator.frontend.fuse.mount.FuseTMountProvider",
+                      "runtime": "fuse-t", "transport": "fskit", "minimum_os": "26.0"}
+    if manifest.get("mount") != expected_mount:
+        raise RuntimeError("macOS Cryptomator requires the qualified FUSE-T FSKit profile")
     if (manifest.get("os") != "Darwin" or manifest.get("architecture") != architecture
             or manifest.get("sources") != json.loads((source / "dependencies.lock.json").read_text())):
         raise RuntimeError("Private Cryptomator differs from the reviewed target/dependency lock")

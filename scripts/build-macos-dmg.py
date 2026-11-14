@@ -128,11 +128,13 @@ def main():
             raise SystemExit("Staged backend external dependencies differ from its build manifest.")
         folder_root = Path(metadata["target_directory"]) / "release/backends"
         java_executables = []
+        backend_minimum_versions = []
         for backend in dict.fromkeys(options.folder_backends):
             if backend == "cryptomator":
                 source = folder_root / backend
                 manifest = json.loads((source / "manifest.json").read_text())
                 verify_cryptomator_manifest(source, manifest, ROOT, architecture)
+                backend_minimum_versions.append(manifest["mount"]["minimum_os"])
                 destination = resources / "backends" / backend
                 shutil.copytree(source, destination, symlinks=True)
                 # Helpers is a code location: source-language files there are
@@ -182,7 +184,7 @@ def main():
                 native_targets.extend(targets)
                 shutil.copytree(folder_root / "licenses" / backend, resources / "backend-licenses" / backend)
                 shutil.copyfile(folder_root / f"{backend}.json", resources / f"{backend}-provenance.json")
-        minimum_versions = [minimum_version(binary) for binary in native_targets]
+        minimum_versions = backend_minimum_versions + [minimum_version(binary) for binary in native_targets]
         for binary in ["lurker-desktop", "lurker-helper", "lurker"]:
             source = binaries / binary
             if architecture not in architectures(source):
