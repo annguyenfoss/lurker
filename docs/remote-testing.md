@@ -44,9 +44,9 @@ Harness verification (no SSH or encryption operations):
 python -m unittest discover -s scripts/tests -p test_remote_test.py
 ```
 
-## Frozen-source native build validation
+## Previous frozen-source native build validation
 
-Final combined application source: `a16cd18b8462293c670e66803fc4e37fc4a9c59f` (2026-11-14). All eleven native hosts verified and tested that exact deployed Git snapshot.
+Previous combined application source: `a16cd18b8462293c670e66803fc4e37fc4a9c59f` (2026-11-14). All eleven native hosts verified and tested that exact deployed Git snapshot.
 
 Core checks compile and test `lurker-core`, CLI and helper. Workspace checks also cover the Slint desktop. Ignored native encryption tests were not executed by these jobs; packaged cipher lifecycle and durability suites have separate evidence in `docs/backend-testing.md`, `docs/linux-package-testing.md` and `docs/macos-backends.md`.
 
@@ -78,3 +78,16 @@ Run identifiers:
 The local aggregate is `target/remote-test/final-matrix-result.json`; each run retains its manifest, result JSON, source hash, toolchains, stage exits and log references. Generated artifacts remain ignored by Git. The earlier `76f05fbd2167313273c53201a070252719e4f4ea` baseline remains separately labeled in `target/remote-test/baseline-76f05fbd-matrix-result.json`: ten completed hosts, 511 passed, 0 failed, 85 ignored.
 
 BSD core results do not claim BSD desktop qualification. macOS runtime/FUSE limitations remain documented separately. No runtime encryption tests were performed on endeavour.
+
+
+## Native BSD desktop development evidence
+
+These later checks qualify specific revisions; they do not relabel the earlier eleven-host baseline.
+
+- NetBSD/OpenBSD `cargo check --workspace --locked` passed at `2cd73aa1c040b2c5b8fc726a096fa965094dfb77`, run `20261114T103726Z-ca3e2e77`.
+- OpenBSD core/CLI/helper unit checks passed **65/0/12 ignored** at `f92c5e822dfa78b164388a300947101109790210`, run `20261114T114612Z-925c03b1`. The same built CLI/helper were copied to an administrator-controlled `/var/run` prefix for separate native RAID tests.
+- NetBSD built the actual desktop test executable and helper at that same `f92c5e8` source, run `20261114T114612Z-e3fb6c8c`. Its opt-in CGD test then passed **1/0** as login UID 1300 through real Slint callbacks and the software renderer: create, mount, write/sync, unmount, reopen/read, and unmount, including helper-backed native listing. This is native GUI workflow evidence without a display-server requirement.
+
+For the NetBSD test, official binary `sudo-1.9.17p1` was installed from the configured NetBSD repository. A temporary drop-in authorized only the root-owned test helper with fixed `--as-root run` and `--as-root list-native` arguments. `visudo` validated it before use. After the test, that exact drop-in was removed, preexisting policy hashes were verified unchanged, the native list was empty and all CGD/VND devices were idle. No broad or permanent passwordless delegation was added. Reports and policy/cleanup proofs remain in ignored `target/remote-test/native-desktop-development-f92c5e8/`.
+
+DragonFly's first full desktop build exposed an upstream `rustix 1.1.4` target-cfg bug: unsupported IPv4 source-membership bindings were included through `freebsdlike`. The lockfile now selects official `rustix 1.1.6`, whose upstream cfg restricts those APIs to FreeBSD. This changes no kernel ABI or encryption code. Upstream source: https://github.com/bytecodealliance/rustix/blob/v1.1.6/src/backend/libc/net/sockopt.rs
