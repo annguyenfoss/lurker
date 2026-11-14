@@ -77,6 +77,16 @@ def stop_owned(child):
             child.wait()
 
 
+def display_environments(display, auth, libraries):
+    app = {key: value for key, value in os.environ.items() if not key.startswith("LD_")}
+    app.update(DISPLAY=display, XAUTHORITY=str(auth), SLINT_BACKEND="winit-software", XDG_SESSION_TYPE="x11")
+    app.pop("WAYLAND_DISPLAY", None)
+    server = app.copy()
+    if libraries:
+        server["LD_LIBRARY_PATH"] = ":".join(str(path.resolve(strict=True)) for path in libraries)
+    return app, server
+
+
 def probe(args, output):
     result = {"source_commit": args.commit, "uid": os.getuid(), "route": "real winit X11 window/software renderer",
               "storage_operations": False, "probe_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
@@ -91,8 +101,16 @@ def probe(args, output):
         if digest != args.binary_sha256:
             raise ValueError("desktop binary differs from the supplied artifact digest")
         result["desktop_sha256"] = digest
-        tools = {name: system_tool(name) for name in ("Xvfb", "xauth", "xdpyinfo", "xwininfo", "xwd")}
+        tools = {name: system_tool(name) for name in ("xauth", "xdpyinfo", "xwininfo", "xwd")}
+        tools["Xvfb"] = str(args.xvfb.resolve(strict=True)) if args.xvfb else system_tool("Xvfb")
+        if args.xvfb:
+            with Path(tools["Xvfb"]).open("rb") as stream:
+                server_digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            if server_digest != args.xvfb_sha256:
+                raise ValueError("private Xvfb differs from the supplied signed-package artifact digest")
+            result["private_server_sha256"] = server_digest
         result["tools"] = tools
+        result["server_note"] = args.server_note
         number = next((n for n in range(87, 187) if not Path(f"/tmp/.X{n}-lock").exists()
                        and not Path(f"/tmp/.X11-unix/X{n}").exists()), None)
         if number is None:
@@ -103,15 +121,13 @@ def probe(args, output):
                        input=f"add {display} MIT-MAGIC-COOKIE-1 {secrets.token_hex(16)}\n",
                        capture_output=True, check=True, timeout=10)
         auth.chmod(0o600)
-        env = {key: value for key, value in os.environ.items() if not key.startswith("LD_")}
-        env.update(DISPLAY=display, XAUTHORITY=str(auth), SLINT_BACKEND="winit-software", XDG_SESSION_TYPE="x11")
-        env.pop("WAYLAND_DISPLAY", None)
+        env, server_env = display_environments(display, auth, args.server_library_path)
         result["loader_environment_overrides"] = False
 
-        def launch(argv, filename):
+        def launch(argv, filename, child_env=None):
             log = (output / filename).open("wb")
             logs.append(log)
-            child = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
+            child = subprocess.Popen(argv, env=child_env or env, stdin=subprocess.DEVNULL,
                                      stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             children.append(child)
             return child
@@ -119,8 +135,19 @@ def probe(args, output):
         def run(argv):
             return subprocess.run(argv, env=env, capture_output=True, timeout=10, check=True)
 
+        extension_options = []
+        if args.disable_extension:
+            help_result = subprocess.run([tools["Xvfb"], "-help"], env=server_env, capture_output=True, timeout=10)
+            help_text = (help_result.stdout + help_result.stderr).decode(errors="replace")
+            (output / "server-options.log").write_text(help_text)
+            if "-extension" not in help_text:
+                raise ValueError("Xvfb does not advertise extension-disable support")
+            for name in args.disable_extension:
+                if not re.search(r"(?<![A-Za-z0-9_-])" + re.escape(name) + r"(?![A-Za-z0-9_-])", help_text):
+                    raise ValueError("Xvfb does not advertise extension " + name)
+                extension_options += ["-extension", name]
         server = launch([tools["Xvfb"], display, "-screen", "0", "1280x900x24", "-nolisten", "tcp",
-                         "-auth", str(auth), "-noreset"], "xvfb.log")
+                         "-auth", str(auth), "-noreset", *extension_options], "xvfb.log", server_env)
         deadline = time.monotonic() + 20
         while True:
             if server.poll() is not None:
@@ -132,6 +159,13 @@ def probe(args, output):
             if time.monotonic() > deadline:
                 raise RuntimeError("private authenticated X display did not become ready")
             time.sleep(0.2)
+        if args.disable_extension:
+            extensions = run([tools["xdpyinfo"], "-queryExtensions"]).stdout.decode(errors="replace")
+            (output / "server-extensions.log").write_text(extensions)
+            for name in args.disable_extension:
+                if re.search(r"(?m)^\s*" + re.escape(name) + r"(?:\s+\(|\s*$)", extensions):
+                    raise ValueError("Xvfb still exposes disabled extension " + name)
+            result["disabled_extensions_verified"] = args.disable_extension
         app = launch([str(binary)], "desktop.log")
         result.update(children={"xvfb": server.pid, "desktop": app.pid}, tcp_disabled=True)
         deadline = time.monotonic() + 20
@@ -189,9 +223,22 @@ def main():
     parser.add_argument("--expected-uid", type=int, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--title", default="Lurker")
+    parser.add_argument("--xvfb", type=Path)
+    parser.add_argument("--xvfb-sha256")
+    parser.add_argument("--server-library-path", action="append", type=Path, default=[])
+    parser.add_argument("--disable-extension", action="append", default=[])
+    parser.add_argument("--server-note", default="system Xvfb; renderer qualification only")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.commit) or not re.fullmatch(r"[0-9a-f]{64}", args.binary_sha256):
         parser.error("full source commit and artifact SHA256 are required")
+    if bool(args.xvfb) != bool(args.xvfb_sha256) or (args.xvfb_sha256 and not re.fullmatch(r"[0-9a-f]{64}", args.xvfb_sha256)):
+        parser.error("a private Xvfb requires its exact artifact SHA256")
+    if args.server_library_path and not args.xvfb:
+        parser.error("server-only library paths require an explicitly verified private Xvfb")
+    if any(not p.is_absolute() or not p.is_dir() for p in args.server_library_path):
+        parser.error("server library paths must be existing absolute directories")
+    if any(not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name) for name in args.disable_extension):
+        parser.error("invalid extension name")
     os.umask(0o077)
 
     def interrupted(_signal, _frame):

@@ -4,6 +4,7 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("window_probe", Path(__file__).parents[1] / "test-desktop-window.py")
 probe = importlib.util.module_from_spec(spec)
@@ -27,6 +28,15 @@ class WindowEvidence(unittest.TestCase):
         for data in (b"short", image()[:-5], image(uniform=True)):
             with self.assertRaises(ValueError):
                 probe.frame_metrics(data)
+
+    def test_private_server_loader_path_cannot_leak_into_the_application(self):
+        with tempfile.TemporaryDirectory(prefix="lurker-server-libs-") as libraries:
+            with mock.patch.dict(probe.os.environ, {"LD_LIBRARY_PATH": "/untrusted", "LD_PRELOAD": "/untrusted.so", "WAYLAND_DISPLAY": "existing"}, clear=True):
+                app, server = probe.display_environments(":87", "/private/auth", [Path(libraries)])
+            self.assertFalse(any(name.startswith("LD_") for name in app))
+            self.assertNotIn("WAYLAND_DISPLAY", app)
+            self.assertEqual(str(Path(libraries).resolve()), server["LD_LIBRARY_PATH"])
+            self.assertNotIn("LD_PRELOAD", server)
 
     def test_existing_output_is_never_overwritten(self):
         with tempfile.TemporaryDirectory(prefix="lurker-window-unit-") as root:
