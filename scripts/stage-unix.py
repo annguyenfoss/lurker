@@ -769,6 +769,9 @@ def stage(args):
                 copied_tree(licenses, share / "licenses" / kind)
                 if kind == "veracrypt-create":
                     copied_tree("lib", private / "lib")
+                    # The privileged loader guard reads this before executing
+                    # the creator. Provenance alone is not a runtime inventory.
+                    copied_file("private-libraries.json", private / "private-libraries.json")
                     copied_file("private-libraries.json", share / "provenance/veracrypt-create-libraries.json")
             else:
                 for name in ENTRY[kind]:
@@ -777,6 +780,8 @@ def stage(args):
                 if (directory / "lib").is_dir():
                     copied_tree("lib", private / "lib")
                 copied_tree("licenses", share / "licenses" / kind)
+                if kind == "veracrypt-userspace":
+                    copied_file("private-libraries.json", private / "private-libraries.json")
                 metadata = ["bsd-veracrypt-source.json"] if kind == "veracrypt-bsd" else ["sources.json", "source-archives.json", "creator-source.json", "artifact-manifest.json", "private-libraries.json"]
                 for name in metadata:
                     if (directory / name).is_file():

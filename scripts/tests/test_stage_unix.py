@@ -398,7 +398,24 @@ Version needs section '.gnu.version_r' contains 2 entries:
         with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "validate_backend", return_value=directory), mock.patch.object(stager, "audit_dependencies", return_value=[]):
             self.assertEqual(0, stager.stage(args))
         self.assertEqual("lib/libexample.so.1", (args.output / "libexec/lurker/backends/lib/libexample.so.1").read_text())
+        self.assertEqual("private-libraries.json", (args.output / "libexec/lurker/backends/private-libraries.json").read_text())
         self.assertEqual("private-libraries.json", (args.output / "share/lurker/provenance/veracrypt-create-libraries.json").read_text())
+
+    def test_userspace_package_keeps_creator_loader_inventory_beside_executables(self):
+        args, source = self._stage_fixture()
+        directory = self.root / "userspace"
+        (directory / "lib").mkdir(parents=True)
+        (directory / "licenses").mkdir()
+        for name in (*stager.ENTRY["veracrypt-userspace"], "private-libraries.json", "lib/libexample.so.1", "licenses/example.txt"):
+            (directory / name).write_text(name)
+        args.select = ["veracrypt"]
+        args.backend = ["veracrypt-userspace=" + str(directory)]
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "validate_backend", return_value=directory), mock.patch.object(stager, "audit_dependencies", return_value=[]):
+            self.assertEqual(0, stager.stage(args))
+        name = "libexec/lurker/backends/private-libraries.json"
+        self.assertEqual("private-libraries.json", (args.output / name).read_text())
+        manifest = json.loads((args.output / "share/lurker/manifest.json").read_text())
+        self.assertEqual(stager.digest(args.output / name), manifest["files"][name]["sha256"])
 
     def test_cryptomator_helper_runtime_sources_match_selected_commit(self):
         names = ("src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java", "pom.xml")
