@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import time
 from types import SimpleNamespace
 from unittest import mock
 
@@ -50,6 +51,25 @@ class Raid1cHarnessTests(unittest.TestCase):
             suite.close(target=missing)
         self.assertEqual(suite.cli.call_args.args[0][-1], str(missing))
         self.assertFalse(suite.mounted)
+
+    def test_failure_preservation_does_not_launch_cleanup_commands(self):
+        suite = object.__new__(SUITE.MirrorSuite)
+        suite.options = SimpleNamespace(preserve_failure=True)
+        suite.mountpoint = Path("/tmp/lurker-owned/mounted")
+        suite.other_mount = Path("/tmp/lurker-owned/other")
+        suite.result = {"status": "running", "started": time.time(), "cases": []}
+        suite.save = mock.Mock()
+        attempted = []
+        def fail_first(name, _function):
+            attempted.append(name)
+            suite.result["cases"].append({"status": "failed"})
+            raise AssertionError("synthetic failure before storage")
+        suite.case = fail_first
+        with mock.patch.object(SUITE.os.path, "ismount", return_value=False):
+            result = suite.run()
+        self.assertEqual(attempted, ["quiet-native-window"])
+        self.assertEqual(result["cleanup_policy"], "preserved-on-failure")
+        self.assertEqual(result["status"], "failed")
 
     def test_argument_validation_blocks_storage_runs_on_development_host(self):
         with mock.patch.object(SUITE.platform, "system", return_value="Linux"), \

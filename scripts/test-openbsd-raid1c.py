@@ -275,10 +275,13 @@ class MirrorSuite(BASE.Suite):
         except Exception as error:
             self.result.update(status="failed", diagnostic=str(error))
         finally:
-            try:
-                self.case("normal-cli-cleanup", self.normal_cleanup)
-            except Exception as error:
-                self.result.update(status="failed", cleanup_diagnostic=str(error))
+            if self.options.preserve_failure and self.result["status"] == "failed":
+                self.result["cleanup_policy"] = "preserved-on-failure"
+            else:
+                try:
+                    self.case("normal-cli-cleanup", self.normal_cleanup)
+                except Exception as error:
+                    self.result.update(status="failed", cleanup_diagnostic=str(error))
             self.result.update(finished=time.time(), retained=True,
                                mount_present=any(os.path.ismount(p) for p in [self.mountpoint, self.other_mount]))
             self.result["duration_seconds"] = round(self.result["finished"] - self.result["started"], 3)
@@ -295,6 +298,7 @@ def parse_args(argv=None):
     parser.add_argument("--root", type=Path, default=Path("/tmp"))
     parser.add_argument("--size-gb", default="0.125", help="Size per member, at least 0.0625 GiB")
     parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument("--preserve-failure", action="store_true", help="Stop before cleanup on failure; preserve owned storage/journal for diagnosis")
     options = parser.parse_args(argv)
     if platform.system() != "OpenBSD" or os.geteuid() != 0:
         parser.error("Run as root on the disposable OpenBSD guest; no storage tests on endeavour")
