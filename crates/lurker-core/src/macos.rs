@@ -88,28 +88,12 @@ fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> AppResult<T> {
 }
 
 fn veracrypt() -> Option<PathBuf> {
-    if let Ok(current) = std::env::current_exe() {
-        if let Some(private) = private_veracrypt_candidates(&current)
-            .into_iter()
-            .find(|path| executable(path))
-        {
-            return Some(private);
-        }
-    }
-    // Finder-launched apps typically have a minimal PATH.
-    let bundled = PathBuf::from("/Applications/VeraCrypt.app/Contents/MacOS/VeraCrypt");
-    if executable(&bundled) {
-        return Some(bundled);
-    }
-    std::env::var_os("PATH")
+    // Only the private build has the specified FUSE-T dependency. An installed
+    // VeraCrypt.app or PATH binary may instead require macFUSE.
+    let current = std::env::current_exe().ok()?;
+    private_veracrypt_candidates(&current)
         .into_iter()
-        .flat_map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
-        .chain([
-            PathBuf::from("/usr/local/bin"),
-            PathBuf::from("/opt/homebrew/bin"),
-        ])
-        .map(|p| p.join("veracrypt"))
-        .find(|p| executable(p))
+        .find(|path| executable(path))
 }
 
 fn private_veracrypt_candidates(current: &Path) -> Vec<PathBuf> {
@@ -137,7 +121,7 @@ fn executable(path: &Path) -> bool {
 }
 
 fn require_veracrypt() -> AppResult<PathBuf> {
-    veracrypt().ok_or_else(|| AppError::new("The private VeraCrypt backend is missing. Install a complete Lurker package or build scripts/build-macos-backends.py. Its matching FUSE runtime must be installed separately."))
+    veracrypt().ok_or_else(|| AppError::new("The private FUSE-T VeraCrypt backend is missing. Install a complete Lurker package or build scripts/build-macos-backends.py. Install FUSE-T separately for VeraCrypt operations."))
 }
 
 pub fn probe_system() -> AppResult<SystemProbe> {
