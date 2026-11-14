@@ -598,7 +598,8 @@ def guest_setup(args):
                 "credential_transport_sha256": hashlib.sha256(Path(__file__).with_name("test-backends.py").read_bytes()).hexdigest(),
                 "cipher": args.cipher, "size_gb": size_gb, "unprivileged": args.unprivileged, "source": str(source),
                 "mountpoint": str(mountpoint), "os": platform.system(), "kernel": platform.release(),
-                "architecture": platform.machine(), "persistent_home_confirmed": True,
+                "architecture": platform.machine(), "python_version": platform.python_version(),
+                "sqlite_version": sqlite3.sqlite_version, "persistent_home_confirmed": True,
                 "mount_table": run(["mount"]), "repair": False}
     write_json(directory / "guest.json", manifest)
     create = ["create", "--type", args.backend]
