@@ -120,6 +120,53 @@ class PackagingPolicy(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     stager.audit_dependencies(self.root)
 
+    def test_symbol_versions_are_separated_by_provider_and_definition(self):
+        text = """Version symbols section '.gnu.version' contains 3 entries:
+  000: 2 (GLIBC_999.0)
+Version definition section '.gnu.version_d' contains 2 entries:
+  000000: Rev: 1 Flags: BASE Index: 1 Cnt: 1 Name: libexample.so.1
+  0x001c: Rev: 1 Flags: none Index: 2 Cnt: 1 Name: EXAMPLE_1.0
+Version needs section '.gnu.version_r' contains 2 entries:
+  000000: Version: 1 File: libc.so.6 Cnt: 1
+  0x0010: Name: GLIBC_2.38 Flags: none Version: 3
+  0x0020: Version: 1 File: libstdc++.so.6 Cnt: 2
+  0x0030: Name: GLIBCXX_3.4.26 Flags: none Version: 4
+  0x0040: Name: CXXABI_1.3.9 Flags: none Version: 5
+"""
+        needs, definitions = stager.parse_elf_versions(text)
+        self.assertEqual({"libc.so.6": ["GLIBC_2.38"], "libstdc++.so.6": ["CXXABI_1.3.9", "GLIBCXX_3.4.26"]}, needs)
+        self.assertEqual(["EXAMPLE_1.0", "libexample.so.1"], definitions)
+
+    def test_matching_soname_with_missing_symbol_version_is_rejected(self):
+        binary = self.root / "binary"
+        library = self.root / "libexample.so.1"
+        binary.write_bytes(b"not executed")
+        library.write_bytes(b"not executed")
+        def inspect(path, _):
+            return {"needed": [library.name] if path == binary else [], "search": ["$ORIGIN"],
+                    "interpreters": [], "version_needs": {library.name: ["EXAMPLE_2.0"]} if path == binary else {},
+                    "version_definitions": ["EXAMPLE_1.0"] if path == library else []}
+        with mock.patch.object(stager, "elf_info", side_effect=inspect):
+            with self.assertRaisesRegex(ValueError, "lacks required symbol versions: EXAMPLE_2.0"):
+                stager.audit_dependencies(self.root)
+        def compatible(path, tool):
+            info = inspect(path, tool)
+            if path == library:
+                info["version_definitions"].append("EXAMPLE_2.0")
+            return info
+        with mock.patch.object(stager, "elf_info", side_effect=compatible):
+            records = stager.audit_dependencies(self.root)
+        record = next(item for item in records if item["file"] == "binary")
+        self.assertEqual(["EXAMPLE_2.0"], record["dependencies"][0]["required_versions"])
+
+    def test_glibc_cannot_be_hidden_in_packaged_library_by_renaming(self):
+        path = self.root / "innocent-name.so"
+        path.write_bytes(b"not executed")
+        info = {"needed": [], "search": [], "interpreters": [], "soname": ["libc.so.6"]}
+        with mock.patch.object(stager, "elf_info", return_value=info), mock.patch.object(stager.platform, "system", return_value="Linux"):
+            with self.assertRaisesRegex(ValueError, "glibc/system loader cannot be bundled"):
+                stager.audit_dependencies(self.root)
+
     def test_real_elf_dependency_audit_executes_metadata_tools_only(self):
         binary = self.root / "never-execute-payload"
         # OpenBSD /bin/sh is a static PIE; the installed SSH client exercises dependencies.

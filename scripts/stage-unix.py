@@ -395,7 +395,7 @@ def elf_info(path, readelf):
     expected = {"x86_64": 62, "aarch64": 183}.get(architecture(platform.machine()))
     if machine != expected:
         fail("ELF architecture differs: " + str(path))
-    result = subprocess.run([readelf, "-l", "-d", str(path)], capture_output=True, text=True, timeout=30,
+    result = subprocess.run([readelf, "--wide", "-l", "-d", "--version-info", str(path)], capture_output=True, text=True, timeout=30,
                             env=dict(os.environ, LC_ALL="C"))
     if result.returncode:
         fail("cannot inspect ELF metadata: " + str(path))
@@ -403,8 +403,41 @@ def elf_info(path, readelf):
     needed = re.findall(r"\(NEEDED\).*?\[([^]]+)\]", text)
     paths = re.findall(r"\((?:RUNPATH|RPATH)\).*?\[([^]]*)\]", text)
     interpreters = re.findall(r"Requesting program interpreter:\s*([^]]+)\]", text)
+    versions, definitions = parse_elf_versions(text)
     return {"needed": needed, "search": [p for entry in paths for p in entry.split(":")], "interpreters": interpreters,
-            "soname": re.findall(r"\(SONAME\).*?\[([^]]+)\]", text)}
+            "soname": re.findall(r"\(SONAME\).*?\[([^]]+)\]", text),
+            "version_needs": versions, "version_definitions": definitions}
+
+
+def parse_elf_versions(text):
+    needs, definitions, section, provider = {}, set(), None, None
+    for line in text.splitlines():
+        if line.startswith("Version "):
+            section = "needs" if line.startswith("Version needs section") else "definitions" if line.startswith("Version definition section") else None
+            provider = None
+        if section == "needs":
+            match = re.search(r"\bFile:\s+(\S+)", line)
+            if match:
+                provider = match[1]
+                needs.setdefault(provider, set())
+            match = re.search(r"\bName:\s+(\S+)", line)
+            if match:
+                if provider is None:
+                    fail("ELF symbol version has no provider")
+                needs[provider].add(match[1])
+        elif section == "definitions":
+            match = re.search(r"\bName:\s+(\S+)", line)
+            if match:
+                definitions.add(match[1])
+    return {name: sorted(values) for name, values in needs.items()}, sorted(definitions)
+
+
+def verify_elf_versions(consumer, name, target, target_info):
+    required = consumer.get("version_needs", {}).get(name, [])
+    missing = set(required) - set(target_info.get("version_definitions", []))
+    if missing:
+        fail("shared library " + str(target) + " lacks required symbol versions: " + ", ".join(sorted(missing)))
+    return required
 
 
 def private_jre_preload(path, name, prefix, readelf):
@@ -442,6 +475,12 @@ def audit_dependencies(prefix):
         result = subprocess.run([ldconfig, "-p" if platform.system() == "Linux" else "-r"], capture_output=True, text=True, timeout=30)
         for name, path in re.findall(r"(\S+)\s+[^\n]*?=>\s+(/\S+)", result.stdout):
             cache.setdefault(name, Path(path))
+    metadata = {}
+    def inspect(path):
+        real = path.resolve()
+        if real not in metadata:
+            metadata[real] = elf_info(path, readelf)
+        return metadata[real]
     pending = [path for path, kind in entries(prefix) if kind == "file"]
     records, seen = [], set()
     while pending:
@@ -450,7 +489,7 @@ def audit_dependencies(prefix):
         if real in seen:
             continue
         seen.add(real)
-        info = elf_info(path, readelf)
+        info = inspect(path)
         if info is None:
             if path.suffix == ".jar" and path.is_relative_to(prefix):
                 with zipfile.ZipFile(path) as jar, tempfile.TemporaryDirectory(prefix="lurker-jar-audit-") as temporary:
@@ -479,11 +518,19 @@ def audit_dependencies(prefix):
                             target = next((d / name for d in defaults if (d / name).is_file()), cache.get(name))
                             if target is None or not target.is_file():
                                 fail("unresolved embedded shared library " + name + " in " + str(path))
+                            target_info = inspect(target)
+                            if target_info is None:
+                                fail("shared library is not ELF: " + str(target))
+                            required = verify_elf_versions(nested, name, target, target_info)
                             pending.append(target)
-                            refs.append({"name": name, "path": str(target.resolve()), "bundled": False, "sha256": digest(target)})
+                            refs.append({"name": name, "path": str(target.resolve()), "bundled": False,
+                                         "sha256": digest(target), "required_versions": required})
                         records.append({"file": str(path.relative_to(prefix)) + "!" + member.filename,
                                         "bundled": True, "dependencies": refs})
             continue
+        if platform.system() == "Linux" and path.resolve().is_relative_to(prefix.resolve()):
+            if any(LINUX_SYSTEM_ELF.fullmatch(name) for name in [path.name] + info.get("soname", [])):
+                fail("host glibc/system loader cannot be bundled: " + str(path))
         search = []
         for item in info["search"]:
             if not item:
@@ -508,9 +555,13 @@ def audit_dependencies(prefix):
                 target = next((d / name for d in search + defaults if (d / name).is_file()), cache.get(name))
             if target is None or not target.is_file():
                 fail("unresolved shared library " + name + " needed by " + str(path))
+            target_info = inspect(target)
+            if target_info is None:
+                fail("shared library is not ELF: " + str(target))
+            required = verify_elf_versions(info, name, target, target_info)
             bundled = target.resolve().is_relative_to(prefix.resolve())
             dependencies.append({"name": name, "path": str(target.relative_to(prefix)) if bundled else str(target.resolve()),
-                                 "bundled": bundled, "sha256": digest(target)})
+                                 "bundled": bundled, "sha256": digest(target), "required_versions": required})
             if preloaded is not None:
                 dependencies[-1]["resolution"] = "preloaded-by-private-java-launcher"
                 dependencies[-1]["runtime_validation"] = "packaged native Java/Cryptomator tests required"
