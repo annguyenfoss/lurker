@@ -132,7 +132,7 @@ If you add or remove a supported create cipher, also update:
 - Use `/usr/bin/hdiutil` for Apple disk-image encryption, attach, detach, and structured discovery.
 - VeraCrypt unmount must first use `/usr/sbin/diskutil unmount` to reject busy filesystems; some VeraCrypt builds force-detach internally.
 - The existing Generate button must use system randomness, with no fixed example password fallback.
-- Prefer the packaged native VeraCrypt backend under `Contents/Helpers` or the private CLI layout; installed-app discovery is a compatibility fallback. Its qualified external FUSE runtime is required. FUSE-T and macFUSE are not interchangeable without native workload tests.
+- Prefer the packaged native VeraCrypt backend under `Contents/Helpers` or the private CLI layout. macOS VeraCrypt must use FUSE-T only; do not build or fall back to a macFUSE variant. macFUSE is reserved for gocryptfs/CryFS. Cryptomator requires a qualified FUSE-T or native no-FUSE provider. Diagnose the missing backend-specific prerequisite rather than substituting another runtime.
 - Passphrases travel over stdin only. hdiutil uses a NUL terminator; VeraCrypt uses a newline. Reject embedded NUL/newline characters and preserve spaces.
 - The desktop still invokes lurker-helper, never the CLI; macOS helper requests run in the login user session without Linux escalation.
 - Reject LUKS and physical devices on macOS, and reject Apple images on Linux with platform-specific errors.
