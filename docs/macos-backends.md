@@ -22,7 +22,7 @@ tools, GNU-compatible make and pkg-config. VeraCrypt uses separately installed
 FUSE-T and its development headers exclusively. macFUSE is reserved for
 gocryptfs/CryFS. Cryptomator requires FUSE-T's qualified FSKit transport on macOS
 26 or later, enabled under System Settings > General > Login Items & Extensions
-> File System Extensions. Packages require at least macOS 26; native dependency
+then File System Extensions. Packages require at least macOS 26; native dependency
 deployment targets can raise the app minimum further.
 The build never installs FUSE or changes system permissions:
 
@@ -82,25 +82,28 @@ TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-th
 
 Native developer qualification, macOS 27.2.1 arm64 / SDK 27.2:
 
-- Candidate `d330b2080834743470640c43c0ec0a6554dd9bf9` packages private
-  VeraCrypt 1.26.31 with external FUSE-T 1.2.9. Its standalone, ad-hoc-signed
-  app passes 78 CLI checks: AES/Serpent/Twofish, password-only and binary-keyfile-only
-  authentication, explicit/Auto discovery, 256 MiB containers, SQLite WAL,
-  fsync, persistence, busy/alias rejection and read-only enforcement.
-- No separate VeraCrypt application was installed; the test PATH contained only
-  macOS system directories. Every owned mount closed normally; no private VeraCrypt or
-  FUSE-T SMB transport process remained after each suite. Evidence is retained
-  in `dist/macos/d330b20/vc-evidence.tar.gz` with the exact CLI/engine hashes.
-- The same packaged CLI passes 52 gocryptfs/CryFS checks with macFUSE 5.5.0
-  (each explicit and Auto). One headless Apple desktop-callback lifecycle test
-  passes using the same packaged helper. All owned mounts close normally.
-- This supersedes the previous 1.26.30 native creation-timeout result for this
-  tested combination. It does not establish other macOS/FUSE versions,
-  crash recovery, a security audit or public-release readiness.
-- The checkpoint DMG contains Apple, VeraCrypt, gocryptfs and CryFS. Cryptomator
-  remains excluded until its FUSE-T FSKit transport passes native locking/WAL
-  and lifecycle checks; the direct SMB transport failed SQLite locking.
+- Full-scope candidate `8aac70784f3a4742cffacced4bbe3bd48841ead0` packages Apple,
+  VeraCrypt, gocryptfs, CryFS and Cryptomator. The DMG and extracted standalone app
+  pass strict nested-signature/dependency audits. This artifact requires macOS
+  27.2 because of native dependency targets; FSKit's feature floor of 26 does
+  not establish compatibility with macOS 26.
+- The exact packaged CLI passes 156 checks: VeraCrypt 78 (AES/Serpent/Twofish,
+  password-only and binary-keyfile-only, explicit/Auto), gocryptfs/CryFS 52
+  (each explicit/Auto), and Cryptomator FSKit 26 (explicit/Auto). Checks include
+  SQLite WAL, fsync, persistence, busy/alias rejection and read-only enforcement.
+- Cryptomator also passes ten immediate mount/close cycles alternating read-only
+  and writable modes (11 checks including create). A headless Apple desktop
+  callback lifecycle passes with the same packaged helper. Owned mounts and
+  backend processes close normally; VeraCrypt leaves no SMB transport service.
+- VeraCrypt 1.26.31 uses FUSE-T 1.2.9 exclusively; gocryptfs/CryFS use macFUSE
+  5.5.0; Cryptomator uses FUSE-T FSKit with a private Java runtime. Tests use only
+  system PATH directories and no separately installed VeraCrypt application.
+- Artifact, source and binary hashes and case reports are retained under
+  `dist/macos/8aac707/`. The earlier `d330b20` checkpoint remains separate.
+  These results supersede the old VeraCrypt creation timeouts and Cryptomator
+  SMB locking failure for the qualified combinations, without enabling fallback.
 
-Apple encrypted disk images also retain their earlier packaged CLI/WAL proof.
-Full-scope package, desktop and directory-backend qualification is recorded
-separately in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`.
+The package is ad-hoc signed, not notarized. These are native development results,
+not a security audit, arbitrary OS-version qualification or full shutdown/fault
+coverage. Apple images also retain their earlier packaged CLI/WAL proof.
+See `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md` for the complete matrix and limits.
