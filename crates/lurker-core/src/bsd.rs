@@ -33,6 +33,10 @@ use netbsd as native;
 #[cfg(target_os = "openbsd")]
 mod openbsd;
 #[cfg(target_os = "openbsd")]
+mod raid1c;
+#[cfg(target_os = "openbsd")]
+mod raid1c_native;
+#[cfg(target_os = "openbsd")]
 use openbsd as native;
 #[cfg(target_os = "dragonfly")]
 mod dragonfly;
@@ -93,6 +97,8 @@ struct Session {
     id: String,
     backend: VolumeType,
     source: PathBuf,
+    #[serde(default)]
+    peer_sources: Vec<PathBuf>,
     identity: Identity,
     backing: Option<String>,
     mapped: Option<String>,
@@ -100,6 +106,9 @@ struct Session {
     #[serde(default)]
     intended_mountpoint: Option<PathBuf>,
     readonly: bool,
+    #[cfg(target_os = "openbsd")]
+    #[serde(default)]
+    mirror: Option<raid1c::Mirror>,
 }
 
 struct Registry {
@@ -200,6 +209,19 @@ impl Registry {
         let identity = fs::metadata(path).ok();
         for s in self.records()? {
             if s.source == path
+                || s.peer_sources.iter().any(|peer| peer == path)
+                || {
+                    #[cfg(target_os = "openbsd")]
+                    {
+                        s.mirror
+                            .as_ref()
+                            .is_some_and(|m| m.owns(path, identity.as_ref()))
+                    }
+                    #[cfg(not(target_os = "openbsd"))]
+                    {
+                        false
+                    }
+                }
                 || identity
                     .as_ref()
                     .is_some_and(|m| m.dev() == s.identity.dev && m.ino() == s.identity.ino)
@@ -352,10 +374,15 @@ fn credential(
 }
 
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
+    command.validate_raid1c_options(std::env::consts::OS)?;
     if command.privilege_mode() != PrivilegeMode::Privileged {
         return Err(AppError::new(
             "Native BSD disk backends require Privileged mode.",
         ));
+    }
+    #[cfg(target_os = "openbsd")]
+    if raid1c::handles(&command) {
+        return raid1c::run(command, output);
     }
     match command {
         #[cfg(target_os = "freebsd")]
@@ -480,6 +507,9 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         backing: None,
         mapped: None,
         mounted: None,
+        peer_sources: Vec::new(),
+        #[cfg(target_os = "openbsd")]
+        mirror: None,
         intended_mountpoint: None,
         readonly: false,
     };
@@ -678,6 +708,9 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         backing: None,
         mapped: None,
         mounted: None,
+        peer_sources: Vec::new(),
+        #[cfg(target_os = "openbsd")]
+        mirror: None,
         intended_mountpoint: Some(target.clone()),
         readonly: c.readonly,
     };
@@ -870,6 +903,9 @@ fn mount_pefs(c: MountCommand, output: Output) -> AppResult<()> {
         backing: None,
         mapped: None,
         mounted: None,
+        peer_sources: Vec::new(),
+        #[cfg(target_os = "openbsd")]
+        mirror: None,
         intended_mountpoint: Some(target.clone()),
         readonly: c.readonly,
     };
@@ -921,10 +957,25 @@ fn unmount(c: UnmountCommand, output: Output) -> AppResult<()> {
         return Err(AppError::new("Native BSD unmount does not support tags."));
     }
     let registry = Registry::open()?;
-    let target = fs::canonicalize(&c.target).unwrap_or(c.target);
+    let target = fs::canonicalize(&c.target)
+        .or_else(|_| absolute_destination(&c.target))
+        .unwrap_or(c.target);
     let identity = fs::metadata(&target).ok();
     let mut found = registry.records()?.into_iter().filter(|s| {
         s.source == target
+            || s.peer_sources.iter().any(|peer| peer == &target)
+            || {
+                #[cfg(target_os = "openbsd")]
+                {
+                    s.mirror
+                        .as_ref()
+                        .is_some_and(|m| m.owns(&target, identity.as_ref()))
+                }
+                #[cfg(not(target_os = "openbsd"))]
+                {
+                    false
+                }
+            }
             || s.mounted.as_ref().is_some_and(|m| m.target == target)
             || s.mapped.as_ref().is_some_and(|m| Path::new(m) == target)
             || identity
@@ -950,6 +1001,10 @@ fn unmount(c: UnmountCommand, output: Output) -> AppResult<()> {
 }
 
 fn verify_session(s: &Session) -> AppResult<()> {
+    #[cfg(target_os = "openbsd")]
+    if s.backend == VolumeType::Raid1c {
+        return raid1c::verify(s);
+    }
     if !s.identity.matches(&s.source) {
         return Err(AppError::new(
             "Container identity changed; refusing to detach any recorded resource.",
@@ -979,6 +1034,10 @@ fn verify_session(s: &Session) -> AppResult<()> {
 }
 
 fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
+    #[cfg(target_os = "openbsd")]
+    if s.backend == VolumeType::Raid1c {
+        return raid1c::cleanup(registry, s);
+    }
     verify_session(s)?;
     if s.mounted.is_none() {
         if let Some(target) = &s.intended_mountpoint {
@@ -1356,6 +1415,9 @@ mod tests {
             backing: None,
             mapped: None,
             mounted: None,
+            peer_sources: Vec::new(),
+            #[cfg(target_os = "openbsd")]
+            mirror: None,
             intended_mountpoint: None,
             readonly: false,
         };
@@ -1429,6 +1491,8 @@ mod tests {
             exec(tool, &[path.as_os_str().to_owned()], None).unwrap()
         }
         let mount_request = |source: &Path, password: &str| MountCommand {
+            peer_sources: Vec::new(),
+            allow_degraded: false,
             privilege_mode: PrivilegeMode::Privileged,
             source: source.to_owned(),
             mountpoint: mountpoint.clone(),
@@ -1454,6 +1518,7 @@ mod tests {
             let source = directory.join(format!("{backend} 密碼 with spaces.img"));
             create(
                 CreateCommand {
+                    peer_sources: Vec::new(),
                     privilege_mode: PrivilegeMode::Privileged,
                     target: source.clone(),
                     size_gb: Some("0.125".into()),
@@ -1543,6 +1608,7 @@ mod tests {
         let mountpoint = directory.join("mnt");
         let passphrase = "temporary external attachment test";
         let command = CreateCommand {
+            peer_sources: Vec::new(),
             privilege_mode: PrivilegeMode::Privileged,
             target: source.clone(),
             size_gb: Some("0.125".into()),
@@ -1567,6 +1633,8 @@ mod tests {
         for kind in [VolumeType::Auto, VolumeType::Veracrypt] {
             let attempted = mount(
                 MountCommand {
+                    peer_sources: Vec::new(),
+                    allow_degraded: false,
                     privilege_mode: PrivilegeMode::Privileged,
                     source: alias.clone(),
                     mountpoint: mountpoint.clone(),
@@ -1625,6 +1693,7 @@ mod tests {
             let passphrase = "temporary managed session test";
             create(
                 CreateCommand {
+                    peer_sources: Vec::new(),
                     privilege_mode: PrivilegeMode::Privileged,
                     target: source.clone(),
                     size_gb: Some("0.125".into()),
@@ -1640,6 +1709,8 @@ mod tests {
             .unwrap();
             mount(
                 MountCommand {
+                    peer_sources: Vec::new(),
+                    allow_degraded: false,
                     privilege_mode: PrivilegeMode::Privileged,
                     source: source.clone(),
                     mountpoint: mountpoint.clone(),
