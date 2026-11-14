@@ -31,6 +31,12 @@ the component. Unpatched upstream and intermediate patch builds cannot satisfy
 the current release provenance. See `cryfs/README.md` for durability evidence and
 the write-through performance tradeoff.
 
+On macOS the builder additionally applies `cryfs/macos-compiler.patch` for newer
+libc++/range-v3 compatibility, recording both patch digests. This patch preserves
+the ordinary `fuse` ABI and requires separately installed macFUSE; the older
+experimental FUSE-T patch is not a production CryFS input. `--jobs` bounds Go,
+Conan and CMake build parallelism, including dependency compilation.
+
 FreeBSD's Go FUSE route needs the base `fusefs` kernel module, access to
 `/dev/fuse`, `/sbin/mount_fusefs` and native permission for user mounts. Its CLI
 suite passed on the dedicated guest with temporary `vfs.usermount=1` and

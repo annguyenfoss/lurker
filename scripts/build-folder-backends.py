@@ -23,6 +23,11 @@ PINS = {
     "cryfs": ("https://github.com/cryfs/cryfs.git", "5d0cc36785d93e12250696a3ffc928042f2e8d61", "1.0.3"),
 }
 PATCHES = {"cryfs": ["native/folder/cryfs/fsyncdir.patch"]}
+PLATFORM_PATCHES = {"Darwin": {"cryfs": ["native/folder/cryfs/macos-compiler.patch"]}}
+
+
+def selected_patches(name: str, system: str | None = None) -> list[str]:
+    return PATCHES.get(name, []) + PLATFORM_PATCHES.get(system or platform.system(), {}).get(name, [])
 
 
 def sha256(path: Path) -> str:
@@ -80,7 +85,7 @@ def go_module_notices(src: Path, destination: Path) -> list[dict]:
 def go_runtime_notices(src: Path, destination: Path) -> dict[str, str]:
     goroot = Path(capture(["go", "env", "GOROOT"], src))
     # Binary distro packages may relocate the top-level Go license.
-    candidates = [goroot, goroot.parent.parent / "share/licenses/go",
+    candidates = [goroot, goroot.parent, goroot.parent.parent / "share/licenses/go",
                   Path("/usr/share/doc/golang-go")]
     if os.environ.get("LURKER_GO_LICENSE_DIR"):
         candidates.insert(0, Path(os.environ["LURKER_GO_LICENSE_DIR"]))
@@ -150,7 +155,7 @@ def patched_source(name: str, pristine: Path, cache: Path, log) -> tuple[Path, d
     Build in a separate worktree, retaining the original pristine checkout.
     Never reset an existing cache that differs from the expected source.
     """
-    paths = PATCHES.get(name, [])
+    paths = selected_patches(name)
     if not paths:
         return pristine, {}
     with tempfile.TemporaryDirectory(prefix="patch-input-", dir=cache) as temporary:
@@ -196,7 +201,7 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             env.update(CGO_ENABLED="0", GOMAXPROCS=str(jobs))
             # Direct build avoids upstream build.bash installing into GOPATH/bin.
             run(["go", "mod", "verify"], src, log, env)
-            run(["go", "build", "-mod=readonly", "-trimpath", "-ldflags="
+            run(["go", "build", "-p", str(jobs), "-mod=readonly", "-trimpath", "-ldflags="
                  f"-X main.GitVersion={version} -X main.BuildDate=2026-11-11",
                  "-o", str(output / name), "."], src, log, env)
             target_os, target_arch = (capture(["go", "env", key], src) for key in ("GOOS", "GOARCH"))
@@ -222,6 +227,7 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
                 # paths in a distributed executable (including empty entries).
                 build_options = ["-c", 'tools.cmake.cmaketoolchain:extra_variables={"CMAKE_SKIP_RPATH":True}']
             run(conan + ["build", ".", "-s", "build_type=Release", "--build=missing",
+                         "-c", f"tools.build:jobs={jobs}",
                          "-o", "&:build_tests=False", "-o", "&:update_checks=False",
                          "--lockfile", str(lock)] + build_options, src, log, env)
             binary = src / "build/Release/src/cryfs-cli/cryfs"

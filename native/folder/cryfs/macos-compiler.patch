@@ -1,0 +1,43 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2a578fb..b68a90d 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -6,6 +6,20 @@ cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
+ 
+ project(cryfs)
+ 
++# Compatibility for range-v3 0.12 with Xcode 27 libc++.
++# https://github.com/ericniebler/range-v3/issues/1866
++if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
++  include(CheckCXXSourceCompiles)
++  check_cxx_source_compiles("#include <cstddef>
++    #ifndef _LIBCPP_TEMPLATE_VIS
++    #error missing visibility macro
++    #endif
++    int main() { return 0; }" LURKER_HAS_LIBCPP_TEMPLATE_VIS)
++  if(NOT LURKER_HAS_LIBCPP_TEMPLATE_VIS)
++    add_compile_definitions(_LIBCPP_TEMPLATE_VIS=)
++  endif()
++endif()
++
+ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake-utils)
+ include(utils)
+ 
+diff --git a/src/blockstore/utils/IdWrapper.h b/src/blockstore/utils/IdWrapper.h
+index 3bf0efa..206cc00 100644
+--- a/src/blockstore/utils/IdWrapper.h
++++ b/src/blockstore/utils/IdWrapper.h
+@@ -89,6 +89,13 @@ inline bool operator==(const IdWrapper<Tag>& lhs, const IdWrapper<Tag>& rhs) {
+   return lhs.id_ == rhs.id_;
+ }
+ 
++// libc++ may dispatch std::less<T> through the transparent comparator.
++// Preserve exactly the byte ordering used by DEFINE_IDWRAPPER's std::less.
++template<class Tag>
++inline bool operator<(const IdWrapper<Tag>& lhs, const IdWrapper<Tag>& rhs) {
++  return 0 > std::memcmp(lhs.data().data(), rhs.data().data(), IdWrapper<Tag>::BINARY_LENGTH);
++}
++
+ template<class Tag>
+ inline bool operator!=(const IdWrapper<Tag>& lhs, const IdWrapper<Tag>& rhs) {
+   return !operator==(lhs, rhs);

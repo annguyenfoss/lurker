@@ -41,6 +41,31 @@ class NoticeTests(unittest.TestCase):
             self.assertTrue(all(not Path(path).is_absolute() for path in inventory))
 
 
+    def test_homebrew_runtime_license_lives_above_libexec(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            goroot = root / "go/libexec"
+            (goroot / "src").mkdir(parents=True)
+            (goroot.parent / "LICENSE").write_text("Go BSD license")
+            with patch.object(BUILD, "capture", return_value=str(goroot)), patch.dict(BUILD.os.environ, {}, clear=True):
+                inventory = BUILD.go_runtime_notices(root, root / "notices")
+            self.assertIn("LICENSE", inventory)
+            self.assertEqual((root / "notices/LICENSE").read_text(), "Go BSD license")
+
+
+class PlatformPatchTests(unittest.TestCase):
+    def test_mac_compiler_patch_preserves_common_durability_and_native_fuse(self):
+        common = BUILD.selected_patches("cryfs", "Linux")
+        mac = BUILD.selected_patches("cryfs", "Darwin")
+        self.assertEqual(common, ["native/folder/cryfs/fsyncdir.patch"])
+        self.assertEqual(mac, common + ["native/folder/cryfs/macos-compiler.patch"])
+        compiler = (BUILD.ROOT / mac[-1]).read_text()
+        self.assertIn("IdWrapper.h", compiler)
+        self.assertNotIn("fuse-t", compiler)
+        self.assertNotIn("src/fspp/fuse/CMakeLists.txt", compiler)
+        self.assertEqual(BUILD.selected_patches("gocryptfs", "Darwin"), [])
+
+
 class PatchedSourceTests(unittest.TestCase):
     def make_source(self, root):
         source = root / "source"
