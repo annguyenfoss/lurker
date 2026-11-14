@@ -204,6 +204,83 @@ class PackagingPolicy(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "server JVM loader path"):
                 stager.private_jre_preload(runtime / "lib/libjava.so", "libjvm.so", self.root, "readelf")
 
+    def _linux_closure(self):
+        (self.root / "lib").mkdir()
+        (self.root / "licenses").mkdir()
+        (self.root / "lib/libexample.so.1").write_bytes(b"private library")
+        (self.root / "licenses/example.txt").write_text("upstream license")
+        (self.root / "lurker-veracrypt-create").write_bytes(b"creator")
+        manifest = {"schema": 1, "libraries": [{"name": "libexample.so.1", "soname": "libexample.so.1",
+                    "sha256": stager.digest(self.root / "lib/libexample.so.1"), "source_path": "/usr/lib/libexample.so.1",
+                    "license_files": ["licenses/example.txt"]}], "files": {
+                    name: {"sha256": stager.digest(self.root / name)} for name in ("lib/libexample.so.1", "licenses/example.txt")}}
+        self._save_closure(manifest)
+        def elf(path, _):
+            return {"needed": ["libc.so.6"] if path.parent.name == "lib" else ["libexample.so.1"],
+                    "search": ["$ORIGIN"] if path.parent.name == "lib" else ["$ORIGIN/lib"],
+                    "soname": [path.name] if path.parent.name == "lib" else [], "interpreters": []}
+        return manifest, elf
+
+    def _save_closure(self, manifest):
+        (self.root / "private-libraries.json").write_text(json.dumps(manifest))
+
+    def test_linux_private_closure_binds_bytes_sonames_notices_and_origin(self):
+        manifest, elf = self._linux_closure()
+        with mock.patch.object(stager, "elf_info", side_effect=elf):
+            self.assertEqual(manifest, stager.verify_linux_private_libraries(self.root, "veracrypt-create"))
+            for field, value, message in (("license_files", [], "license"), ("source_path", "", "provenance"),
+                                           ("soname", "libdifferent.so.1", "SONAME"), ("sha256", "stale", "checksum")):
+                original = manifest["libraries"][0][field]
+                manifest["libraries"][0][field] = value
+                self._save_closure(manifest)
+                with self.assertRaisesRegex(ValueError, message):
+                    stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+                manifest["libraries"][0][field] = original
+            self._save_closure(manifest)
+            (self.root / "lib/libunrecorded.so").write_bytes(b"unrecorded")
+            with self.assertRaisesRegex(ValueError, "unmanifested"):
+                stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+
+    def test_linux_private_closure_refuses_host_runtime_and_ambient_fallback(self):
+        manifest, elf = self._linux_closure()
+        for name in ("libc.so.6", "ld-linux-x86-64.so.2", "libpthread.so.0", "libresolv.so.2"):
+            with self.subTest(name=name):
+                manifest["libraries"][0]["name"] = name
+                self._save_closure(manifest)
+                with self.assertRaisesRegex(ValueError, "forbidden"):
+                    stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+        manifest["libraries"][0]["name"] = "libexample.so.1"
+        self._save_closure(manifest)
+        def missing(path, tool):
+            info = elf(path, tool)
+            if path.name == "lurker-veracrypt-create":
+                info["needed"].append("libfuse3.so.4")
+            return info
+        with mock.patch.object(stager, "elf_info", side_effect=missing):
+            with self.assertRaisesRegex(ValueError, "missing dependency libfuse3.so.4"):
+                stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+        def wrong_origin(path, tool):
+            info = elf(path, tool)
+            info["search"] = ["/usr/lib"]
+            return info
+        with mock.patch.object(stager, "elf_info", side_effect=wrong_origin):
+            with self.assertRaisesRegex(ValueError, r"exact \$ORIGIN"):
+                stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+
+    def test_creator_only_staging_keeps_private_libraries_and_provenance(self):
+        args, source = self._stage_fixture()
+        directory = self.root / "creator"
+        (directory / "lib").mkdir(parents=True)
+        (directory / "licenses").mkdir()
+        for name in ("lurker-veracrypt-create", "creator-source.json", "private-libraries.json", "lib/libexample.so.1", "licenses/example.txt"):
+            (directory / name).write_text(name)
+        args.select = ["veracrypt"]
+        args.backend = ["veracrypt-create=" + str(directory)]
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "validate_backend", return_value=directory), mock.patch.object(stager, "audit_dependencies", return_value=[]):
+            self.assertEqual(0, stager.stage(args))
+        self.assertEqual("lib/libexample.so.1", (args.output / "libexec/lurker/backends/lib/libexample.so.1").read_text())
+        self.assertEqual("private-libraries.json", (args.output / "share/lurker/provenance/veracrypt-create-libraries.json").read_text())
+
     def test_cryptomator_helper_runtime_sources_match_selected_commit(self):
         names = ("src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java", "pom.xml")
         for name in names:

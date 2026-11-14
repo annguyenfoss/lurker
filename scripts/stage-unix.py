@@ -242,6 +242,59 @@ def verify_cryptomator_sources(root, source):
             fail("Cryptomator helper source differs from exact Lurker commit: " + name)
 
 
+# These components belong to the host ABI and must never be shipped privately.
+LINUX_SYSTEM_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|resolv|util|anl|nss_[^/]+|BrokenLocale)\.so(?:\..*)?)$")
+LINUX_BASELINE_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|stdc\+\+|gcc_s)\.so(?:\..*)?)$")
+
+
+def verify_linux_private_libraries(root, kind):
+    manifest = json_file(root / "private-libraries.json")
+    if manifest.get("schema") != 1 or not isinstance(manifest.get("files"), dict):
+        fail("Linux private library manifest schema/inventory is missing")
+    verify_files(root, manifest["files"])
+    actual = {str(path.relative_to(root)) for path, _ in entries(root / "lib")}
+    recorded = {name for name in manifest["files"] if name.startswith("lib/")}
+    if actual != recorded:
+        fail("Linux private library inventory has unmanifested/missing files")
+    if any(not name.startswith(("lib/", "licenses/")) for name in manifest["files"]):
+        fail("Linux private library inventory contains unrelated paths")
+    readelf = shutil.which("readelf") or shutil.which("llvm-readelf")
+    if not readelf:
+        fail("readelf/llvm-readelf is required for private libraries")
+    names = set()
+    libraries = manifest.get("libraries", [])
+    for library in libraries:
+        name = str(relative(library["name"]))
+        if "/" in name or name in names or LINUX_SYSTEM_ELF.fullmatch(name):
+            fail("forbidden/duplicate Linux private library: " + name)
+        names.add(name)
+        path = root / "lib" / name
+        if path.is_symlink() or digest(path) != library.get("sha256"):
+            fail("Linux private library checksum/regular-file identity differs: " + name)
+        if not library.get("source_path") or not Path(library["source_path"]).is_absolute():
+            fail("Linux private library source provenance is missing: " + name)
+        notices = library.get("license_files", [])
+        if not notices or any(not str(relative(notice)).startswith("licenses/") or notice not in manifest["files"] for notice in notices):
+            fail("Linux private library license inventory is missing: " + name)
+        info = elf_info(path, readelf)
+        if info is None or info["soname"] != [library.get("soname")] or library.get("soname") != name:
+            fail("Linux private library SONAME identity differs: " + name)
+        if info["search"] != ["$ORIGIN"] or info["interpreters"]:
+            fail("Linux private library needs an exact $ORIGIN search path: " + name)
+    if recorded != {"lib/" + name for name in names}:
+        fail("Linux private library inventory differs from its library records")
+    for name in ENTRY[kind] + ["lib/" + name for name in sorted(names)]:
+        info = elf_info(root / name, readelf)
+        if info is None:
+            fail("Linux private closure contains a non-ELF file: " + name)
+        if not name.startswith("lib/") and info["search"] != ["$ORIGIN/lib"]:
+            fail("Linux helper needs an exact $ORIGIN/lib search path: " + name)
+        for dependency in info["needed"]:
+            if not LINUX_BASELINE_ELF.fullmatch(dependency) and dependency not in names:
+                fail("Linux private closure is missing dependency " + dependency + " for " + name)
+    return manifest
+
+
 def validate_backend(kind, directory, source):
     root = safe_root(directory)
     list(entries(root))
@@ -286,6 +339,7 @@ def validate_backend(kind, directory, source):
             fail("VeraCrypt creator source archive checksum differs")
         if manifest.get("binary_sha256") != digest(root / "lurker-veracrypt-create"):
             fail("VeraCrypt creator binary checksum differs")
+        verify_linux_private_libraries(root, kind)
         if kind == "veracrypt-userspace":
             if json_file(root / "sources.json") != {key: list(value) for key, value in pin.items()}:
                 fail("Linux userspace source pins differ")
@@ -387,7 +441,7 @@ def audit_dependencies(prefix):
     if ldconfig:
         result = subprocess.run([ldconfig, "-p" if platform.system() == "Linux" else "-r"], capture_output=True, text=True, timeout=30)
         for name, path in re.findall(r"(\S+)\s+[^\n]*?=>\s+(/\S+)", result.stdout):
-            cache.setdefault(Path(path).name, Path(path))
+            cache.setdefault(name, Path(path))
     pending = [path for path, kind in entries(prefix) if kind == "file"]
     records, seen = [], set()
     while pending:
@@ -592,6 +646,9 @@ def stage(args):
                 copied_file(metadata, share / "provenance" / (kind + ".json"))
                 licenses = "licenses/" + kind if kind in {"gocryptfs", "cryfs"} else "licenses"
                 copied_tree(licenses, share / "licenses" / kind)
+                if kind == "veracrypt-create":
+                    copied_tree("lib", private / "lib")
+                    copied_file("private-libraries.json", share / "provenance/veracrypt-create-libraries.json")
             else:
                 for name in ENTRY[kind]:
                     copied_file(name, private / name)
@@ -599,7 +656,7 @@ def stage(args):
                 if (directory / "lib").is_dir():
                     copied_tree("lib", private / "lib")
                 copied_tree("licenses", share / "licenses" / kind)
-                metadata = ["bsd-veracrypt-source.json"] if kind == "veracrypt-bsd" else ["sources.json", "source-archives.json", "creator-source.json", "artifact-manifest.json"]
+                metadata = ["bsd-veracrypt-source.json"] if kind == "veracrypt-bsd" else ["sources.json", "source-archives.json", "creator-source.json", "artifact-manifest.json", "private-libraries.json"]
                 for name in metadata:
                     if (directory / name).is_file():
                         target = share / "provenance" / kind
