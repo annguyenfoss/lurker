@@ -68,6 +68,24 @@ class PlatformPatchTests(unittest.TestCase):
 
 
 class MacStagingTests(unittest.TestCase):
+    def test_private_openmp_license_is_required_and_copied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            library = root / "llvm/lib/libomp.dylib"
+            library.parent.mkdir(parents=True)
+            library.write_bytes(b"OpenMP runtime")
+            notice = library.parent.parent / "LICENSE.TXT"
+            notice.write_text("LLVM license with exception")
+            module = SimpleNamespace(dependencies=lambda _: [str(library)])
+            with patch.dict("sys.modules", {"macos_backend": module}):
+                BUILD.macos_private_notices(root / "cryfs", {"cryfs-libs/libomp.dylib": "digest"}, root / "licenses")
+                self.assertEqual((root / "licenses/llvm-openmp/LICENSE.TXT").read_text(), notice.read_text())
+                notice.unlink()
+                with self.assertRaisesRegex(RuntimeError, "license missing"):
+                    BUILD.macos_private_notices(root / "cryfs", {"cryfs-libs/libomp.dylib": "digest"}, root / "licenses")
+                with self.assertRaisesRegex(RuntimeError, "No reviewed"):
+                    BUILD.macos_private_notices(root / "cryfs", {"cryfs-libs/unknown.dylib": "digest"}, root / "licenses")
+
     def test_failed_signing_does_not_publish_private_code(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

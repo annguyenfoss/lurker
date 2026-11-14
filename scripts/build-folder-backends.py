@@ -208,6 +208,23 @@ def stage_macos_cryfs(binary: Path, output: Path) -> dict:
                                   for path in sorted(libraries.iterdir()) if path.is_file()}}
 
 
+def macos_private_notices(binary: Path, libraries: dict[str, str], destination: Path) -> None:
+    """Ship LLVM's license with the private OpenMP runtime, fail on new closures."""
+    from macos_backend import dependencies
+    originals = {Path(path).name: Path(path) for path in dependencies(binary) if path.startswith("/")}
+    for relative in libraries:
+        name = Path(relative).name
+        if name != "libomp.dylib" or name not in originals:
+            raise RuntimeError("No reviewed private dylib notice recipe: " + name)
+        prefix = originals[name].resolve(strict=True).parent.parent
+        license = prefix / "LICENSE.TXT"
+        if not license.is_file():
+            raise RuntimeError("LLVM OpenMP runtime license missing: " + str(license))
+        target = destination / "llvm-openmp"
+        target.mkdir(parents=True, exist_ok=True)
+        copy_notice(license, target / license.name)
+
+
 def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
     url, revision, version = PINS[name]
     logpath = cache / f"{name}.log"
@@ -268,6 +285,8 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         for path in license_paths:
             copy_notice(path, license_dir / path.name)
         source_notices(src, license_dir / "source")
+        if name == "cryfs" and platform.system() == "Darwin":
+            macos_private_notices(binary, native_manifest["private_libraries"], license_dir / "native")
         for relative, expected in patches.items():
             path = ROOT / relative
             if sha256(path) != expected:
