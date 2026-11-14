@@ -42,6 +42,12 @@ def arguments(binary, action, source, *, mountpoint=None, peer=None, kind=None,
     return command
 
 
+def member_parent(root, long_parent):
+    # A120-character component is valid on the guest but exceeds the previous
+    # creation-parent restriction; plaintext mountpoints stay short and separate.
+    return root / ("members-" + "x" * 112) if long_parent else root
+
+
 def owned_path(value, root):
     return isinstance(value, str) and value.startswith("/") and Path(os.path.normpath(value)).is_relative_to(root)
 
@@ -98,11 +104,17 @@ def private_binary(binary):
 class MirrorSuite(BASE.Suite):
     def __init__(self, options):
         super().__init__(options)
-        self.peer = self.root / "peer 密碼 with spaces.img"
+        self.member_parent = member_parent(self.root, options.long_parent)
+        if self.member_parent != self.root:
+            self.member_parent.mkdir(mode=0o700)
+        self.source = self.member_parent / self.source.name
+        self.peer = self.member_parent / "peer 密碼 with spaces.img"
         self.descriptor = Path(str(self.source) + ".raid1c.json")
         self.held = None
         self.result.update(suite="openbsd-raid1c-cli", harness_sha256=BASE.file_hash(Path(__file__)), profile="two members; native AES-XTS/bcrypt_pbkdf; FFS2",
                            size_gb_per_member=options.size_gb,
+                           long_parent=options.long_parent, member_parent=str(self.member_parent),
+                           actual_mountpoint=str(self.mountpoint),
                            limitations=["No device create, VM shutdown, rebuild, repair, forced detach or readonly native mapping"])
         self.save()
 
@@ -378,6 +390,8 @@ class InvokingOwnerSuite(MirrorSuite):
         # Assign only this newly allocated traversal directory and fresh helper
         # files. Member/descriptor/inner-root ownership must come from Lurker.
         os.chown(self.root, self.owner.pw_uid, self.owner.pw_gid)
+        if self.member_parent != self.root:
+            os.chown(self.member_parent, self.owner.pw_uid, self.owner.pw_gid)
         self.expected = self.root / "expected user payload.bin"
         self.expected.write_bytes(self.payload); self.expected.chmod(0o600)
         os.chown(self.expected, self.owner.pw_uid, self.owner.pw_gid)
@@ -474,6 +488,7 @@ def parse_args(argv=None):
     parser.add_argument("--root", type=Path, default=Path("/tmp"))
     parser.add_argument("--size-gb", default="0.125", help="Size per member, at least 0.0625 GiB")
     parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument("--long-parent", action="store_true", help="Put encrypted members and descriptor beneath a120-character directory; keep native mountpoints short")
     parser.add_argument("--owner-user", help="Use a separate fresh synthetic-sudo invoking-user proof instead of the root matrix")
     parser.add_argument("--preserve-failure", action="store_true", help="Stop before cleanup on failure; preserve owned storage/journal for diagnosis")
     options = parser.parse_args(argv)

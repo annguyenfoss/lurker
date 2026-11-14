@@ -104,6 +104,15 @@ class Raid1cHarnessTests(unittest.TestCase):
             path.write_bytes(b"truncated")
             with self.assertRaises(AssertionError): SUITE.native_headers([path])
 
+    def test_long_encrypted_parent_does_not_lengthen_native_mountpoint(self):
+        root = Path("/tmp/lurker-conformance-example")
+        parent = SUITE.member_parent(root, True)
+        self.assertEqual(len(parent.name), 120)
+        self.assertTrue(parent.is_relative_to(root))
+        self.assertGreater(len(str(parent / "primary.img")), 90)
+        self.assertLess(len(str(root / "mount with spaces")), 90)
+        self.assertEqual(SUITE.member_parent(root, False), root)
+
     def test_argument_validation_blocks_storage_runs_on_development_host(self):
         with mock.patch.object(SUITE.platform, "system", return_value="Linux"), \
              mock.patch.object(SUITE.os, "geteuid", return_value=0), \
