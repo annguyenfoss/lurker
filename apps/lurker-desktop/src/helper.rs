@@ -81,6 +81,9 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
         {
             return Err("Installed lurker-helper does not support directory backends. Update it together with the desktop app.".into());
         }
+        if directory_backend && capabilities["folder_supervision_protocol"] != 1 {
+            return Err("Installed lurker-helper does not support supervised directory sessions. Update it together with the desktop app.".into());
+        }
         if unprivileged && capabilities["unprivileged_veracrypt"] != true {
             return Err("Installed lurker-helper does not support unprivileged operation. Update it together with the desktop app.".into());
         }
@@ -225,6 +228,44 @@ fi
     }
 
     #[test]
+    fn directory_requests_require_supervision_before_receiving_credentials() {
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-folder-supervision-helper-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(
+            &helper,
+            r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"directory_backends":true}'
+else
+  touch "${0}.ran"
+fi
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let command = CommandAction::Create(lurker_core::CreateCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            target: directory.join("vault"),
+            peer_sources: Vec::new(),
+            size_gb: None,
+            force: false,
+            source_kind: lurker_core::SourceKind::Directory,
+            volume_type: VolumeType::Gocryptfs,
+            cipher: lurker_core::CreateCipher::Aes,
+            passphrase: Some("fixture password".into()),
+            keyfile: None,
+        });
+        let error = run_helper(&helper, command).unwrap_err();
+        assert!(error.contains("supervised directory sessions"), "{error}");
+        assert!(!directory.join("helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     #[cfg(target_os = "linux")]
     fn privileged_linux_requests_require_owned_loop_lease_capability() {
         let directory =
@@ -328,7 +369,7 @@ fi
             &helper,
             r#"#!/bin/sh
 if [ "$1" = capabilities ]; then
-  printf '%s\n' '{"protocol_version":3,"directory_backends":true,"unprivileged_veracrypt":false}'
+  printf '%s\n' '{"protocol_version":3,"directory_backends":true,"folder_supervision_protocol":1,"unprivileged_veracrypt":false}'
 else
   cat >/dev/null
   printf '%s\n' '{"ok":true,"logs":[],"error":null}'
