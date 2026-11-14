@@ -17,8 +17,8 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = {
-    "veracrypt": ("veracrypt/VeraCrypt", "8172bc55f834485f67be271e02c1167981423621"),
-    "veracrypt-create": ("veracrypt/VeraCrypt", "8172bc55f834485f67be271e02c1167981423621"),
+    "veracrypt": ("veracrypt/VeraCrypt", "7afc449f2bc69366e8b67b82ad66201325d318c3"),
+    "veracrypt-create": ("veracrypt/VeraCrypt", "7afc449f2bc69366e8b67b82ad66201325d318c3"),
     "lkl": ("lkl/linux", "d0f76a77e8c2ca68bd7d96190b8da09040eab072"),
 }
 
@@ -26,8 +26,8 @@ SOURCES = {
 # extraction and before accepting an existing archive cache. Mutable generated
 # build trees are not a substitute for these immutable source inputs.
 SOURCE_ARCHIVE_SHA256 = {
-    "veracrypt": "fc286de07d0ac88b48c65cade34bac932b30a93cd1719a22f9fef3b69feedfc4",
-    "veracrypt-create": "fc286de07d0ac88b48c65cade34bac932b30a93cd1719a22f9fef3b69feedfc4",
+    "veracrypt": "1bf27ae89671943fbd2ff0cc63e9c727951a774a5c6c3cb26e058bdea0ca39d1",
+    "veracrypt-create": "1bf27ae89671943fbd2ff0cc63e9c727951a774a5c6c3cb26e058bdea0ca39d1",
     "lkl": "ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e168",
 }
 
