@@ -22,7 +22,8 @@ tools, GNU-compatible make and pkg-config. VeraCrypt uses separately installed
 FUSE-T and its development headers exclusively. macFUSE is reserved for
 gocryptfs/CryFS. Cryptomator requires FUSE-T's qualified FSKit transport on macOS
 26 or later, enabled under System Settings > General > Login Items & Extensions
-> File System Extensions. Packages containing it declare macOS 26 as their minimum.
+> File System Extensions. Packages require at least macOS 26; native dependency
+deployment targets can raise the app minimum further.
 The build never installs FUSE or changes system permissions:
 
 ```bash
