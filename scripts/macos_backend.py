@@ -11,11 +11,11 @@ import subprocess
 import tarfile
 import urllib.request
 
-VC_REVISION = "8172bc55f834485f67be271e02c1167981423621"
+VC_REVISION = "7afc449f2bc69366e8b67b82ad66201325d318c3"
 SOURCES = {
     "veracrypt": (
         f"https://codeload.github.com/veracrypt/VeraCrypt/tar.gz/{VC_REVISION}",
-        "fc286de07d0ac88b48c65cade34bac932b30a93cd1719a22f9fef3b69feedfc4",
+        "1bf27ae89671943fbd2ff0cc63e9c727951a774a5c6c3cb26e058bdea0ca39d1",
     ),
     "wxwidgets": (
         "https://github.com/wxWidgets/wxWidgets/releases/download/v3.2.8.1/wxWidgets-3.2.8.1.tar.bz2",

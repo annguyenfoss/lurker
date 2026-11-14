@@ -6,6 +6,12 @@ caches default to `~/.cache/lurker/macos-backends`; staged artifacts stay under
 `target/release/macos-backends`. Source
 archives are SHA-256 checked. The build records target, compiler, SDK, FUSE
 implementation/version, source URLs/hashes and staged artifact hashes in `provenance.json`.
+The Mac engine is pinned to the signed upstream VeraCrypt 1.26.31 release
+commit `7afc449f2bc69366e8b67b82ad66201325d318c3`. It includes Unix descriptor
+inheritance hardening and system-tool wait/timeout fixes relevant to the previous
+native hangs; native qualification below remains a separate requirement.
+https://github.com/veracrypt/VeraCrypt/releases/tag/VeraCrypt_1.26.31
+
 Its text interface uses the existing VeraCrypt profiles and stdin credentials.
 The shared `native/veracrypt/utf8-console.patch` preserves complete Unicode paths
 in libc++ volume listings; its digest and patched input hashes are recorded and
