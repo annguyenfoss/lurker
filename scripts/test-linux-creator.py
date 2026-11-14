@@ -35,7 +35,7 @@ def check_companion_trust(original_cli, cases, failures):
         key = root / "test.key"; key.write_bytes(os.urandom(32)); key.chmod(0o600)
         target = root / "must-not-exist.hc"
         user = pwd.getpwnam("adjutant")
-        for case in ["user-owned-library", "writable-library", "escaped-library-symlink", "changed-library-hash", "user-owned-manifest", "uninventoried-library"]:
+        for case in ["user-owned-library", "writable-library", "escaped-library-symlink", "changed-library-hash", "user-owned-manifest", "uninventoried-library", "dangling-library-directory"]:
             if library.is_symlink() or library.exists(): library.unlink()
             library.write_bytes(original); library.chmod(0o644)
             receipt.write_text(json.dumps(manifest)); receipt.chmod(0o644); os.chown(receipt, 0, 0)
@@ -46,13 +46,16 @@ def check_companion_trust(original_cli, cases, failures):
             elif case == "changed-library-hash": library.write_bytes(b"changed")
             elif case == "user-owned-manifest": os.chown(receipt, user.pw_uid, user.pw_gid)
             elif case == "uninventoried-library": (libraries / "libunexpected.so").write_bytes(b"unexpected")
+            elif case == "dangling-library-directory":
+                shutil.rmtree(libraries); libraries.symlink_to(root / "missing-library-directory"); receipt.unlink()
             case_name = "elevated-" + case
             cases[case_name] = []
             outcome = subprocess.run([cli, "create", "--type", "veracrypt", "--key-file", key, target, "0.15"],
                                      stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
             diagnostic = (b"hash mismatch" if case == "changed-library-hash" else
                           b"Uninventoried" if case == "uninventoried-library" else
-                          b"bounded regular file" if case == "escaped-library-symlink" else b"untrusted path")
+                          b"bounded regular file" if case == "escaped-library-symlink" else
+                          b"Cannot inspect private backend file" if case == "dangling-library-directory" else b"untrusted path")
             if outcome.returncode == 0 or diagnostic not in outcome.stdout + outcome.stderr or marker.exists() or target.exists():
                 failures.append(case_name)
             marker.unlink(missing_ok=True)

@@ -465,14 +465,15 @@ fn validate_creator_libraries(program: &Path) -> AppResult<()> {
         .ok_or_else(|| AppError::new("Invalid private creator path."))?;
     let directory = parent.join("lib");
     let manifest = parent.join("private-libraries.json");
+    // Inspect the entry itself: try_exists follows links, so a dangling
+    // $ORIGIN/lib symlink must not be mistaken for an older host-only build.
+    let entry_exists = |path: &Path| match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(AppError::io("Cannot inspect private backend entry", err)),
+    };
     // Older administrator-installed builds use only trusted host libraries.
-    if !directory
-        .try_exists()
-        .map_err(|err| AppError::io("Cannot inspect private libraries", err))?
-        && !manifest
-            .try_exists()
-            .map_err(|err| AppError::io("Cannot inspect backend manifest", err))?
-    {
+    if !entry_exists(&directory)? && !entry_exists(&manifest)? {
         return Ok(());
     }
     let bytes = trusted_backend_file(&manifest, 1024 * 1024)?;
