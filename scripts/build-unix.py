@@ -45,6 +45,18 @@ def verify_immutable_source(source, metadata_path=None):
         raise ValueError("deployed source contains unexpected/missing inputs; use a fresh immutable snapshot with build caches outside it")
 
 
+def verify_userspace_cache(directory, module):
+    root = module.safe_root(directory)
+    envelope = module.json_file(root / "artifact-manifest.json")
+    if envelope.get("schema") != 1 or envelope.get("backend") != "veracrypt-userspace":
+        raise ValueError("cached Linux native helpers require a complete userspace artifact envelope")
+    module.verify_platform(envelope)
+    module.verify_files(root, envelope["files"])
+    actual = {str(path.relative_to(root)) for path, _ in module.entries(root)} - {"artifact-manifest.json"}
+    if actual != set(envelope["files"]):
+        raise ValueError("cached Linux native helpers contain unmanifested/missing files")
+
+
 def supplied_artifacts(values, selected, system, module):
     result = {}
     for item in values:
@@ -128,6 +140,11 @@ def recipe(args, system, selected, artifacts, cache, work, module):
     if "veracrypt" in selected and not any(kind.startswith("veracrypt-") for kind in artifacts):
         directory = cache / ("veracrypt-" + args.native_keys["veracrypt"]) / "output"
         if system == "Linux":
+            if (directory / "sources.json").is_file():
+                # Validate the previous build's bytes before rebinding unchanged
+                # native code to a newer application source commit.
+                stages.insert(0, ("userspace-cache-verification", [python, str(Path(__file__).resolve()),
+                                  "--verify-userspace-cache", str(directory)]))
             native("veracrypt-userspace", directory, "sources.json",
                    [python, str(scripts / "build-linux-userspace.py"), "--source-dir", str(directory.parent / "src"),
                     "--output-dir", str(directory), "--jobs", str(args.jobs)])
@@ -231,6 +248,13 @@ def write_result(work, value):
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--verify-userspace-cache":
+        try:
+            verify_userspace_cache(Path(sys.argv[2]), stager())
+            return 0
+        except (ValueError, OSError, KeyError) as error:
+            print(json.dumps({"status": "blocked", "error": str(error)}), file=sys.stderr)
+            return 2
     # Private argv-only stage used to publish the validated native envelope.
     if len(sys.argv) == 4 and sys.argv[1] == "--copy-envelope":
         source, target = map(Path, sys.argv[2:])

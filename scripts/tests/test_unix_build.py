@@ -1,6 +1,10 @@
 """Build orchestration contracts; no compiler or encryption backend executes."""
 import argparse
 import importlib.util
+import hashlib
+import json
+import os
+import platform
 from pathlib import Path
 import tempfile
 import unittest
@@ -105,6 +109,27 @@ class UnixBuild(unittest.TestCase):
             with mock.patch.dict(builder.os.environ, {"GOOS": "freebsd", "GOARCH": "amd64"}, clear=True):
                 freebsd = builder.native_key(source, "Linux", [])
         self.assertNotEqual(linux, freebsd)
+
+    def test_cached_userspace_helpers_are_checked_before_rebinding(self):
+        directory = self.root / "native"
+        directory.mkdir()
+        helper = directory / "lurker-fs"
+        helper.write_bytes(b"original compiled helper")
+        manifest = {"schema": 1, "backend": "veracrypt-userspace", "os": platform.system(),
+                    "architecture": platform.machine(), "files": {"lurker-fs": {"sha256": hashlib.sha256(helper.read_bytes()).hexdigest()}}}
+        (directory / "artifact-manifest.json").write_text(json.dumps(manifest))
+        builder.verify_userspace_cache(directory, self.module)
+        helper.write_bytes(b"corrupt cached helper")
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            builder.verify_userspace_cache(directory, self.module)
+
+    def test_cached_userspace_verification_precedes_rust_build(self):
+        directory = self.root / "cache/veracrypt-vc/output"
+        directory.mkdir(parents=True)
+        (directory / "sources.json").write_text("{}")
+        stages = self.recipe("Linux", {"veracrypt"})
+        self.assertEqual("userspace-cache-verification", stages[0][0])
+        self.assertFalse(any(name == "build-veracrypt-userspace" for name, _ in stages))
 
     def test_failed_stage_stops_and_retains_source_identity(self):
         work = self.root / "work"
