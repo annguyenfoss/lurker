@@ -247,6 +247,46 @@ LINUX_SYSTEM_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m
 LINUX_CXX_RUNTIME_ELF = re.compile(r"^lib(?:stdc\+\+|gcc_s)\.so(?:\..*)?$")
 
 
+def verify_linux_static_wx(root, manifest, source):
+    records = manifest.get("static_libraries", [])
+    if len(records) != 1 or records[0].get("name") != "wxWidgets":
+        fail("Linux helpers require pinned private static wxWidgets provenance")
+    if any(item.get("soname", "").startswith("libwx") for item in manifest.get("libraries", [])):
+        fail("Linux private wxWidgets must be linked statically")
+    record = records[0]
+    name = "licenses/wxwidgets/provenance.json"
+    if record.get("provenance") != name or name not in manifest["files"]:
+        fail("Linux static wxWidgets provenance inventory is missing")
+    verify_files(root, {name: manifest["files"][name]})
+    receipt = json_file(root / name)
+    inputs = receipt.get("inputs", {})
+    constants = {key: source.constant("scripts/linux_wx.py", key) for key in
+                 ("VERSION", "URL", "SHA256", "FLAGS", "LICENSES", "ENV_FLAGS")}
+    if receipt.get("schema") != 1 or any(inputs.get(key) != constants[constant] for key, constant in
+            (("version", "VERSION"), ("url", "URL"), ("archive_sha256", "SHA256"))):
+        fail("Linux static wxWidgets source pin differs from selected source")
+    flags = inputs.get("flags", [])
+    if not flags or not flags[0].startswith("--prefix=/") or flags[1:] != list(constants["FLAGS"]):
+        fail("Linux static wxWidgets configuration differs from selected source")
+    notices = ["licenses/wxwidgets/" + str(relative(path)) for path in constants["LICENSES"]]
+    if sorted(record.get("license_files", [])) != sorted(notices) or sorted(receipt.get("license_files", [])) != sorted(notices):
+        fail("Linux static wxWidgets license list differs from selected source")
+    verify_files(root, {path: manifest["files"].get(path, {}) for path in notices})
+    major_minor = ".".join(constants["VERSION"].split(".")[:2])
+    expected = {"lib/libwx_baseu-" + major_minor + ".a", "lib/libwxregexu-" + major_minor + ".a"}
+    libraries = receipt.get("static_libraries", {})
+    if set(libraries) != expected or any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in libraries.values()):
+        fail("Linux static wxWidgets archive identities are missing")
+    if not re.fullmatch(r"[0-9a-f]{64}", inputs.get("source_tree_sha256", "")) or not Path(inputs.get("source_dir", "")).is_absolute():
+        fail("Linux static wxWidgets source-tree identity is missing")
+    compilers = inputs.get("compilers", {})
+    if set(compilers) != {"CC", "CXX"} or any(not Path(item.get("path", "")).is_absolute() or not item.get("version") or
+            not re.fullmatch(r"[0-9a-f]{64}", item.get("sha256", "")) for item in compilers.values()):
+        fail("Linux static wxWidgets compiler identity is missing")
+    if set(inputs.get("environment", {})) != set(constants["ENV_FLAGS"]):
+        fail("Linux static wxWidgets compiler flag provenance is missing")
+
+
 def verify_linux_private_libraries(root, kind):
     manifest = json_file(root / "private-libraries.json")
     if manifest.get("schema") != 1 or not isinstance(manifest.get("files"), dict):
@@ -339,7 +379,8 @@ def validate_backend(kind, directory, source):
             fail("VeraCrypt creator source archive checksum differs")
         if manifest.get("binary_sha256") != digest(root / "lurker-veracrypt-create"):
             fail("VeraCrypt creator binary checksum differs")
-        verify_linux_private_libraries(root, kind)
+        private_manifest = verify_linux_private_libraries(root, kind)
+        verify_linux_static_wx(root, private_manifest, source)
         if kind == "veracrypt-userspace":
             if json_file(root / "sources.json") != {key: list(value) for key, value in pin.items()}:
                 fail("Linux userspace source pins differ")

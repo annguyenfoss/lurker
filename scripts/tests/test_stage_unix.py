@@ -251,6 +251,72 @@ Version needs section '.gnu.version_r' contains 2 entries:
             with self.assertRaisesRegex(ValueError, "server JVM loader path"):
                 stager.private_jre_preload(runtime / "lib/libjava.so", "libjvm.so", self.root, "readelf")
 
+    def _static_wx(self):
+        source = mock.Mock()
+        constants = {"VERSION": "3.2.8.1", "URL": "https://example.test/pinned-wx.tar.bz2", "SHA256": "a" * 64,
+                     "FLAGS": ("--disable-shared", "--disable-secretstore"), "LICENSES": ("docs/licence.txt", "3rdparty/pcre/LICENCE"),
+                     "ENV_FLAGS": ("CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS")}
+        source.constant.side_effect = lambda path, key: constants[key]
+        notices = ["licenses/wxwidgets/" + name for name in constants["LICENSES"]]
+        for name in notices:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(name)
+        receipt = {"schema": 1, "inputs": {"version": constants["VERSION"], "url": constants["URL"],
+                    "archive_sha256": constants["SHA256"], "flags": ["--prefix=/private/build", *constants["FLAGS"]],
+                    "source_tree_sha256": "b" * 64, "source_dir": "/private/source", "environment": {key: "" for key in constants["ENV_FLAGS"]},
+                    "compilers": {key: {"path": "/usr/bin/compiler", "version": "native compiler", "sha256": "c" * 64} for key in ("CC", "CXX")}},
+                   "static_libraries": {name: "d" * 64 for name in ("lib/libwx_baseu-3.2.a", "lib/libwxregexu-3.2.a")}, "license_files": notices}
+        path = "licenses/wxwidgets/provenance.json"
+        manifest = {"static_libraries": [{"name": "wxWidgets", "provenance": path, "license_files": notices}],
+                    "files": {name: {"sha256": stager.digest(self.root / name)} for name in notices}}
+        self._save_wx(receipt, manifest)
+        return source, receipt, manifest
+
+    def _save_wx(self, receipt, manifest):
+        path = self.root / "licenses/wxwidgets/provenance.json"
+        path.write_text(json.dumps(receipt))
+        manifest["files"][str(path.relative_to(self.root))] = {"sha256": stager.digest(path)}
+
+    def test_static_wx_is_bound_to_source_configuration_and_notices(self):
+        source, receipt, manifest = self._static_wx()
+        stager.verify_linux_static_wx(self.root, manifest, source)
+        path = self.root / "licenses/wxwidgets/provenance.json"
+        original = path.read_text()
+        path.write_text(original + " ")
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            stager.verify_linux_static_wx(self.root, manifest, source)
+        path.write_text(original)
+        for key, value, message in (("version", "stale", "source pin"), ("archive_sha256", "stale", "source pin"),
+                                     ("flags", ["--prefix=/private", "--enable-secretstore"], "configuration"),
+                                     ("source_tree_sha256", "", "source-tree"), ("compilers", {}, "compiler identity"),
+                                     ("environment", {}, "compiler flag")):
+            with self.subTest(key=key):
+                before = receipt["inputs"][key]
+                receipt["inputs"][key] = value
+                self._save_wx(receipt, manifest)
+                with self.assertRaisesRegex(ValueError, message):
+                    stager.verify_linux_static_wx(self.root, manifest, source)
+                receipt["inputs"][key] = before
+        self._save_wx(receipt, manifest)
+        receipt["license_files"] = receipt["license_files"][:1]
+        self._save_wx(receipt, manifest)
+        with self.assertRaisesRegex(ValueError, "license list"):
+            stager.verify_linux_static_wx(self.root, manifest, source)
+
+    def test_missing_wx_archives_or_dynamic_substitution_are_refused(self):
+        source, receipt, manifest = self._static_wx()
+        receipt["static_libraries"].pop("lib/libwxregexu-3.2.a")
+        self._save_wx(receipt, manifest)
+        with self.assertRaisesRegex(ValueError, "archive identities"):
+            stager.verify_linux_static_wx(self.root, manifest, source)
+        manifest["libraries"] = [{"soname": "libwx_baseu-3.2.so.0"}]
+        with self.assertRaisesRegex(ValueError, "linked statically"):
+            stager.verify_linux_static_wx(self.root, manifest, source)
+        manifest["static_libraries"] = []
+        with self.assertRaisesRegex(ValueError, "pinned private static"):
+            stager.verify_linux_static_wx(self.root, manifest, source)
+
     def _linux_closure(self):
         (self.root / "lib").mkdir()
         (self.root / "licenses").mkdir()
