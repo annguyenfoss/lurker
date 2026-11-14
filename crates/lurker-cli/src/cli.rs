@@ -42,6 +42,13 @@ pub fn parse_env_args<I>(args: I) -> Result<ParseOutcome, ParseFailure>
 where
     I: IntoIterator<Item = OsString>,
 {
+    parse_args_for_platform(args, std::env::consts::OS)
+}
+
+fn parse_args_for_platform<I>(args: I, os: &str) -> Result<ParseOutcome, ParseFailure>
+where
+    I: IntoIterator<Item = OsString>,
+{
     let mut args = args.into_iter();
     let script = args.next().unwrap_or_else(|| OsString::from("lurker"));
     let script_name = Path::new(&script)
@@ -55,6 +62,8 @@ where
     let mut volume_type = VolumeType::Auto;
     let mut volume_type_explicit = false;
     let mut readonly = false;
+    let mut peer_sources = Vec::new();
+    let mut allow_degraded = false;
     let mut privilege_mode = lurker_core::PrivilegeMode::Privileged;
     let mut privilege_mode_explicit = false;
     let mut create_cipher = CreateCipher::Aes;
@@ -68,7 +77,10 @@ where
     while index < raw_args.len() {
         let current = raw_args[index].to_string_lossy();
         let option = current.split('=').next().unwrap();
-        if matches!(option, "--key-file" | "--new-key-file" | "--slot") {
+        if matches!(
+            option,
+            "--key-file" | "--new-key-file" | "--slot" | "--member"
+        ) {
             let value = if current.contains('=') {
                 OsString::from_vec(raw_args[index].as_bytes()[option.len() + 1..].to_vec())
             } else {
@@ -92,6 +104,7 @@ where
                 ));
             }
             match option {
+                "--member" => peer_sources.push(PathBuf::from(value)),
                 "--key-file" => {
                     if keyfile.replace(PathBuf::from(value)).is_some() {
                         return Err(usage_failure(
@@ -190,6 +203,10 @@ where
                 create_cipher_explicit = true;
                 index += 2;
             }
+            "--degraded" => {
+                allow_degraded = true;
+                index += 1;
+            }
             "--readonly" => {
                 readonly = true;
                 index += 1;
@@ -225,7 +242,7 @@ where
                 let value = &current["--type=".len()..];
                 volume_type = VolumeType::parse(value).ok_or_else(|| ParseFailure {
                     message: Some(format!(
-                        "Invalid --type value: {}. Use auto, luks, luks1, veracrypt, apple, geli, cgd, softraid, pefs, gocryptfs, cryfs, or cryptomator.",
+                        "Invalid --type value: {}. Use auto, luks, luks1, veracrypt, apple, geli, cgd, softraid, raid1c, pefs, gocryptfs, cryfs, or cryptomator.",
                         value
                     )),
                     exit_code: 1,
@@ -412,6 +429,51 @@ where
         }
     }
 
+    if !peer_sources.is_empty() || allow_degraded || volume_type == VolumeType::Raid1c {
+        if os != "openbsd" {
+            return Err(usage_failure(
+                &script_name,
+                color_mode,
+                "RAID1C, --member and --degraded require OpenBSD.",
+            ));
+        }
+        if !matches!(action.as_str(), "create" | "mount" | "umount") {
+            return Err(usage_failure(
+                &script_name,
+                color_mode,
+                "RAID1C options are valid only with create, mount or unmount.",
+            ));
+        }
+        if allow_degraded && action != "mount" {
+            return Err(usage_failure(
+                &script_name,
+                color_mode,
+                "Option --degraded is only valid with mount for existing-array recovery.",
+            ));
+        }
+        if !peer_sources.is_empty() {
+            if action == "mount" && volume_type == VolumeType::Auto {
+                // Preserve the explicit type across helper JSON: older helpers
+                // must reject RAID1C instead of ignoring unfamiliar peer fields.
+                volume_type = VolumeType::Raid1c;
+            }
+            if !matches!(action.as_str(), "create" | "mount") || volume_type != VolumeType::Raid1c {
+                return Err(usage_failure(
+                    &script_name,
+                    color_mode,
+                    "--member requires create --type raid1c or a RAID1C mount.",
+                ));
+            }
+        }
+        if allow_degraded && volume_type != VolumeType::Raid1c {
+            return Err(usage_failure(
+                &script_name,
+                color_mode,
+                "Degraded recovery requires mount --type raid1c --degraded (or --member).",
+            ));
+        }
+    }
+
     if new_keyfile.is_some() && action != "add-key" {
         return Err(usage_failure(
             &script_name,
@@ -473,10 +535,18 @@ where
                 || force
                 || tag.is_some()
             {
-                return Err(usage_failure(&script_name, color_mode, "Keyslot operations support LUKS only and do not take cipher, force or tag options."));
+                return Err(usage_failure(
+                    &script_name,
+                    color_mode,
+                    "Keyslot operations support LUKS only and do not take cipher, force or tag options.",
+                ));
             }
             if action_args.len() != 1 {
-                return Err(usage_failure(&script_name, color_mode, "Usage: lurker keyslots|add-key|remove-key <source> [--slot N] [--key-file FILE] [--new-key-file FILE]"));
+                return Err(usage_failure(
+                    &script_name,
+                    color_mode,
+                    "Usage: lurker keyslots|add-key|remove-key <source> [--slot N] [--key-file FILE] [--new-key-file FILE]",
+                ));
             }
             let operation = match action.as_str() {
                 "keyslots" => KeyslotOperation::List,
@@ -554,8 +624,11 @@ where
                 classify_create_target(&target, &script_name, color_mode)?
             };
             if volume_type.is_directory() && (create_cipher_explicit || force) {
-                return Err(usage_failure(&script_name, color_mode,
-                    "Directory backends use their fixed native profile and do not accept --cipher or --force."));
+                return Err(usage_failure(
+                    &script_name,
+                    color_mode,
+                    "Directory backends use their fixed native profile and do not accept --cipher or --force.",
+                ));
             }
             let size_gb = match source_kind {
                 SourceKind::Directory => {
@@ -590,19 +663,24 @@ where
                 }
             };
 
+            let command = CommandAction::Create(CreateCommand {
+                privilege_mode,
+                target,
+                peer_sources,
+                size_gb,
+                source_kind,
+                force,
+                volume_type,
+                cipher: create_cipher,
+                passphrase: None,
+                keyfile,
+            });
+            command
+                .validate_raid1c_options(os)
+                .map_err(|err| usage_failure(&script_name, color_mode, &err.message))?;
             Ok(ParseOutcome::Run(Cli {
                 color_mode,
-                command: CommandAction::Create(CreateCommand {
-                    privilege_mode,
-                    target,
-                    size_gb,
-                    source_kind,
-                    force,
-                    volume_type,
-                    cipher: create_cipher,
-                    passphrase: None,
-                    keyfile,
-                }),
+                command,
             }))
         }
         "mount" => {
@@ -671,18 +749,24 @@ where
                 });
             }
 
+            let command = CommandAction::Mount(MountCommand {
+                privilege_mode,
+                source,
+                peer_sources,
+                allow_degraded,
+                mountpoint,
+                tag,
+                volume_type,
+                passphrase: None,
+                keyfile,
+                readonly,
+            });
+            command
+                .validate_raid1c_options(os)
+                .map_err(|err| usage_failure(&script_name, color_mode, &err.message))?;
             Ok(ParseOutcome::Run(Cli {
                 color_mode,
-                command: CommandAction::Mount(MountCommand {
-                    privilege_mode,
-                    source,
-                    mountpoint,
-                    tag,
-                    volume_type,
-                    passphrase: None,
-                    keyfile,
-                    readonly,
-                }),
+                command,
             }))
         }
         "umount" => {
@@ -757,8 +841,16 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     };
 
     let directory_help = "\nDirectory backends (where supported):\n  create --type gocryptfs|cryfs|cryptomator|pefs <directory>\n  mount --type BACKEND <encrypted-directory> <mountpoint>\n  unmount --type BACKEND <mountpoint>\n  No size or cipher option; fixed native encryption profile.\n";
+    let raid_help = if cfg!(target_os = "openbsd") {
+        "\nRAID1C (two mirrored file members, native AES/password only):\n  create --type raid1c --member <peer-file> <file> <size-gb>\n  mount [--type raid1c] [--member <peer-file>] <file> <mountpoint>\n  mount --type raid1c --degraded <surviving-file> <mountpoint>\n  --degraded explicitly recovers an existing array; never used during create.\n  Keep both files and their RAID1C descriptors together; no --force or keyfiles.\n"
+    } else {
+        ""
+    };
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
-        return format!("Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\nNative default: {}. File containers only; native device operations require administrator privileges.\n{directory_help}", VolumeType::default_create());
+        return format!(
+            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\nNative default: {}. File containers only; native device operations require administrator privileges.\n{raid_help}{directory_help}",
+            VolumeType::default_create()
+        );
     }
     if cfg!(target_os = "macos") {
         return format!(
@@ -767,7 +859,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     }
 
     format!(
-        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} keyslots <source>{reset}\n  {accent}{script_name} add-key <source> [--slot N] [--key-file FILE] [--new-key-file FILE]{reset}\n  {accent}{script_name} remove-key <source> --slot N [--key-file FILE]{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--slot N{reset}          LUKS slot to add (optional) or remove (required)\n  {accent}--new-key-file FILE{reset}   New LUKS credential for add-key; otherwise prompt for a new password\n  {accent}--unprivileged{reset}    Linux VeraCrypt files without elevation (userspace helpers required)\n  {accent}--privileged{reset}      Use the existing kernel-backed route (default)\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), luks1, apple (macOS default), veracrypt, geli, cgd, softraid, pefs, gocryptfs, cryfs, cryptomator; auto for mount/unmount\n  {accent}--key-file FILE{reset}   Use a keyfile instead of a password (LUKS/VeraCrypt create or mount)\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n{directory_help}"
+        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} keyslots <source>{reset}\n  {accent}{script_name} add-key <source> [--slot N] [--key-file FILE] [--new-key-file FILE]{reset}\n  {accent}{script_name} remove-key <source> --slot N [--key-file FILE]{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--slot N{reset}          LUKS slot to add (optional) or remove (required)\n  {accent}--new-key-file FILE{reset}   New LUKS credential for add-key; otherwise prompt for a new password\n  {accent}--unprivileged{reset}    Linux VeraCrypt files without elevation (userspace helpers required)\n  {accent}--privileged{reset}      Use the existing kernel-backed route (default)\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), luks1, apple (macOS default), veracrypt, geli, cgd, softraid, raid1c, pefs, gocryptfs, cryfs, cryptomator; auto for mount/unmount\n  {accent}--key-file FILE{reset}   Use a keyfile instead of a password (LUKS/VeraCrypt create or mount)\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n{directory_help}"
     )
 }
 
@@ -796,7 +888,7 @@ fn parse_volume_type(
 ) -> Result<VolumeType, ParseFailure> {
     VolumeType::parse(&value.to_string_lossy()).ok_or_else(|| ParseFailure {
         message: Some(format!(
-            "Invalid --type value: {}. Use auto, luks, luks1, veracrypt, apple, geli, cgd, softraid, pefs, gocryptfs, cryfs, or cryptomator.",
+            "Invalid --type value: {}. Use auto, luks, luks1, veracrypt, apple, geli, cgd, softraid, raid1c, pefs, gocryptfs, cryfs, or cryptomator.",
             value.to_string_lossy()
         )),
         exit_code: 1,
@@ -887,7 +979,9 @@ fn reject_removed_operand_flag(action: &str, script_name: &str) -> String {
         "mount" => format!(
             "Operand flags are no longer supported. Use: {script_name} mount <source> <mountpoint>"
         ),
-        "umount" => format!("Operand flags are no longer supported. Use: {script_name} umount <target>"),
+        "umount" => {
+            format!("Operand flags are no longer supported. Use: {script_name} umount <target>")
+        }
         _ => "Unsupported argument chosen.".into(),
     }
 }
@@ -908,6 +1002,188 @@ mod tests {
     use super::{parse_env_args, CommandAction, ParseOutcome};
     use lurker_core::{CreateCipher, SourceKind, VolumeType};
     use std::ffi::OsString;
+
+    #[test]
+    fn raid1c_create_parses_one_peer_without_changing_native_default() {
+        let args = [
+            "lurker",
+            "create",
+            "--type",
+            "raid1c",
+            "--member=second.img",
+            "first.img",
+            "1",
+        ];
+        let ParseOutcome::Run(cli) =
+            super::parse_args_for_platform(args.map(OsString::from), "openbsd").unwrap()
+        else {
+            panic!()
+        };
+        let CommandAction::Create(c) = cli.command else {
+            panic!()
+        };
+        assert_eq!(c.volume_type, VolumeType::Raid1c);
+        assert_eq!(c.peer_sources, vec![std::path::PathBuf::from("second.img")]);
+        assert!(!c.force);
+        for args in [
+            vec![
+                "lurker",
+                "create",
+                "--member",
+                "second.img",
+                "first.img",
+                "1",
+            ],
+            vec!["lurker", "create", "--type=raid1c", "first.img", "1"],
+            vec![
+                "lurker",
+                "create",
+                "--type=raid1c",
+                "--member=second.img",
+                "--member=third.img",
+                "first.img",
+                "1",
+            ],
+            vec![
+                "lurker",
+                "create",
+                "--type=raid1c",
+                "--member=second.img",
+                "--force",
+                "first.img",
+                "1",
+            ],
+            vec![
+                "lurker",
+                "create",
+                "--type=raid1c",
+                "--member=second.img",
+                "--cipher=twofish",
+                "first.img",
+                "1",
+            ],
+            vec![
+                "lurker",
+                "create",
+                "--type=raid1c",
+                "--member=second.img",
+                "--degraded",
+                "first.img",
+                "1",
+            ],
+        ] {
+            assert!(
+                super::parse_args_for_platform(args.iter().map(OsString::from), "openbsd").is_err(),
+                "{args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn raid1c_mount_normalizes_auto_members_before_helper_serialization() {
+        for flag in [
+            vec!["--member", "peer.img"],
+            vec!["--type=auto", "--member=peer.img", "--degraded"],
+        ] {
+            let mut args = vec!["lurker", "mount", "Cargo.toml", "/tmp"];
+            args.extend(flag);
+            let ParseOutcome::Run(cli) =
+                super::parse_args_for_platform(args.iter().map(OsString::from), "openbsd").unwrap()
+            else {
+                panic!()
+            };
+            let CommandAction::Mount(c) = cli.command else {
+                panic!()
+            };
+            assert_eq!(c.volume_type, VolumeType::Raid1c);
+            assert_eq!(c.peer_sources, vec![std::path::PathBuf::from("peer.img")]);
+            assert_eq!(c.allow_degraded, args.contains(&"--degraded"));
+        }
+        let args = [
+            "lurker",
+            "mount",
+            "--type=raid1c",
+            "--degraded",
+            "Cargo.toml",
+            "/tmp",
+        ];
+        assert!(super::parse_args_for_platform(args.map(OsString::from), "openbsd").is_ok());
+        for args in [
+            vec!["lurker", "mount", "--degraded", "Cargo.toml", "/tmp"],
+            vec![
+                "lurker",
+                "mount",
+                "--type=softraid",
+                "--member=peer",
+                "Cargo.toml",
+                "/tmp",
+            ],
+            vec![
+                "lurker",
+                "mount",
+                "--member=peer",
+                "--member=third",
+                "Cargo.toml",
+                "/tmp",
+            ],
+            vec![
+                "lurker",
+                "mount",
+                "--member=peer",
+                "-t",
+                "work",
+                "Cargo.toml",
+                "/tmp",
+            ],
+            vec!["lurker", "unmount", "--member=peer", "Cargo.toml"],
+            vec!["lurker", "unmount", "--degraded", "Cargo.toml"],
+        ] {
+            assert!(
+                super::parse_args_for_platform(args.iter().map(OsString::from), "openbsd").is_err(),
+                "{args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn raid1c_flags_fail_before_source_inspection_on_other_platforms() {
+        for os in ["linux", "macos", "freebsd", "netbsd", "dragonfly"] {
+            for option in ["--member=peer", "--degraded", "--type=raid1c"] {
+                let args = [
+                    "lurker",
+                    "mount",
+                    option,
+                    "missing-source",
+                    "missing-mountpoint",
+                ];
+                let err = super::parse_args_for_platform(args.map(OsString::from), os).unwrap_err();
+                assert!(err.message.unwrap().contains("require OpenBSD"));
+            }
+        }
+    }
+
+    #[test]
+    fn raid1c_member_paths_preserve_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+        let member = OsString::from_vec(b"peer-\xff.img".to_vec());
+        let args = [
+            OsString::from("lurker"),
+            "create".into(),
+            "--type=raid1c".into(),
+            "--member".into(),
+            member.clone(),
+            "first.img".into(),
+            "1".into(),
+        ];
+        let ParseOutcome::Run(cli) = super::parse_args_for_platform(args, "openbsd").unwrap()
+        else {
+            panic!()
+        };
+        let CommandAction::Create(c) = cli.command else {
+            panic!()
+        };
+        assert_eq!(c.peer_sources[0].as_os_str(), member);
+    }
 
     #[test]
     fn folder_create_has_no_size_and_rejects_container_options() {

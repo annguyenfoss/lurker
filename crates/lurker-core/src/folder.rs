@@ -694,6 +694,8 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
             mount_inner(
                 runtime,
                 MountCommand {
+                    peer_sources: Vec::new(),
+                    allow_degraded: false,
                     privilege_mode: PrivilegeMode::Unprivileged,
                     source: staging.clone(),
                     mountpoint: mp.clone(),

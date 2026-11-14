@@ -213,6 +213,7 @@ impl Drop for Fixture {
 }
 fn create(source: &Path, cipher: CreateCipher, force: bool) -> CommandAction {
     CommandAction::Create(CreateCommand {
+        peer_sources: Vec::new(),
         privilege_mode: PrivilegeMode::Unprivileged,
         target: source.into(),
         size_gb: Some("0.125".into()),
@@ -226,6 +227,8 @@ fn create(source: &Path, cipher: CreateCipher, force: bool) -> CommandAction {
 }
 fn mount(source: &Path, at: &Path, readonly: bool) -> CommandAction {
     CommandAction::Mount(MountCommand {
+        peer_sources: Vec::new(),
+        allow_degraded: false,
         privilege_mode: PrivilegeMode::Unprivileged,
         source: source.into(),
         mountpoint: at.into(),

@@ -113,6 +113,7 @@ fn bad(action: CommandAction) -> OperationResponse {
 const PASSWORD: &str = "Lurker integration p@ssphrase 你好 123456789!";
 fn create(target: &Path, kind: SourceKind, ty: VolumeType, cipher: CreateCipher) -> CommandAction {
     CommandAction::Create(CreateCommand {
+        peer_sources: Vec::new(),
         privilege_mode: lurker_core::PrivilegeMode::Privileged,
         target: target.into(),
         size_gb: (kind == SourceKind::File).then(|| "0.25".into()),
@@ -132,6 +133,8 @@ fn mount(
     tag: Option<&str>,
 ) -> CommandAction {
     CommandAction::Mount(MountCommand {
+        peer_sources: Vec::new(),
+        allow_degraded: false,
         privilege_mode: lurker_core::PrivilegeMode::Privileged,
         source: source.into(),
         mountpoint: at.into(),

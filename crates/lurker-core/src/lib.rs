@@ -112,6 +112,7 @@ fn native_directory_request(command: &CommandAction) -> bool {
 }
 
 fn validate_platform(command: &CommandAction) -> AppResult<()> {
+    command.validate_raid1c_options(std::env::consts::OS)?;
     let backend = command.volume_type();
     if !backend.supports_platform(std::env::consts::OS) {
         return Err(AppError::new(format!(

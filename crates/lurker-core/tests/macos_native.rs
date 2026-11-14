@@ -24,6 +24,7 @@ impl Fixture {
     }
     fn create(&self, kind: VolumeType, cipher: CreateCipher) -> CreateCommand {
         CreateCommand {
+            peer_sources: Vec::new(),
             privilege_mode: lurker_core::PrivilegeMode::Privileged,
             target: self.0.join("vault with spaces.container"),
             size_gb: Some("0.03125".into()),
@@ -37,6 +38,8 @@ impl Fixture {
     }
     fn mount(&self, path: &Path, pass: &str, readonly: bool, kind: VolumeType) -> CommandAction {
         CommandAction::Mount(MountCommand {
+            peer_sources: Vec::new(),
+            allow_degraded: false,
             privilege_mode: lurker_core::PrivilegeMode::Privileged,
             source: path.into(),
             mountpoint: self.0.join("mounted vault"),

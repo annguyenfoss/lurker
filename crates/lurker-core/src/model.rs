@@ -50,6 +50,7 @@ pub enum VolumeType {
     Geli,
     Cgd,
     Softraid,
+    Raid1c,
     Pefs,
     Gocryptfs,
     Cryfs,
@@ -67,6 +68,7 @@ impl VolumeType {
             "geli" => Some(Self::Geli),
             "cgd" => Some(Self::Cgd),
             "softraid" => Some(Self::Softraid),
+            "raid1c" => Some(Self::Raid1c),
             "pefs" => Some(Self::Pefs),
             "gocryptfs" => Some(Self::Gocryptfs),
             "cryfs" => Some(Self::Cryfs),
@@ -86,6 +88,7 @@ impl VolumeType {
             Self::Geli => "geli",
             Self::Cgd => "cgd",
             Self::Softraid => "softraid",
+            Self::Raid1c => "raid1c",
             Self::Pefs => "pefs",
             Self::Gocryptfs => "gocryptfs",
             Self::Cryfs => "cryfs",
@@ -206,7 +209,7 @@ impl VolumeType {
             Self::Veracrypt => matches!(os, "linux" | "macos" | "freebsd" | "openbsd"),
             Self::Geli | Self::Pefs => os == "freebsd",
             Self::Cgd => os == "netbsd",
-            Self::Softraid => os == "openbsd",
+            Self::Softraid | Self::Raid1c => os == "openbsd",
             Self::Gocryptfs => matches!(os, "linux" | "macos" | "freebsd"),
             Self::Cryfs | Self::Cryptomator => matches!(os, "linux" | "macos"),
         }
@@ -239,6 +242,10 @@ mod scope_tests {
             (VolumeType::Cgd, [false, false, false, false, true, false]),
             (
                 VolumeType::Softraid,
+                [false, false, false, false, false, true],
+            ),
+            (
+                VolumeType::Raid1c,
                 [false, false, false, false, false, true],
             ),
             (VolumeType::Pefs, [false, false, true, false, false, false]),
