@@ -24,9 +24,9 @@ COMMON_PATCH_SHA256 = "3d945f1ed832ffa61d7fb1ab817b36d5b15de858cd864a65ea181567c
 PATCH_TARGET = "src/Main/UserInterface.cpp"
 PINS = {
     "veracrypt": {
-        "url": "https://codeload.github.com/veracrypt/VeraCrypt/tar.gz/8172bc55f834485f67be271e02c1167981423621",
-        "revision": "8172bc55f834485f67be271e02c1167981423621",
-        "sha256": "fc286de07d0ac88b48c65cade34bac932b30a93cd1719a22f9fef3b69feedfc4",
+        "url": "https://codeload.github.com/veracrypt/VeraCrypt/tar.gz/7afc449f2bc69366e8b67b82ad66201325d318c3",
+        "revision": "7afc449f2bc69366e8b67b82ad66201325d318c3",
+        "sha256": "1bf27ae89671943fbd2ff0cc63e9c727951a774a5c6c3cb26e058bdea0ca39d1",
     },
     "wxwidgets": {
         "url": "https://codeload.github.com/wxWidgets/wxWidgets/tar.gz/refs/tags/v3.2.8.1",
@@ -99,8 +99,11 @@ def prepare(name, cache, offline=False):
             temporary.unlink(missing_ok=True)
     if digest(archive) != pin["sha256"]:
         raise RuntimeError(f"Cached {name} archive failed SHA-256 verification")
-    source = cache / name
-    stamp = cache / f"{name}.inputs.json"
+    # Preserve old qualified sources and their wx output across engine updates.
+    # wx and libiconv keep their existing pinned cache layout.
+    cache_name = f"{name}-{pin['revision'][:16]}" if name == "veracrypt" else name
+    source = cache / cache_name
+    stamp = cache / f"{cache_name}.inputs.json"
     if not source.exists():
         with tempfile.TemporaryDirectory(prefix=f".{name}-", dir=cache) as tmp:
             temporary = Path(tmp)
@@ -183,6 +186,43 @@ def record_wx(stamp, specification, source):
     if len(files) < 3 or not all(p.is_file() for p in files):
         raise RuntimeError("Static wx build is incomplete")
     stamp.write_text(json.dumps({"specification": specification, "files": {str(p): digest(p) for p in files}}, sort_keys=True) + "\n")
+
+
+def compatible_wx_build(stamp, source, wx):
+    """Reuse only exact wx artifacts built by an identical upstream recipe.
+
+    wx-config embeds its build prefix; keep that directory in place and pass
+    WX_BUILD_DIR instead of relocating or rewriting the verified static build.
+    """
+    if not stamp.is_file():
+        return None
+    try:
+        recorded = json.loads(stamp.read_text())
+        previous = recorded["specification"]
+        current = wx_specification(source, wx)
+        if any(previous.get(key) != value for key, value in current.items() if key not in {"source", "vc_pin"}):
+            return None
+        if not wx_cached(stamp, previous):
+            return None
+        old_pin = previous["vc_pin"]
+        archive = stamp.parent / f"veracrypt-{old_pin['revision']}.tar.gz"
+        if not archive.is_file() or digest(archive) != old_pin["sha256"]:
+            return None
+        with tarfile.open(archive) as tar:
+            top = tar.getmembers()[0].name.split("/")[0]
+            with tar.extractfile(top + "/src/Makefile") as stream:
+                recipe = hashlib.file_digest(stream, "sha256").hexdigest()
+        if recipe != digest(source / "src/Makefile"):
+            return None
+        directory = Path(previous["source"]) / "src/wxrelease"
+        config = directory / "wx-config"
+        expected = {str(config), *map(str, directory.glob("lib/*.a")),
+                    *map(str, directory.glob("lib/wx/include/*/wx/setup.h"))}
+        if len(expected) < 3 or set(recorded["files"]) != expected:
+            return None
+        return directory
+    except (KeyError, ValueError, OSError, tarfile.TarError):
+        return None
 
 
 def stage(binary, output, source, wx, target, build_options, iconv_source=None):
@@ -294,8 +334,12 @@ def main():
     wx_stamp = options.source_dir.resolve() / "wx-build.json"
     wx_spec = wx_specification(source, wx)
     if not wx_cached(wx_stamp, wx_spec):
-        command(["gmake", f"-j{options.jobs}", *flags, f"WX_ROOT={wx}", "WX_CONFIGURE_EXTRA_FLAGS=--disable-tests", "wxbuild"], logs, "wxwidgets", cwd=source / "src")
-        record_wx(wx_stamp, wx_spec, source)
+        compatible = compatible_wx_build(wx_stamp, source, wx)
+        if compatible is not None:
+            flags.append(f"WX_BUILD_DIR={compatible}")
+        else:
+            command(["gmake", f"-j{options.jobs}", *flags, f"WX_ROOT={wx}", "WX_CONFIGURE_EXTRA_FLAGS=--disable-tests", "wxbuild"], logs, "wxwidgets", cwd=source / "src")
+            record_wx(wx_stamp, wx_spec, source)
     # Changed link flags must not reuse an executable linked by a prior recipe.
     (source / "src/Main/veracrypt").unlink(missing_ok=True)
     command(["gmake", f"-j{options.jobs}", *flags], logs, "veracrypt", cwd=source / "src")

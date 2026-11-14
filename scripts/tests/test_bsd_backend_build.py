@@ -110,6 +110,33 @@ class SourceProvenance(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Modified source input"):
                 builder.prepare("veracrypt", self.cache, offline=True)
 
+    def test_engine_upgrade_reuses_wx_only_with_identical_recipe_and_verified_artifacts(self):
+        old_source = self.cache / "old"
+        new_source = self.cache / "new"
+        wx = self.cache / "wx"
+        build = old_source / "src/wxrelease"
+        (build / "lib/wx/include/base/wx").mkdir(parents=True)
+        (new_source / "src").mkdir(parents=True)
+        (new_source / "src/Makefile").write_bytes(b"identical wx recipe")
+        for path in [build / "wx-config", build / "lib/libwx.a", build / "lib/wx/include/base/wx/setup.h"]:
+            path.write_bytes(b"qualified build artifact")
+        archive = self.cache / "veracrypt-old.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            member = tarfile.TarInfo("upstream/src/Makefile")
+            member.size = len(b"identical wx recipe")
+            tar.addfile(member, io.BytesIO(b"identical wx recipe"))
+        pins = {"veracrypt": {"revision": "old", "sha256": builder.digest(archive)}, "wxwidgets": {"revision": "same"}}
+        stamp = self.cache / "wx-build.json"
+        with patch.dict(builder.PINS, pins), patch.object(builder.subprocess, "check_output", return_value="same compiler"):
+            builder.record_wx(stamp, builder.wx_specification(old_source, wx), old_source)
+            builder.PINS["veracrypt"] = {"revision": "new", "sha256": "new source pin"}
+            self.assertEqual(builder.compatible_wx_build(stamp, new_source, wx), build)
+            (new_source / "src/Makefile").write_bytes(b"changed wx recipe")
+            self.assertIsNone(builder.compatible_wx_build(stamp, new_source, wx))
+            (new_source / "src/Makefile").write_bytes(b"identical wx recipe")
+            (build / "lib/libwx.a").write_bytes(b"tampered library")
+            self.assertIsNone(builder.compatible_wx_build(stamp, new_source, wx))
+
 
 if __name__ == "__main__":
     unittest.main()

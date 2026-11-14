@@ -6,6 +6,14 @@ wxWidgets **base** library, then stages `lurker-veracrypt-bsd`, private shared
 libraries, notices and `bsd-veracrypt-source.json` in `target/release/backends`.
 It never installs packages, loads kernel modules, elevates or tests storage.
 
+The current source pin is official VeraCrypt 1.26.31 (`7afc449f2bc6`). Its Unix
+fixes cover inherited service channels/files/devices, subprocess hangs and
+mount-point ownership/validation. The reviewed BSD patches still apply without
+changing encryption profiles. Engine source caches are revision-specific; an
+older static wx cache is reused only when its artifact hashes, compiler/OS/wx
+configuration and verified upstream build recipe still match. Its build prefix
+stays in place through `WX_BUILD_DIR`.
+
 Build prerequisites are a native C/C++ compiler, GNU make, Python 3.11+, yasm,
 pkg-config, readelf/ldd/strip, FUSE2 headers and PC/SC headers. FreeBSD package
 names are `gmake yasm pkgconf fusefs-libs pcsc-lite libiconv`; OpenBSD has FUSE
@@ -69,3 +77,4 @@ Upstream references:
 - https://github.com/veracrypt/VeraCrypt/blob/8172bc55f834485f67be271e02c1167981423621/License.txt
 - https://github.com/wxWidgets/wxWidgets/tree/v3.2.8.1
 - https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz
+- https://github.com/veracrypt/VeraCrypt/releases/tag/VeraCrypt_1.26.31
