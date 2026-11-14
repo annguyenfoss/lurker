@@ -35,6 +35,73 @@ DISK_TARGETS = {name: "hda" if name == "dragonflybsd" else "vda" for name in SOU
 UEFI_CODE = "/usr/share/edk2/x64/OVMF_CODE.4m.fd"
 UEFI_VARS = "/usr/share/edk2/x64/OVMF_VARS.4m.fd"
 
+DIRECTORIES = {"gocryptfs", "cryfs", "cryptomator", "pefs"}
+LOGIN_BACKENDS = {"gocryptfs", "cryfs", "cryptomator"}
+ALLOWED = {"Linux": {"luks", "luks1", "veracrypt", "gocryptfs", "cryfs", "cryptomator"},
+           "FreeBSD": {"geli", "veracrypt", "pefs", "gocryptfs"},
+           "NetBSD": {"cgd"}, "OpenBSD": {"softraid", "raid1c", "veracrypt"},
+           "DragonFly": {"luks1"}}
+
+
+def validate_guest_route(backend, unprivileged, cipher, system=None, uid=None):
+    system = platform.system() if system is None else system
+    uid = os.geteuid() if uid is None else uid
+    require(backend in ALLOWED.get(system, set()), "Backend is outside this VM OS's locked matrix")
+    require(not unprivileged or (system == "Linux" and backend == "veracrypt"),
+            "Userspace selection is Linux VeraCrypt only")
+    login = backend in LOGIN_BACKENDS or unprivileged
+    require((uid != 0) if login else (uid == 0),
+            "This case requires the login user" if login else "This native case requires root inside its owned clone")
+    require(backend in {"luks", "luks1", "veracrypt"} or cipher == "aes",
+            "This backend has a fixed create profile; alternate cipher not tested")
+    return "login-user" if login else "native-root"
+
+
+def verify_staged_package(cli, commit, backend):
+    require(not cli.is_symlink(), "CLI entry must be a regular staged package file")
+    cli = cli.resolve(strict=True)
+    root = cli.parent.parent
+    require(cli == root / "bin/lurker", "Use the package's bin/lurker entry")
+    for path in (root, *root.parents):
+        info = path.lstat()
+        require(info.st_uid == 0 and not info.st_mode & 0o022 and not path.is_symlink(),
+                "Stage package under a root-controlled persistent prefix")
+    manifest_path = root / "share/lurker/manifest.json"
+    require(not manifest_path.is_symlink(), "Package manifest symlink rejected")
+    manifest = json.loads(manifest_path.read_text())
+    require(manifest["source_commit"] == commit and manifest["os"] == platform.system(),
+            "Staged package source/OS does not match requested candidate")
+    require(backend in manifest["selected_backends"], "Backend is absent from the staged package")
+    for name, entry in manifest["files"].items():
+        relative = Path(name)
+        require(not relative.is_absolute() and ".." not in relative.parts, "Unsafe package manifest path")
+        path = root / relative
+        require(path.resolve(strict=True).is_relative_to(root), "Package file escapes private root")
+        if "sha256" in entry:
+            require(not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"],
+                    "Staged package bytes changed: " + name)
+        else:
+            require(path.is_symlink() and os.readlink(path) == entry["symlink"], "Package symlink changed: " + name)
+    require(manifest["files"]["bin/lurker"]["sha256"] == hashlib.sha256(cli.read_bytes()).hexdigest(),
+            "CLI is missing from verified package manifest")
+    return manifest, hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+
+
+def guest_prerequisites(package, backend, unprivileged):
+    for requirement in package.get("host_tool_requirements", {}).get(backend, []):
+        choices = requirement if isinstance(requirement, list) else [requirement]
+        require(any(shutil.which(name) for name in choices), "Missing native tool prerequisite: " + "/".join(choices))
+    system = platform.system()
+    fuse = backend in LOGIN_BACKENDS or unprivileged or (backend == "veracrypt" and system in {"FreeBSD", "OpenBSD"})
+    if fuse:
+        require(any(os.access(path, os.R_OK | os.W_OK) for path in Path("/dev").glob("fuse*")),
+                "No accessible FUSE device for the selected user; explicit clone prerequisite setup required")
+    if system == "FreeBSD" and backend == "gocryptfs":
+        require(run(["/sbin/sysctl", "-n", "vfs.usermount"]).strip() == "1",
+                "FreeBSD login-user FUSE requires vfs.usermount=1 in the disposable clone")
+    if backend == "pefs":
+        require(Path("/boot/modules/pefs.ko").is_file(), "Missing matching FreeBSD PEFS kernel module")
+
 
 def require(condition, message):
     if not condition:
@@ -578,10 +645,16 @@ def guest_cli(directory, arguments, secret):
 def guest_setup(args):
     require(args.persistent_home_confirmed, "Confirm the home filesystem is persistent, not tmpfs")
     require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Exact candidate Git commit required")
+    try:
+        route = validate_guest_route(args.backend, args.unprivileged, args.cipher)
+        package, manifest_digest = verify_staged_package(args.cli, args.commit, args.backend)
+        guest_prerequisites(package, args.backend, args.unprivileged)
+    except Exception as error:
+        print(json.dumps({"status": "blocked", "stage": "prerequisites", "backend": args.backend,
+                          "source_commit": args.commit, "reason": str(error)[:2048]}), flush=True)
+        return 2
     directory = guest_directory(args.run, create=True)
     cli = args.cli.resolve(strict=True)
-    require(args.backend in ("gocryptfs", "cryfs", "cryptomator", "pefs") or args.unprivileged or os.geteuid() == 0,
-            "Native container workloads require root inside the disposable clone")
     secret = secrets.token_urlsafe(48)
     password = directory / "test-password"
     with open(password, "w", opener=lambda p, f: os.open(p, f, 0o600)) as output:
@@ -595,6 +668,8 @@ def guest_setup(args):
     mountpoint.mkdir(mode=0o700)
     manifest = {"schema": 1, "run": args.run, "cli": str(cli), "source_commit": args.commit,
                 "cli_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(), "backend": args.backend,
+                "package_manifest_sha256": manifest_digest, "privilege_route": route,
+                "selected_package_backends": package["selected_backends"],
                 "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 "credential_transport_sha256": hashlib.sha256(Path(__file__).with_name("test-backends.py").read_bytes()).hexdigest(),
                 "cipher": args.cipher, "size_gb": size_gb, "unprivileged": args.unprivileged, "source": str(source),
@@ -622,6 +697,7 @@ def guest_setup(args):
                                   start_new_session=True)
     write_json(directory / "worker-process.json", {"pid": worker.pid, "run": args.run})
     print(json.dumps({"status": "workload-started", "directory": str(directory), "pid": worker.pid}), flush=True)
+    return 0
 
 
 def guest_worker(run_id):
@@ -730,7 +806,7 @@ def main():
     setup = commands.add_parser("guest-setup", help="Inside an owned clone only; prepare persistent workload")
     setup.add_argument("--run", required=True)
     setup.add_argument("--cli", type=Path, required=True)
-    setup.add_argument("--backend", choices=("luks", "luks1", "veracrypt", "geli", "cgd", "softraid", "gocryptfs", "cryfs", "cryptomator", "pefs"), required=True)
+    setup.add_argument("--backend", choices=("luks", "luks1", "veracrypt", "geli", "cgd", "softraid", "raid1c", "gocryptfs", "cryfs", "cryptomator", "pefs"), required=True)
     setup.add_argument("--cipher", choices=("aes", "serpent", "twofish"), default="aes")
     setup.add_argument("--commit", required=True)
     setup.add_argument("--unprivileged", action="store_true")
@@ -740,8 +816,7 @@ def main():
         guest.add_argument("--run", required=True)
     args = parser.parse_args()
     if args.action == "guest-setup":
-        guest_setup(args)
-        return 0
+        return guest_setup(args)
     if args.action == "guest-worker":
         guest_worker(args.run)
         return 0
