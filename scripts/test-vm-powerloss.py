@@ -31,6 +31,10 @@ ROOT = Path("/mnt/virt")
 SOURCES = {name: name + "-core-01" for name in
            ("archlinux", "freebsd", "netbsd", "openbsd", "dragonflybsd")}
 
+DISK_TARGETS = {name: "hda" if name == "dragonflybsd" else "vda" for name in SOURCES}
+UEFI_CODE = "/usr/share/edk2/x64/OVMF_CODE.4m.fd"
+UEFI_VARS = "/usr/share/edk2/x64/OVMF_VARS.4m.fd"
+
 
 def require(condition, message):
     if not condition:
@@ -63,21 +67,69 @@ def write_json(path, value):
         os.close(descriptor)
 
 
-def disk_source(xml):
+def disk_source(xml, target="vda"):
     disks = ET.fromstring(xml).findall("./devices/disk")
     require(len(disks) == 1, "Source must have exactly one disk; extra media require explicit review")
     disk = disks[0]
     require(disk.get("type") == "file" and disk.get("device") == "disk", "Only file-backed source disks")
-    require(disk.find("target").get("dev") == "vda", "Reviewed source disk must be vda")
+    require(target in ("vda", "hda") and disk.find("target").get("dev") == target, "Reviewed source disk target changed")
+    if target == "hda":
+        require(disk.find("target").get("bus") == "ide", "Reviewed hda must use IDE")
     require(disk.find("driver").get("type") == "qcow2", "Source format must be qcow2")
     require(disk.find("mirror") is None, "An existing block job must never be interrupted")
     return disk.find("source").get("file")
 
 
+
+def disk_target(manifest):
+    expected = DISK_TARGETS[manifest["os"]]
+    require(manifest.get("disk_target", expected) == expected, "Unreviewed disk target for this OS")
+    return expected
+
+
+def trusted_firmware_file(path):
+    path = Path(path)
+    for entry in (path, *path.parents):
+        info = entry.lstat()
+        require(not entry.is_symlink() and info.st_uid == 0 and not info.st_mode & 0o022,
+                "Firmware paths must be administrator controlled without symlinks")
+    require(path.is_file(), "Firmware must be a regular file")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def firmware_policy(manifest):
+    firmware = manifest.get("firmware")
+    if firmware is None:
+        require(manifest["os"] != "dragonflybsd", "DragonFly requires reviewed private UEFI state")
+        return None
+    require(manifest["os"] == "dragonflybsd" and firmware["loader"] == UEFI_CODE and
+            firmware["template"] == UEFI_VARS and firmware["nvram"] ==
+            str(Path(manifest["disk"]).parent / "nvram.fd"), "Firmware ownership policy changed")
+    return firmware
+
+
+def validate_firmware_xml(domain, firmware, private=False):
+    loader, nvram = domain.find("os/loader"), domain.find("os/nvram")
+    if firmware is None:
+        require(loader is None and nvram is None and domain.find("os/varstore") is None,
+                "Firmware writable paths require a separately reviewed private copy")
+        return
+    require(domain.find("os").get("firmware") == "efi" and loader is not None and nvram is not None,
+            "Reviewed DragonFly UEFI definition missing")
+    require(loader.text == UEFI_CODE and loader.get("readonly") == "yes" and
+            loader.get("type") == "pflash" and loader.get("format") == "raw", "Unreviewed firmware loader")
+    require(not list(nvram) and nvram.get("template") == UEFI_VARS and
+            nvram.get("templateFormat") == "raw" and nvram.get("format") == "raw" and
+            domain.find("os/varstore") is None, "Unreviewed NVRAM storage")
+    if private:
+        require(nvram.text == firmware["nvram"], "Clone NVRAM path changed")
+
 def clone_xml(source, manifest):
     domain = ET.fromstring(source)
-    require(domain.find("os/nvram") is None and domain.find("os/loader") is None,
-            "Firmware writable paths require a separately reviewed private copy")
+    firmware = firmware_policy(manifest)
+    validate_firmware_xml(domain, firmware)
+    if firmware is not None:
+        domain.find("os/nvram").text = firmware["nvram"]
     domain.attrib.pop("id", None)
     for tag in ("uuid", "description", "metadata", "seclabel", "resource", "sysinfo", "genid", "qemu:commandline"):
         for element in domain.findall(tag):
@@ -151,6 +203,8 @@ class OwnedClone:
         require(manifest["disk"] == str(directory / "root.qcow2"), "Disk ownership mismatch")
         require(manifest["network"] == directory.name, "Network ownership mismatch")
         require(manifest["marker"] == "lurker-disposable-fault:" + manifest["run"], "Marker mismatch")
+        disk_target(manifest)
+        firmware_policy(manifest)
         return cls(directory, manifest)
 
     def verify_network(self):
@@ -182,11 +236,13 @@ class OwnedClone:
         require(domain.findtext("uuid") == self.manifest["uuid"], "Clone UUID changed")
         require(domain.findtext("name") == self.manifest["name"], "Clone name changed")
         require(domain.findtext("description") == self.manifest["marker"], "Clone marker changed")
-        require(disk_source(ET.tostring(domain, encoding="unicode")) == self.manifest["disk"], "Clone disk changed")
+        require(disk_source(ET.tostring(domain, encoding="unicode"), disk_target(self.manifest)) == self.manifest["disk"], "Clone disk changed")
         interfaces = domain.findall("devices/interface")
         require(len(interfaces) == 1, "Clone must have only the isolated NIC")
         require(interfaces[0].find("source").get("network") == self.manifest["network"], "Clone network changed")
         require(interfaces[0].find("mac").get("address") == self.manifest["mac"], "Clone MAC changed")
+        validate_firmware_xml(domain, firmware_policy(self.manifest), private=True)
+        self.verify_firmware_resources()
         self.verify_network()
 
     def verify_disk(self):
@@ -196,6 +252,38 @@ class OwnedClone:
         recorded = json.loads((self.directory / "copy-result.json").read_text())
         require(recorded["disk_identity"] == {"device": metadata.st_dev, "inode": metadata.st_ino},
                 "Clone disk inode changed")
+
+    def verify_firmware_resources(self, before_boot=False):
+        firmware = firmware_policy(self.manifest)
+        if firmware is None:
+            return
+        require(trusted_firmware_file(UEFI_CODE) == firmware["loader_sha256"] and
+                trusted_firmware_file(UEFI_VARS) == firmware["template_sha256"], "Trusted firmware bytes changed")
+        path = Path(firmware["nvram"])
+        state_file = self.directory / "firmware-state.json"
+        if not state_file.exists():
+            require(before_boot and not path.exists() and not path.is_symlink(),
+                    "Initial NVRAM destination exists or lacks an ownership record")
+            return
+        info = path.lstat()
+        require(stat.S_ISREG(info.st_mode) and not path.is_symlink(), "Private NVRAM is not a regular file")
+        state = json.loads(state_file.read_text())
+        require(state == {"path": str(path), "device": info.st_dev, "inode": info.st_ino},
+                "Private NVRAM inode changed")
+
+    def record_initial_firmware(self):
+        firmware = firmware_policy(self.manifest)
+        if firmware is None or (self.directory / "firmware-state.json").exists():
+            return
+        domain = ET.fromstring(virsh("dumpxml", self.manifest["uuid"]))
+        require(domain.findtext("uuid") == self.manifest["uuid"] and
+                domain.findtext("name") == self.manifest["name"] and
+                domain.findtext("description") == self.manifest["marker"], "Created firmware domain identity changed")
+        validate_firmware_xml(domain, firmware, private=True)
+        path = Path(firmware["nvram"])
+        info = path.lstat()
+        require(stat.S_ISREG(info.st_mode) and not path.is_symlink(), "Created NVRAM is not a regular private file")
+        write_json(self.directory / "firmware-state.json", {"path": str(path), "device": info.st_dev, "inode": info.st_ino})
 
     def event(self, operation, **details):
         event = {"schema": 1, "run": self.manifest["run"], "domain_uuid": self.manifest["uuid"],
@@ -209,12 +297,14 @@ class OwnedClone:
     def create(self):
         self.verify_disk()
         self.verify_network()
+        self.verify_firmware_resources(before_boot=True)
         xml = (self.directory / "clone.xml").read_text()
         # Compare the saved definition to a fresh deterministic derivation, so
         # editing the XML cannot smuggle in an external disk or host device.
         expected = clone_xml((self.directory / "source-inactive.xml").read_text(), self.manifest)
         require(xml == expected, "Saved clone XML changed")
         virsh("create", self.directory / "clone.xml")
+        self.record_initial_firmware()
         self.verify_domain()
         self.event("boot", method="libvirt-create")
 
@@ -294,23 +384,31 @@ def prepare(os_name, run_id, subnet, bandwidth):
     source = SOURCES[os_name]
     inactive = virsh("dumpxml", source, "--inactive")
     live = virsh("dumpxml", source)
-    source_disk = disk_source(live)
-    require(disk_source(inactive) == source_disk, "Live/persistent source disks differ")
+    target = DISK_TARGETS[os_name]
+    source_disk = disk_source(live, target)
+    require(disk_source(inactive, target) == source_disk, "Live/persistent source disks differ")
     require(virsh("domstate", source).strip() == "running", "Source must remain running")
-    require("No current block job" in virsh("blockjob", source, "vda", "--info"), "Preexisting block job")
-    info = virsh("domblkinfo", source, "vda")
+    require("No current block job" in virsh("blockjob", source, target, "--info"), "Preexisting block job")
+    info = virsh("domblkinfo", source, target)
     capacity = int(re.search(r"Capacity:\s+(\d+)", info).group(1))
     require(os.statvfs(ROOT).f_bavail * os.statvfs(ROOT).f_frsize > capacity + 10 * 1024**3,
             "Insufficient room for a full standalone source copy")
     directory = ROOT / ("lurker-fault-" + run_id)
     require(not directory.exists(), "Run already exists; use its manifest")
     manifest = {"schema": 1, "run": run_id, "os": os_name, "source": source,
-                "source_uuid": ET.fromstring(inactive).findtext("uuid"), "source_disk": source_disk,
+                "source_uuid": ET.fromstring(inactive).findtext("uuid"), "source_disk": source_disk, "disk_target": target,
                 "name": directory.name + "-" + os_name, "uuid": str(uuid.uuid4()),
                 "marker": "lurker-disposable-fault:" + run_id, "disk": str(directory / "root.qcow2"),
                 "network": directory.name, "network_uuid": str(uuid.uuid4()), "subnet": str(network),
                 "bridge": "lf" + secrets.token_hex(5), "mac": "52:54:00:" + ":".join(secrets.token_hex(1) for _ in range(3)),
                 "bandwidth_mib": bandwidth, "source_xml_sha256": hashlib.sha256(inactive.encode()).hexdigest()}
+    if os_name == "dragonflybsd":
+        manifest["firmware"] = {"loader": UEFI_CODE, "template": UEFI_VARS,
+                                "nvram": str(directory / "nvram.fd"),
+                                "loader_sha256": trusted_firmware_file(UEFI_CODE),
+                                "template_sha256": trusted_firmware_file(UEFI_VARS)}
+    # Validate before allocating any plan directory.
+    clone_xml(inactive, manifest)
     # Traverse-only access allows libvirt's QEMU uid to use its relabeled image;
     # all manifests, XML and logs remain private to the invoking user.
     directory.mkdir(mode=0o711)
@@ -329,11 +427,11 @@ def copy_and_boot(clone):
     destination = Path(m["disk"])
     require(not destination.exists() and not destination.is_symlink(), "Copy destination already exists or is a symlink")
     require(virsh("dumpxml", m["source"], "--inactive") == (clone.directory / "source-inactive.xml").read_text(), "Source XML changed")
-    require(disk_source(virsh("dumpxml", m["source"])) == m["source_disk"], "Source disk changed")
-    require("No current block job" in virsh("blockjob", m["source"], "vda", "--info"), "Preexisting block job")
+    require(disk_source(virsh("dumpxml", m["source"]), disk_target(m)) == m["source_disk"], "Source disk changed")
+    require("No current block job" in virsh("blockjob", m["source"], disk_target(m), "--info"), "Preexisting block job")
     # --finish stops mirroring when ready and leaves the ORIGINAL disk active.
     # Never --pivot, --shallow, --reuse-external, or direct reads of live qcow2.
-    command = ["virsh", "-c", URI, "blockcopy", m["source"], "vda", "--dest", m["disk"],
+    command = ["virsh", "-c", URI, "blockcopy", m["source"], disk_target(m), "--dest", m["disk"],
                "--format", "qcow2", "--bandwidth", str(m["bandwidth_mib"]), "--wait", "--finish",
                "--transient-job", "--timeout", "3600"]
     with (clone.directory / "blockcopy.log").open("w") as log:
@@ -399,9 +497,9 @@ def finish_copy_and_boot(clone):
     after = virsh("dumpxml", m["source"], "--inactive")
     (clone.directory / "source-after.xml").write_text(after)
     require(after == (clone.directory / "source-inactive.xml").read_text(), "Original definition changed")
-    require(disk_source(virsh("dumpxml", m["source"])) == m["source_disk"], "Original source disk changed")
+    require(disk_source(virsh("dumpxml", m["source"]), disk_target(m)) == m["source_disk"], "Original source disk changed")
     require(virsh("domstate", m["source"]).strip() == "running", "Original stopped unexpectedly")
-    require("No current block job" in virsh("blockjob", m["source"], "vda", "--info"), "Copy job still active")
+    require("No current block job" in virsh("blockjob", m["source"], disk_target(m), "--info"), "Copy job still active")
     image = inspect_private_copy(clone)
     disk_metadata = Path(m["disk"]).lstat()
     require(stat.S_ISREG(disk_metadata.st_mode), "Copied disk is not a regular file")
@@ -492,7 +590,7 @@ def guest_setup(args):
     source, mountpoint = directory / "encrypted data", directory / "open data"
     size_gb = None
     if args.backend not in ("gocryptfs", "cryfs", "cryptomator", "pefs"):
-        size_gb = "0.125" if args.backend in ("geli", "cgd", "softraid") else "0.35"
+        size_gb = "0.125" if (args.backend in ("geli", "cgd", "softraid") or platform.system() == "DragonFly") else "0.35"
     mountpoint.mkdir(mode=0o700)
     manifest = {"schema": 1, "run": args.run, "cli": str(cli), "source_commit": args.commit,
                 "cli_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(), "backend": args.backend,

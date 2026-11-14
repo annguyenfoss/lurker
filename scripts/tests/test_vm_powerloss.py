@@ -229,6 +229,62 @@ class Ownership(unittest.TestCase):
         self.assertIn("/sbin", argv[-1].splitlines()[0])
         self.assertTrue(argv[-1].endswith("\nmount"))
 
+    def dragonfly_fixture(self):
+        m = {**self.m, "os": "dragonflybsd", "source": "dragonflybsd-core-01",
+             "name": self.directory.name + "-dragonflybsd", "disk_target": "hda",
+             "firmware": {"loader": VM.UEFI_CODE, "template": VM.UEFI_VARS,
+                          "nvram": str(self.directory / "nvram.fd"),
+                          "loader_sha256": "approved", "template_sha256": "approved"}}
+        source = SOURCE.replace('<os>', '<os firmware="efi">').replace('</os>',
+            '<loader readonly="yes" type="pflash" format="raw">' + VM.UEFI_CODE + '</loader>' +
+            '<nvram template="' + VM.UEFI_VARS + '" templateFormat="raw" format="raw">/original-vars</nvram></os>')
+        source = source.replace('<target dev="vda"/>', '<target dev="hda" bus="ide"/>')
+        return m, source
+
+    def test_reviewed_ide_target_preserves_private_disk_and_firmware(self):
+        m, source = self.dragonfly_fixture()
+        with self.assertRaises(RuntimeError):
+            VM.disk_source(source)
+        self.assertEqual(VM.disk_source(source, "hda"), "/original")
+        result = VM.clone_xml(source, m)
+        root = ET.fromstring(result)
+        self.assertEqual(root.findtext("os/nvram"), m["firmware"]["nvram"])
+        self.assertEqual(root.find("os/loader").get("readonly"), "yes")
+        self.assertEqual(VM.disk_source(result, "hda"), m["disk"])
+        self.assertNotIn("/original-vars", result)
+        self.assertIsNone(root.find("devices/hostdev"))
+
+    def test_firmware_loader_and_external_nvram_policy_rejected(self):
+        m, source = self.dragonfly_fixture()
+        for bad in (source.replace('readonly="yes"', 'readonly="no"'), source.replace(VM.UEFI_CODE, "/home/user/firmware")):
+            with self.assertRaises(RuntimeError):
+                VM.clone_xml(bad, m)
+        m["firmware"]["nvram"] = "/original-vars"
+        VM.write_json(self.directory / "manifest.json", m)
+        with self.assertRaises(RuntimeError):
+            VM.OwnedClone.load(self.directory)
+
+    def test_private_nvram_collision_and_replacement_rejected(self):
+        m, _ = self.dragonfly_fixture()
+        VM.write_json(self.directory / "manifest.json", m)
+        clone = VM.OwnedClone.load(self.directory)
+        nvram = self.directory / "nvram.fd"
+        nvram.symlink_to(self.directory / "missing")
+        with patch.object(VM, "trusted_firmware_file", return_value="approved"), patch.object(VM, "virsh") as call:
+            with self.assertRaises(RuntimeError):
+                clone.verify_firmware_resources(before_boot=True)
+        call.assert_not_called()
+        nvram.unlink();nvram.write_bytes(b"private vars")
+        VM.write_json(self.directory / "firmware-state.json", {"path": str(nvram), "device": -1, "inode": -1})
+        with patch.object(VM, "trusted_firmware_file", return_value="approved"):
+            with self.assertRaisesRegex(RuntimeError, "inode"):
+                clone.verify_firmware_resources()
+
+    def test_untrusted_firmware_ancestor_rejected(self):
+        path = self.directory / "firmware.fd";path.write_bytes(b"untrusted")
+        with self.assertRaisesRegex(RuntimeError, "administrator controlled"):
+            VM.trusted_firmware_file(path)
+
 
 
 class GuestFixture(unittest.TestCase):

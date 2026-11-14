@@ -185,3 +185,19 @@ The concise aggregate and full host audit are ignored artifacts at
 These are three passed cases and 15 recovery checks, one refused recovery, and
 one untested firmware configuration. They retain their exact `76f05fb` runtime
 attribution and do not qualify later candidates or untested backends/ciphers.
+
+## Reviewed DragonFly IDE/UEFI clone adapter
+
+The DragonFly adapter preserves its reviewed IDE `hda` disk target and read-only
+OVMF loader. It replaces the original NVRAM path with a fresh `nvram.fd` under
+the owned run directory, initialized by libvirt from the administrator-controlled
+OVMF variables template. It never reads, copies or modifies the original VM's
+variables file. The loader/template paths, every ancestor's ownership/mode and
+both file digests are checked; arbitrary firmware and other UEFI layouts remain
+rejected. The private NVRAM destination must initially be absent, including no
+dangling symlink. Once created, its device/inode is recorded and rechecked for
+boot, poweroff and console/SSH identity verification. It remains with the private
+disk as evidence after the transient clone stops.
+
+Libvirt documents fresh template initialization and retained transient NVRAM:
+https://libvirt.org/formatdomain.html#bios-bootloader
