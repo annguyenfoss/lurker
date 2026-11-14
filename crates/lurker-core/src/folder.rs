@@ -864,7 +864,8 @@ fn mount_inner(
     }
     let executable = find_program(c.volume_type)?;
     if fence::required(c.volume_type) {
-        let capabilities = backend_command(c.volume_type, &executable).arg("--capabilities").output()
+        let capabilities = backend_command(c.volume_type, &executable).arg("--capabilities")
+            .stdout(Stdio::piped()).output()
             .map_err(|e| AppError::io("Cannot inspect Cryptomator fencing capability", e))?;
         let supported = capabilities.status.success() && serde_json::from_slice::<serde_json::Value>(&capabilities.stdout)
             .ok().and_then(|v| v.get("fenced_mountpoint_protocol").and_then(|n| n.as_u64())) == Some(1);
