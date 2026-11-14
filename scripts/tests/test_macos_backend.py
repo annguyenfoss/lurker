@@ -4,6 +4,7 @@ import io
 from pathlib import Path
 import tarfile
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -97,6 +98,20 @@ class MacBackendTests(unittest.TestCase):
             files["source/src/main/java/org/lurker/cryptomator/Main.java"] = "old"
             with self.assertRaisesRegex(RuntimeError, "helper source differs"):
                 backend.verify_cryptomator_manifest(root, manifest, project, "arm64")
+
+    def test_hardened_runtime_exceptions_are_limited_to_external_fuse_consumers(self):
+        spec = importlib.util.spec_from_file_location("macos_dmg", Path(__file__).parents[1] / "build-macos-dmg.py")
+        dmg = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {"macos_backend": backend}):
+            spec.loader.exec_module(dmg)
+        helpers = Path("App/Contents/Helpers")
+        native, java = Path("native.plist"), Path("java.plist")
+        jre = Path("App/Contents/Resources/runtime/bin/java")
+        for name in ["lurker-veracrypt", "cryfs"]:
+            self.assertEqual(dmg.signing_entitlements(helpers / name, helpers, [jre], native, java), ["--entitlements", native])
+        self.assertEqual(dmg.signing_entitlements(jre, helpers, [jre], native, java), ["--entitlements", java])
+        for path in [helpers / "gocryptfs", Path("App/Contents/MacOS/lurker"), Path("App/Contents/MacOS/lurker-desktop")]:
+            self.assertEqual(dmg.signing_entitlements(path, helpers, [jre], native, java), [])
 
     def test_external_runtime_rejects_user_writable_ancestors(self):
         with tempfile.TemporaryDirectory() as temporary:

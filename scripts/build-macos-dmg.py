@@ -24,6 +24,16 @@ def run(*arguments, capture=False):
     ).stdout
 
 
+def signing_entitlements(target, helpers, java_executables, backend_plist, java_plist):
+    if target in java_executables:
+        return ["--entitlements", java_plist]
+    # These native consumers load separately installed, differently signed FUSE
+    # libraries. Keep the exception off the Rust frontends and Go executable.
+    if target in {helpers / "lurker-veracrypt", helpers / "cryfs"}:
+        return ["--entitlements", backend_plist]
+    return []
+
+
 def layout_tools():
     try:
         from ds_store import DSStore
@@ -236,9 +246,8 @@ def main():
             plistlib.dump({"com.apple.security.cs.disable-library-validation": True,
                           "com.apple.security.cs.allow-jit": True}, file)
         for target in signing_targets:
-            exception = ["--entitlements", backend_entitlements] if target == helper_dir / "lurker-veracrypt" else []
-            if target in java_executables:
-                exception = ["--entitlements", java_entitlements]
+            exception = signing_entitlements(target, helper_dir, java_executables,
+                                               backend_entitlements, java_entitlements)
             run("codesign", "--force", "--sign", identity, "--options", "runtime",
                 "--timestamp=none" if identity == "-" else "--timestamp", *exception, target)
         run("codesign", "--verify", "--deep", "--strict", "--verbose=2", app)

@@ -59,8 +59,8 @@ an explicit external dependency; its path, resolved target and ancestors must be
 administrator-controlled. Unrelated Homebrew/developer paths are not
 allowed to survive packaging.
 
-The private VeraCrypt executable alone receives the hardened-runtime library
-validation exception required to load another developer's FUSE runtime. The
+The private VeraCrypt and CryFS executables receive the hardened-runtime library
+validation exception required to load their separately installed FUSE runtime. The
 desktop, CLI and internal Rust helper retain library validation. This follows
 Apple's entitlement contract:
 https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.disable-library-validation
