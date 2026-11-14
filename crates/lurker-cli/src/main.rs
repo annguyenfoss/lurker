@@ -4,6 +4,9 @@ use cli::{ParseFailure, ParseOutcome};
 use lurker_core::{run, Output};
 
 fn main() {
+    if let Some(code) = lurker_core::run_folder_supervisor_if_requested() {
+        std::process::exit(code);
+    }
     std::process::exit(main_entry());
 }
 

@@ -16,6 +16,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[path = "folder_supervisor.rs"]
+mod supervisor;
+
+pub(crate) fn run_supervisor_if_requested() -> Option<i32> {
+    supervisor::dispatch()
+}
+
 const WAIT: Duration = Duration::from_secs(60);
 const SCHEMA: u32 = 1;
 
@@ -180,6 +187,8 @@ struct Session {
     mount_identity: Option<String>,
     mounted_directory: Option<Identity>,
     process: Option<Process>,
+    #[serde(default)]
+    supervisor: Option<Process>,
 }
 
 fn secure_dir(path: &Path) -> AppResult<()> {
@@ -904,23 +913,14 @@ fn mount_inner(
         mount_identity: None,
         mounted_directory: None,
         process: None,
+        supervisor: None,
     };
     save(&dir, &session)?;
-    let mut args = mount_args(
-        c.volume_type,
-        &session.source,
-        &session.mountpoint,
-        c.readonly,
-    )?;
-    if initializing && c.volume_type == VolumeType::Cryfs {
-        // Existing vaults retain their own cipher/KDF; mount never migrates.
-        args.splice(
-            0..0,
-            ["--cipher", "aes-256-gcm", "--blocksize", "16384"].map(OsString::from),
-        );
-    }
-    let mut command = backend_command(c.volume_type, &executable);
-    command.args(args);
+    let mut command = Command::new(std::env::current_exe()
+        .map_err(|e| AppError::io("Cannot locate folder supervisor", e))?);
+    command.arg("--lurker-folder-supervisor").arg(&dir).arg(&executable)
+        .arg(if initializing { "init" } else { "mount" })
+        .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
     unsafe {
         command.pre_exec(|| {
             if libc::setsid() < 0 {
@@ -932,12 +932,21 @@ fn mount_inner(
     let mut child = command
         .spawn()
         .map_err(|e| AppError::io("Cannot start directory backend", e))?;
-    session.process = process_identity(child.id());
+    session.supervisor = process_identity(child.id());
     save(&dir, &session)?;
     send(&mut child, &secret)?;
     let started = Instant::now();
     loop {
+        if session.process.is_none() {
+            if let Some(process) = supervisor::read_record(&dir, "backend-process.json")? {
+                session.process = Some(process);
+                save(&dir, &session)?;
+            }
+        }
         if let Some(identity) = mount_identity(&session.mountpoint)? {
+            if session.process.is_none() {
+                return Err(AppError::new("Mounted backend identity unavailable; session retained."));
+            }
             session.mount_identity = Some(identity);
             session.mounted_directory = Some(Identity::read(&session.mountpoint)?);
             save(&dir, &session)?;
@@ -952,11 +961,14 @@ fn mount_inner(
             .try_wait()
             .map_err(|e| AppError::io("Cannot monitor directory backend", e))?
         {
-            fs::remove_dir_all(&dir)
-                .map_err(|e| AppError::io("Cannot remove failed session", e))?;
+            let diagnostic = supervisor::check_close(&dir, session.backend).err()
+                .map(|error| error.message).unwrap_or_default();
+            let archive = runtime.path.join(format!("failed-{}", dir.file_name().unwrap().to_string_lossy()));
+            fs::rename(&dir, &archive).map_err(|e| AppError::io("Cannot preserve failed startup", e))?;
+            sync_dir(&runtime.path)?;
             return Err(AppError::new(format!(
-                "{} mount failed ({status}). Check credentials and the required FUSE runtime.",
-                session.backend
+                "{} mount failed ({status}). Evidence retained at {}. {diagnostic}",
+                session.backend, archive.display()
             )));
         }
         if started.elapsed() > WAIT {
@@ -1074,6 +1086,28 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output) -> AppResult<()
             std::thread::sleep(Duration::from_millis(50));
         }
     }
+    if let Some(monitor) = &session.supervisor {
+        let started = Instant::now();
+        while alive(monitor)? {
+            if started.elapsed() > Duration::from_secs(15) {
+                return Err(AppError::new("Backend monitor has not completed; session retained."));
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+    let close_result = if session.supervisor.is_some() {
+        supervisor::check_close(&dir, session.backend)
+    } else {
+        Err(AppError::new("Legacy backend session has no recorded exit result; a clean close cannot be confirmed."))
+    };
+    if let Err(error) = close_result {
+        // No mount or live backend remains: retain evidence without preventing
+        // an explicit reopen for inspection. Live/busy resources never reach here.
+        let archive = runtime.path.join(format!("failed-{}", dir.file_name().unwrap().to_string_lossy()));
+        fs::rename(&dir, &archive).map_err(|e| AppError::io("Cannot preserve failed backend session", e))?;
+        sync_dir(&runtime.path)?;
+        return Err(AppError::new(format!("Filesystem detached, but backend close failed. Evidence retained at {}. {}", archive.display(), error.message)));
+    }
     fs::remove_dir_all(dir).map_err(|e| AppError::io("Cannot remove closed session", e))?;
     output.success("Directory vault closed.");
     Ok(())
@@ -1178,6 +1212,7 @@ mod tests {
             mount_identity: None,
             mounted_directory: None,
             process: None,
+            supervisor: None,
         }
     }
     #[test]
@@ -1296,6 +1331,7 @@ mod tests {
                 inode: 4,
             }),
             process: None,
+            supervisor: None,
         };
         assert!(confirmed_mount_directory(&session, "confirmed mount").is_ok());
         assert!(confirmed_mount_directory(&session, "replacement mount").is_err());

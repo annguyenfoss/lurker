@@ -105,7 +105,7 @@ def main():
                 with target.open("wb" if args.fault == "create" else "r+b", buffering=0) as stream:
                     stream.write(b"uncommitted" * 1024)
                     os.fsync(stream.fileno())
-            result["write_fault"] = "false-success"
+            result["write_fault"] = "pending-directory-mutation-without-fsync" if args.fault == "close" else "false-success"
         except OSError as error:
             result["write_errno"] = error.errno
         if args.fault == "close":
@@ -130,9 +130,22 @@ def main():
         CLI_TEST.terminal([cli, "unmount", "--type", "cryfs", str(vault)])
         if args.fault == "close":
             assert result["full_close_exit"] != 0, "Closing with an unflushed directory while full must not report success"
+            assert "backend close failed" in result["full_close_diagnostic"], "Close failure must be explicit"
+            archives = []
+            registry = Path(f"/tmp/lurker-folders-{os.geteuid()}")
+            for directory in registry.glob("failed-session-*"):
+                record = directory / "session.json"
+                if record.is_file() and json.loads(record.read_text())["source"] == str(vault):
+                    status = json.loads((directory / "backend-result.json").read_text())
+                    assert status["signal"] is not None or status["code"] != 0
+                    archives.append(str(directory))
+            assert len(archives) == 1, "Unclean close must retain the real backend exit status"
+            result["failure_evidence"] = archives[0]
+            result["outcome"] = "unclean-exit-reported-and-previous-commits-preserved"
         else:
             assert result.get("write_errno") in (errno.ENOSPC, errno.EDQUOT), "Mounted write must report the real full-storage errno"
-        assert result["close_exit"] == 0, "Backend did not recover a clean close after restoring space"
+            assert result["close_exit"] == 0, "Backend did not recover a clean close after restoring space"
+            result["outcome"] = "storage-error-returned-and-clean-close-recovered"
         result["status"] = "passed"
     except Exception as error:
         result.update(status="failed", failed_stage=phase, error=str(error).replace(secret, "<redacted>")[:4096])

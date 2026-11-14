@@ -4,6 +4,9 @@ use std::io::{IsTerminal, Read, Write};
 use std::process::{Command, Output, Stdio};
 
 fn main() {
+    if let Some(code) = lurker_core::run_folder_supervisor_if_requested() {
+        std::process::exit(code);
+    }
     std::process::exit(run());
 }
 
@@ -23,6 +26,7 @@ fn run() -> i32 {
                 serde_json::json!({
                     "protocol_version": 3,
                     "directory_backends": true,
+                    "folder_supervision_protocol": 1,
                     "raid1c_members": cfg!(target_os = "openbsd"),
                     "noninteractive_sudo": !cfg!(target_os = "macos"),
                     "trusted_privileged_tools": !cfg!(target_os = "macos"),

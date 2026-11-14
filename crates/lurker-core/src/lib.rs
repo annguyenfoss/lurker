@@ -272,3 +272,15 @@ pub fn effective_uid() -> u32 {
     // SAFETY: geteuid has no arguments or preconditions.
     unsafe { libc::geteuid() }
 }
+
+/// Internal frontend entry point for a login-user directory backend monitor.
+pub fn run_folder_supervisor_if_requested() -> Option<i32> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    {
+        folder::run_supervisor_if_requested()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+    {
+        None
+    }
+}

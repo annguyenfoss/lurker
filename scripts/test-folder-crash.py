@@ -151,9 +151,25 @@ def check(cli, backend, root):
         first = subprocess.run([cli, "unmount", str(mountpoint)], capture_output=True, text=True, timeout=45)
         if first.returncode:
             result["mountpoint_unmount_error"] = first.stderr[-1500:]
-            second = subprocess.run([cli, "unmount", str(vault)], capture_output=True, text=True, timeout=45)
-            if second.returncode:
-                raise AssertionError("Source unmount failed: " + second.stderr[-1500:])
+            failure = first
+            if "backend close failed" not in first.stderr:
+                failure = subprocess.run([cli, "unmount", str(vault)], capture_output=True, text=True, timeout=45)
+            if failure.returncode:
+                # A supervised backend killed by this test must report an
+                # unclean exit. Accept only exact retained identity/status
+                # evidence after ordinary detach, never a generic CLI error.
+                assert "backend close failed" in failure.stderr, failure.stderr[-1500:]
+                assert record["mount_identity"] not in Path("/proc/self/mountinfo").read_text().splitlines()
+                matches = []
+                for directory in Path(f"/tmp/lurker-folders-{os.geteuid()}").glob("failed-session-*"):
+                    saved = json.loads((directory / "session.json").read_text())
+                    if saved["source"] == str(vault) and saved["process"] == record["process"]:
+                        status = json.loads((directory / "backend-result.json").read_text())
+                        assert status["signal"] == signal.SIGKILL and status["code"] is None
+                        matches.append(str(directory))
+                assert len(matches) == 1, "Owned daemon crash must retain its actual SIGKILL result"
+                result["unclean_close_reported"] = True
+                result["backend_exit_evidence"] = matches[0]
         phase = "reopen-durability"
         CLI_TEST.terminal([cli, "mount", "--type", backend, str(vault), str(mountpoint)], [secret])
         # Preserve the raw test database before SQLite's normal WAL recovery
