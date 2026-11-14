@@ -1,4 +1,5 @@
 """Native backend provenance and Mach-O staging; no package installation or FUSE copy."""
+import ast
 import hashlib
 import json
 import os
@@ -205,6 +206,48 @@ def verify_veracrypt_manifest(root, provenance, project_root):
         raise RuntimeError("Private backend manifest does not cover lurker-veracrypt")
     verify_manifest_files(root, artifacts)
     return runtime
+
+
+def source_constant(project_root, filename, name):
+    for node in ast.parse((Path(project_root) / filename).read_text()).body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise RuntimeError(f"Missing reviewed build constant: {name}")
+
+
+def verify_folder_manifest(root, backend, manifest, project_root, architecture):
+    recipe = "scripts/build-folder-backends.py"
+    url, revision, _ = source_constant(project_root, recipe, "PINS")[backend]
+    patches = source_constant(project_root, recipe, "PATCHES").get(backend, [])
+    patches += source_constant(project_root, recipe, "PLATFORM_PATCHES").get("Darwin", {}).get(backend, [])
+    expected = {relative: sha256(Path(project_root) / relative) for relative in patches}
+    if manifest.get("source") != url or manifest.get("revision") != revision or manifest.get("patches", {}) != expected:
+        raise RuntimeError(f"Private {backend} differs from reviewed source/patch pins")
+    target = manifest.get("target", {})
+    if target not in ({"GOOS": "darwin", "GOARCH": {"arm64": "arm64", "x86_64": "amd64"}[architecture]},
+                      {"os": "Darwin", "machine": architecture}):
+        raise RuntimeError(f"Private {backend} target differs from the native package")
+    private = manifest.get("private_libraries", {})
+    if any(not name.startswith(backend + "-libs/") or Path(name).suffix != ".dylib" for name in private):
+        raise RuntimeError(f"Private {backend} has unexpected library paths")
+    verify_manifest_files(root, {backend: manifest["sha256"], **private})
+    notices = manifest.get("license_files")
+    if not notices:
+        raise RuntimeError(f"Private {backend} has no digest-bound license files")
+    verify_manifest_files(Path(root) / "licenses" / backend, notices)
+    if backend == "cryfs" and manifest_fuse_runtime(manifest) != "macfuse":
+        raise RuntimeError("macOS CryFS requires macFUSE")
+
+
+def verify_cryptomator_manifest(root, manifest, project_root, architecture):
+    source = Path(project_root) / "native/folder/cryptomator"
+    if (manifest.get("os") != "Darwin" or manifest.get("architecture") != architecture
+            or manifest.get("sources") != json.loads((source / "dependencies.lock.json").read_text())):
+        raise RuntimeError("Private Cryptomator differs from the reviewed target/dependency lock")
+    for relative in ["pom.xml", "src/main/java/module-info.java", "src/main/java/org/lurker/cryptomator/Main.java"]:
+        if manifest.get("files", {}).get("source/" + relative) != sha256(source / relative):
+            raise RuntimeError(f"Private Cryptomator helper source differs: {relative}")
+    verify_manifest_files(root, manifest["files"])
 
 
 def minimum_version(binary):

@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 
-from macos_backend import architectures, verify_veracrypt_manifest, minimum_version, sha256, stage_macho
+from macos_backend import architectures, verify_veracrypt_manifest, verify_folder_manifest, verify_cryptomator_manifest, minimum_version, sha256, stage_macho
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -122,10 +122,7 @@ def main():
             if backend == "cryptomator":
                 source = folder_root / backend
                 manifest = json.loads((source / "manifest.json").read_text())
-                for relative, digest in manifest["files"].items():
-                    path = source / relative
-                    if Path(relative).is_absolute() or ".." in Path(relative).parts or sha256(path) != digest:
-                        raise SystemExit(f"Cryptomator manifest mismatch: {relative}")
+                verify_cryptomator_manifest(source, manifest, ROOT, architecture)
                 destination = resources / "backends" / backend
                 shutil.copytree(source, destination, symlinks=True)
                 # Helpers is a code location: source-language files there are
@@ -164,9 +161,14 @@ def main():
             else:
                 manifest = json.loads((folder_root / f"{backend}.json").read_text())
                 source = folder_root / backend
-                if sha256(source) != manifest["sha256"]:
-                    raise SystemExit(f"Private {backend} manifest mismatch")
-                targets, _ = stage_macho(source, helper_dir / backend, frameworks, architecture)
+                verify_folder_manifest(folder_root, backend, manifest, ROOT, architecture)
+                targets, folder_external = stage_macho(source, helper_dir / backend, frameworks, architecture,
+                                                       fuse_runtime="macfuse")
+                expected_names = {backend, *(Path(name).name for name in manifest.get("private_libraries", {}))}
+                if {path.name for path in targets} != expected_names:
+                    raise SystemExit(f"Staged {backend} closure includes unmanifested private code")
+                if folder_external != manifest.get("external_libraries", []):
+                    raise SystemExit(f"Staged {backend} external libraries differ from its manifest")
                 native_targets.extend(targets)
                 shutil.copytree(folder_root / "licenses" / backend, resources / "backend-licenses" / backend)
                 shutil.copyfile(folder_root / f"{backend}.json", resources / f"{backend}-provenance.json")

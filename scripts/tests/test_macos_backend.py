@@ -56,6 +56,48 @@ class MacBackendTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "provenance mismatch"):
                 backend.verify_veracrypt_manifest(root, escaped, project_root)
 
+    def test_folder_package_binds_darwin_patches_private_libraries_and_notices(self):
+        import copy
+        project = Path(__file__).parents[2]
+        recipe = "scripts/build-folder-backends.py"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative in ["cryfs", "cryfs-libs/libomp.dylib", "licenses/cryfs/LICENSE.txt"]:
+                path = root / relative; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b"fixture")
+            url, revision, _ = backend.source_constant(project, recipe, "PINS")["cryfs"]
+            paths = backend.source_constant(project, recipe, "PATCHES")["cryfs"]
+            paths += backend.source_constant(project, recipe, "PLATFORM_PATCHES")["Darwin"]["cryfs"]
+            manifest = {"source": url, "revision": revision, "target": {"os": "Darwin", "machine": "arm64"},
+                        "patches": {r: backend.sha256(project / r) for r in paths},
+                        "sha256": backend.sha256(root / "cryfs"),
+                        "private_libraries": {"cryfs-libs/libomp.dylib": backend.sha256(root / "cryfs-libs/libomp.dylib")},
+                        "license_files": {"LICENSE.txt": backend.sha256(root / "licenses/cryfs/LICENSE.txt")},
+                        "fuse_runtime": {"implementation": "macfuse"}}
+            backend.verify_folder_manifest(root, "cryfs", manifest, project, "arm64")
+            old = copy.deepcopy(manifest); del old["patches"][paths[-1]]
+            with self.assertRaisesRegex(RuntimeError, "source/patch pins"):
+                backend.verify_folder_manifest(root, "cryfs", old, project, "arm64")
+            (root / "cryfs-libs/libomp.dylib").write_bytes(b"changed")
+            with self.assertRaisesRegex(RuntimeError, "provenance mismatch"):
+                backend.verify_folder_manifest(root, "cryfs", manifest, project, "arm64")
+
+    def test_cryptomator_package_rejects_old_helper_even_with_current_dependency_lock(self):
+        import json
+        project = Path(__file__).parents[2]
+        source = project / "native/folder/cryptomator"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); files = {}
+            for relative in ["pom.xml", "src/main/java/module-info.java", "src/main/java/org/lurker/cryptomator/Main.java"]:
+                path = root / "source" / relative
+                path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes((source / relative).read_bytes())
+                files["source/" + relative] = backend.sha256(path)
+            manifest = {"os": "Darwin", "architecture": "arm64", "files": files,
+                        "sources": json.loads((source / "dependencies.lock.json").read_text())}
+            backend.verify_cryptomator_manifest(root, manifest, project, "arm64")
+            files["source/src/main/java/org/lurker/cryptomator/Main.java"] = "old"
+            with self.assertRaisesRegex(RuntimeError, "helper source differs"):
+                backend.verify_cryptomator_manifest(root, manifest, project, "arm64")
+
     def test_external_runtime_rejects_user_writable_ancestors(self):
         with tempfile.TemporaryDirectory() as temporary:
             library = Path(temporary) / "library.dylib"
