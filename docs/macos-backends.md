@@ -54,8 +54,8 @@ directory. A failed wxWidgets build is not treated as a completed dependency.
 
 The DMG includes the CLI at `Lurker.app/Contents/MacOS/lurker`, the desktop,
 internal helper, private backend, private non-system dylibs, notices and build
-provenance. Backends are resolved relative to the running app/CLI before the
-compatibility lookup for separately installed VeraCrypt. Missing private build
+provenance. Backends are resolved relative to the running app/CLI; separately
+installed VeraCrypt applications and PATH executables are not fallbacks. Missing private build
 artifacts stop packaging. Architecture slices, deployment targets and rewritten
 dependency paths are checked before nested code is signed. The selected FUSE library is
 an explicit external dependency; its path, resolved target and ancestors must be
@@ -85,6 +85,17 @@ Native developer qualification, macOS 27.2.1 arm64 / SDK 27.2:
 The `8aac707` artifact is a functional baseline. Later fault testing exposed
 plaintext fallthrough into a writable mount directory after unexpected detach;
 underlay fencing and fresh native qualification are required before release.
+
+The fenced `294b2b83bbb797886a22f871ad8759a08f787f2e` DMG now passes **182 CLI
+checks** (the baseline coverage below plus 26 Apple-image checks) and five
+packaged Cryptomator crash/recovery checks. Its SHA-256 is
+`7647f3b977ee68e6c63dceaac6c237ff0067a1597c32310add4174d9061098f8`.
+One VeraCrypt Serpent/keyfile reopen timed out with no remaining mount; that
+suite passed on retry. Both attempts remain in
+`dist/macos/294b2b8/native/`; this is an observed transient limitation. No owned
+package mounts/processes remained after qualification. Packaged fast-close and
+desktop callback checks remain pending. See `docs/folder-supervision.md` for the
+fence recovery contract; losing its guardian never enables a path-based chmod.
 
 - Full-scope candidate `8aac70784f3a4742cffacced4bbe3bd48841ead0` packages Apple,
   VeraCrypt, gocryptfs, CryFS and Cryptomator. The DMG and extracted standalone app

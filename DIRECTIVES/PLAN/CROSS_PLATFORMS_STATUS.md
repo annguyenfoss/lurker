@@ -14,16 +14,24 @@ Java image passes its integration tests and helper negotiation passes. Explicit/
 Auto CLI lifecycles pass 26/26. Supervised JVM crash, plaintext write denial,
 replacement refusal, explicit recovery, committed file/SQLite WAL integrity and
 normal close pass five checks. These results retain their individual revisions
-in `docs/folder-supervision.md`; the final Mac package still needs rebuilding.
+in `docs/folder-supervision.md`. Rebuilt Mac package `294b2b8` now passes 182 CLI
+checks and five packaged crash/recovery checks. One VeraCrypt Serpent/keyfile
+reopen timed out without leaving a mount; the retained failed attempt passed on
+retry. This remains an observed transient limitation, not an erased failure.
 RAID1C power-loss setup/reopening now supplies both recorded members; runner unit
 tests pass 31/31. Actual RAID1C power-loss and final cross-host packages remain pending.
 
 The earlier full-scope Mac `8aac707` package passed 156 normal CLI checks, 11
 rapid-close checks and an Apple desktop lifecycle, but crash testing exposed
 writable plaintext underlay after automatic detach. It is not release-qualified.
-OpenBSD desktop code generation failed with OOM/ENOSPC; pause cleanup restored
-512 MiB of disk headroom. On resumption its console is in single-user mode with
-read-only root and networking down; filesystem inspection precedes further builds.
+OpenBSD desktop code generation failed with OOM/ENOSPC. On resumption OpenBSD,
+NetBSD and DragonFly were stopped on root-filesystem inconsistencies. Explicitly
+authorized repairs without backups completed; read-only follow-up checks passed
+and all three booted with SSH available. OpenBSD's missing X11 files were restored
+from signed official sets, preserving 52 existing configurations and boot controls.
+Its workspace rebuild now raises only the build process's 1.5 GiB data limit to
+4 GiB; root has roughly 4 GiB headroom. Final Linux/BSD package source is frozen
+at `cc87b54ef6`; Mac artifact source remains independently recorded as `294b2b8`.
 
 ## Current completion pass
 
@@ -126,7 +134,7 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 ## Remaining qualification work and limits
 
-- Complete the five-backend Mac package with the production Cryptomator FSKit profile and readiness fix. macOS FUSE remains separately installed; older checkpoint results do not qualify new binaries automatically.
+- Finish Mac packaged fast-close/desktop callback checks and characterize the retained VeraCrypt reopen timeout. The rebuilt five-backend `294b2b8` DMG passes 182 CLI and five crash/recovery checks; macOS FUSE remains separately installed.
 - Finish final packaged native tests at one frozen source across all six Linux distributions and four BSDs. Minimal pinned wxBase/private ELF payloads now pass dependency audits on the six Linux distributions; installed developer tools do not establish clean-machine independence.
 - Repeat BSD VeraCrypt generation/recovery proofs against final packages. Current native generation guards pass, including FreeBSD daemon-death recovery. OpenBSD can return ENXIO for a configured vnode after its FUSE daemon dies, making source identity unverifiable. Production preserves that session rather than guessing or force-detaching it.
 - The DragonFly IDE/UEFI clone adapter is implemented and its isolated clone is ready; power-loss testing awaits the current package. OpenBSD FFS still requires checking after the characterized power cut; no automatic repair is performed.
