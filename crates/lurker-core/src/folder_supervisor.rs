@@ -64,7 +64,14 @@ pub(super) fn read_record<T: serde::de::DeserializeOwned>(
         .map_err(|_| AppError::new("Malformed backend result; preserve the session."))
 }
 
-fn collect(mut pipe: impl Read) -> Vec<u8> {
+fn acknowledged(bytes: &[u8], status: &str) -> bool {
+    bytes.split_inclusive(|byte| *byte == b'\n').any(|line| {
+        line.ends_with(b"\n") && serde_json::from_slice::<serde_json::Value>(line)
+            .is_ok_and(|value| value == serde_json::json!({"protocol": 1, "status": status}))
+    })
+}
+
+fn collect(mut pipe: impl Read, mut ready: Option<PathBuf>) -> Vec<u8> {
     let mut captured = Vec::new();
     let mut chunk = [0u8; 4096];
     loop {
@@ -72,9 +79,18 @@ fn collect(mut pipe: impl Read) -> Vec<u8> {
             Ok(0) => return captured,
             Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(_) => return captured,
-            Ok(count) => captured.extend_from_slice(
-                &chunk[..count.min(OUTPUT_LIMIT.saturating_sub(captured.len()))],
-            ),
+            Ok(count) => {
+                captured.extend_from_slice(
+                    &chunk[..count.min(OUTPUT_LIMIT.saturating_sub(captured.len()))],
+                );
+                if let Some(dir) = ready.as_ref() {
+                    if acknowledged(&captured, "mounted")
+                        && write_record(dir, "backend-ready.json", &true).is_ok()
+                    {
+                        ready = None;
+                    }
+                }
+            }
         }
     }
 }
@@ -175,8 +191,9 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
         .stderr
         .take()
         .ok_or_else(|| AppError::new("Missing backend diagnostic pipe."))?;
-    let out = std::thread::spawn(move || collect(stdout));
-    let err = std::thread::spawn(move || collect(stderr));
+    let ready = (session.backend == VolumeType::Cryptomator).then(|| dir.clone());
+    let out = std::thread::spawn(move || collect(stdout, ready));
+    let err = std::thread::spawn(move || collect(stderr, None));
     let send_result = send(&mut child, secret);
     let status = child
         .wait()
@@ -187,10 +204,7 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
     let stderr = err
         .join()
         .map_err(|_| AppError::new("Backend diagnostic monitor failed."))?;
-    let closed_ack = stdout.split(|byte| *byte == b'\n').any(|line| {
-        serde_json::from_slice::<serde_json::Value>(line)
-            .is_ok_and(|value| value == serde_json::json!({"protocol": 1, "status": "closed"}))
-    });
+    let closed_ack = acknowledged(&stdout, "closed");
     // Redact each stream before joining: either bounded capture may end
     // halfway through a password, independently of the other stream.
     let combined = format!(
@@ -254,6 +268,34 @@ pub(super) fn dispatch() -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mounted_ack_is_published_before_stdout_closes_and_only_after_a_complete_message() {
+        let dir = std::env::temp_dir().join(format!("lurker-supervisor-ready-{}", nonce()));
+        secure_dir(&dir).unwrap();
+        let (reader, mut writer) = std::os::unix::net::UnixStream::pair().unwrap();
+        let destination = dir.clone();
+        let collector = std::thread::spawn(move || collect(reader, Some(destination)));
+        writer.write_all(b"{\"protocol\":1,\"status\":\"mounted\"}").unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        assert!(read_record::<bool>(&dir, "backend-ready.json").unwrap().is_none());
+        writer.write_all(b"\n").unwrap();
+        let started = Instant::now();
+        while read_record::<bool>(&dir, "backend-ready.json").unwrap() != Some(true) {
+            assert!(started.elapsed() < Duration::from_secs(5));
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(!collector.is_finished(), "Readiness must be visible while the daemon is alive");
+        writer.write_all(b"{\"protocol\":1,\"status\":\"closed\"}\n").unwrap();
+        drop(writer);
+        let output = collector.join().unwrap();
+        assert!(acknowledged(&output, "mounted"));
+        assert!(acknowledged(&output, "closed"));
+        for incomplete in [b"{\"protocol\":1,\"status\":\"mounted\"}".as_slice(),
+                           b"{\"protocol\":1,\"status\":\"mounted\",\"extra\":true}\n"] {
+            assert!(!acknowledged(incomplete, "mounted"));
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
     #[test]
     fn supervisor_resolves_a_symlinked_runtime_root_without_recreating_state() {
         let base = std::env::temp_dir().join(format!("lurker-supervisor-alias-{}", nonce()));

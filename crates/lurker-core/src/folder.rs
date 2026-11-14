@@ -947,15 +947,27 @@ fn mount_inner(
             if session.process.is_none() {
                 return Err(AppError::new("Mounted backend identity unavailable; session retained."));
             }
-            session.mount_identity = Some(identity);
-            session.mounted_directory = Some(Identity::read(&session.mountpoint)?);
-            save(&dir, &session)?;
-            output.success(&format!(
-                "Mounted {} at {}",
-                session.backend,
-                session.mountpoint.display()
-            ));
-            return Ok(());
+            if session.mount_identity.as_ref().is_some_and(|expected| expected != &identity) {
+                return Err(AppError::new("Mount changed before backend readiness; session retained."));
+            }
+            if session.mount_identity.is_none() {
+                session.mount_identity = Some(identity);
+                session.mounted_directory = Some(Identity::read(&session.mountpoint)?);
+                save(&dir, &session)?;
+            }
+            // Java installs its close hook after native mount() returns. The
+            // kernel can expose the mount first; an immediate close must wait
+            // for the helper's mounted ACK, or SIGTERM could skip the hook.
+            if session.backend != VolumeType::Cryptomator
+                || supervisor::read_record::<bool>(&dir, "backend-ready.json")? == Some(true)
+            {
+                output.success(&format!(
+                    "Mounted {} at {}",
+                    session.backend,
+                    session.mountpoint.display()
+                ));
+                return Ok(());
+            }
         }
         if let Some(status) = child
             .try_wait()

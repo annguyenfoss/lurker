@@ -55,6 +55,10 @@ it never overwrites a preexisting vault. CryFS initialization temporarily mounts
 the staged vault and waits for its foreground daemon to finish flushing before
 publication. Do not signal a CryFS or gocryptfs daemon immediately after native
 unmount: native detach may precede userspace destructor/metadata completion.
+Cryptomator readiness additionally requires its complete `mounted` protocol
+acknowledgement, observed and persisted by the supervisor while stdout remains
+open. A visible kernel mount can precede Java's close-hook registration; returning
+early lets an immediate unmount terminate the JVM without a close acknowledgement.
 
 Per-user `/tmp/lurker-folders-UID` state contains no credentials. It records source
 device/inode, mount identity, process birth identity and readonly mode. Busy or
