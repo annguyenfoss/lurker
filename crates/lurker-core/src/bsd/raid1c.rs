@@ -36,6 +36,8 @@ pub(super) struct Mirror {
     descriptor_published: bool,
     creating: bool,
     committed: bool,
+    #[serde(default)]
+    rolled_back: bool,
     allow_degraded: bool,
 }
 
@@ -131,6 +133,7 @@ fn empty_session(
             descriptor_published: false,
             creating,
             committed: false,
+            rolled_back: false,
             allow_degraded: degraded,
         }),
     }
@@ -644,7 +647,12 @@ fn verify_members(session: &Session) -> AppResult<()> {
                 && member.backing.is_none()
                 && session.mapped.is_none()
                 && regular_matches(identity, &member.target);
-            if !regular_matches(identity, &member.path) && !finalized {
+            let discarded = state(session)?.rolled_back
+                && member.backing.is_none()
+                && session.mapped.is_none()
+                && fs::symlink_metadata(&member.path)
+                    .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound);
+            if !regular_matches(identity, &member.path) && !finalized && !discarded {
                 return Err(AppError::new(
                     "Mirror member identity changed; refusing cleanup.",
                 ));
@@ -730,7 +738,7 @@ fn close_resources(registry: &Registry, session: &mut Session) -> AppResult<()> 
 
 pub(super) fn cleanup(registry: &Registry, session: &mut Session) -> AppResult<()> {
     close_resources(registry, session)?;
-    if state(session)?.creating && !state(session)?.committed {
+    if state(session)?.creating && !state(session)?.committed && !state(session)?.rolled_back {
         let paths = state(session)?
             .members
             .iter()
@@ -739,6 +747,8 @@ pub(super) fn cleanup(registry: &Registry, session: &mut Session) -> AppResult<(
             .collect::<Vec<_>>();
         driver::ensure_unattached(&paths)?;
         rollback_publication(session)?;
+        state_mut(session)?.rolled_back = true;
+        registry.save(session)?;
     }
     remove_staging(session)?;
     registry.remove(session)
@@ -910,6 +920,8 @@ mod tests {
         assert!(!state(&session).unwrap().members[0].target.exists());
         remove_staging(&session).unwrap();
         // Repeated cleanup after a partially completed staging removal is safe.
+        state_mut(&mut session).unwrap().rolled_back = true;
+        verify(&session).unwrap();
         remove_staging(&session).unwrap();
         registry.remove(&session).unwrap();
         drop(registry);
