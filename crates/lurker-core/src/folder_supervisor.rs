@@ -134,7 +134,7 @@ fn session_for_directory(root: &Path, canonical_dir: &Path) -> AppResult<Session
         .ok_or_else(|| AppError::new("Supervisor requires an existing private folder session."))
 }
 
-fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
+fn run(dir: PathBuf, executable: PathBuf, initializing: bool, descriptor: Option<i32>) -> AppResult<()> {
     if crate::effective_uid() == 0 {
         return Err(AppError::new(
             "Folder supervisor must run as the login user.",
@@ -148,6 +148,7 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
             "Supervisor backend differs from the selected private executable.",
         ));
     }
+    let held_fence = fence::inherited(descriptor, &session)?;
     let mut password = Vec::new();
     std::io::stdin()
         .take(65538)
@@ -166,6 +167,7 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
         &session.mountpoint,
         session.readonly,
     )?;
+    if held_fence.is_some() { args.push("--fenced-mountpoint".into()); }
     if initializing && session.backend == VolumeType::Cryfs {
         args.splice(
             0..0,
@@ -177,12 +179,20 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
-        .map_err(|e| AppError::io("Cannot start monitored backend", e))?;
-    let process = process_identity(child.id())
-        .ok_or_else(|| AppError::new("Cannot confirm monitored backend identity."))?;
-    write_record(&dir, "backend-process.json", &process)?;
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            write_record(&dir, "backend-result.json", &BackendResult { code: None, signal: None,
+                closed_ack: false, diagnostic: "Native backend could not be started.".into() })?;
+            if let Some(file) = &held_fence { fence::guard_until_requested(&dir, &session, file)?; }
+            return Err(AppError::io("Cannot start monitored backend", error));
+        }
+    };
+    if let Some(process) = process_identity(child.id()) {
+        write_record(&dir, "backend-process.json", &process)?;
+    } else if held_fence.is_none() {
+        return Err(AppError::new("Cannot confirm monitored backend identity."));
+    }
     let stdout = child
         .stdout
         .take()
@@ -220,6 +230,9 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool) -> AppResult<()> {
     };
     password.fill(0);
     write_record(&dir, "backend-result.json", &result)?;
+    // The original descriptor must outlive a crash. Only an explicit verified
+    // recovery request releases the permission barrier and lets the guardian exit.
+    if let Some(file) = &held_fence { fence::guard_until_requested(&dir, &session, file)?; }
     send_result
 }
 
@@ -248,7 +261,7 @@ pub(super) fn dispatch() -> Option<i32> {
     if args.get(1).and_then(|v| v.to_str()) != Some("--lurker-folder-supervisor") {
         return None;
     }
-    if args.len() != 5 {
+    if args.len() != 5 && args.len() != 6 {
         return Some(64);
     }
     let initializing = match args[4].to_str() {
@@ -256,8 +269,13 @@ pub(super) fn dispatch() -> Option<i32> {
         Some("mount") => false,
         _ => return Some(64),
     };
+    let descriptor = if args.len() == 6 {
+        match args[5].to_str().and_then(|v| v.parse::<i32>().ok()).filter(|fd| *fd >= 3) {
+            Some(fd) => Some(fd), None => return Some(64),
+        }
+    } else { None };
     Some(
-        match run(args[2].clone().into(), args[3].clone().into(), initializing) {
+        match run(args[2].clone().into(), args[3].clone().into(), initializing, descriptor) {
             Ok(()) => 0,
             // The caller retains the session if no durable backend result exists.
             Err(_) => 1,
@@ -317,6 +335,7 @@ mod tests {
             mounted_directory: None,
             process: None,
             supervisor: None,
+            fence: None,
         };
         write_record(&dir, "session.json", &session).unwrap();
         let canonical = fs::canonicalize(&dir).unwrap();

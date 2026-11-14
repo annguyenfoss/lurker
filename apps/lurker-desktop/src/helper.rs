@@ -99,6 +99,16 @@ fn list_native_from_helper(helper_path: &Path) -> Result<Vec<ActiveVolume>, Stri
 }
 
 pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<OperationResponse, String> {
+    let cryptomator_fence =
+        lurker_core::request_requires_cryptomator_fence(&command).map_err(|error| error.message)?;
+    run_helper_checked(helper_path, command, cryptomator_fence)
+}
+
+fn run_helper_checked(
+    helper_path: &Path,
+    command: CommandAction,
+    cryptomator_fence: bool,
+) -> Result<OperationResponse, String> {
     let directory_backend =
         lurker_core::request_requires_user_session(&command).map_err(|e| e.message)?;
     // Directory requests have their own login-session capability. A row's
@@ -129,7 +139,14 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
             }
             _ => false,
         };
-    if privileged_tools || directory_backend || unprivileged || keyfile || keyslots || raid1c {
+    if privileged_tools
+        || directory_backend
+        || unprivileged
+        || keyfile
+        || keyslots
+        || raid1c
+        || cryptomator_fence
+    {
         let result = Command::new(helper_path)
             .arg("capabilities")
             .stdin(Stdio::null())
@@ -149,6 +166,12 @@ pub fn run_helper(helper_path: &Path, command: CommandAction) -> Result<Operatio
         }
         if directory_backend && capabilities["folder_supervision_protocol"] != 1 {
             return Err("Installed lurker-helper does not support supervised directory sessions. Update it together with the desktop app.".into());
+        }
+        if cryptomator_fence
+            && (capabilities["protocol_version"] != 3
+                || capabilities["cryptomator_fence_protocol"].as_u64() != Some(1))
+        {
+            return Err("Installed lurker-helper does not support fail-closed Cryptomator mountpoints on macOS. Update it together with the desktop app.".into());
         }
         if unprivileged && capabilities["unprivileged_veracrypt"] != true {
             return Err("Installed lurker-helper does not support unprivileged operation. Update it together with the desktop app.".into());
@@ -257,6 +280,128 @@ mod tests {
     // Parallel script creation and subprocess spawning can briefly inherit a
     // sibling fixture's writable descriptor before exec (ETXTBSY on Linux).
     static HELPER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn cryptomator_fence_capability_is_required_before_secret_stdin() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-cryptomator-fence-helper-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let vault = directory.join("vault");
+        fs::create_dir(&vault).unwrap();
+        fs::write(vault.join("vault.cryptomator"), b"fixture marker").unwrap();
+        let helper = directory.join("helper");
+        let commands = [
+            CommandAction::Create(lurker_core::CreateCommand {
+                privilege_mode: PrivilegeMode::Privileged,
+                target: vault.clone(),
+                peer_sources: Vec::new(),
+                size_gb: None,
+                force: false,
+                source_kind: lurker_core::SourceKind::Directory,
+                volume_type: VolumeType::Cryptomator,
+                cipher: lurker_core::CreateCipher::Aes,
+                passphrase: Some("fixture password".into()),
+                keyfile: None,
+            }),
+            CommandAction::Mount(lurker_core::MountCommand {
+                privilege_mode: PrivilegeMode::Privileged,
+                source: vault.clone(),
+                peer_sources: Vec::new(),
+                allow_degraded: false,
+                mountpoint: directory.join("mount"),
+                tag: None,
+                volume_type: VolumeType::Auto,
+                passphrase: Some("fixture password".into()),
+                keyfile: None,
+                readonly: false,
+            }),
+        ];
+        for capability in [
+            serde_json::Value::Null,
+            serde_json::json!(true),
+            serde_json::json!("1"),
+            serde_json::json!(1.0),
+            serde_json::json!(0),
+            serde_json::json!(2),
+        ] {
+            let capabilities = serde_json::json!({"protocol_version":3,"directory_backends":true,"folder_supervision_protocol":1,"cryptomator_fence_protocol":capability});
+            fs::write(&helper, format!("#!/bin/sh\nif [ \"$1\" = capabilities ]; then printf '%s\\n' '{}'; else : > \"${{0}}.ran\"; fi\n", capabilities)).unwrap();
+            fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+            for command in &commands {
+                let error = run_helper_checked(&helper, command.clone(), true).unwrap_err();
+                assert!(error.contains("fail-closed Cryptomator"), "{error}");
+                assert!(!directory.join("helper.ran").exists());
+            }
+        }
+        fs::write(&helper, r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"directory_backends":true,"folder_supervision_protocol":1,"cryptomator_fence_protocol":1}'
+else
+  cat >/dev/null
+  printf '%s\n' '{"ok":true,"logs":[],"error":null}'
+fi
+"#).unwrap();
+        for command in commands {
+            assert!(run_helper_checked(&helper, command, true).unwrap().ok);
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn macos_auto_cryptomator_detection_rejects_unfenced_helpers() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-auto-cryptomator-fence-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let vault = directory.join("vault");
+        fs::create_dir(&vault).unwrap();
+        fs::write(vault.join("vault.cryptomator"), b"fixture marker").unwrap();
+        let helper = directory.join("helper");
+        fs::write(
+            &helper,
+            r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"directory_backends":true,"folder_supervision_protocol":1}'
+else
+  touch "${0}.ran"
+fi
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        // An unresolved Auto path can change before the helper inspects it.
+        // It needs the same protection even when no current directory marker
+        // causes the ordinary folder capability checks to run.
+        for source in [vault, directory.join("unresolved.dmg")] {
+            let command = CommandAction::Mount(lurker_core::MountCommand {
+                privilege_mode: PrivilegeMode::Privileged,
+                source,
+                peer_sources: Vec::new(),
+                allow_degraded: false,
+                mountpoint: directory.join("mount"),
+                tag: None,
+                volume_type: VolumeType::Auto,
+                passphrase: Some("fixture password".into()),
+                keyfile: None,
+                readonly: false,
+            });
+            assert!(lurker_core::request_requires_cryptomator_fence(&command).unwrap());
+            let error = run_helper(&helper, command).unwrap_err();
+            assert!(error.contains("fail-closed Cryptomator"), "{error}");
+            assert!(!directory.join("helper.ran").exists());
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn native_listing_requires_a_new_capability_and_preserves_authorization_errors() {
@@ -675,7 +820,7 @@ fi
             allow_degraded: false,
             mountpoint: "mnt".into(),
             tag: None,
-            volume_type: VolumeType::Auto,
+            volume_type: VolumeType::Veracrypt,
             passphrase: None,
             keyfile: Some("key".into()),
             readonly: false,

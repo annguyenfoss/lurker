@@ -44,16 +44,23 @@ public final class Main {
                 return;
             }
             if (args.length == 1 && args[0].equals("--capabilities")) {
-                System.out.println("{\"protocol\":1,\"init\":true,\"mount\":true,\"readonly\":true,\"password_stdin\":true}");
+                int fence = System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("mac") ? 1 : 0;
+                System.out.println("{\"protocol\":1,\"init\":true,\"mount\":true,\"readonly\":true,\"password_stdin\":true,\"fenced_mountpoint_protocol\":" + fence + "}");
                 return;
             }
             if (args.length < 2 || (!args[0].equals("init") && !args[0].equals("mount"))) {
                 throw new IllegalArgumentException("Expected init DIRECTORY or mount VAULT MOUNTPOINT [--readonly]");
             }
             boolean init = args[0].equals("init");
-            if ((init && args.length != 2) || (!init && args.length != 3 && args.length != 4)
-                    || (args.length == 4 && !args[3].equals("--readonly"))) {
+            if ((init && args.length != 2) || (!init && (args.length < 3 || args.length > 5))) {
                 throw new IllegalArgumentException("Invalid backend arguments");
+            }
+            boolean readonly = false, fenced = false;
+            if (!init) for (int i = 3; i < args.length; i++) {
+                if (args[i].equals("--readonly") && !readonly) readonly = true;
+                else if (args[i].equals("--fenced-mountpoint") && !fenced
+                        && System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("mac")) fenced = true;
+                else throw new IllegalArgumentException("Invalid backend arguments");
             }
             char[] password = readPassword();
             try {
@@ -61,7 +68,7 @@ public final class Main {
                     initialize(Path.of(args[1]), password);
                     System.out.println("{\"protocol\":1,\"status\":\"initialized\"}");
                 } else {
-                    mount(Path.of(args[1]), Path.of(args[2]), password, args.length == 4);
+                    mount(Path.of(args[1]), Path.of(args[2]), password, readonly, fenced);
                 }
             } finally {
                 Arrays.fill(password, '\0');
@@ -176,11 +183,24 @@ public final class Main {
         return clean;
     }
 
-    private static void mount(Path vault, Path mountpoint, char[] password, boolean readonly) throws Exception {
+    static void validateMountpoint(Path mountpoint, boolean fenced) throws IOException {
         if (!Files.isDirectory(mountpoint, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Invalid mountpoint");
-        try (var entries = Files.list(mountpoint)) {
-            if (entries.findAny().isPresent()) throw new IOException("Mountpoint must be empty");
+        if (fenced) {
+            // Core proved emptiness through its original held FD after fencing.
+            // Listing by path is intentionally impossible with underlying mode 000.
+            if (!Files.getPosixFilePermissions(mountpoint, LinkOption.NOFOLLOW_LINKS).isEmpty()
+                    || !Files.getOwner(mountpoint, LinkOption.NOFOLLOW_LINKS).getName().equals(System.getProperty("user.name"))) {
+                throw new IOException("Fenced mountpoint must be mode 000 and owned by this user");
+            }
+        } else {
+            try (var entries = Files.list(mountpoint)) {
+                if (entries.findAny().isPresent()) throw new IOException("Mountpoint must be empty");
+            }
         }
+    }
+
+    private static void mount(Path vault, Path mountpoint, char[] password, boolean readonly, boolean fenced) throws Exception {
+        validateMountpoint(mountpoint, fenced);
         var fs = CryptoFileSystemProvider.newFileSystem(vault, properties(vault, password, readonly));
         try {
             var service = mountService();

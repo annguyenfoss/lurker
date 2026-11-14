@@ -18,6 +18,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[path = "folder_supervisor.rs"]
 mod supervisor;
+#[path = "folder/fence.rs"]
+mod fence;
 
 pub(crate) fn run_supervisor_if_requested() -> Option<i32> {
     supervisor::dispatch()
@@ -193,6 +195,8 @@ struct Session {
     process: Option<Process>,
     #[serde(default)]
     supervisor: Option<Process>,
+    #[serde(default)]
+    fence: Option<fence::Journal>,
 }
 
 fn secure_dir(path: &Path) -> AppResult<()> {
@@ -859,6 +863,13 @@ fn mount_inner(
         ));
     }
     let executable = find_program(c.volume_type)?;
+    if fence::required(c.volume_type) {
+        let capabilities = backend_command(c.volume_type, &executable).arg("--capabilities").output()
+            .map_err(|e| AppError::io("Cannot inspect Cryptomator fencing capability", e))?;
+        let supported = capabilities.status.success() && serde_json::from_slice::<serde_json::Value>(&capabilities.stdout)
+            .ok().and_then(|v| v.get("fenced_mountpoint_protocol").and_then(|n| n.as_u64())) == Some(1);
+        if !supported { return Err(AppError::new("The private Cryptomator backend must support mountpoint fencing protocol 1; update it before unlocking.")); }
+    }
     let secret = password(c.passphrase, false)?;
     let source = fs::canonicalize(&c.source)
         .map_err(|e| AppError::io("Cannot resolve encrypted directory", e))?;
@@ -907,6 +918,7 @@ fn mount_inner(
         .path
         .join(format!("session-{}-{}", std::process::id(), nonce()));
     secure_dir(&dir)?;
+    let held_fence = if fence::required(c.volume_type) { Some(fence::prepare(&mountpoint)?) } else { None };
     let mut session = Session {
         schema: SCHEMA,
         backend: c.volume_type,
@@ -918,17 +930,30 @@ fn mount_inner(
         mounted_directory: None,
         process: None,
         supervisor: None,
+        fence: held_fence.as_ref().map(|(journal, _)| journal.clone()),
     };
     save(&dir, &session)?;
+    if let Some((_, file)) = held_fence.as_ref() {
+        fence::arm(&session.mountpoint, file, session.fence.as_mut().unwrap())?;
+        save(&dir, &session)?;
+    }
     let mut command = Command::new(std::env::current_exe()
         .map_err(|e| AppError::io("Cannot locate folder supervisor", e))?);
     command.arg("--lurker-folder-supervisor").arg(&dir).arg(&executable)
         .arg(if initializing { "init" } else { "mount" })
         .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
+    let fence_descriptor = held_fence.as_ref().map(|(_, file)| file.as_raw_fd());
+    if let Some(fd) = fence_descriptor { command.arg(fd.to_string()); }
     unsafe {
-        command.pre_exec(|| {
+        command.pre_exec(move || {
             if libc::setsid() < 0 {
                 return Err(std::io::Error::last_os_error());
+            }
+            if let Some(fd) = fence_descriptor {
+                let flags = libc::fcntl(fd, libc::F_GETFD);
+                if flags == -1 || libc::fcntl(fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
             }
             Ok(())
         });
@@ -972,6 +997,9 @@ fn mount_inner(
                 ));
                 return Ok(());
             }
+        }
+        if session.fence.is_some() && supervisor::read_record::<supervisor::BackendResult>(&dir, "backend-result.json")?.is_some() {
+            return Err(AppError::new(format!("Cryptomator startup failed; its mountpoint remains protected. Explicitly unmount {} to verify and restore it before retrying. Evidence: {}", session.source.display(), dir.display())));
         }
         if let Some(status) = child
             .try_wait()
@@ -1102,6 +1130,11 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output) -> AppResult<()
             std::thread::sleep(Duration::from_millis(50));
         }
     }
+    fence::request_restore(&dir, &session)?;
+    if let Some(journal) = session.fence.as_mut() {
+        journal.armed = false;
+        save(&dir, &session)?;
+    }
     if let Some(monitor) = &session.supervisor {
         let started = Instant::now();
         while alive(monitor)? {
@@ -1141,7 +1174,7 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
             Some(process) => alive(process)?,
             None => false,
         };
-        if mounted || running {
+        if mounted || running || s.fence.as_ref().is_some_and(|journal| journal.armed) {
             result.push(ActiveVolume {
                 privilege_mode: PrivilegeMode::Unprivileged,
                 source_path: Some(s.source),
@@ -1239,6 +1272,7 @@ mod tests {
             mounted_directory: None,
             process: None,
             supervisor: None,
+            fence: None,
         }
     }
     #[test]
@@ -1358,6 +1392,7 @@ mod tests {
             }),
             process: None,
             supervisor: None,
+            fence: None,
         };
         assert!(confirmed_mount_directory(&session, "confirmed mount").is_ok());
         assert!(confirmed_mount_directory(&session, "replacement mount").is_err());

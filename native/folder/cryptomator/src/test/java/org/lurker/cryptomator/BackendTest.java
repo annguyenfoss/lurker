@@ -26,6 +26,20 @@ class BackendTest {
         assertThrows(IOException.class, () -> Main.providerSuffix("FreeBSD"));
     }
 
+    @Test void fencedMountpointRequiresOwnedModeZeroAndDoesNotListTheProtectedPath() throws Exception {
+        var point = Files.createDirectory(vault.resolve("mountpoint"));
+        assertThrows(IOException.class, () -> Main.validateMountpoint(point, true));
+        var original = Files.getPosixFilePermissions(point);
+        try {
+            Files.setPosixFilePermissions(point, Set.of());
+            Main.validateMountpoint(point, true);
+            var alias = vault.resolve("alias"); Files.createSymbolicLink(alias, point);
+            assertThrows(IOException.class, () -> Main.validateMountpoint(alias, true));
+        } finally { Files.setPosixFilePermissions(point, original); }
+        Files.writeString(point.resolve("existing"), "fixture");
+        assertThrows(IOException.class, () -> Main.validateMountpoint(point, false));
+    }
+
     @Test void macTransportRequiresFskitAndRejectsUnsupportedHostOrDefaults() throws Exception {
         String defaults = "-ononamedattr -obackend=smb -orwsize=262144 -ouid=501 -ogid=20";
         for (String version : new String[] {"26.0", "26.6.2", "27.2"}) {

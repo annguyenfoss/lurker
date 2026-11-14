@@ -131,6 +131,7 @@ exec "$LURKER_CRYPTOMATOR_ROOT/runtime/bin/java" \\
             "schema": 1, "backend": "cryptomator", "protocol": 1,
             "os": platform.system(), "architecture": platform.machine(), "java": java_version,
             "mount": MOUNT_PROFILES[platform.system()],
+            "fenced_mountpoint_protocol": 1 if platform.system() == "Darwin" else 0,
             "cryptofs": "2.8.0", "fuse_nio": "5.1.0", "helper_license": "AGPL-3.0-only",
             "sources": json.loads((SOURCE / "dependencies.lock.json").read_text()),
             "tests": test_summary,

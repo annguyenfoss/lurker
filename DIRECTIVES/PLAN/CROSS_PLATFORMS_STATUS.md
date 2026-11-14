@@ -5,6 +5,22 @@ Active completion pass, 2026-11-14. The earlier frozen candidate was
 The current integration is not yet frozen or fully qualified. Scope/profiles:
 `DIRECTIVES/LLM/CIPHER.md`. Public-release qualification remains separate.
 
+## Paused work checkpoint
+
+The user stopped implementation and requested committing/pushing the current
+work. The pending Cryptomator mountpoint fence and its helper capability gate
+are an unfinished checkpoint, not a qualified release. Last native Mac fence
+tests: 14 passed, 4 failed because an absent ACL is treated as an inspection
+error. Native fenced-helper and recovery tests remain incomplete. The expanded
+VM power-loss prerequisite/route checks are also partial; RAID1C power-loss execution and
+the final cross-host packaged matrix have not run.
+
+The earlier full-scope Mac `8aac707` package passed 156 normal CLI checks, 11
+rapid-close checks and an Apple desktop lifecycle, but crash testing exposed
+writable plaintext underlay after automatic detach. It is not release-qualified.
+OpenBSD desktop code generation later failed with OOM/ENOSPC; pause cleanup
+removed only failed generated objects and restored 512 MiB of disk headroom.
+
 ## Current completion pass
 
 - macOS policy: VeraCrypt uses FUSE-T only; gocryptfs/CryFS use macFUSE;

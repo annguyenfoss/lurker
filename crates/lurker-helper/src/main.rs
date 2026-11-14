@@ -30,6 +30,7 @@ fn run() -> i32 {
                     "directory_backends": true,
                     "native_volume_listing": if native_listing_supported() { Some(1) } else { None },
                     "folder_supervision_protocol": 1,
+                    "cryptomator_fence_protocol": if cfg!(target_os = "macos") { Some(1) } else { None },
                     "raid1c_members": cfg!(target_os = "openbsd"),
                     "noninteractive_sudo": !cfg!(target_os = "macos"),
                     "trusted_privileged_tools": !cfg!(target_os = "macos"),
