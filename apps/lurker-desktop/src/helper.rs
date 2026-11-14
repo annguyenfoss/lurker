@@ -188,6 +188,10 @@ mod tests {
     use super::*;
     use lurker_core::{PrivilegeMode, UnmountCommand, VolumeType};
 
+    // Parallel script creation and subprocess spawning can briefly inherit a
+    // sibling fixture's writable descriptor before exec (ETXTBSY on Linux).
+    static HELPER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     #[cfg(any(
         target_os = "freebsd",
@@ -196,6 +200,9 @@ mod tests {
         target_os = "openbsd"
     ))]
     fn bsd_native_requests_require_terminal_free_authorization_support() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory =
             std::env::temp_dir().join(format!("lurker-bsd-auth-helper-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
@@ -229,6 +236,9 @@ fi
 
     #[test]
     fn directory_requests_require_supervision_before_receiving_credentials() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory = std::env::temp_dir().join(format!(
             "lurker-folder-supervision-helper-{}",
             std::process::id()
@@ -268,6 +278,9 @@ fi
     #[test]
     #[cfg(target_os = "linux")]
     fn privileged_linux_requests_require_owned_loop_lease_capability() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory =
             std::env::temp_dir().join(format!("lurker-loop-helper-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
@@ -301,6 +314,9 @@ fi
 
     #[test]
     fn mirrored_requests_require_explicit_member_capability_before_stdin() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory =
             std::env::temp_dir().join(format!("lurker-raid1c-helper-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
@@ -340,6 +356,9 @@ fi
 
     #[test]
     fn directory_requests_require_the_new_helper_contract() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory =
             std::env::temp_dir().join(format!("lurker-folder-helper-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
@@ -361,6 +380,9 @@ fi
 
     #[test]
     fn directory_session_does_not_require_linux_veracrypt_capability() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory =
             std::env::temp_dir().join(format!("lurker-folder-capability-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
@@ -390,6 +412,9 @@ fi
 
     #[test]
     fn older_helper_is_never_sent_an_unprivileged_operation() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory =
             std::env::temp_dir().join(format!("lurker-helper-capabilities-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
@@ -418,6 +443,9 @@ fi
     #[cfg(target_os = "linux")]
     #[test]
     fn userspace_requests_reject_helpers_without_the_source_locking_protocol() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory = std::env::temp_dir().join(format!(
             "lurker-transport-capability-{}",
             std::process::id()
@@ -448,6 +476,9 @@ fi
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn plain_privileged_requests_require_the_trusted_tool_contract() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory = std::env::temp_dir().join(format!(
             "lurker-privileged-capability-{}",
             std::process::id()
@@ -481,6 +512,9 @@ fi
 
     #[test]
     fn helpers_must_advertise_credential_support_before_receiving_secrets() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let directory =
             std::env::temp_dir().join(format!("lurker-helper-credentials-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
