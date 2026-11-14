@@ -159,8 +159,8 @@ class MirrorSuite(BASE.Suite):
             if not self.records():
                 raise AssertionError("Mounted mirror has no recoverable ownership journal")
 
-    def close(self):
-        self.cli(self.command("unmount", self.mountpoint))
+    def close(self, target=None):
+        self.cli(self.command("unmount", target or self.mountpoint))
         if os.path.ismount(self.mountpoint):
             raise AssertionError("CLI reported close but its owned mount remains")
         self.mounted = False
@@ -209,8 +209,14 @@ class MirrorSuite(BASE.Suite):
         self.held = self.root / "held missing primary.img"
         self.source.rename(self.held)
         self.guarded_rejection(self.command("mount", mountpoint=self.mountpoint), password=self.password)
-        self.guarded_rejection(self.command("mount", self.peer, kind="raid1c", degraded=True, mountpoint=self.mountpoint),
+        self.guarded_rejection(self.command("mount", kind="raid1c", peer=self.peer, degraded=True, mountpoint=self.mountpoint),
                                password=self.wrong)
+        # Keep the original descriptor: it identifies a missing logical primary
+        # and an explicitly supplied surviving peer, without inventing a file.
+        self.mount(kind="raid1c", peer=self.peer, degraded=True)
+        self.verify(); self.degraded_status("logical-primary-missing-explicit-peer")
+        self.close(target=self.source)
+        # The documented survivor-only recovery route also remains usable.
         self.mount(source=self.peer, kind="raid1c", degraded=True)
         self.verify(); self.degraded_status("secondary-survives-primary-missing"); self.close()
         self.held.rename(self.source); self.held = None

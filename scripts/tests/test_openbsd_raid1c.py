@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location("openbsd_raid1c_conformance", Path(__file__).parents[1] / "test-openbsd-raid1c.py")
@@ -37,6 +38,18 @@ class Raid1cHarnessTests(unittest.TestCase):
         self.assertEqual(auto[auto.index("--type") + 1], "auto")
         with self.assertRaises(ValueError):
             SUITE.arguments("/owned/lurker", "mount", "/tmp/source")
+
+    def test_close_can_identify_a_missing_logical_primary_without_statting_it(self):
+        suite = object.__new__(SUITE.MirrorSuite)
+        suite.options = SimpleNamespace(binary=Path("/owned/lurker"), size_gb="0.125")
+        suite.mountpoint = Path("/tmp/lurker-owned/mounted")
+        suite.cli = mock.Mock()
+        suite.footprint = lambda: {"vnconfig": "vnd0: not in use\n", "bioctl": "", "sessions": {}}
+        missing = Path("/tmp/lurker-owned/missing-primary.img")
+        with mock.patch.object(SUITE.os.path, "ismount", return_value=False):
+            suite.close(target=missing)
+        self.assertEqual(suite.cli.call_args.args[0][-1], str(missing))
+        self.assertFalse(suite.mounted)
 
     def test_argument_validation_blocks_storage_runs_on_development_host(self):
         with mock.patch.object(SUITE.platform, "system", return_value="Linux"), \
