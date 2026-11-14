@@ -77,21 +77,24 @@ Use only disposable `/tmp/lurker-*` files for native tests:
 TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 ```
 
-Baseline development evidence before current FUSE-T qualification, macOS 27.2.1 arm64 / SDK 27.2:
+Native developer qualification, macOS 27.2.1 arm64 / SDK 27.2:
 
-- The app/DMG builds, nested signatures and dependency checks pass; the packaged
-  private VeraCrypt, gocryptfs and Java helper start without external Go/Java/
-  VeraCrypt. The offline native rebuild reuses verified source/wx caches.
-- Apple images pass the packaged CLI lifecycle, SQLite WAL and safety suite.
-  Native Mac core unit tests cover raw-image detection and hardlink identities.
-- VeraCrypt AES/Serpent/Twofish each reached application I/O through the packaged
-  CLI. Subsequent tests found/fixed Unicode listing and hardlink safety bugs.
-  The final FUSE-T 1.2.9 run still failed during native creation with an operation
-  timeout. This combination remains unqualified; a successful small-image run
-  does not establish reliable create/mount behavior across sizes or load.
-- gocryptfs requires macFUSE, absent on that host. CryFS/FUSE-T cannot enable
-  SQLite WAL; Cryptomator's experimental upstream FUSE-T provider also failed WAL.
-  These directory backends still need native application/lifecycle qualification
-  with the backend-specific runtime required above.
+- Candidate `d330b2080834743470640c43c0ec0a6554dd9bf9` packages private
+  VeraCrypt 1.26.31 with external FUSE-T 1.2.9. Its standalone, ad-hoc-signed
+  app passes 78 CLI checks: AES/Serpent/Twofish, password-only and binary-keyfile-only
+  authentication, explicit/Auto discovery, 256 MiB containers, SQLite WAL,
+  fsync, persistence, busy/alias rejection and read-only enforcement.
+- No separate VeraCrypt application or development tool was available through
+  the test PATH. Every owned mount closed normally; no private VeraCrypt or
+  FUSE-T SMB transport process remained after each suite. Evidence is retained
+  in `dist/macos/d330b20/vc-evidence.tar.gz` with the exact CLI/engine hashes.
+- This supersedes the previous 1.26.30 native creation-timeout result for this
+  tested combination. It does not establish other macOS/FUSE versions,
+  crash recovery, a security audit or public-release readiness.
+- The checkpoint DMG contains Apple, VeraCrypt, gocryptfs and CryFS. Cryptomator
+  remains excluded until its FUSE-T FSKit transport passes native locking/WAL
+  and lifecycle checks; the direct SMB transport failed SQLite locking.
 
-These are development results, not a full macOS support or public-release claim.
+Apple encrypted disk images retain their earlier packaged lifecycle/WAL proof.
+Full-scope package, desktop and directory-backend qualification is recorded
+separately in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`.
