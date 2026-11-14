@@ -635,6 +635,21 @@ def record(args):
     return 0
 
 
+def desktop_display_requirements(system, desktop):
+    if not desktop:
+        return None
+    displays = {"X11": {"session": "reachable X11/XWayland display with login-user authorization",
+                         "libraries": ["libX11", "libXcursor", "libX11-xcb", "libXi", "libxcb", "libxkbcommon", "libxkbcommon-x11"]}}
+    if system == "Linux":
+        displays["Wayland"] = {"session": "reachable Wayland compositor in the login-user session",
+                                "libraries": ["libwayland-client", "libxkbcommon"]}
+    return {"renderer": "Slint/winit software renderer", "display_sessions": displays,
+            "session_policy": "one supported display session and its matching native libraries are required",
+            "library_audit_scope": "winit loads display/keyboard libraries with dlopen; ELF NEEDED resolution alone does not qualify these dependencies",
+            "qualification": "not performed by staging; launch an actual native winit window with the installed package",
+            "test_only_tools": ["Xvfb", "xauth"]}
+
+
 def desktop_authorization(selected, desktop):
     privileged = set(selected) & {"luks", "luks1", "veracrypt", "geli", "cgd", "softraid", "raid1c", "pefs"}
     if not desktop or not privileged:
@@ -773,8 +788,10 @@ def stage(args):
                     "selected_backends": sorted(selected), "bundled_artifacts": sorted(artifacts),
                     "host_tools": requirements, "native_dependencies": dependencies,
                     "desktop_authorization": authorization,
+                    "desktop_runtime": desktop_display_requirements(system, args.desktop),
                     "host_tool_requirements": {backend: TOOLS.get(system, {}).get(backend, []) for backend in sorted(selected)},
                     "runtime_requirements": ["matching host kernel/filesystem and mount authorization"]
+                        + (["Desktop requires a working native display session plus matching winit display/keyboard libraries, including xkbcommon; verify an actual window separately from ELF metadata"] if args.desktop else [])
                         + (["Desktop native operations require host pkexec or sudo and working administrator policy for the installed lurker-helper"] if authorization else [])
                         + (["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and fusermount)"] if "cryfs" in selected else [])
                         + (["gocryptfs requires FUSE; Linux accepts fusermount3 or fusermount, FreeBSD uses mount_fusefs"] if "gocryptfs" in selected else [])

@@ -468,6 +468,21 @@ Version needs section '.gnu.version_r' contains 2 entries:
         self.assertEqual({"sudo": "/trusted/sudo"}, authorization["available"])
         self.assertIn("presence checked only", authorization["qualification"])
         self.assertIn("working administrator authorization", authorization["policy_requirement"])
+        display = manifest["desktop_runtime"]
+        self.assertIn("libxkbcommon-x11", display["display_sessions"]["X11"]["libraries"])
+        self.assertIn("Wayland", display["display_sessions"])
+        self.assertIn("not performed by staging", display["qualification"])
+        self.assertIn("dlopen", display["library_audit_scope"])
+        self.assertEqual(["Xvfb", "xauth"], display["test_only_tools"])
+
+    def test_bsd_desktop_declares_x11_runtime_without_claiming_display_execution(self):
+        for system in ("FreeBSD", "DragonFly", "NetBSD", "OpenBSD"):
+            with self.subTest(system=system):
+                display = stager.desktop_display_requirements(system, True)
+                self.assertEqual({"X11"}, set(display["display_sessions"]))
+                self.assertIn("libxkbcommon-x11", display["display_sessions"]["X11"]["libraries"])
+                self.assertIn("actual native winit window", display["qualification"])
+                self.assertIsNone(stager.desktop_display_requirements(system, False))
 
     def test_login_user_folder_or_cli_only_does_not_require_desktop_elevation(self):
         with mock.patch.object(stager.shutil, "which") as lookup:
