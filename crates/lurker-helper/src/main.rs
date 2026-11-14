@@ -103,7 +103,7 @@ fn handle_native_list(as_root: bool) -> NativeVolumeListResponse {
         return native_list_error("Authorized native listing is supported on BSD only.");
     }
     if is_root() {
-        return match lurker_core::list_active_volumes() {
+        return match lurker_core::list_native_active_volumes() {
             Ok(volumes) => NativeVolumeListResponse {
                 ok: true,
                 volumes: volumes

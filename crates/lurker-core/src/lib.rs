@@ -186,6 +186,36 @@ pub fn probe_system() -> AppResult<SystemProbe> {
     }
 }
 
+/// Read the private BSD native namespace after helper authorization. Do not
+/// inspect root's unrelated directory sessions while serving a login user.
+pub fn list_native_active_volumes() -> AppResult<Vec<ActiveVolume>> {
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    {
+        if effective_uid() != 0 {
+            return Err(AppError::new(
+                "Native volume listing requires administrator authorization.",
+            ));
+        }
+        bsd::list_active_volumes()
+    }
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    {
+        Err(AppError::new(
+            "Authorized native listing is supported on BSD only.",
+        ))
+    }
+}
+
 pub fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
     #[cfg(target_os = "macos")]
     {
