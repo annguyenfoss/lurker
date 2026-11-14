@@ -233,6 +233,8 @@ def verify_folder_manifest(root, backend, manifest, project_root, architecture):
     notices = manifest.get("license_files")
     if not notices:
         raise RuntimeError(f"Private {backend} has no digest-bound license files")
+    if any(Path(name).name == "libomp.dylib" for name in private) and "native/llvm-openmp/LICENSE.TXT" not in notices:
+        raise RuntimeError(f"Private {backend} is missing the LLVM OpenMP notice")
     verify_manifest_files(Path(root) / "licenses" / backend, notices)
     if backend == "cryfs" and manifest_fuse_runtime(manifest) != "macfuse":
         raise RuntimeError("macOS CryFS requires macFUSE")

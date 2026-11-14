@@ -63,7 +63,7 @@ class MacBackendTests(unittest.TestCase):
         recipe = "scripts/build-folder-backends.py"
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for relative in ["cryfs", "cryfs-libs/libomp.dylib", "licenses/cryfs/LICENSE.txt"]:
+            for relative in ["cryfs", "cryfs-libs/libomp.dylib", "licenses/cryfs/LICENSE.txt", "licenses/cryfs/native/llvm-openmp/LICENSE.TXT"]:
                 path = root / relative; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b"fixture")
             url, revision, _ = backend.source_constant(project, recipe, "PINS")["cryfs"]
             paths = backend.source_constant(project, recipe, "PATCHES")["cryfs"]
@@ -72,9 +72,14 @@ class MacBackendTests(unittest.TestCase):
                         "patches": {r: backend.sha256(project / r) for r in paths},
                         "sha256": backend.sha256(root / "cryfs"),
                         "private_libraries": {"cryfs-libs/libomp.dylib": backend.sha256(root / "cryfs-libs/libomp.dylib")},
-                        "license_files": {"LICENSE.txt": backend.sha256(root / "licenses/cryfs/LICENSE.txt")},
+                        "license_files": {"LICENSE.txt": backend.sha256(root / "licenses/cryfs/LICENSE.txt"),
+                                          "native/llvm-openmp/LICENSE.TXT": backend.sha256(root / "licenses/cryfs/native/llvm-openmp/LICENSE.TXT")},
                         "fuse_runtime": {"implementation": "macfuse"}}
             backend.verify_folder_manifest(root, "cryfs", manifest, project, "arm64")
+            missing_notice = copy.deepcopy(manifest)
+            del missing_notice["license_files"]["native/llvm-openmp/LICENSE.TXT"]
+            with self.assertRaisesRegex(RuntimeError, "LLVM OpenMP notice"):
+                backend.verify_folder_manifest(root, "cryfs", missing_notice, project, "arm64")
             old = copy.deepcopy(manifest); del old["patches"][paths[-1]]
             with self.assertRaisesRegex(RuntimeError, "source/patch pins"):
                 backend.verify_folder_manifest(root, "cryfs", old, project, "arm64")
