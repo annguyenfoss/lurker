@@ -594,6 +594,19 @@ def record(args):
     return 0
 
 
+def desktop_authorization(selected, desktop):
+    privileged = set(selected) & {"luks", "luks1", "veracrypt", "geli", "cgd", "softraid", "raid1c", "pefs"}
+    if not desktop or not privileged:
+        return None
+    search = os.environ.get("PATH", "") + ":/usr/local/bin:/usr/pkg/bin:/usr/local/sbin:/usr/pkg/sbin"
+    available = {name: path for name in ("pkexec", "sudo") if (path := shutil.which(name, path=search))}
+    if not available:
+        fail("desktop native operations require host pkexec or sudo plus an administrator policy authorizing the installed lurker-helper; install/configure authorization before staging")
+    return {"required_for": sorted(privileged), "alternatives": ["pkexec", "sudo"], "available": available,
+            "policy_requirement": "working administrator authorization for the installed lurker-helper",
+            "qualification": "executable presence checked only; authorization policy and login-user desktop operation require native testing"}
+
+
 def stage(args):
     system = platform.system()
     if system not in SUPPORTED:
@@ -647,6 +660,7 @@ def stage(args):
         if not fuse:
             fail("userspace VeraCrypt requires the host fusermount3 helper")
         requirements["fusermount3"] = fuse
+    authorization = desktop_authorization(selected, args.desktop)
     output = args.output.absolute()
     if ".." in output.parts or output.exists() or output.is_symlink():
         fail("output must not exist: " + str(output))
@@ -717,8 +731,10 @@ def stage(args):
         manifest = {"schema": 1, "source_commit": source.commit, "os": system, "architecture": platform.machine(),
                     "selected_backends": sorted(selected), "bundled_artifacts": sorted(artifacts),
                     "host_tools": requirements, "native_dependencies": dependencies,
+                    "desktop_authorization": authorization,
                     "host_tool_requirements": {backend: TOOLS.get(system, {}).get(backend, []) for backend in sorted(selected)},
                     "runtime_requirements": ["matching host kernel/filesystem and mount authorization"]
+                        + (["Desktop native operations require host pkexec or sudo and working administrator policy for the installed lurker-helper"] if authorization else [])
                         + (["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and fusermount)"] if "cryfs" in selected else [])
                         + (["gocryptfs requires FUSE; Linux accepts fusermount3 or fusermount, FreeBSD uses mount_fusefs"] if "gocryptfs" in selected else [])
                         + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])

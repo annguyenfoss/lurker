@@ -377,6 +377,42 @@ Version needs section '.gnu.version_r' contains 2 entries:
         args.binary_manifest.write_text(json.dumps(provenance))
         return args, source
 
+    def test_desktop_native_package_requires_external_authorization_executable(self):
+        args, source = self._stage_fixture()
+        args.desktop = True
+        binary = args.binaries / "lurker-desktop"
+        binary.write_bytes(b"\x7fELFfixture-never-executed")
+        binary.chmod(0o755)
+        provenance = json.loads(args.binary_manifest.read_text())
+        provenance["files"][binary.name] = {"sha256": stager.digest(binary)}
+        args.binary_manifest.write_text(json.dumps(provenance))
+        def without_authorization(name, **kwargs):
+            return None if name in {"sudo", "pkexec"} else "/trusted/" + name
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", side_effect=without_authorization):
+            with self.assertRaisesRegex(ValueError, "pkexec or sudo plus an administrator policy"):
+                stager.stage(args)
+        self.assertFalse(args.output.exists())
+        def sudo_present(name, **kwargs):
+            return None if name == "pkexec" else "/trusted/" + name
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", side_effect=sudo_present), mock.patch.object(stager, "audit_dependencies", return_value=[]):
+            self.assertEqual(0, stager.stage(args))
+        manifest = json.loads((args.output / "share/lurker/manifest.json").read_text())
+        authorization = manifest["desktop_authorization"]
+        self.assertEqual(["luks"], authorization["required_for"])
+        self.assertEqual({"sudo": "/trusted/sudo"}, authorization["available"])
+        self.assertIn("presence checked only", authorization["qualification"])
+        self.assertIn("working administrator authorization", authorization["policy_requirement"])
+
+    def test_login_user_folder_or_cli_only_does_not_require_desktop_elevation(self):
+        with mock.patch.object(stager.shutil, "which") as lookup:
+            self.assertIsNone(stager.desktop_authorization({"gocryptfs", "cryfs", "cryptomator"}, True))
+            self.assertIsNone(stager.desktop_authorization({"luks", "geli", "cgd", "softraid", "raid1c"}, False))
+        lookup.assert_not_called()
+        for backend in ("luks1", "geli", "cgd", "softraid", "raid1c", "pefs", "veracrypt"):
+            with self.subTest(backend=backend), mock.patch.object(stager.shutil, "which", return_value=None):
+                with self.assertRaisesRegex(ValueError, "desktop native operations require"):
+                    stager.desktop_authorization({backend}, True)
+
     def test_raid1c_stages_base_tools_without_private_runtime_or_qualification_claim(self):
         args, source = self._raid1c_stage_fixture()
         tools = ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]
