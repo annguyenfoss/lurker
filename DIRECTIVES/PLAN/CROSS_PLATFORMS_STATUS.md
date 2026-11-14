@@ -1,10 +1,35 @@
 # Cross-platform implementation status
 
-Development checkpoint, 2026-11-14. Final combined candidate:
-`a16cd18b8462293c670e66803fc4e37fc4a9c59f`. Linux and all four BSDs have
-implemented, native-tested CLI backends. macOS remains best effort: Apple images
-pass; four selected FUSE pairs remain unqualified. Scope/profiles:
-`DIRECTIVES/LLM/CIPHER.md`. Public-release qualification is still incomplete.
+Active completion pass, 2026-11-14. The earlier frozen candidate was
+`a16cd18b8462293c670e66803fc4e37fc4a9c59f`; its results below remain historical.
+The current integration is not yet frozen or fully qualified. Scope/profiles:
+`DIRECTIVES/LLM/CIPHER.md`. Public-release qualification remains separate.
+
+## Current completion pass
+
+- macOS policy: VeraCrypt uses FUSE-T only; gocryptfs/CryFS use macFUSE;
+  Cryptomator uses FUSE-T's signed FSKit extension (macOS 26+). The user enabled
+  that extension on Buran. SMB/NFS failed SQLite requirements and are not fallbacks.
+- The packaged `d330b20` Mac checkpoint passed VeraCrypt 78/78, gocryptfs/CryFS
+  52/52 and an Apple-image desktop callback lifecycle. It omits Cryptomator and
+  is not the final full-scope package. The production FSKit helper is committed;
+  `8aac707` fixes the observed mounted-ACK/readiness race. Full-package tests follow.
+- OpenBSD RAID1C now has command/helper/desktop support, native two-member and
+  explicit degraded recovery, descriptor-last publication and identity guards.
+  Development CLI checks passed 19/19 plus 11/11 owner/returning-peer checks.
+  Native duplicate-role stale peers are refused unchanged, not auto-rebuilt.
+- New Linux/BSD filesystems and images receive the invoking user's private
+  ownership. Real normal-user GUI/helper lifecycles passed for NetBSD CGD and
+  Arch LUKS2/gocryptfs. Native FreeBSD/DragonFly desktop builds passed after the
+  upstream rustix 1.1.6 fix; one separate fontless-host zoom fixture needs repair.
+- Linux loop leases, persistent directory-backend exit results and Cryptomator
+  close acknowledgements are implemented. Mounted CryFS ENOSPC/EDQUOT write
+  recovery passed. A close while still full may abort upstream; Lurker reports
+  failure and retains exact exit evidence instead of falsely claiming success.
+
+Evidence: `docs/macos-backends.md`, `docs/folder-supervision.md`,
+`docs/backend-testing.md`, `docs/remote-testing.md`. Current native tests retain
+their exact source/binary identities; they are not relabeled as a final matrix.
 
 ## Architecture delivered
 
@@ -13,7 +38,7 @@ pass; four selected FUSE pairs remain unqualified. Scope/profiles:
 - Desktop backend choices/native defaults, directory forms, supported credentials and Linux-only device/privilege/keyslot controls over the shared helper/core.
 - Exact-commit remote jobs, separate compiler/native caches, bounded JSON reports and verified Unix/macOS staging.
 
-## Final build/unit matrix
+## Earlier frozen build/unit matrix
 
 All eleven hosts used the same final candidate. Ignored native tests do not count
 as runtime qualification; the packaged CLI suites below are separate.
@@ -78,14 +103,15 @@ backing disk paths remain unchanged. Ordinary fixtures use private
 owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 `target/vm-powerloss/summary.json`, `/mnt/virt/lurker-fault-*`.
 
-## Remaining qualification limits
+## Remaining qualification work and limits
 
-- macOS VeraCrypt/FUSE-T has creation timeouts. gocryptfs/Cryptomator application qualification needs compatible macFUSE; CryFS is omitted from the development DMG. macOS FUSE is installed separately.
-- Linux startup SIGKILL can retain a pre-mapper loop and fail closed. BSD private VeraCrypt daemon-death cleanup and full mounted CryFS ENOSPC/EDQUOT recovery remain unqualified.
-- DragonFly poweroff testing is unrun: the coordinator rejects its IDE/UEFI definition pending a private firmware adapter. Normal native CLI tests pass.
-- Native BSD support initially uses file containers; OpenBSD implements single-source CRYPTO, with multi-source RAID1C pending. Native BSD desktop, clean-machine release tests, full-home/session integration, public signing/notarization and broader fault/security review remain separate gates.
+- Complete the five-backend Mac package with the production Cryptomator FSKit profile and readiness fix. macOS FUSE remains separately installed; older checkpoint results do not qualify new binaries automatically.
+- Finish final packaged native tests at one frozen source across all six Linux distributions and four BSDs. Linux private VeraCrypt is being rebuilt with minimal pinned wxBase to avoid newer GLib ABI dependencies; installed developer tools do not establish clean-machine independence.
+- Finish current BSD VeraCrypt generation/recovery proof qualification. FreeBSD daemon-death recovery passes; OpenBSD can return ENXIO for a configured vnode after its FUSE daemon dies, making source identity unverifiable. Production preserves that session rather than guessing or force-detaching it.
+- The DragonFly IDE/UEFI clone adapter is implemented and its isolated clone is ready; power-loss testing awaits the current package. OpenBSD FFS still requires checking after the characterized power cut; no automatic repair is performed.
+- Native BSD support remains file-container oriented. Full-home/session automation, clean-machine/public-release qualification, signing/notarization and broader fault/security review remain separate gates.
 
-Final Linux archive: `target/linux-package-a16cd18b84/package/package.tar.gz`.
-Mac developer DMG: `dist/macos/a16cd18/Lurker-0.1.0-macos-arm64.dmg`.
+Earlier Linux archive: `target/linux-package-a16cd18b84/package/package.tar.gz`.
+Earlier Mac developer DMG: `dist/macos/a16cd18/Lurker-0.1.0-macos-arm64.dmg`.
 Both have retained manifests, source identities and SHA-256 proofs; the DMG is
 ad-hoc signed rather than notarized.
