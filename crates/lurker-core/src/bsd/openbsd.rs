@@ -1,8 +1,8 @@
 //! OpenBSD's base-system softraid CRYPTO adapter.
 //!
-//! Only Lurker-owned vnode files are accepted. A single RAID chunk is used;
-//! RAID1C needs multiple independently identified backing files and is not
-//! represented by the current single-source request protocol.
+//! Only Lurker-owned vnode files are accepted. This adapter uses one CRYPTO
+//! chunk; `raid1c_native` composes the same identity and filesystem helpers for
+//! explicitly identified two-member native RAID1C arrays.
 use super::{args, exec, Credential};
 use crate::{AppError, AppResult, CreateCipher};
 use std::fs::{self, File, OpenOptions};
@@ -76,22 +76,25 @@ const VNDIOCGET: libc::c_ulong = 0xc0000000
     | ((b'F' as libc::c_ulong) << 8)
     | 3;
 
-fn backing_identity_matches(query: &VndUser, unit: i32, device: u64, inode: u64) -> bool {
-    query.unit == unit
-        && (query.device != 0 || query.inode != 0)
-        && query.device as u64 == device
-        && query.inode as u64 == inode
+fn queried_backing_identity(query: &VndUser, unit: i32) -> AppResult<Option<(u64, u64)>> {
+    if query.unit != unit {
+        return Err(AppError::new(
+            "Unexpected vnode unit returned by the kernel.",
+        ));
+    }
+    if query.device == 0 && query.inode == 0 {
+        Ok(None)
+    } else {
+        Ok(Some((query.device as u64, query.inode as u64)))
+    }
 }
 
-pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
+/// Read the kernel's backing identity without configuring or detaching a vnode.
+pub(super) fn vnode_identity(device: &str) -> AppResult<Option<(u64, u64)>> {
     let name = device_name(device, "vnd")?;
     let unit = name[3..]
         .parse::<i32>()
         .map_err(|_| AppError::new("OpenBSD vnode unit is outside its native range."))?;
-    let metadata = fs::metadata(path).map_err(|e| AppError::io("Inspect vnode source", e))?;
-    if !metadata.is_file() {
-        return Err(AppError::new("Vnode backing must be a regular file."));
-    }
     let control = File::open(format!("/dev/r{name}c"))
         .map_err(|e| AppError::io("Open vnode identity control", e))?;
     let mut query = VndUser {
@@ -110,10 +113,18 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
             std::io::Error::last_os_error(),
         ));
     }
+    queried_backing_identity(&query, unit)
+}
+
+pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
+    let metadata = fs::metadata(path).map_err(|e| AppError::io("Inspect vnode source", e))?;
+    if !metadata.is_file() {
+        return Err(AppError::new("Vnode backing must be a regular file."));
+    }
     // Do not trust vnconfig's cached display pathname or a /dev name for the
     // backing filesystem: hard links can change the displayed path, and FUSE
     // filesystems do not necessarily have a corresponding block-device node.
-    if !backing_identity_matches(&query, unit, metadata.dev(), metadata.ino()) {
+    if vnode_identity(device)? != Some((metadata.dev(), metadata.ino())) {
         return Err(AppError::new(
             "Vnode backing identity changed; refusing storage operation.",
         ));
@@ -326,13 +337,14 @@ mod tests {
             device: 1024,
             inode: 42,
         };
-        assert!(backing_identity_matches(&query, 2, 1024, 42));
-        assert!(!backing_identity_matches(&query, 1, 1024, 42));
-        assert!(!backing_identity_matches(&query, 2, 2048, 42));
-        assert!(!backing_identity_matches(&query, 2, 1024, 43));
+        assert_eq!(
+            queried_backing_identity(&query, 2).unwrap(),
+            Some((1024, 42))
+        );
+        assert!(queried_backing_identity(&query, 1).is_err());
         query.device = 0;
         query.inode = 0;
-        assert!(!backing_identity_matches(&query, 2, 0, 0));
+        assert_eq!(queried_backing_identity(&query, 2).unwrap(), None);
     }
 
     #[cfg(all(target_os = "openbsd", target_pointer_width = "64"))]
