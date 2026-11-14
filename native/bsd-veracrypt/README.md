@@ -80,7 +80,7 @@ rejected. Old proofless journals require live control. Acquisition also rejects
 native auxiliary mounts omitted by failed engine discovery. Native regressions verify unchanged
 image SHA-256 and original external attachments after rejected alias operations.
 The fresh 1.26.31 adapter lifecycle passed all six cipher/credential cells on
-both guests (FreeBSD 170 s, OpenBSD 180 s), including serialized recovery proofs
+both guests with the final nonce patch (FreeBSD 169 s, OpenBSD 182 s), including serialized recovery proofs
 and repeated normal close. A FreeBSD owned-daemon SIGKILL regression passed:
 drained UFS data survived reopen; orphan discovery blocked acquisition; partial
 cleanup retried; source replacement and actual device reuse were rejected;
@@ -94,7 +94,10 @@ printed path or guessed unit cannot replace the missing identity. This differs
 from normal live-engine close and must not be presented as successful automated
 OpenBSD daemon recovery. Native OpenBSD partial-cleanup retry with live auxiliary control passed, including
 actual reused-unit rejection, old-proof rejection after same-source reopen and
-unchanged ciphertext.
+unchanged ciphertext. The opt-in fault tests are
+`native_saved_proof_recovers_dead_control_and_partial_cleanup` on FreeBSD and
+`native_saved_proof_retries_partial_cleanup_without_device_adoption` on OpenBSD;
+run only on designated guests with `--ignored --test-threads=1`.
 
 These are native **backend adapter** results; they do not claim whole CLI,
 desktop or release-package qualification.
