@@ -275,12 +275,42 @@ fn executable(path: &Path) -> bool {
 }
 
 fn find_program(name: &str) -> AppResult<PathBuf> {
-    std::env::var_os("PATH")
+    find_program_with_path(name, std::env::var_os("PATH"))
+}
+
+fn find_program_with_path(name: &str, path: Option<OsString>) -> AppResult<PathBuf> {
+    path
         .into_iter()
         .flat_map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
+        // Debian-style login PATHs omit sbin, but formatting our own FUSE
+        // image is unprivileged. Find the declared host formatter there too.
+        .chain(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from))
         .map(|p| p.join(name))
         .find(|p| executable(p))
         .ok_or_else(|| AppError::new(format!("Required command not found: {name}")))
+}
+
+#[cfg(test)]
+mod program_lookup_tests {
+    use super::*;
+
+    #[test]
+    fn system_tools_remain_available_without_a_login_path() {
+        let path = find_program_with_path("true", Some("/nonexistent/lurker-empty-path".into())).unwrap();
+        assert!(path.is_absolute() && executable(&path));
+        assert!(find_program_with_path("lurker-nonexistent-system-tool", None).is_err());
+    }
+
+    #[test]
+    fn unprivileged_lookup_preserves_explicit_path_precedence() {
+        let directory = std::env::temp_dir().join(format!("lurker-program-lookup-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let program = directory.join("true");
+        fs::write(&program, b"#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(find_program_with_path("true", Some(directory.clone().into_os_string())).unwrap(), program);
+        fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 impl Tools {
