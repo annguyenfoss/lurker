@@ -135,6 +135,16 @@ fn rerun_native_list(program: &str) -> Result<NativeVolumeListResponse, String> 
     let current_exe =
         lurker_core::trusted_privileged_executable(&current_exe).map_err(|error| error.message)?;
     let output = spawn_reexec_action(program, &current_exe, b"", "list-native")?;
+    decode_native_list_output(program, output)
+}
+
+fn decode_native_list_output(
+    program: &str,
+    output: Output,
+) -> Result<NativeVolumeListResponse, String> {
+    if program == "pkexec" && output.status.code() == Some(126) {
+        return Ok(native_list_error("Authorization was cancelled."));
+    }
     decode_json_output(program, output)
 }
 
@@ -265,8 +275,13 @@ fn reexec_command(
     action: &str,
 ) -> Command {
     let mut command = Command::new(executable);
-    if program == "sudo" && !terminal {
-        command.arg("-n");
+    if !terminal {
+        if program == "sudo" {
+            command.arg("-n");
+        }
+        if program == "pkexec" {
+            command.arg("--disable-internal-agent");
+        }
     }
     command
         .arg(current_exe)
@@ -283,6 +298,9 @@ fn reexec_command(
 }
 
 fn decode_reexec_output(program: &str, output: Output) -> Result<OperationResponse, String> {
+    if program == "pkexec" && output.status.code() == Some(126) {
+        return Ok(operation_error("Authorization was cancelled."));
+    }
     decode_json_output(program, output)
 }
 
@@ -337,6 +355,22 @@ fn operation_error(message: impl Into<String>) -> OperationResponse {
 mod tests {
     use super::*;
     use std::os::unix::process::ExitStatusExt;
+
+    #[test]
+    fn dismissing_polkit_is_a_final_error_instead_of_a_sudo_fallback() {
+        let cancelled = || Output {
+            status: std::process::ExitStatus::from_raw(126 << 8),
+            stdout: Vec::new(),
+            stderr: b"dialog dismissed".to_vec(),
+        };
+        // Ok(false) is deliberately distinct from a transport Err: neither
+        // operation nor list authorization may try another route after Cancel.
+        let operation = decode_reexec_output("pkexec", cancelled()).unwrap();
+        assert!(!operation.ok && operation.error.unwrap().contains("cancelled"));
+        let listing = decode_native_list_output("pkexec", cancelled()).unwrap();
+        assert!(!listing.ok && listing.volumes.is_empty());
+        assert!(listing.error.unwrap().contains("cancelled"));
+    }
 
     #[test]
     fn authorized_listing_reexec_uses_its_own_role_without_password_arguments() {
@@ -402,7 +436,12 @@ mod tests {
             (
                 "pkexec",
                 false,
-                vec!["/usr/libexec/lurker/lurker-helper", "--as-root", "run"],
+                vec![
+                    "--disable-internal-agent",
+                    "/usr/libexec/lurker/lurker-helper",
+                    "--as-root",
+                    "run",
+                ],
             ),
         ] {
             let executable = std::path::Path::new("/usr/bin").join(program);
