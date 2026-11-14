@@ -12,10 +12,13 @@ use std::fs;
 use std::fs::OpenOptions;
 #[cfg(target_os = "openbsd")]
 use std::io::Write;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::fs::MetadataExt;
+#[cfg(test)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 const NAME: &str = "lurker-veracrypt-bsd";
+mod runtime;
 
 /// Supplied only by the locked, root-owned registry after session verification.
 /// Printed source paths alone cannot identify an engine's opened file handle.
@@ -45,21 +48,6 @@ fn candidates(current: &Path) -> Vec<PathBuf> {
     ]
 }
 
-fn controlled(path: &Path) -> AppResult<PathBuf> {
-    let path =
-        fs::canonicalize(path).map_err(|e| AppError::io("Resolve private BSD runtime", e))?;
-    for ancestor in path.ancestors() {
-        let metadata =
-            fs::metadata(ancestor).map_err(|e| AppError::io("Inspect private BSD runtime", e))?;
-        if metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
-            return Err(AppError::new(
-                "Private BSD runtime libraries must be administrator-controlled.",
-            ));
-        }
-    }
-    Ok(path)
-}
-
 pub(super) fn backend() -> AppResult<PathBuf> {
     let mut paths = Vec::new();
     if let Some(path) = std::env::var_os("LURKER_BSD_VERACRYPT") {
@@ -83,26 +71,7 @@ pub(super) fn backend() -> AppResult<PathBuf> {
             "Unexpected private BSD VeraCrypt executable identity.",
         ));
     }
-    let directory = path.parent().unwrap();
-    #[cfg(target_os = "freebsd")]
-    for library in ["libfuse.so.2", "libiconv.so.2"] {
-        let library = controlled(&directory.join("lib").join(library))?;
-        if !library.is_file() {
-            return Err(AppError::new("Incomplete BSD private library closure."));
-        }
-    }
-    if directory.join("lib").exists() {
-        controlled(&directory.join("lib"))?;
-        for entry in fs::read_dir(directory.join("lib"))
-            .map_err(|e| AppError::io("Inspect private BSD libraries", e))?
-        {
-            controlled(
-                &entry
-                    .map_err(|e| AppError::io("Inspect private BSD library", e))?
-                    .path(),
-            )?;
-        }
-    }
+    runtime::validate(&path)?;
     Ok(path)
 }
 

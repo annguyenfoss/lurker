@@ -36,6 +36,14 @@ The staged executable uses upstream's text/stdin interface. It is intended for
 Lurker's trusted, administrator-controlled private backend directory; a normal
 user's build output must never be automatically elevated. FreeBSD private
 libraries use `$ORIGIN/lib`; OpenBSD runtime libraries must come from base.
+Before any backend execution, including version discovery, Lurker verifies the
+bounded manifest, executable and private-library hashes, complete library names,
+and administrator ownership of every companion path. Symlinks and writable or
+unlisted loader files fail closed. Development installations must retain the
+complete producer layout, including `bsd-veracrypt-source.json` and `licenses`;
+copying only the executable and `lib` is insufficient. Installed packages use
+`share/lurker/provenance/veracrypt-bsd/bsd-veracrypt-source.json` and
+`share/lurker/licenses/veracrypt-bsd`, as emitted by `scripts/stage-unix.py`.
 No separately installed VeraCrypt is required. Native FUSE/kernel availability
 and authorization remain host prerequisites. Smartcard/PKCS#11 integration is
 outside Lurker's selected credential interface.
