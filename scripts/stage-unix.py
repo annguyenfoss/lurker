@@ -244,7 +244,7 @@ def verify_cryptomator_sources(root, source):
 
 # These components belong to the host ABI and must never be shipped privately.
 LINUX_SYSTEM_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|resolv|util|anl|nss_[^/]+|BrokenLocale)\.so(?:\..*)?)$")
-LINUX_BASELINE_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|stdc\+\+|gcc_s)\.so(?:\..*)?)$")
+LINUX_CXX_RUNTIME_ELF = re.compile(r"^lib(?:stdc\+\+|gcc_s)\.so(?:\..*)?$")
 
 
 def verify_linux_private_libraries(root, kind):
@@ -290,7 +290,7 @@ def verify_linux_private_libraries(root, kind):
         if not name.startswith("lib/") and info["search"] != ["$ORIGIN/lib"]:
             fail("Linux helper needs an exact $ORIGIN/lib search path: " + name)
         for dependency in info["needed"]:
-            if not LINUX_BASELINE_ELF.fullmatch(dependency) and dependency not in names:
+            if not (LINUX_SYSTEM_ELF.fullmatch(dependency) or LINUX_CXX_RUNTIME_ELF.fullmatch(dependency)) and dependency not in names:
                 fail("Linux private closure is missing dependency " + dependency + " for " + name)
     return manifest
 

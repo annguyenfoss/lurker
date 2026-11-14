@@ -298,6 +298,12 @@ Version needs section '.gnu.version_r' contains 2 entries:
                     stager.verify_linux_private_libraries(self.root, "veracrypt-create")
         manifest["libraries"][0]["name"] = "libexample.so.1"
         self._save_closure(manifest)
+        def host_glibc(path, tool):
+            info = elf(path, tool)
+            info["needed"].extend(["libresolv.so.2", "libutil.so.1", "libanl.so.1"])
+            return info
+        with mock.patch.object(stager, "elf_info", side_effect=host_glibc):
+            stager.verify_linux_private_libraries(self.root, "veracrypt-create")
         def missing(path, tool):
             info = elf(path, tool)
             if path.name == "lurker-veracrypt-create":
