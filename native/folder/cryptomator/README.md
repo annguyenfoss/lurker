@@ -77,18 +77,24 @@ retains a concise result with evidence. As with ordinary SQLite WAL databases,
 read-only access may need existing shared-memory files or SQLite immutable mode;
 the smoke suite uses immutable mode only after the sole writable connection has
 closed/checkpointed. This is not a claim of concurrent-writer or crash safety.
-macOS arm64 builds and the initial two CryptoFS-level native integration tests pass using
-a private reduced Java 27 runtime. macFUSE is absent on the available Mac, so its
-mounted lifecycle remains unqualified. An experiment using the upstream FUSE-T
-provider with FUSE-T 1.2.9 mounted and wrote files but failed the SQLite WAL check
-with a disk I/O error. FUSE-T is consequently not enabled; do not bypass that
-decision with library symlinks. Signing/notarization of a Mac package must account
-for the bundled JVM's JIT and external native FUSE loading, with appropriately
-scoped Java entitlements; an unsigned build is not a release package.
+macOS arm64 builds and five Java tests pass with a private reduced Java 27
+runtime. Mounted qualification remains incomplete: FUSE-T 1.2.9's default SMB
+transport returns `ENOTSUP` for byte-range locks and SQLite reports
+`SQLITE_IOERR_LOCK`. File writes alone do not qualify application I/O. An
+experimental `backend=fskit` transport reached the installed FUSE-T extension,
+but mounting was refused while that extension was disabled. `pluginkit -e use`
+sets its user election without granting FSKit Settings consent. Do not bypass
+these failures with library symlinks or a macFUSE fallback. Sign the private JVM
+with narrowly scoped JIT/external-library entitlements when packaging.
+
+Upstream also offers a separate native FSKit adapter for macOS 27/Apple silicon.
+Embedding it requires an app extension with an Apple-issued provisioning profile
+authorizing `com.apple.developer.fskit.fsmodule`; an ad-hoc build cannot mount.
+This is a separate integration and remains unqualified, not an automatic fallback:
+https://github.com/cryptomator/fskit-nio-adapter
 
 With FUSE-NIO 5.1.0, the dedicated Arch daemon-crash suite also passes: SQLite
 FULL/WAL commits and explicit file/directory fsync while the writer's descriptors
 remain open, verified daemon SIGKILL, normal CLI unmount, reopen, exact file data
-and WAL replay/integrity verification. The three Java tests pass on Arch and macOS,
-including callback registration. This proves the tested daemon-crash scenario,
+and WAL replay/integrity verification, including callback registration. This proves the tested daemon-crash scenario,
 not arbitrary power-loss recovery or durable directory metadata on every host.
