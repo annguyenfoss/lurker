@@ -642,6 +642,27 @@ def guest_cli(directory, arguments, secret):
     return result
 
 
+def guest_volume_arguments(action, manifest):
+    require(action in {"create", "mount"}, "Unknown guest volume action")
+    backend = manifest["backend"]
+    peers = manifest.get("peer_sources", [])
+    require(isinstance(peers, list) and len(peers) == (1 if backend == "raid1c" else 0),
+            "RAID1C requires its recorded second member; other backends forbid peers")
+    command = [action, "--type", backend]
+    if peers:
+        require(peers[0] != manifest["source"], "Mirror members must be distinct")
+        command += ["--member", peers[0]]
+    if action == "create" and backend in {"luks", "luks1", "veracrypt"}:
+        command += ["--cipher", manifest["cipher"]]
+    command.append(manifest["source"])
+    if action == "mount":
+        command.append(manifest["mountpoint"])
+    elif backend not in DIRECTORIES:
+        require(manifest["size_gb"] is not None, "File container size missing")
+        command.append(manifest["size_gb"])
+    return command
+
+
 def guest_setup(args):
     require(args.persistent_home_confirmed, "Confirm the home filesystem is persistent, not tmpfs")
     require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Exact candidate Git commit required")
@@ -664,7 +685,7 @@ def guest_setup(args):
     source, mountpoint = directory / "encrypted data", directory / "open data"
     size_gb = None
     if args.backend not in ("gocryptfs", "cryfs", "cryptomator", "pefs"):
-        size_gb = "0.125" if (args.backend in ("geli", "cgd", "softraid") or platform.system() == "DragonFly") else "0.35"
+        size_gb = "0.125" if (args.backend in ("geli", "cgd", "softraid", "raid1c") or platform.system() == "DragonFly") else "0.35"
     mountpoint.mkdir(mode=0o700)
     manifest = {"schema": 1, "run": args.run, "cli": str(cli), "source_commit": args.commit,
                 "cli_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(), "backend": args.backend,
@@ -673,20 +694,14 @@ def guest_setup(args):
                 "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 "credential_transport_sha256": hashlib.sha256(Path(__file__).with_name("test-backends.py").read_bytes()).hexdigest(),
                 "cipher": args.cipher, "size_gb": size_gb, "unprivileged": args.unprivileged, "source": str(source),
+                "peer_sources": [str(directory / "encrypted peer")] if args.backend == "raid1c" else [],
                 "mountpoint": str(mountpoint), "os": platform.system(), "kernel": platform.release(),
                 "architecture": platform.machine(), "python_version": platform.python_version(),
                 "sqlite_version": sqlite3.sqlite_version, "persistent_home_confirmed": True,
                 "mount_table": run(["mount"]), "repair": False}
     write_json(directory / "guest.json", manifest)
-    create = ["create", "--type", args.backend]
-    if args.backend not in ("gocryptfs", "cryfs", "cryptomator", "pefs"):
-        if args.backend in ("luks", "luks1", "veracrypt"):
-            create += ["--cipher", args.cipher]
-        create += [str(source), size_gb]
-    else:
-        create += [str(source)]
-    guest_cli(directory, create, secret)
-    guest_cli(directory, ["mount", "--type", args.backend, str(source), str(mountpoint)], secret)
+    guest_cli(directory, guest_volume_arguments("create", manifest), secret)
+    guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
     require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
     # Persist only test credentials/recovery metadata before the measured
     # workload. No global sync and no clean detach occurs before poweroff.
@@ -752,11 +767,14 @@ def guest_verify(run_id):
     secret = (directory / "test-password").read_text()
     source, mountpoint = Path(manifest["source"]), Path(manifest["mountpoint"])
     require(source == directory / "encrypted data" and mountpoint == directory / "open data", "Fixture paths changed")
+    require(manifest.get("peer_sources", []) ==
+            ([str(directory / "encrypted peer")] if manifest["backend"] == "raid1c" else []),
+            "Recorded mirror member paths changed")
     result = {"schema": 1, "status": "failed", "suite": "isolated-vm-abrupt-poweroff", **manifest,
               "ready": ready, "repair": False, "poweroff_method": "libvirt-destroy"}
     phase = "reopen-through-candidate-cli"
     try:
-        guest_cli(directory, ["mount", "--type", manifest["backend"], str(source), str(mountpoint)], secret)
+        guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
         require(os.path.ismount(mountpoint), "Recovery CLI did not expose the encrypted filesystem")
         phase = "capture-raw-WAL-evidence"
         evidence = directory / "recovered-evidence"

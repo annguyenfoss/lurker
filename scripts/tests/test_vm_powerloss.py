@@ -292,6 +292,31 @@ class Ownership(unittest.TestCase):
 
 
 class GuestFixture(unittest.TestCase):
+    def test_raid_workload_reopens_the_same_two_recorded_members(self):
+        manifest = {"backend": "raid1c", "source": "/owned/primary", "peer_sources": ["/owned/peer"],
+                    "mountpoint": "/owned/open", "size_gb": "0.125", "cipher": "aes"}
+        self.assertEqual(VM.guest_volume_arguments("create", manifest),
+                         ["create", "--type", "raid1c", "--member", "/owned/peer", "/owned/primary", "0.125"])
+        self.assertEqual(VM.guest_volume_arguments("mount", manifest),
+                         ["mount", "--type", "raid1c", "--member", "/owned/peer", "/owned/primary", "/owned/open"])
+        for peers in ([], ["/owned/primary"], ["/owned/peer", "/owned/third"]):
+            with self.subTest(peers=peers), self.assertRaises(RuntimeError):
+                VM.guest_volume_arguments("mount", {**manifest, "peer_sources": peers})
+        with self.assertRaises(RuntimeError):
+            VM.guest_volume_arguments("mount", {**manifest, "backend": "softraid"})
+
+    def test_login_routes_and_fixed_profiles_are_enforced_before_workload(self):
+        for system, backend, uid, unprivileged in [
+                ("Linux", "cryptomator", 0, False), ("FreeBSD", "gocryptfs", 0, False),
+                ("OpenBSD", "raid1c", 1000, False), ("NetBSD", "cgd", 0, True),
+                ("DragonFly", "gocryptfs", 1000, False)]:
+            with self.subTest(system=system, backend=backend), self.assertRaises(RuntimeError):
+                VM.validate_guest_route(backend, unprivileged, "aes", system, uid)
+        self.assertEqual(VM.validate_guest_route("veracrypt", True, "twofish", "Linux", 1000), "login-user")
+        self.assertEqual(VM.validate_guest_route("raid1c", False, "aes", "OpenBSD", 0), "native-root")
+        with self.assertRaises(RuntimeError):
+            VM.validate_guest_route("raid1c", False, "serpent", "OpenBSD", 0)
+
     def test_owned_persistent_home_marker_and_permissions(self):
         with tempfile.TemporaryDirectory() as temporary, patch.object(VM.Path, "home", return_value=Path(temporary)), patch.object(VM.platform, "system", return_value="FreeBSD"):
             directory = VM.guest_directory("test1234", create=True)
