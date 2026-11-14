@@ -397,27 +397,7 @@ fn trusted_root_program(path: &Path) -> AppResult<PathBuf> {
 // The dynamic loader follows the creator's $ORIGIN/lib before main(). A
 // trusted executable alone is insufficient when its companions are writable.
 fn trusted_backend_file(path: &Path, limit: u64) -> AppResult<Vec<u8>> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|err| AppError::io("Cannot inspect private backend file", err))?;
-    if !metadata.is_file() || metadata.len() > limit {
-        return Err(AppError::new(
-            "Private backend must be a bounded regular file, without symlinks.",
-        ));
-    }
-    for ancestor in path.ancestors() {
-        let metadata = fs::symlink_metadata(ancestor)
-            .map_err(|err| AppError::io("Cannot inspect private backend ownership", err))?;
-        if metadata.file_type().is_symlink()
-            || metadata.uid() != 0
-            || metadata.permissions().mode() & 0o022 != 0
-        {
-            return Err(AppError::new(format!(
-                "Refusing private backend through an untrusted path: {}",
-                ancestor.display()
-            )));
-        }
-    }
-    fs::read(path).map_err(|err| AppError::io("Cannot read trusted private backend", err))
+    crate::trust::trusted_runtime_file(path, limit)
 }
 
 fn creator_library_inventory(manifest: &serde_json::Value) -> AppResult<Vec<(String, String)>> {

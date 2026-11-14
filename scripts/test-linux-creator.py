@@ -54,9 +54,10 @@ def check_companion_trust(original_cli, cases, failures):
                                      stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
             diagnostic = (b"hash mismatch" if case == "changed-library-hash" else
                           b"Uninventoried" if case == "uninventoried-library" else
-                          b"bounded regular file" if case == "escaped-library-symlink" else
-                          b"Cannot inspect private backend file" if case == "dangling-library-directory" else b"untrusted path")
-            if outcome.returncode == 0 or diagnostic not in outcome.stdout + outcome.stderr or marker.exists() or target.exists():
+                          (b"bounded regular file", b"untrusted path") if case == "escaped-library-symlink" else
+                          (b"Cannot inspect private backend file", b"Cannot inspect privileged path ownership") if case == "dangling-library-directory" else b"untrusted path")
+            diagnostics = diagnostic if isinstance(diagnostic, tuple) else (diagnostic,)
+            if outcome.returncode == 0 or not any(item in outcome.stdout + outcome.stderr for item in diagnostics) or marker.exists() or target.exists():
                 failures.append(case_name)
             marker.unlink(missing_ok=True)
 
