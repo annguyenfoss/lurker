@@ -90,6 +90,9 @@ Native developer qualification, macOS 27.2.1 arm64 / SDK 27.2:
   macOS system directories. Every owned mount closed normally; no private VeraCrypt or
   FUSE-T SMB transport process remained after each suite. Evidence is retained
   in `dist/macos/d330b20/vc-evidence.tar.gz` with the exact CLI/engine hashes.
+- The same packaged CLI passes 52 gocryptfs/CryFS checks with macFUSE 5.5.0
+  (each explicit and Auto). One headless Apple desktop-callback lifecycle test
+  passes using the same packaged helper. All owned mounts close normally.
 - This supersedes the previous 1.26.30 native creation-timeout result for this
   tested combination. It does not establish other macOS/FUSE versions,
   crash recovery, a security audit or public-release readiness.
@@ -97,6 +100,6 @@ Native developer qualification, macOS 27.2.1 arm64 / SDK 27.2:
   remains excluded until its FUSE-T FSKit transport passes native locking/WAL
   and lifecycle checks; the direct SMB transport failed SQLite locking.
 
-Apple encrypted disk images retain their earlier packaged lifecycle/WAL proof.
+Apple encrypted disk images also retain their earlier packaged CLI/WAL proof.
 Full-scope package, desktop and directory-backend qualification is recorded
 separately in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`.
