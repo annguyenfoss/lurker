@@ -629,9 +629,8 @@ mod tests {
             std::env::var_os("LURKER_DESKTOP_NATIVE_ROOT").expect("explicit /tmp fixture root"),
         );
         let fixture_parent = fixture_parent.canonicalize().unwrap();
-        assert!(
-            fixture_parent.starts_with("/tmp") && fixture_parent != std::path::Path::new("/tmp")
-        );
+        let temporary_root = std::path::Path::new("/tmp").canonicalize().unwrap();
+        assert!(fixture_parent.starts_with(&temporary_root) && fixture_parent != temporary_root);
         let helper = std::path::PathBuf::from(
             std::env::var_os("LURKER_DESKTOP_NATIVE_HELPER").expect("explicit real helper path"),
         )
