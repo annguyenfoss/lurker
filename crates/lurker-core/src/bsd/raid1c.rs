@@ -124,6 +124,7 @@ fn empty_session(
         mapped: None,
         mounted: None,
         intended_mountpoint: None,
+        initialization_directory: None,
         readonly: false,
         mirror: Some(Mirror {
             uuid: None,
@@ -273,13 +274,9 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         registry.save(&session)?;
         verify(&session)?;
         driver::make_filesystem(session.mapped.as_deref().unwrap())?;
-        let target = state(&session)?.members[0]
-            .stage_dir
-            .as_ref()
-            .unwrap()
-            .join("root");
-        super::initialize_new_filesystem_owner(&registry, &mut session, &target, owner)?;
+        super::initialize_new_filesystem_owner(&registry, &mut session, owner)?;
         close_resources(&registry, &mut session)?;
+        super::remove_initialization_directory(&registry, &mut session)?;
         for member in &state(&session)?.members {
             File::open(&member.path)
                 .and_then(|f| f.sync_all())
@@ -752,6 +749,7 @@ fn close_resources(registry: &Registry, session: &mut Session) -> AppResult<()> 
 
 pub(super) fn cleanup(registry: &Registry, session: &mut Session) -> AppResult<()> {
     close_resources(registry, session)?;
+    super::remove_initialization_directory(registry, session)?;
     if state(session)?.creating && !state(session)?.committed && !state(session)?.rolled_back {
         let paths = state(session)?
             .members
@@ -848,16 +846,6 @@ fn remove_staging(session: &Session) -> AppResult<()> {
                     fs::remove_file(path)
                         .map_err(|e| AppError::io("Remove owned staged descriptor", e))?;
                 }
-            }
-            let root = directory.join("root");
-            if root.exists() {
-                if mounts()?.iter().any(|m| m.target == root) {
-                    return Err(AppError::new(
-                        "Initialization root remains mounted; preserve staging.",
-                    ));
-                }
-                fs::remove_dir(&root)
-                    .map_err(|e| AppError::io("Remove empty initialization mountpoint", e))?;
             }
             fs::remove_dir(directory)
                 .map_err(|e| AppError::io("Remove empty mirror staging directory", e))?;

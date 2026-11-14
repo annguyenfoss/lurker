@@ -92,6 +92,12 @@ struct Mounted {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+struct InitializationDirectory {
+    path: PathBuf,
+    identity: Option<Identity>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 struct Session {
     version: u32,
     id: String,
@@ -108,6 +114,8 @@ struct Session {
     mounted: Option<Mounted>,
     #[serde(default)]
     intended_mountpoint: Option<PathBuf>,
+    #[serde(default)]
+    initialization_directory: Option<InitializationDirectory>,
     readonly: bool,
     #[cfg(target_os = "openbsd")]
     #[serde(default)]
@@ -530,6 +538,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         #[cfg(target_os = "openbsd")]
         mirror: None,
         intended_mountpoint: None,
+        initialization_directory: None,
         readonly: false,
     };
     registry.save(&session)?;
@@ -551,7 +560,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
             )?);
             capture_veracrypt_recovery(&registry, &mut session)?;
             initialize_acquired_mapping(&registry, &session, veracrypt::make_filesystem)?;
-            initialize_new_filesystem_owner(&registry, &mut session, &stage.join("root"), owner)?;
+            initialize_new_filesystem_owner(&registry, &mut session, owner)?;
             return Ok(());
         }
         session.backing = Some(native::attach_file(&source, false)?);
@@ -589,7 +598,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
                 .map_err(|e| AppError::io("Open new CGD recovery parameters", e))?;
             crate::new_filesystem::assign_file(&params, owner)?;
         }
-        initialize_new_filesystem_owner(&registry, &mut session, &stage.join("root"), owner)?;
+        initialize_new_filesystem_owner(&registry, &mut session, owner)?;
         Ok(())
     })();
     let cleaned = cleanup(&registry, &mut session);
@@ -627,15 +636,23 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
 fn initialize_new_filesystem_owner(
     registry: &Registry,
     session: &mut Session,
-    target: &Path,
     owner: crate::new_filesystem::Owner,
 ) -> AppResult<()> {
-    fs::create_dir(target)
+    // The OS mount-name limit must not constrain encrypted-image parent paths.
+    let target = registry.directory.join(format!("init-{}", session.id));
+    session.initialization_directory = Some(InitializationDirectory {
+        path: target.clone(),
+        identity: None,
+    });
+    registry.save(session)?;
+    fs::create_dir(&target)
         .map_err(|e| AppError::io("Create new filesystem initialization mountpoint", e))?;
-    fs::set_permissions(target, fs::Permissions::from_mode(0o700))
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o700))
         .map_err(|e| AppError::io("Protect new filesystem mountpoint", e))?;
+    session.initialization_directory.as_mut().unwrap().identity = Some(Identity::read(&target)?);
     session.intended_mountpoint = Some(target.to_owned());
     registry.save(session)?;
+    sync_directory(&registry.directory)?;
     verify_session(session)?;
     let mapped = session
         .mapped
@@ -670,6 +687,45 @@ fn initialize_new_filesystem_owner(
         ));
     }
     crate::new_filesystem::assign_root(&directory, owner)
+}
+
+fn remove_initialization_directory(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    let Some(record) = &session.initialization_directory else {
+        return Ok(());
+    };
+    if record.path != registry.directory.join(format!("init-{}", session.id)) {
+        return Err(AppError::new(
+            "Initialization directory is outside its reserved journal path.",
+        ));
+    }
+    if mounts()?.iter().any(|m| m.target == record.path) {
+        return Err(AppError::new(
+            "Initialization directory remains mounted; preserve its journal.",
+        ));
+    }
+    match fs::symlink_metadata(&record.path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(AppError::io("Inspect initialization directory", e)),
+        Ok(metadata) => {
+            if !metadata.is_dir()
+                || !record
+                    .identity
+                    .as_ref()
+                    .is_some_and(|id| id.matches(&record.path))
+            {
+                return Err(AppError::new(
+                    "Initialization directory identity changed; preserve its journal.",
+                ));
+            }
+            private_owned(&record.path, true)?;
+            // remove_dir refuses any unexpected entry; never traverse/recurse.
+            fs::remove_dir(&record.path)
+                .map_err(|e| AppError::io("Remove empty initialization directory", e))?;
+            sync_directory(&registry.directory)?;
+        }
+    }
+    session.initialization_directory = None;
+    registry.save(session)
 }
 
 fn absolute_destination(path: &Path) -> AppResult<PathBuf> {
@@ -796,6 +852,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         #[cfg(target_os = "openbsd")]
         mirror: None,
         intended_mountpoint: Some(target.clone()),
+        initialization_directory: None,
         readonly: c.readonly,
     };
     registry.save(&session)?;
@@ -1004,6 +1061,7 @@ fn mount_pefs(c: MountCommand, output: Output) -> AppResult<()> {
         #[cfg(target_os = "openbsd")]
         mirror: None,
         intended_mountpoint: Some(target.clone()),
+        initialization_directory: None,
         readonly: c.readonly,
     };
     registry.save(&session)?;
@@ -1186,6 +1244,7 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     if s.backend == VolumeType::Veracrypt && s.mapped.is_none() && veracrypt::attached(&s.source)? {
         return Err(AppError::new("A VeraCrypt attachment exists without a recorded device identity; preserve this session for explicit recovery."));
     }
+    remove_initialization_directory(registry, s)?;
     registry.remove(s)
 }
 
@@ -1448,6 +1507,68 @@ fn mounts() -> AppResult<Vec<Mounted>> {
 mod tests {
     use super::*;
     #[test]
+    #[ignore = "requires root BSD /tmp fixture"]
+    fn initialization_cleanup_refuses_replacements_and_nonempty_directories() {
+        require_root().unwrap();
+        let directory = PathBuf::from(format!("/tmp/lurker-init-cleanup-{}", unique_id()));
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let source = directory.join("image");
+        fs::write(&source, b"fixture").unwrap();
+        let registry = Registry {
+            directory: directory.clone(),
+            _lock: File::create(directory.join("lock")).unwrap(),
+        };
+        let mut session = Session {
+            version: 1,
+            id: unique_id(),
+            backend: default_backend(),
+            source: source.clone(),
+            peer_sources: Vec::new(),
+            identity: Identity::read(&source).unwrap(),
+            backing: None,
+            mapped: None,
+            mounted: None,
+            intended_mountpoint: None,
+            initialization_directory: None,
+            readonly: false,
+            #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+            veracrypt_proof: None,
+            #[cfg(target_os = "openbsd")]
+            mirror: None,
+        };
+        let target = directory.join(format!("init-{}", session.id));
+        fs::create_dir(&target).unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+        session.initialization_directory = Some(InitializationDirectory {
+            path: target.clone(),
+            identity: Some(Identity::read(&target).unwrap()),
+        });
+        registry.save(&session).unwrap();
+        let held = directory.join("held");
+        fs::rename(&target, &held).unwrap();
+        fs::create_dir(&target).unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(remove_initialization_directory(&registry, &mut session).is_err());
+        assert!(target.is_dir());
+        fs::remove_dir(&target).unwrap();
+        fs::rename(&held, &target).unwrap();
+        let unexpected = target.join("unexpected");
+        fs::write(&unexpected, b"preserve").unwrap();
+        assert!(remove_initialization_directory(&registry, &mut session).is_err());
+        assert_eq!(fs::read(&unexpected).unwrap(), b"preserve");
+        fs::remove_file(&unexpected).unwrap();
+        remove_initialization_directory(&registry, &mut session).unwrap();
+        assert!(!target.exists());
+        assert!(session.initialization_directory.is_none());
+        registry.remove(&session).unwrap();
+        drop(registry);
+        fs::remove_file(directory.join("lock")).unwrap();
+        fs::remove_file(source).unwrap();
+        fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
     fn unprivileged_discovery_does_not_read_the_privileged_registry() {
         if crate::effective_uid() != 0 {
             assert!(list_active_volumes().unwrap().is_empty());
@@ -1527,6 +1648,7 @@ mod tests {
             #[cfg(target_os = "openbsd")]
             mirror: None,
             intended_mountpoint: None,
+            initialization_directory: None,
             readonly: false,
         };
         registry.save(&session).unwrap();
