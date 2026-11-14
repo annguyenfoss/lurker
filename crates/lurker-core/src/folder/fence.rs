@@ -211,7 +211,11 @@ pub(super) fn request_restore(dir: &Path, session: &Session) -> AppResult<()> {
     }
 }
 
-#[cfg(test)]
+// This fence is a macOS Cryptomator facility. Linux also exercises its POSIX
+// primitives as a reference host. The BSDs do not select Cryptomator; their
+// process adapters and mode-000 directory rename rules differ from this test
+// fixture, so these cases do not describe a BSD backend contract.
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
