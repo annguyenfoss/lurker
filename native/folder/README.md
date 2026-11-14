@@ -99,6 +99,19 @@ database evidence; it never repairs data or forces detach. It tests daemon death
 not whole-machine power loss. A passing graceful-close suite cannot substitute
 for these checks, and backend durability failures remain explicit failures.
 
+`scripts/test-cryptomator-child-crash.py --backend /path/to/lurker-cryptomator
+--runtime-tests` separately characterizes the macOS native backend. It verifies
+the complete production image and the JVM's UID, parent and microsecond birth,
+then kills only its unreaped direct child. A blocked writer keeps an acknowledged
+FULL/WAL transaction open; the test snapshots ciphertext, reopens, checks exact
+data and SQLite integrity, and closes normally. The committed workload passed
+on macOS 27.2.1 with FUSE-T 1.2.9/FSKit. Native teardown was asynchronous (~3 s),
+and an immediate ordinary unmount could fail during that transition. No forced
+detach or repair is used. This qualifies native backend durability; supervised
+CLI fault recovery remains separate. It also records whether automatic detach
+exposes a writable underlying mount directory, which occurred in the direct
+backend test. No durability assertion is made for unacknowledged writes.
+
 Upstream references:
 
 - https://github.com/rfjakob/gocryptfs/tree/v2.7.0
