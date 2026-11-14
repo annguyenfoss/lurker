@@ -71,6 +71,20 @@ class Raid1cHarnessTests(unittest.TestCase):
         self.assertEqual(result["cleanup_policy"], "preserved-on-failure")
         self.assertEqual(result["status"], "failed")
 
+    def test_invoking_owner_context_is_explicit_only_on_create(self):
+        suite = object.__new__(SUITE.InvokingOwnerSuite)
+        suite.options = SimpleNamespace(binary=Path("/owned/lurker"), size_gb="0.125")
+        suite.owner = SimpleNamespace(pw_uid=1300, pw_gid=1300)
+        suite.source = Path("/tmp/lurker-owned/primary.img")
+        suite.peer = Path("/tmp/lurker-owned/peer.img")
+        create = suite.create_args()
+        self.assertEqual(create[:3], ["/usr/bin/env", "SUDO_UID=1300", "SUDO_GID=1300"])
+        self.assertIn("--member", create)
+        mount = suite.command("mount", mountpoint=Path("/tmp/lurker-owned/mnt"))
+        self.assertNotIn("/usr/bin/env", mount)
+        self.assertFalse(any("SUDO_UID" in argument for argument in mount))
+        compile(SUITE.USER_WORKLOAD, "normal-user-workload.py", "exec")
+
     def test_argument_validation_blocks_storage_runs_on_development_host(self):
         with mock.patch.object(SUITE.platform, "system", return_value="Linux"), \
              mock.patch.object(SUITE.os, "geteuid", return_value=0), \

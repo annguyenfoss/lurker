@@ -78,7 +78,7 @@ class MirrorSuite(BASE.Suite):
         self.peer = self.root / "peer 密碼 with spaces.img"
         self.descriptor = Path(str(self.source) + ".raid1c.json")
         self.held = None
-        self.result.update(suite="openbsd-raid1c-cli", profile="two members; native AES-XTS/bcrypt_pbkdf; FFS2",
+        self.result.update(suite="openbsd-raid1c-cli", harness_sha256=BASE.file_hash(Path(__file__)), profile="two members; native AES-XTS/bcrypt_pbkdf; FFS2",
                            size_gb_per_member=options.size_gb,
                            limitations=["No device create, VM shutdown, rebuild, repair, forced detach or readonly native mapping"])
         self.save()
@@ -299,6 +299,149 @@ class MirrorSuite(BASE.Suite):
         return self.result
 
 
+USER_WORKLOAD = r'''import json, os, sqlite3, stat, sys
+from pathlib import Path
+action, stage, mounted, expected, uid, gid = sys.argv[1:]
+uid, gid = int(uid), int(gid)
+assert os.geteuid() == uid and uid != 0, "workload must run as the invoking normal user"
+root = Path(mounted)
+info = root.stat()
+assert (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) == (uid, gid, 0o700)
+payload = (stage + "\n").encode() + Path(expected).read_bytes()
+file = root / "user-fsync.bin"
+db = root / "user-profile.sqlite"
+if action == "write":
+    os.umask(0o077)
+    with file.open("wb") as stream:
+        stream.write(payload); stream.flush(); os.fsync(stream.fileno())
+    connection = sqlite3.connect(db)
+    try:
+        assert connection.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute("CREATE TABLE IF NOT EXISTS profile(key TEXT PRIMARY KEY, value BLOB)")
+        connection.execute("INSERT OR REPLACE INTO profile VALUES (?,?)", ("latest", payload))
+        connection.commit()
+        reader = sqlite3.connect(db)
+        try: assert reader.execute("SELECT value FROM profile WHERE key='latest'").fetchone()[0] == payload
+        finally: reader.close()
+    finally: connection.close()
+    descriptor = os.open(root, os.O_RDONLY)
+    try: os.fsync(descriptor)
+    finally: os.close(descriptor)
+assert file.read_bytes() == payload
+connection = sqlite3.connect(db)
+try:
+    assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert connection.execute("SELECT value FROM profile WHERE key='latest'").fetchone()[0] == payload
+finally: connection.close()
+assert file.stat().st_uid == uid and db.stat().st_uid == uid
+print(json.dumps({"status":"passed", "uid":os.geteuid(), "action":action, "stage":stage,
+                  "filesystem_owner":info.st_uid, "filesystem_mode":oct(stat.S_IMODE(info.st_mode))}))
+'''
+
+
+class InvokingOwnerSuite(MirrorSuite):
+    """Fresh invoking-user fixture; exercise the opposite degraded direction."""
+    def __init__(self, options):
+        import pwd
+        super().__init__(options)
+        try:
+            self.owner = pwd.getpwnam(options.owner_user)
+        except KeyError as error:
+            raise ValueError("--owner-user account does not exist") from error
+        if self.owner.pw_uid == 0:
+            raise ValueError("--owner-user must identify a normal account")
+        # Assign only this newly allocated traversal directory and fresh helper
+        # files. Member/descriptor/inner-root ownership must come from Lurker.
+        os.chown(self.root, self.owner.pw_uid, self.owner.pw_gid)
+        self.expected = self.root / "expected user payload.bin"
+        self.expected.write_bytes(self.payload); self.expected.chmod(0o600)
+        os.chown(self.expected, self.owner.pw_uid, self.owner.pw_gid)
+        self.workload = self.root / "normal-user-workload.py"
+        self.workload.write_text(USER_WORKLOAD); self.workload.chmod(0o600)
+        os.chown(self.workload, self.owner.pw_uid, self.owner.pw_gid)
+        self.result.update(suite="openbsd-raid1c-invoking-owner", invoking_user=options.owner_user,
+                           invoking_uid=self.owner.pw_uid, invoking_gid=self.owner.pw_gid,
+                           normal_user_workload=str(self.workload))
+        self.save()
+
+    def create_args(self):
+        return ["/usr/bin/env", f"SUDO_UID={self.owner.pw_uid}", f"SUDO_GID={self.owner.pw_gid}", *super().create_args()]
+
+    def file_owners(self):
+        import stat
+        values = {}
+        for path in [self.source, self.peer, self.descriptor]:
+            info = path.stat()
+            value = {"uid":info.st_uid, "gid":info.st_gid, "mode":oct(stat.S_IMODE(info.st_mode))}
+            if value != {"uid":self.owner.pw_uid, "gid":self.owner.pw_gid, "mode":"0o600"}:
+                raise AssertionError(f"Lurker did not publish invoking-user-owned private storage: {path}")
+            values[path.name] = value
+        self.result["published_ownership"] = values; self.save()
+
+    def user(self, action, stage):
+        import shlex
+        command = shlex.join(["/usr/local/bin/python3", str(self.workload), action, stage,
+                              str(self.mountpoint), str(self.expected), str(self.owner.pw_uid), str(self.owner.pw_gid)])
+        argv = ["/usr/bin/su", "-m", self.options.owner_user, "-c", command]
+        process = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=45)
+        name = self.result["cases"][-1]["name"]
+        records = self.result["cases"][-1].setdefault("normal_user_commands", [])
+        log = self.logs / (name + f"-user-{len(records)}.log")
+        log.write_bytes(process.stdout + process.stderr); log.chmod(0o600)
+        if process.returncode:
+            raise AssertionError(f"Normal-user {action}/{stage} failed exit{process.returncode}; {log}")
+        value = json.loads(process.stdout)
+        if value.get("uid") != self.owner.pw_uid or value.get("status") != "passed":
+            raise AssertionError("Workload did not prove execution as the invoking normal user")
+        records.append({"argv": argv, "log": str(log), "proof": value})
+
+    def degraded_primary(self):
+        held = self.root / "held missing secondary.img"
+        self.peer.rename(held)
+        # Primary0 survives, so the missing secondary1 can later be identified
+        # as offline without the secondary-only role conflict tested separately.
+        self.mount(kind="raid1c", degraded=True)
+        self.user("write", "degraded-primary-newest")
+        self.user("read", "degraded-primary-newest")
+        self.degraded_status("primary-online-secondary-missing"); self.close()
+        held.rename(self.peer)
+        self.mount(kind="raid1c", peer=self.peer, degraded=True)
+        self.user("read", "degraded-primary-newest")
+        self.degraded_status("stale-secondary-returned-offline")
+        self.close(); self.file_owners()
+        self.result["limitations"].append("Returning secondary stays offline; newest invoking-user WAL/data must come from surviving primary. No rebuild attempted.")
+
+    def run(self):
+        try:
+            for name, function in [
+                ("quiet-native-window", lambda: require_idle(self.footprint())),
+                ("synthetic-sudo-create", self.create), ("published-uid-gid-and-0600", self.file_owners),
+                ("root-mount-user-filesystem", self.mount),
+                ("normal-user-write-fsync-and-wal", lambda: self.user("write", "initial")),
+                ("normal-close", self.close), ("root-reopen-existing-ownership", self.mount),
+                ("normal-user-read-reopened-wal", lambda: self.user("read", "initial")),
+                ("normal-reclose", self.close),
+                ("primary-survives-user-writes-secondary-return-offline", self.degraded_primary),
+            ]: self.case(name, function)
+            self.result["status"] = "passed"
+        except Exception as error:
+            self.result.update(status="failed", diagnostic=str(error))
+        finally:
+            if self.options.preserve_failure and self.result["status"] == "failed":
+                self.result["cleanup_policy"] = "preserved-on-failure"
+            else:
+                try: self.case("normal-cli-cleanup", self.normal_cleanup)
+                except Exception as error: self.result.update(status="failed", cleanup_diagnostic=str(error))
+            self.result.update(finished=time.time(), retained=True,
+                               mount_present=any(os.path.ismount(p) for p in [self.mountpoint, self.other_mount]))
+            self.result["duration_seconds"] = round(self.result["finished"] - self.result["started"], 3)
+            self.result["counts"] = {status: sum(case["status"] == status for case in self.result["cases"])
+                                     for status in ["passed", "failed", "skipped"]}
+            self.save()
+        return self.result
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
@@ -306,6 +449,7 @@ def parse_args(argv=None):
     parser.add_argument("--root", type=Path, default=Path("/tmp"))
     parser.add_argument("--size-gb", default="0.125", help="Size per member, at least 0.0625 GiB")
     parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument("--owner-user", help="Use a separate fresh synthetic-sudo invoking-user proof instead of the root matrix")
     parser.add_argument("--preserve-failure", action="store_true", help="Stop before cleanup on failure; preserve owned storage/journal for diagnosis")
     options = parser.parse_args(argv)
     if platform.system() != "OpenBSD" or os.geteuid() != 0:
@@ -325,9 +469,9 @@ def parse_args(argv=None):
 def main(argv=None):
     try:
         options = parse_args(argv)
-        for name in ["LURKER_BACKEND_DIR", "LURKER_USERSPACE_DIR", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES"]:
+        for name in ["LURKER_BACKEND_DIR", "LURKER_USERSPACE_DIR", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "SUDO_UID", "SUDO_GID", "PKEXEC_UID", "DOAS_USER"]:
             os.environ.pop(name, None)
-        suite = MirrorSuite(options)
+        suite = InvokingOwnerSuite(options) if options.owner_user else MirrorSuite(options)
         result = suite.run()
         print(json.dumps({"schema": 1, "suite": result["suite"], "status": result["status"],
                           "source_commit": result["source_commit"], "counts": result["counts"],
