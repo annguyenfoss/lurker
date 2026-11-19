@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Binary-keyfile CLI conformance for GELI and PEFS on the FreeBSD test guest.
+"""Binary-keyfile CLI conformance for GELI, PEFS and DragonFly LUKS1.
 
 Reuse the qualified native CLI/PTY workload suite. Only fresh private children
 of /tmp are used. Full evidence is retained; no forced unmount, native detach,
@@ -20,6 +20,7 @@ SPEC = importlib.util.spec_from_file_location("keyfile_conformance", Path(__file
 KEYFILES = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(KEYFILES)
 BASE = KEYFILES.conformance
+BACKENDS = {"FreeBSD": {"geli", "pefs"}, "DragonFly": {"luks1"}}
 
 
 def private_binary(binary):
@@ -59,7 +60,7 @@ class BSDKeyfileSuite(KEYFILES.KeyfileSuite):
                 stream.write(b"\0\xff\n\r" + os.urandom(252))
                 stream.flush()
                 os.fsync(stream.fileno())
-        self.result.update(suite="freebsd-binary-keyfile-cli", harness_sha256=BASE.file_hash(Path(__file__)),
+        self.result.update(suite=f"{platform.system().lower()}-binary-keyfile-cli", harness_sha256=BASE.file_hash(Path(__file__)),
                            parent_harness_sha256=BASE.file_hash(Path(BASE.__file__)),
                            credential_harness_sha256=BASE.file_hash(Path(KEYFILES.__file__)),
                            keyfile_prefix="NUL/FF/LF/CR; 256 bytes", no_password_prompts=True,
@@ -89,9 +90,14 @@ class BSDKeyfileSuite(KEYFILES.KeyfileSuite):
         return records
 
     def footprint(self):
-        return {"md": self.native(["/sbin/mdconfig", "-l"]),
-                "geli": self.native(["/sbin/geli", "status"]),
-                "mounts": self.native(["/sbin/mount", "-p"]), "sessions": self.records()}
+        footprint = {"mounts": self.native(["/sbin/mount", "-p"]), "sessions": self.records()}
+        if self.options.backend == "luks1":
+            footprint.update(vnodes=self.native(["/usr/sbin/vnconfig", "-l"]),
+                             mappings=self.native(["/sbin/dmsetup", "ls"]))
+        else:
+            footprint.update(md=self.native(["/sbin/mdconfig", "-l"]),
+                             geli=self.native(["/sbin/geli", "status"]))
+        return footprint
 
     def cli(self, args, expected=True, password=None):
         before = self.footprint() if not expected else None
@@ -139,14 +145,18 @@ class BSDKeyfileSuite(KEYFILES.KeyfileSuite):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--backend", choices=["geli", "pefs"], required=True)
+    parser.add_argument("--backend", choices=["geli", "luks1", "pefs"], required=True)
+    parser.add_argument("--cipher", choices=["aes", "serpent", "twofish"],
+                        help="LUKS1 create cipher (default AES)")
     parser.add_argument("--commit", required=True, help="Verified exact full source Git SHA of the supplied CLI")
     parser.add_argument("--root", type=Path, default=Path("/tmp"))
     parser.add_argument("--size-gb", default="0.125")
     parser.add_argument("--timeout", type=float, default=180)
     options = parser.parse_args(argv)
-    if platform.system() != "FreeBSD" or os.geteuid() != 0:
-        parser.error("Run as root on the designated FreeBSD test guest; no storage tests on endeavour")
+    if options.backend not in BACKENDS.get(platform.system(), set()) or os.geteuid() != 0:
+        parser.error("Run as root on the designated FreeBSD or DragonFly test guest with a native backend")
+    if options.cipher is not None and options.backend != "luks1":
+        parser.error("--cipher is only applicable to DragonFly LUKS1")
     if not re.fullmatch(r"[0-9a-f]{40}", options.commit) or not 0 < options.timeout <= 1800:
         parser.error("Use a full lowercase source SHA and a positive bounded timeout")
     from decimal import Decimal, InvalidOperation
@@ -161,7 +171,8 @@ def parse_args(argv=None):
         parser.error("--root must name an existing directory beneath /tmp")
     options.binary = options.binary.resolve(strict=True)
     private_binary(options.binary)
-    options.cipher = "aes" if options.backend == "geli" else None
+    if options.backend in {"geli", "luks1"} and options.cipher is None:
+        options.cipher = "aes"
     options.auto_detect = True
     options.unprivileged = False
     options.expect_readonly_unsupported = False
