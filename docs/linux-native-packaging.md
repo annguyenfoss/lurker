@@ -418,3 +418,21 @@ are under `target/goal-validation/fedora-clean-1e04b85/`.
 https://dl.fedoraproject.org/pub/fedora/linux/releases/45/Cloud/x86_64/images/Fedora-Cloud-45-1.4-x86_64-CHECKSUM
 
 https://fedoraproject.org/security/
+
+## Clean openSUSE Leap installation and offline runtime
+
+The stock Leap 16.1 Build3.13 cloud image matched openSUSE's published
+SHA-256 and SHA-512. A dedicated KVM copy installed the exact `1e04b85`
+RPM, SHA-256
+`0c163cfb6a9fba486a5db6f624f35098a2ad50147812000d4db5fd6b69d9a8af`,
+with 73 checksum- and signature-verified openSUSE prerequisite RPMs.
+
+Installation and lifecycle testing ran in loopback-only network namespaces.
+All 117 privileged and 78 login-user checks passed. The installed X11
+window probe passed after provisioning the separately packaged signed Xvfb
+test dependency. Package removal left no fixture mounts or loop devices.
+The owned guest and bridge were removed, and the original domain and
+image were preserved. Receipts are under
+`target/goal-validation/opensuse-clean-1e04b85/`.
+
+https://download.opensuse.org/download/distribution/openSUSE-current/appliances/Leap-16.1-Minimal-VM.x86_64-Cloud-Build3.13.qcow2.mirrorlist
