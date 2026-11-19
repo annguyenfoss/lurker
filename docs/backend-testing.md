@@ -366,3 +366,30 @@ Read-only attachment cases verified safe refusal. The mount, VND and
 softraid inventories matched before and after testing. The run restored the
 original sudo configuration and removed the package from the alternate
 root. Receipts and results are under `target/openbsd-a60e4bc/`.
+
+### OpenBSD VeraCrypt backing-file sync
+
+On OpenBSD 8.0, a traced login-user file fsync, rename/directory fsync, and
+SQLite FULL/WAL workload against the `a60e4bc` engine issued 49 ciphertext
+writes without a backing-file fsync. A direct fsync on the private image
+also issued no backing-file fsync. The owned vnode device rejected
+`DIOCCACHESYNC` with ENOTTY. The guest kernel's vnode strategy passed
+`IO_SYNC` to the backing vnode, while the FUSE write request dropped it.
+
+The engine built with `4189679` followed all 49 ciphertext writes with a
+successful fsync on the same backing descriptor in the same thread.
+Explicit private-image fsync reached the ciphertext descriptor as well.
+The login user could still write only through the mounted filesystem,
+and the file and SQLite data matched after clean close and reopen.
+These traces establish the engine's sync behavior. Media durability
+depends on the lower storage layers and the result of a separate KVM cut.
+
+Build `20261119T191549Z-661bf390` passed workspace check and build and
+reported 109 tests passed and 17 ignored. The exact staged OpenBSD archive
+passed 26 AES password and binary-keyfile lifecycle checks, with native
+mount and device inventories restored. Its SHA-256 is
+`52829c0d1b9b3d7f4d96309882d634d51fc2b96a745dad9f0ee9f2a6711d8b68`.
+The engine SHA-256 is
+`0c3db467e0abc33f67997a22f6deba438cfcab228a4095c063715b0a564be99e`.
+Trace summaries, the archive, and lifecycle receipts are under
+`target/openbsd-vc-barrier/`.
