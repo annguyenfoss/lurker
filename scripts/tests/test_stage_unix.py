@@ -421,6 +421,30 @@ Version needs section '.gnu.version_r' contains 2 entries:
             with self.assertRaisesRegex(ValueError, r"exact \$ORIGIN"):
                 stager.verify_linux_private_libraries(self.root, "veracrypt-create")
 
+    def test_bsd_veracrypt_requires_complete_wxwidgets_notices(self):
+        engine = self.root / "lurker-veracrypt-bsd"
+        engine.write_bytes(b"\x7fELFfixture")
+        engine.chmod(0o755)
+        (self.root / "licenses").mkdir()
+        exception = self.root / "licenses/wxWidgets.txt"
+        exception.write_text("Exception notice")
+        pins = {"veracrypt": {"revision": "qualified"}}
+        notices = {"docs/licence.txt": "wxWidgets.txt", "docs/lgpl.txt": "wxWidgets-LGPL.txt"}
+        source = mock.Mock()
+        source.constant.side_effect = lambda _, name: {"PINS": pins, "WX_NOTICES": notices}[name]
+        manifest = {"sources": pins, "binary": engine.name, "binary_sha256": stager.digest(engine),
+                    "files": {engine.name: stager.digest(engine), "licenses/wxWidgets.txt": stager.digest(exception)}}
+        receipt = self.root / "bsd-veracrypt-source.json"
+        receipt.write_text(json.dumps(manifest))
+        with mock.patch.object(stager, "verify_platform"), mock.patch.object(stager, "verify_bsd_patches"):
+            with self.assertRaisesRegex(ValueError, "wxWidgets license texts are missing"):
+                stager.validate_backend("veracrypt-bsd", self.root, source)
+            library_license = "licenses/wxWidgets-LGPL.txt"
+            (self.root / library_license).write_text("Library GPL")
+            manifest["files"][library_license] = stager.digest(self.root / library_license)
+            receipt.write_text(json.dumps(manifest))
+            self.assertEqual(self.root, stager.validate_backend("veracrypt-bsd", self.root, source))
+
     def test_creator_only_staging_keeps_private_libraries_and_provenance(self):
         args, source = self._stage_fixture()
         directory = self.root / "creator"

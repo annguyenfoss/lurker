@@ -34,6 +34,15 @@ sudo policy and any native FUSE device access. FreeBSD PEFS requires the
 the staged PEFS utility and matching module come from that package and adds
 it as a dependency.
 
+The BSD VeraCrypt build ships both the wxWidgets exception and its full
+Library GPL text from the pinned wxWidgets archive. The backend manifest
+records both SHA-256 digests, and Unix staging requires both entries.
+Native FreeBSD and OpenBSD KVM checks restaged the verified VeraCrypt
+1.26.31 engines with both texts. The engine hashes matched the previous
+stages, and the notice-incomplete stages were refused. Each guest passed
+45 builder and staging tests. Receipts are under
+`target/goal-validation/bsd-wx-notices/`.
+
 Use `pkg add` and `pkg delete` on FreeBSD and DragonFly. Use `pkg_add` and
 `pkg_delete` on NetBSD and OpenBSD. OpenBSD's distribution policy requires a
 trusted source or signed packages for normal distribution. Use `-Dunsigned`

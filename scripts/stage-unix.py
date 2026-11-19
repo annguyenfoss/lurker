@@ -418,6 +418,9 @@ def validate_backend(kind, directory, source):
                 fail("BSD VeraCrypt private library checksum differs")
         if not manifest.get("files"):
             fail("BSD VeraCrypt complete runtime file inventory is missing")
+        notices = source.constant("scripts/build-bsd-backends.py", "WX_NOTICES")
+        if not {f"licenses/{name}" for name in notices.values()} <= manifest["files"].keys():
+            fail("BSD VeraCrypt wxWidgets license texts are missing from its manifest")
         verify_files(root, manifest["files"])
         runtime_files = {"lurker-veracrypt-bsd"} | {str(p.relative_to(root)) for p, _ in entries(root)
                          if str(p.relative_to(root)).startswith(("lib/", "licenses/"))}

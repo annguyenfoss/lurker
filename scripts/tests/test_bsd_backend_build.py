@@ -84,6 +84,28 @@ class SourceProvenance(unittest.TestCase):
         artifact.write_bytes(b"stale build")
         self.assertFalse(builder.wx_cached(stamp, spec))
 
+    def test_backend_attests_wxwidgets_exception_and_library_license(self):
+        source = self.cache / "veracrypt"
+        source.mkdir()
+        (source / "License.txt").write_text("VeraCrypt upstream license")
+        wx = self.cache / "wxwidgets"
+        (wx / "docs").mkdir(parents=True)
+        (wx / "docs/licence.txt").write_text("wxWidgets exception")
+        (wx / "docs/lgpl.txt").write_text("Library GPL")
+        binary = self.cache / "veracrypt-engine"
+        binary.write_bytes(b"engine fixture")
+        output = self.cache / "stage"
+        with patch.object(builder.subprocess, "run"), \
+             patch.object(builder, "linked_libraries", return_value=[Path("/usr/lib/libfuse.so.4.0")]), \
+             patch.object(builder.subprocess, "check_output", side_effect=["VeraCrypt fixture", "2.9.9"]):
+            manifest = builder.stage(binary, output, source, wx, "OpenBSD", {})
+        for name, contents in (("wxWidgets.txt", "wxWidgets exception"),
+                               ("wxWidgets-LGPL.txt", "Library GPL")):
+            relative = "licenses/" + name
+            notice = output / relative
+            self.assertEqual(notice.read_text(), contents)
+            self.assertEqual(manifest["files"][relative], builder.digest(notice))
+
     def test_reviewed_patch_is_repeatable_and_rejects_extra_source_changes(self):
         # A reduced real upstream fixture retains the complete reviewed hunk.
         original = ('prefix\n\tvoid UserInterface::DisplayVolumeProperties (const VolumeInfoList &volumes) const\n'

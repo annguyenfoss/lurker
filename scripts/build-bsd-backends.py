@@ -25,6 +25,7 @@ OPENBSD_VND_PATCH_SHA256 = "4173de985131b068615bf4a7f16d75fd300a02245007b35af353
 FREEBSD_MD_PATCH_SHA256 = "9e2793dfa9671819b81719d14e18c12c99c9d621924bab08d5f9028677eba708"
 PATCH_TARGET = "src/Main/UserInterface.cpp"
 PATCH_TARGETS = (PATCH_TARGET, "src/Core/Unix/CoreUnix.cpp", "src/Driver/Fuse/FuseService.cpp")
+WX_NOTICES = {"docs/licence.txt": "wxWidgets.txt", "docs/lgpl.txt": "wxWidgets-LGPL.txt"}
 PINS = {
     "veracrypt": {
         "url": "https://codeload.github.com/veracrypt/VeraCrypt/tar.gz/7afc449f2bc69366e8b67b82ad66201325d318c3",
@@ -292,7 +293,8 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
     licenses = output / "licenses"
     licenses.mkdir(exist_ok=True)
     shutil.copy2(source / "License.txt", licenses / "VeraCrypt.txt")
-    shutil.copy2(wx / "docs/licence.txt", licenses / "wxWidgets.txt")
+    for upstream, installed in WX_NOTICES.items():
+        shutil.copy2(wx / upstream, licenses / installed)
     if iconv_source is not None:
         shutil.copy2(iconv_source / "COPYING.LIB", licenses / "libiconv-LGPL-2.1.txt")
     # Private copies of OS packages retain their upstream notices. Base system
@@ -315,7 +317,7 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
         "runtime": {"external_fuse_kernel": True, "separate_veracrypt": False, "privilege": "root", "source_kind": "regular_file"},
     }
     members = [destination, *[output / "lib" / item["name"] for item in private],
-               licenses / "VeraCrypt.txt", licenses / "wxWidgets.txt"]
+               licenses / "VeraCrypt.txt", *[licenses / name for name in WX_NOTICES.values()]]
     if iconv_source is not None:
         members.append(licenses / "libiconv-LGPL-2.1.txt")
     for name in ("libiconv", "fusefs-libs"):
