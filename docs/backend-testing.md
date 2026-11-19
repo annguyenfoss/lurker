@@ -244,6 +244,31 @@ The build result, package receipts and individual runtime results are under
 `target/freebsd-frozen-a60e4bc/`. The guest retained the full runtime logs
 under `/tmp/lurker-freebsd-qualification-zwjrl3i6/`.
 
+### FreeBSD VeraCrypt ciphertext sync qualification
+
+The FreeBSD-only VeraCrypt sync fix at
+`2fda5f7ca413f73ac7c9d3ec51feac007119386e` passed workspace check, build,
+and tests on FreeBSD 15.1-RELEASE-p6 amd64 (112 passed, 0 failed, 10
+ignored) in remote run `20261119T192927Z-0b1ab4b3`. The isolated native
+installation passed all 104 VeraCrypt CLI checks across the eight cipher
+and credential routes above. The packaged engine also passed daemon
+generation recovery, the login-user desktop VeraCrypt create/write/reopen
+and close lifecycle, and a 1280×860 X11 window probe as UID 1300.
+
+The normal close and reopen tests verified file contents and SQLite WAL.
+The guest removed the installed Lurker package, preserved its original
+package database, and restored the mount, md, GELI, session and kernel
+module inventories, FUSE permissions, and `vfs.usermount`. The ciphertext
+barrier trace is recorded in `docs/vm-powerloss-testing.md`.
+
+The portable archive SHA-256 is
+`be8d7cf4aa3c5cc5dbb20755f2702d7df8c0c597332716411bf12ab07e81bb3f`.
+The native package SHA-256 is
+`19eccbd1cfadbc7bffc31e52e396546fe8d4e7d198866b97b9ede4f9ad0e5272`.
+The build, package, and runtime receipts are under
+`target/freebsd-vc-barrier/`. The guest retained the runtime logs under
+`/tmp/lurker-freebsd-qualification-jwei413n/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
