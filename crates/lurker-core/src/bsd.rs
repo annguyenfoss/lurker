@@ -113,6 +113,9 @@ struct Session {
     veracrypt_proof: Option<veracrypt::RecoveryProof>,
     identity: Identity,
     backing: Option<String>,
+    #[cfg(target_os = "dragonfly")]
+    #[serde(default)]
+    dragonfly_layer: Option<dragonfly::linear::Layer>,
     mapped: Option<String>,
     mounted: Option<Mounted>,
     #[serde(default)]
@@ -523,16 +526,29 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         .mode(0o600)
         .open(&source)
         .map_err(|e| AppError::io("Create staged container", e))?;
+    #[cfg(not(target_os = "dragonfly"))]
     crate::new_filesystem::assign_file(&file, owner)?;
     file.set_len(size)
         .map_err(|e| AppError::io("Size staged container", e))?;
+    #[cfg(target_os = "dragonfly")]
+    let staged = file
+        .metadata()
+        .map_err(|e| AppError::io("Identify staged LUKS1 image", e))?;
     let mut session = Session {
         version: 1,
         id: unique_id(),
         backend,
         source: source.clone(),
+        #[cfg(not(target_os = "dragonfly"))]
         identity: Identity::read(&source)?,
+        #[cfg(target_os = "dragonfly")]
+        identity: Identity {
+            dev: staged.dev(),
+            ino: staged.ino(),
+        },
         backing: None,
+        #[cfg(target_os = "dragonfly")]
+        dragonfly_layer: None,
         mapped: None,
         mounted: None,
         peer_sources: Vec::new(),
@@ -566,6 +582,11 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
             initialize_new_filesystem_owner(&registry, &mut session, owner)?;
             return Ok(());
         }
+        #[cfg(target_os = "dragonfly")]
+        {
+            private_owned(&source, false)?;
+            verify_session(&session)?;
+        }
         session.backing = Some(native::attach_file(&source, false)?);
         registry.save(&session)?;
         verify_session(&session)?;
@@ -583,10 +604,17 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         {
             session.mapped = Some(native::format(backing, c.cipher, &credential)?);
         }
-        #[cfg(any(target_os = "freebsd", target_os = "dragonfly"))]
+        #[cfg(target_os = "freebsd")]
         {
             native::format(backing, c.cipher, &credential)?;
             session.mapped = Some(native::unlock(backing, false, &credential)?);
+        }
+        #[cfg(target_os = "dragonfly")]
+        {
+            native::format(backing, c.cipher, &credential)?;
+            session.mapped = Some(dragonfly::linear::activate(
+                &registry, &mut session, false, &credential,
+            )?);
         }
         // Persist every acquired crypto device before filesystem work. Failed
         // or interrupted newfs must leave an explicitly recoverable mapping.
@@ -618,6 +646,11 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     if let Err(error) = initialized {
         let _ = fs::remove_dir_all(&stage);
         return Err(error);
+    }
+    #[cfg(target_os = "dragonfly")]
+    {
+        verify_session(&session)?;
+        crate::new_filesystem::assign_file(&file, owner)?;
     }
     file.sync_all()
         .map_err(|e| AppError::io("Sync initialized container", e))?;
@@ -845,6 +878,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         source: source.clone(),
         identity,
         backing: None,
+        #[cfg(target_os = "dragonfly")]
+        dragonfly_layer: None,
         mapped: None,
         mounted: None,
         peer_sources: Vec::new(),
@@ -906,7 +941,13 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                         &params_path(&source),
                     )?);
                 }
-                #[cfg(not(target_os = "netbsd"))]
+                #[cfg(target_os = "dragonfly")]
+                {
+                    session.mapped = Some(dragonfly::linear::activate(
+                        &registry, &mut session, c.readonly, &credential,
+                    )?);
+                }
+                #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
                 {
                     session.mapped = Some(native::unlock(
                         session.backing.as_deref().unwrap(),
@@ -1226,7 +1267,11 @@ fn verify_session(s: &Session) -> AppResult<()> {
     if let Some(backing) = &s.backing {
         native::verify_backing(backing, &s.source)?;
     }
+    #[cfg(target_os = "dragonfly")]
+    dragonfly::linear::verify(Path::new(STATE), s)?;
     if let (Some(mapped), Some(backing)) = (&s.mapped, &s.backing) {
+        #[cfg(target_os = "dragonfly")]
+        let backing = &*dragonfly::linear::crypto_backing(s, backing);
         native::verify_mapping(mapped, backing)?;
     }
     Ok(())
@@ -1237,6 +1282,8 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     if s.backend == VolumeType::Raid1c {
         return raid1c::cleanup(registry, s);
     }
+    #[cfg(target_os = "dragonfly")]
+    dragonfly::linear::reconcile_activation(registry, s)?;
     verify_session(s)?;
     if s.mounted.is_none() {
         if let Some(target) = &s.intended_mountpoint {
@@ -1273,6 +1320,8 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
         s.mapped = None;
         registry.save(s)?;
     }
+    #[cfg(target_os = "dragonfly")]
+    dragonfly::linear::release(registry, s)?;
     if let Some(backing) = &s.backing {
         native::verify_backing(backing, &s.source)?;
         native::detach_file(backing)?;
@@ -1588,6 +1637,8 @@ mod tests {
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            #[cfg(target_os = "dragonfly")]
+            dragonfly_layer: None,
             mapped: None,
             mounted: None,
             intended_mountpoint: None,
@@ -1701,6 +1752,8 @@ mod tests {
             source: source.clone(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            #[cfg(target_os = "dragonfly")]
+            dragonfly_layer: None,
             mapped: None,
             mounted: None,
             peer_sources: Vec::new(),

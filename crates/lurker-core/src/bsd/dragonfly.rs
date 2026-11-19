@@ -4,11 +4,13 @@ use super::{Credential, args, exec};
 use crate::{AppError, AppResult, CreateCipher};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::Read;
 use std::os::fd::AsRawFd;
 use std::os::raw::{c_int, c_ulong};
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
+
+pub(super) mod linear;
+mod metadata;
 
 const VNCONFIG: &str = "/usr/sbin/vnconfig";
 const CRYPTSETUP: &str = "/sbin/cryptsetup";
@@ -84,28 +86,35 @@ pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential
     Ok(())
 }
 
+#[cfg(test)]
 pub(super) fn unlock(device: &str, readonly: bool, credential: &Credential) -> AppResult<String> {
     vnode_name(device)?;
-    let mut random = [0u8; 8];
-    File::open("/dev/urandom")
-        .and_then(|mut file| file.read_exact(&mut random))
-        .map_err(|e| AppError::io("Failed to name DragonFly crypto mapping", e))?;
-    let name = format!(
-        "lurker_{}_{:016x}",
-        std::process::id(),
-        u64::from_ne_bytes(random)
-    );
+    let name = format!("lurker_{}", super::unique_id().replace('-', "_"));
+    unlock_named(device, &name, readonly, credential)?;
+    Ok(format!("/dev/mapper/{name}"))
+}
+
+fn unlock_named(
+    device: &str,
+    name: &str,
+    readonly: bool,
+    credential: &Credential,
+) -> AppResult<()> {
+    if device.starts_with("/dev/mapper/lurker_linear_") {
+        mapping_name(device)?;
+    } else {
+        vnode_name(device)?;
+    }
+    mapping_name(name)?;
     let mut command = args(&["--batch-mode"]);
     if readonly {
         command.push("--readonly".into());
     }
     let (auth, input) = credential_args(credential);
     command.extend(auth);
-    command.extend(args(&["luksOpen", device, &name]));
-    // cryptsetup itself refuses an existing mapping. Cleanup ownership is
-    // transferred only after a successful open, never after authentication failure.
+    command.extend(args(&["luksOpen", device, name]));
     exec(CRYPTSETUP, &command, input.as_deref())?;
-    Ok(format!("/dev/mapper/{name}"))
+    Ok(())
 }
 
 pub(super) fn close(device: &str) -> AppResult<()> {
@@ -200,47 +209,110 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-fn dependency_matches(output: &str, rdev: u64) -> bool {
-    let Some((count, rest)) = output.trim().split_once(':') else {
+fn attached_private_copy(path: &Path) -> AppResult<Option<String>> {
+    let metadata = std::fs::metadata(path)
+        .map_err(|e| AppError::io("Inspect private DragonFly vnode backing", e))?;
+    let expected = (metadata.dev(), metadata.ino());
+    let listing = exec(VNCONFIG, &args(&["-l"]), None)?;
+    let mut found = None;
+    for line in listing.lines() {
+        let Some((name, _)) = line.split_once(':') else {
+            continue;
+        };
+        if vnode_name(name).is_ok()
+            && vnode_identity(name).is_ok_and(|identity| identity == expected)
+        {
+            if found.is_some() {
+                return Err(AppError::new(
+                    "Multiple vnodes cover the private LUKS1 metadata.",
+                ));
+            }
+            found = Some(format!("/dev/{name}"));
+        }
+    }
+    Ok(found)
+}
+
+fn dependency_matches(output: &str, rdevs: &[u64]) -> bool {
+    let Some((count, mut rest)) = output.trim().split_once(':') else {
         return false;
     };
-    if count.split_whitespace().collect::<Vec<_>>() != ["1", "dependencies"] {
+    let mut count = count.split_whitespace();
+    if count.next().and_then(|v| v.parse().ok()) != Some(rdevs.len())
+        || count.next() != Some("dependencies")
+        || count.next().is_some()
+    {
         return false;
     }
-    let Some(pair) = rest
-        .trim()
-        .strip_prefix('(')
-        .and_then(|s| s.strip_suffix(')'))
-    else {
-        return false;
-    };
-    let Some((major, minor)) = pair.split_once(',') else {
-        return false;
-    };
-    let (Ok(major), Ok(minor)) = (major.trim().parse::<u64>(), minor.trim().parse::<u64>()) else {
-        return false;
-    };
-    // DragonFly sys/types.h encodes the major in bits 8..15, with a
-    // non-contiguous minor cookie. The native 6.4 libdevmapper presents major
-    // zero for vnode dependencies; the kernel-reported minor cookie still
-    // identifies the attached vnode. Reject extra dependencies or another cookie.
-    let native_major = (rdev >> 8) & 0xff;
-    (major == 0 || major == native_major) && minor == (rdev & 0xffff00ff)
+    let mut remaining = rdevs.to_vec();
+    while let Some(pair) = rest.trim().strip_prefix('(') {
+        let Some((pair, next)) = pair.split_once(')') else {
+            return false;
+        };
+        let Some((major, minor)) = pair.split_once(',') else {
+            return false;
+        };
+        let (Ok(major), Ok(minor)) = (major.trim().parse::<u64>(), minor.trim().parse::<u64>())
+        else {
+            return false;
+        };
+        // The native libdm can present major zero. The kernel minor cookie
+        // still identifies the backing device in DragonFly's dev_t layout.
+        let Some(index) = remaining.iter().position(|rdev| {
+            (major == 0 || major == (rdev >> 8) & 0xff) && minor == rdev & 0xffff00ff
+        }) else {
+            return false;
+        };
+        remaining.swap_remove(index);
+        rest = next;
+    }
+    remaining.is_empty() && rest.trim().is_empty()
+}
+
+fn verify_dependencies(mapped: &str, backing: &[&str]) -> AppResult<()> {
+    let name = mapping_name(mapped)?;
+    let rdevs = backing
+        .iter()
+        .map(|path| {
+            std::fs::metadata(path)
+                .map(|metadata| metadata.rdev())
+                .map_err(|e| AppError::io("Failed to inspect DragonFly device identity", e))
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    // Dependency queries and status are key-free. Table queries can disclose
+    // a live encryption key on older implementations.
+    let output = exec("/sbin/dmsetup", &args(&["deps", name]), None)?;
+    if !dependency_matches(&output, &rdevs) {
+        return Err(AppError::new(
+            "DragonFly mapping dependencies changed; preserving the session.",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
-    vnode_name(backing)?;
-    let name = mapping_name(mapped)?;
-    let metadata = std::fs::metadata(backing)
-        .map_err(|e| AppError::io("Failed to inspect DragonFly vnode identity", e))?;
-    // The base cryptsetup 1.1.2 status command leaves its device field blank
-    // on DragonFly. deps is key-free; never inspect dmsetup table output,
-    // which can contain the live encryption key on older implementations.
-    let output = exec("/sbin/dmsetup", &args(&["deps", name]), None)?;
-    if !dependency_matches(&output, metadata.rdev()) {
-        return Err(AppError::new(
-            "DragonFly crypto mapping was replaced; preserving the session.",
-        ));
+    if backing.starts_with("/dev/mapper/lurker_linear_") {
+        mapping_name(backing)?;
+    } else {
+        vnode_name(backing)?;
+    }
+    verify_dependencies(mapped, &[backing])?;
+    let status = exec(
+        "/sbin/dmsetup",
+        &args(&["status", mapping_name(mapped)?]),
+        None,
+    )?;
+    let mut entries = status.lines();
+    let mut first = entries.next().unwrap_or_default().split_whitespace();
+    if first.next() != Some("0")
+        || first
+            .next()
+            .and_then(|v| v.parse::<u64>().ok())
+            .is_none_or(|size| size == 0)
+        || first.next() != Some("crypt")
+        || entries.next().is_some()
+    {
+        return Err(AppError::new("DragonFly crypto mapping type changed."));
     }
     Ok(())
 }
@@ -270,15 +342,15 @@ mod tests {
         assert_eq!(VNIOCGET, 0xc4184606);
         assert!(dependency_matches(
             "1 dependencies\t: (0, 504430631)\n",
-            504432679
+            &[504432679]
         ));
         assert!(!dependency_matches(
             "1 dependencies\t: (0, 504430632)\n",
-            504432679
+            &[504432679]
         ));
         assert!(!dependency_matches(
             "2 dependencies: (0, 504430631) (0, 42)\n",
-            504432679
+            &[504432679]
         ));
     }
 

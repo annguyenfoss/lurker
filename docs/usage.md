@@ -209,6 +209,11 @@ NetBSD `.cgdparams` and PEFS `.pefs.conf`/`.pefs.db` metadata with their encrypt
 data. OpenBSD CRYPTO and RAID1C refuse read-only attachment.
 See `docs/backend-testing.md` for the exact tested revisions and remaining gates.
 
+DragonFly uses the stock `dm_target_linear` module. Unlock accepts the
+DragonFly LUKS1 cipher and keyslot profiles in
+`DIRECTIVES/LLM/CIPHER.md` and uses a private metadata copy during each
+session. Preserve the complete original container as usual.
+
 OpenBSD RAID1C is an explicit two-file mirror. Size is per member.
 
 ```bash

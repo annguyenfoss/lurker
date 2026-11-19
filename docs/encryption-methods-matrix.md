@@ -74,22 +74,23 @@ Lurker's DragonFly vnode-backed LUKS1 create and unlock commands.
 The shipped LUKS1 reader checks magic, the version and hash support. Its
 privileged unlock path lacks the structural keyslot geometry checks present
 in upstream cryptsetup 2.8.7 at `0e2fadbd02be23796006d57d448dbf1080b79cea`.
-Lurker's explicit and Auto routes both reach that reader. Vnode identity and
-session guards govern the file and mapping. They leave header validation to
-cryptsetup. The Linux metadata helpers consume native `luksDump` output and
-provide no independent pre-open validation on DragonFly.
+The earlier DragonFly adapter passed the original vnode directly to this
+reader. Lurker now checks the supported header and slot geometry, captures
+the metadata in its root-private registry and uses stock `dm_target_linear`
+to join that snapshot with the original ciphertext payload. The adapter
+reads back the composite metadata before cryptsetup runs.
 
 - https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/54d7118100cb99b741fe92cfd8d542c623b6f8d0/contrib/cryptsetup/luks/keymanage.c
 - https://gitlab.com/cryptsetup/cryptsetup/-/raw/0e2fadbd02be23796006d57d448dbf1080b79cea/lib/luks1/keymanage.c
 
-Keep security qualification open pending a vendor-supported parser fix or a
-reviewed equivalent. A Lurker-side check would need to enforce documented
-header bounds before the privileged reader and ensure that the validated bytes
-remain stable through unlock. Native compatibility evidence covers the approved
-AES, Serpent and Twofish XTS/plain64 profiles with PBKDF2/SHA-256 and 512-bit
-combined keys, using passwords and binary keyfiles. Broader imported-volume
-compatibility and kernel or crypto-library security assurance require separate
-evidence. Source receipts and installed hashes are under
+Keep public security qualification open pending independent review of this
+guard and its native cleanup behavior, or a vendor-supported parser fix.
+The reviewed 6.4 maintenance and development branches retain the same legacy
+parser. Native compatibility evidence covers the approved AES, Serpent and
+Twofish XTS/plain64 profiles with PBKDF2/SHA-256 and 512-bit combined keys,
+using passwords and binary keyfiles. Broader imported-volume compatibility
+and kernel or crypto-library security assurance require separate evidence.
+Source receipts and installed hashes are under
 `target/dragonfly-native-review/`. The stock-guest header receipts are in
 `target/dragonfly-stock-ca3c845/headers.json`.
 
