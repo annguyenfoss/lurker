@@ -81,7 +81,9 @@ persistent directory. A returned PID alone is not readiness: read and retain
 `ready.json`, whose status must be `ready-for-abrupt-poweroff`, before using
 the coordinator's guarded `poweroff` and `boot` operations. Keep the worker
 alive at the power cut. After boot, `guest-verify --run RUN` reopens through the
-same hash-checked candidate CLI and writes `result.json`. Preserve the separate
+same hash-checked candidate CLI and writes `result.json`. It rechecks the
+staged package manifest and files before reopening, then confirms normal close
+removed the mount. Preserve the separate
 hypervisor poweroff/boot evidence alongside the guest result; invoking a guest
 verification command alone does not prove a power cut happened. Setup and
 verification retain fixtures and never run filesystem repair.
