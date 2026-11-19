@@ -116,6 +116,23 @@ removed the fixture and left neither FUSE layer, any live owned process, nor
 a session record. The package and binary digests and raw `/proc` fields are
 in `target/goal-validation/linux-runtime-audit-a5a1857/lkl-runtime.json`.
 
+The shipped LKL revision `d0f76a77e8c2ca68bd7d96190b8da09040eab072`
+also matched the LKL default branch on 2026-11-20. Its `fs/btrfs` Git
+tree ID is identical to mainline Linux `v6.12`. The corresponding
+`v6.12.118` stable tree has the same 140 files, with different contents
+in 85 of them. Lurker's LKL patch changes its configuration and host I/O
+integration without changing that filesystem subtree. This establishes the
+Btrfs maintenance gap relative to the stable kernel tree. Advisory
+applicability, integration with later stable changes and rebuilt runtime
+qualification remain open. The compared tree and blob IDs are recorded in
+`target/goal-validation/release-inputs-review/`.
+
+https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072/fs/btrfs
+
+https://github.com/torvalds/linux/tree/v6.12/fs/btrfs
+
+https://github.com/gregkh/linux/tree/v6.12.118/fs/btrfs
+
 ## Source identity and cross-mode exclusion
 
 Native Linux file mounts hold a nonblocking exclusive inode lock through mapper startup. Administrator-controlled `losetup` attaches the pinned source descriptor; cryptsetup queries and opens that loop block device, avoiding a conflicting metadata flock on the container file. The loop backing filesystem/inode and the opened mapper are verified before filesystem access. The owned loop is detached after handled failures or marked for automatic removal when its mapper closes. Hard links and renamed backing files cannot bypass the inode check. The CLI needs read access to lock the source; run the privileged CLI as root for root-owned unreadable containers. Missing or ambiguous native identity metadata fails closed.
