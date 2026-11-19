@@ -163,3 +163,12 @@ The CLI SHA-256 is
 Results from the isolated KVM copy are in
 `target/dragonfly-resume/keyfiles/`. Harness `b78d314` enables native
 resource checks, using the compatibility fix in `12d7e7f`.
+
+The full desktop archive from the same build opened a native 1280×860 X11
+window as UID 1300 with 1,200 sampled pixel colors. The test used an
+isolated copy of the verified November 13 KVM archive with official
+DragonFly X11 packages installed offline. The probe disabled TCP and four
+unused X extensions, used private Xauthority, and reaped all owned
+children. The window result and full package manifest are in
+`target/dragonfly-resume/`. The full archive SHA-256 is
+`22feef4528e2d684182b5900381721e5c076b01aabf960e43992931737e3a742`.
