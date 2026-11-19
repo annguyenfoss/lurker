@@ -297,6 +297,15 @@ both recovered. Package, readiness, result and local state path are recorded
 in the Arch evidence directory. The normal compatibility check reopened
 ciphertext from `2ebae8f` with byte-identical existing client metadata.
 
+The rebuilt `390f468` Arch package passed all five checks for VeraCrypt
+AES in the login-user route. Its LKL device advertises flush to Btrfs and
+forwards the request to the host backing file through the private VeraCrypt
+engine. The recovered file matched its digest, SQLite recovered the
+committed row and kept the uncommitted row invisible, and normal close
+detached the mount. Archive SHA-256
+`ceb81faa6e49f22a3b4b717b3136cc7781caa410ef8a1495f609f894a3ce8c3a`;
+see `result-ar20261120lklfix.json` in the Arch evidence directory.
+
 ### FreeBSD GELI flush tracing
 
 On the original FreeBSD 15.1-RELEASE-p6 KVM guest, DTrace observed no GEOM
