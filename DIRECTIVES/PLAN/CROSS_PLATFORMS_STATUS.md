@@ -25,6 +25,22 @@ a committed SQLite FULL/WAL row, and an uncommitted row.
 | DragonFly BSD | LUKS1 | Previously published fixtures unlocked after repeat cuts on two backing filesystems. Both lost the acknowledged file and transaction. |
 | macOS | Apple encrypted disk images, VeraCrypt, gocryptfs, CryFS, Cryptomator | Historical package results only. This round excluded macOS. |
 
+## DragonFly guarded LUKS1 activation
+
+`e98bcc6` feeds a checked, root-private LUKS1 metadata copy to native
+`cryptsetup` through the stock `dm_target_linear` module. The mapping
+reads and writes the original ciphertext payload at its existing offsets.
+On DragonFly 6.4.2 KVM, workspace check passed and unit tests reported
+92 passed and three ignored. The development CLI passed 91 real lifecycle
+checks across AES, Serpent and Twofish with passwords and binary keyfiles.
+It also reopened an earlier AES vault through Auto in read-only mode.
+
+The native CLI package at `dfc7fdc` verified all 49 installed payload files,
+passed 13 installed AES lifecycle checks, and restored the prior package
+inventory on removal. The hardened desktop package, independent review
+and abrupt-power-loss recovery for the guarded path remain open. See
+`docs/backend-testing.md` and `target/dragonfly-metadata-v1/`.
+
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
 All ten non-macOS KVM guests ran locked workspace checks and tests from
@@ -315,9 +331,9 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   CGD, DragonFly LUKS1, and all three OpenBSD storage routes. Publisher
   signatures and release security qualification still require evidence.
 - The DragonFly 6.4.2 base `cryptsetup` and reviewed maintenance branch
-  lack the upstream LUKS1 reader's structural keyslot checks. Native
-  development builds passed the approved profiles. A vendor-supported
-  fix or reviewed equivalent protection is required for release. See
+  lack the upstream LUKS1 reader's structural keyslot checks. The guarded
+  adapter above is the candidate protection for these builds. Release
+  qualification requires independent review. See
   `docs/encryption-methods-matrix.md`.
 - The `ca3c845` private LKL Btrfs tree matches Linux `v6.12`. The builder
   now pins `v6.12.118` and rechecks its applied sources. A rebuilt helper
