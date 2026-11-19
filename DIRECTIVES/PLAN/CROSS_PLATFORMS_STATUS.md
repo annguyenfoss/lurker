@@ -69,7 +69,8 @@ artifact digests and lifecycle receipts are in
 
 Fresh KVM guests used vendor installation images and local native
 prerequisites. Each ran the actual installed CLI and desktop package
-without an external network route.
+without an external network route. Together they passed 1,551 CLI
+lifecycle checks and ten X11 window probes.
 
 | Guest | Product source | Installed lifecycle checks | Desktop |
 | --- | --- | ---: | --- |
@@ -88,6 +89,7 @@ OpenBSD's native package manager rejects the unsigned developer archive
 under its stock policy. The clean replay used its scoped unsigned-package
 option after verifying the exact archive digest. The platform packaging
 guides record source image identities, dependency receipts and cleanup.
+The aggregate is in `target/goal-validation/clean-install-matrix-summary.json`.
 
 ## Coordinated non-macOS native qualification, 2026-11-20
 
@@ -283,10 +285,15 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   FreeBSD also passed its daemon-death recovery case.
 - The opt-in `session-close` hook passed 82 checks across Debian, FreeBSD and
   NetBSD. Arch also stopped its systemd consumer, ran the hook, shut down
-  cleanly, rebooted and recovered the file and SQLite data. FreeBSD ran the
-  hook from `rc.shutdown` for GELI and recovered both after reboot. Broader
-  shutdown integration, publisher signatures, and security review still
-  require evidence.
+  cleanly, rebooted and recovered the file and SQLite data. Separate native
+  `rc.shutdown` tests recovered both after reboot on FreeBSD GELI, NetBSD
+  CGD, DragonFly LUKS1, and all three OpenBSD storage routes. Publisher
+  signatures and release security qualification still require evidence.
+- The DragonFly 6.4.2 base `cryptsetup` and reviewed maintenance branch
+  lack the upstream LUKS1 reader's structural keyslot checks. Native
+  development builds passed the approved profiles. A vendor-supported
+  fix or reviewed equivalent protection is required for release. See
+  `docs/encryption-methods-matrix.md`.
 - The `ca3c845` private LKL Btrfs tree matches Linux `v6.12`. The builder
   now pins `v6.12.118` and rechecks its applied sources. A rebuilt helper
   passed 39 Arch login-user checks. The full `1e04b85` Arch archive passed
