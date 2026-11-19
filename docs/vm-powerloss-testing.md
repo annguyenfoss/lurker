@@ -503,6 +503,20 @@ See `synchronous-copied-ffs-audit.log`,
 `copied-ffs-preen-*-sync.json` and `result-*sync20261120.json` in the
 OpenBSD fault directory.
 
+The production `ca3c845` archive repeated all three cuts with the package's
+default mount policy. The kernel reported `synchronous` on every workload
+mount, without a diagnostic remount. The cuts began 1.91 to 2.52 seconds
+after readiness. FFS required a manual check before writable reopen on all
+three routes. Native preen succeeded on each separate verified ciphertext
+copy, followed by a clean read-only check, ordinary writable CLI reopen,
+recovery of the fsynced file and committed SQLite row, exclusion of the
+uncommitted row, a new fsynced write and normal close. The original fixture
+hashes and the clone's mount and device inventories were preserved.
+
+Archive SHA-256 was
+`22d42cd27e6f2e41d9a8e619ce03ebbfe54813b387792d3e589958832e657310`.
+See `default-sync-powerloss-summary.json` in the OpenBSD fault directory.
+
 https://man.openbsd.org/OpenBSD-8.0/mount.8
 
 ## Arch packaged runtime power cuts

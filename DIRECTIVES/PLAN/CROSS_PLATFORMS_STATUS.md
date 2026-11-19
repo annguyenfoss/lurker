@@ -207,9 +207,9 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   recovered acknowledged files and SQLite transactions from read-only FFS
   mounts of disposable ciphertext copies after cuts. Normal writable CLI
   reopen still failed during mount on all three routes. Fresh synchronous
-  FFS controls on all three routes passed explicit preen and writable CLI
-  recovery on copies. Conventional FFS controls reported duplicate blocks
-  requiring manual intervention.
+  FFS controls and the default `ca3c845` package on all three routes passed
+  explicit preen and writable CLI recovery on copies. Conventional FFS
+  controls reported duplicate blocks requiring manual intervention.
 - DragonFly's freshly published LUKS1 fixture was missing from a recovered
   copy of the HAMMER2 backing disk. A separate vault persisted across a
   clean reboot and unlocked after the cut. Its ciphertext matched the
