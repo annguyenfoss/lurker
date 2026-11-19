@@ -45,6 +45,23 @@ Whole-guest mount inventory equality remained unverified on Linux. The
 artifact digests and lifecycle receipts are in
 `target/goal-validation/secure-synchronous-ca3c845/native-package-summary.json`.
 
+## Clean-machine installation and offline runtime
+
+Fresh KVM guests used vendor installation images and local native
+prerequisites. Each ran the actual installed CLI and desktop package
+without an external network route.
+
+| Guest | Product source | Installed lifecycle checks | Desktop |
+| --- | --- | ---: | --- |
+| Debian 13 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
+| FreeBSD 15.1 cloud image | `ca3c845` | 208 across GELI, VeraCrypt, PEFS and gocryptfs | X11 passed |
+| OpenBSD 8.0 stock install | `ca3c845` | 69 across CRYPTO, AES VeraCrypt and RAID1C | X11 passed |
+
+OpenBSD's native package manager rejects the unsigned developer archive
+under its stock policy. The clean replay used its scoped unsigned-package
+option after verifying the exact archive digest. The platform packaging
+guides record source image identities, dependency receipts and cleanup.
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from
