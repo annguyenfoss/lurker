@@ -56,7 +56,7 @@ source and logs are retained under `target/bsd-native-wrapper/`.
 
 | Guest and payload | Product source | Native installation proof |
 | --- | --- | --- |
-| FreeBSD 15.1, full CLI and desktop | `029cf99` | Installed with 22 official dependency artifacts. GELI passed 13 lifecycle checks before removal. The earlier `2ebae8f` package passed the same check. |
+| FreeBSD 15.1, full CLI and desktop | `a60e4bc` | Installed with 22 official dependency artifacts. All 208 GELI, PEFS, VeraCrypt, and gocryptfs CLI checks passed, along with four desktop lifecycles and an X11 window. The isolated package was removed and the original package database matched its baseline. Earlier `029cf99` and `2ebae8f` native packages each passed 13 GELI checks. |
 | NetBSD 11.1, full CLI and desktop | `24dcc6e` | Installed with sudo and xkbcommon. CGD passed 13 lifecycle checks before removal. |
 | OpenBSD 8.0, full CLI and desktop | `264cd6e` | Installed with signed dependencies and native shared-library checks. CRYPTO passed 13 lifecycle checks. The installed VeraCrypt helper supported login-user writes and SQLite WAL persistence after close and reopen, kept its raw FUSE data private, and safely refused read-only attach. The package was then removed. |
 | DragonFly 6.4.2, full CLI and desktop | `2ebae8f` | Installed with native dependencies and removed on a fresh isolated archive copy. The installed CLI ran, and the desktop binary matched the earlier X11 window proof. The separate CLI-only native package passed 13 LUKS1/AES lifecycle checks. |

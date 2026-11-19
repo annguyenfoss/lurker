@@ -167,6 +167,41 @@ with an earlier failure and diagnosis under
 `/tmp/lurker-freebsd-qualification-wx0843tb/`. The collected summary, package
 manifest, and X11 frame receipt are under `target/freebsd-final-resume/`.
 
+## Coordinated FreeBSD native package qualification
+
+The frozen `a60e4bc69a3b78b8dd6e2297c2300a38f4508251` build on FreeBSD
+15.1-RELEASE-p6 amd64 passed workspace check and build. Its workspace tests
+passed 110, with 10 ignored and none failed. Remote run
+`20261119T184037Z-1972fdb8` verified and reused the existing FreeBSD
+VeraCrypt 1.26.31 and patched gocryptfs 2.7.0 engine inputs. The new staged
+manifest binds those engine bytes and the rebuilt frontends to this source
+revision.
+
+The isolated native package installation passed all 208 CLI checks in the
+same backend and credential routes listed above. These cases ran against the
+native-installed binary and exercised real create, unlock, file and SQLite
+WAL I/O, fsync, close, reopen, read-back, incorrect credentials, busy close,
+and read-only behavior. The native package also passed four real login-user
+desktop callback lifecycles, the VeraCrypt generation recovery test with its
+packaged engine, and the 1280×860 X11 window probe as UID 1300. The guest
+reported GELI kernel and userland version 7, FUSE kernel ABI 7.35, and
+PEFS module package `g20260829.1501000,1`.
+
+Native installation used an isolated root and package database with 22
+local official dependency artifacts. Removal left the original package
+database unchanged. The guest restored its mount, md, GELI, session and
+kernel-module inventories, FUSE permissions, and `vfs.usermount`. This
+run exercised ordinary close and reopen. The earlier GELI power-cut result
+remains recorded in `docs/vm-powerloss-testing.md`.
+
+The portable archive SHA-256 is
+`b57f0331ed0c805ff452bb9b63e71087016c6ccd7be65edc3b76f9bcee4c3d7b`.
+The native package SHA-256 is
+`99d5cdf490d64908ded14b8f69e8febe0b3bb0ba6d0c2348b0a55f1e7617fac9`.
+The build result, package receipts and individual runtime results are under
+`target/freebsd-frozen-a60e4bc/`. The guest retained the full runtime logs
+under `/tmp/lurker-freebsd-qualification-zwjrl3i6/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
