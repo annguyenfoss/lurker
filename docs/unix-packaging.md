@@ -154,6 +154,28 @@ python -m unittest discover -s scripts/tests -p test_stage_unix.py
 
 Tests cover external symlinks, traversal, special/setuid files, internal runtime links, source/binary identity, missing runtimes, dependency failures and competing publication. They execute no encryption operations.
 
+## Native package download sizes
+
+These sizes are for the digest-verified native installer files built on KVM.
+The Linux artifacts use `c21e0cc` and the BSD artifacts use `ca3c845`.
+Distribution prerequisites are separate downloads.
+
+| Package | Size |
+| --- | ---: |
+| Arch Linux pacman | 79.5 MiB |
+| Debian DEB | 69.4 MiB |
+| Ubuntu DEB | 71.3 MiB |
+| Fedora RPM | 71.4 MiB |
+| openSUSE RPM | 71.4 MiB |
+| Gentoo Portage GPKG | 79.5 MiB |
+| FreeBSD PKG | 17.2 MiB |
+| OpenBSD TGZ | 21.5 MiB |
+| NetBSD TGZ | 22.3 MiB |
+| DragonFly BSD PKG | 12.2 MiB |
+
+Exact sizes and digests are in
+`target/goal-validation/native-package-download-sizes.json`.
+
 ## Release maintenance and signatures
 
 Use the installed package's `share/lurker/manifest.json` and neighboring
