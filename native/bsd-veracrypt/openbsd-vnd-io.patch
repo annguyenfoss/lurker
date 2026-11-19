@@ -101,3 +101,83 @@
 +			{
 -				FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);
 +				FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);
+@@ -1109,8 +1109,12 @@
+-
++
+-			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
++			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
+-			{
++			{
+-				FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);
++				FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);
++				// OpenBSD vnd uses IO_SYNC, which its FUSE write request
++				// does not carry. Finish the synchronous ciphertext write
++				// before returning success to the vnode disk.
++				FuseService::FlushVolume();
+-				return size;
++				return size;
+-			}
++			}
+-
++
+-			if (strcmp (path, FuseService::GetAuxDeviceInfoPath()) == 0)
++			if (strcmp (path, FuseService::GetAuxDeviceInfoPath()) == 0)
+@@ -1159,18 +1163,21 @@
+-
++
+-		return -ENOENT;
++		return -ENOENT;
+-	}
++	}
+-
++
+-#ifdef TC_LINUX
++#if defined(TC_LINUX) || defined(TC_OPENBSD)
+-	static int fuse_service_fsync (const char *path, int datasync, struct fuse_file_info *fi)
++	static int fuse_service_fsync (const char *path, int datasync, struct fuse_file_info *fi)
+-	{
++	{
+-		try
++		try
+-		{
++		{
++#ifdef TC_OPENBSD
++			if (!fuse_service_data_access (path, fi))
++#else
+-			if (!FuseService::CheckAccessRights())
++			if (!FuseService::CheckAccessRights())
++#endif
+-				return -EACCES;
++				return -EACCES;
+-
++
+-			// Loop devices turn block-layer flushes into fsync requests on the volume image.
+-			// Data written by WriteVolumeSectors() reaches the backing storage only when it is synced.
++			// Forward explicit fsync on the private volume image to ciphertext.
+-			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
++			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
+-				FuseService::FlushVolume();
++				FuseService::FlushVolume();
+-		}
++		}
+-		catch (...)
++		catch (...)
+@@ -1805,9 +1812,9 @@
+-		static fuse_operations fuse_service_oper;
++		static fuse_operations fuse_service_oper;
+-
++
+-		fuse_service_oper.access = fuse_service_access;
++		fuse_service_oper.access = fuse_service_access;
+-		fuse_service_oper.destroy = fuse_service_destroy;
++		fuse_service_oper.destroy = fuse_service_destroy;
+-#ifdef TC_LINUX
++#if defined(TC_LINUX) || defined(TC_OPENBSD)
+-		fuse_service_oper.fsync = fuse_service_fsync;
++		fuse_service_oper.fsync = fuse_service_fsync;
+-#endif
++#endif
+-		fuse_service_oper.getattr = fuse_service_getattr;
++		fuse_service_oper.getattr = fuse_service_getattr;
+-		fuse_service_oper.init = fuse_service_init;
++		fuse_service_oper.init = fuse_service_init;

@@ -126,7 +126,9 @@ class SourceProvenance(unittest.TestCase):
             self.assertEqual(builder.prepare("veracrypt", self.cache, offline=True), source)
             service = (source / "src/Driver/Fuse/FuseService.cpp").read_bytes()
             self.assertIn(b"fi->fh = LurkerOpenBsdVolumeHandle;", service)
-            self.assertEqual(service.count(b"!fuse_service_data_access (path, fi)"), 2)
+            self.assertEqual(service.count(b"!fuse_service_data_access (path, fi)"), 3)
+            self.assertIn(b"FuseService::FlushVolume();\n\t\t\t\treturn size;", service)
+            self.assertIn(b"#if defined(TC_LINUX) || defined(TC_OPENBSD)\n\t\tfuse_service_oper.fsync", service)
             core = source / "src/Core/Unix/CoreUnix.cpp"
             reviewed = core.read_bytes()
             self.assertIn(b"arc4random_buf (nonce, sizeof (nonce))", reviewed)

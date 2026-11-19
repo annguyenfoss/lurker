@@ -21,7 +21,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 PATCH_SHA256 = "b532ade3b7944a414162efe5d2b21a137698a0a05bbe3b6cdd146a861a4ace9d"
 COMMON_PATCH_SHA256 = "3d945f1ed832ffa61d7fb1ab817b36d5b15de858cd864a65ea181567cf6986e0"
-OPENBSD_VND_PATCH_SHA256 = "031b540ebede7929b2e695ef75f5e820ce650a3b54e94305540261d574fd8469"
+OPENBSD_VND_PATCH_SHA256 = "4173de985131b068615bf4a7f16d75fd300a02245007b35af353faa6e999abd0"
 PATCH_TARGET = "src/Main/UserInterface.cpp"
 PATCH_TARGETS = (PATCH_TARGET, "src/Core/Unix/CoreUnix.cpp", "src/Driver/Fuse/FuseService.cpp")
 PINS = {

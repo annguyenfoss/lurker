@@ -41,6 +41,13 @@ their existing checks. OpenBSD enforces permissions on the root-owned auxiliary
 directory and image. The build and package manifests require the patch digest
 for OpenBSD.
 
+The OpenBSD vnode device requests synchronous backing writes, but its FUSE
+write messages do not carry that request. Each authorized data-node write now
+syncs the encrypted backing file before replying. The explicit FUSE fsync
+callback also syncs that file under the existing data-node access check.
+This preserves the vnode device's write ordering through the private engine.
+The outer filesystem and storage device still determine media durability.
+
 The staged executable uses upstream's text/stdin interface. It is intended for
 Lurker's trusted, administrator-controlled private backend directory; a normal
 user's build output must never be automatically elevated. FreeBSD private
