@@ -1,9 +1,9 @@
 # Cross-platform implementation status
 
-Active completion pass, 2026-11-14. The earlier frozen candidate was
-`a16cd18b8462293c670e66803fc4e37fc4a9c59f`; its results below remain historical.
-The current integration is not yet frozen or fully qualified. Scope/profiles:
-`DIRECTIVES/LLM/CIPHER.md`. Public-release qualification remains separate.
+Active non-macOS qualification, 2026-11-20. The coordinated native package
+results and remaining release gates apply to this round. Earlier checkpoints
+retain their original dates and source revisions. The approved profiles are
+in `DIRECTIVES/LLM/CIPHER.md`.
 
 ## Coordinated non-macOS native qualification, 2026-11-20
 
@@ -42,7 +42,7 @@ See `docs/backend-testing.md`, `docs/linux-package-testing.md`,
 `docs/linux-native-packaging.md`, `docs/bsd-packaging.md` and
 `docs/vm-powerloss-testing.md` for exact evidence.
 
-## Resumed checkpoint
+## Earlier macOS and BSD checkpoint
 
 The paused WIP was committed/pushed, then implementation resumed. Darwin's
 absent-ACL handling and discarded capability output are fixed. Native Mac fence
@@ -70,7 +70,7 @@ Its workspace rebuild now raises only the build process's 1.5 GiB data limit to
 4 GiB; root has roughly 4 GiB headroom. Final Linux/BSD package source is frozen
 at `cc87b54ef6`; Mac artifact source remains independently recorded as `294b2b8`.
 
-## Current completion pass
+## Earlier implementation checkpoint
 
 - macOS policy: VeraCrypt uses FUSE-T only; gocryptfs/CryFS use macFUSE;
   Cryptomator uses FUSE-T's signed FSKit extension (macOS 26+). The user enabled
