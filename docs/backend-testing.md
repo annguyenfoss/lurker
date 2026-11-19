@@ -147,6 +147,25 @@ lacked its trusted helper. This case exercises an administrator-ordered
 close before shutdown. Evidence is under
 `target/goal-validation/arch-shutdown/`.
 
+### FreeBSD close hook in `rc.shutdown`
+
+An owned FreeBSD KVM clone used the verified `ca3c845` portable package
+to create and open a GELI AES fixture. A separate process fsynced a file,
+committed a SQLite FULL/WAL row, and held another row uncommitted. The
+guest's native shutdown script ran the fixture hook during `rc.shutdown`.
+It verified the consumer identity, stopped it, waited for SQLite close,
+and called `session-close`. The hook returned zero without a credential
+prompt and the mount was gone before poweroff.
+
+After the same guest booted again, the ordinary CLI reopened the same
+vault. The file matched its digest, SQLite integrity passed, and only
+the committed row was visible. The reader retry fixed a SQLite context
+manager error in the verification harness. Normal close left the vnode
+inventory idle. The temporary shutdown script was removed from the clone.
+Evidence and package hashes are under
+`/mnt/virt/lurker-fault-fb20261120a/` in `native-shutdown-result.json` and
+the matching staging and inventory logs.
+
 ## Captured packaged CLI evidence
 
 The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected

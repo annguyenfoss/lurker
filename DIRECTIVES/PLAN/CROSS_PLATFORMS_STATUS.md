@@ -260,9 +260,10 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   FreeBSD also passed its daemon-death recovery case.
 - The opt-in `session-close` hook passed 82 checks across Debian, FreeBSD and
   NetBSD. Arch also stopped its systemd consumer, ran the hook, shut down
-  cleanly, rebooted and recovered the file and SQLite data. Broader shutdown
-  integration, stock Fedora, openSUSE and Gentoo qualification, publisher
-  signatures and security review still require evidence.
+  cleanly, rebooted and recovered the file and SQLite data. FreeBSD ran the
+  hook from `rc.shutdown` for GELI and recovered both after reboot. Broader
+  shutdown integration, stock Fedora, openSUSE and Gentoo qualification,
+  publisher signatures and security review still require evidence.
 - The `ca3c845` private LKL Btrfs tree matches Linux `v6.12`. The builder
   now pins `v6.12.118` and rechecks its applied sources. A rebuilt helper
   passed 39 Arch login-user checks. The full `1e04b85` Arch archive passed
