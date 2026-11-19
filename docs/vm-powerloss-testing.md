@@ -570,6 +570,24 @@ under the FreeBSD fault directory.
 
 https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.0/sys/sys/disk.h
 
+The `--freebsd-suj-diagnostic` control enabled native soft-updates
+journaling on a fresh unmounted GELI/UFS fixture from `a60e4bc`, verified
+it using `tunefs -p`, and opened it through the normal CLI. Initial
+setup attempts used the wrong backing sector size and the wrong status
+label. Both stopped before poweroff and left no device attached. The
+measured cut began 0.52 seconds after acknowledgment.
+
+The normal writable reopen refused the dirty UFS journal. A SHA-verified
+copy recovered its journal with `fsck_ffs -p`, and normal writable CLI
+reopen and close then passed. The file digest differed and SQLite could
+not find the committed table even though the raw WAL measured 82,432
+bytes. The original ciphertext hash and device inventory were unchanged.
+This control leaves GELI acknowledged-write durability unresolved.
+See `result-fbgelisujc20261120.json`, `geli-suj-copy-recovery.json` and
+`geli-suj-copy-fsck.log` under the FreeBSD fault directory.
+
+https://man.freebsd.org/cgi/man.cgi?query=tunefs&sektion=8
+
 FreeBSD gocryptfs at `a60e4bc` passed all five recovery checks after
 explicit session reconciliation. Direct reopen first refused the recorded
 session. Normal close quarantined the dead session and reported that its
