@@ -442,6 +442,31 @@ recovered the acknowledged data without mutating the inner file systems.
 
 https://man.openbsd.org/OpenBSD-8.0/fsck_ffs.8
 
+### OpenBSD synchronous FFS after a fresh cut
+
+With the same `4189679` package, `--openbsd-sync-diagnostic` remounted each
+fresh VeraCrypt AES, softraid CRYPTO and RAID1C FFS2 fixture with
+`mount -u -o sync` before the measured workload. The effective mount table
+confirmed `synchronous` on the same fixture device. Cuts began 1.43 to 2.06
+seconds after readiness. Direct normal writable reopen still failed at FFS
+on all three routes.
+
+A separate native `fsck_ffs -fp` on each hash-verified ciphertext copy
+repaired its allocation summaries and marked FFS clean. The following
+read-only filesystem check exited zero on every copy. After ordinary
+native detach, the normal Lurker CLI opened each repaired copy writable,
+recovered the exact fsynced file and committed SQLite row, excluded the
+uncommitted row, synced a new file and closed normally. The original
+ciphertext hashes and device inventories matched the baseline. These
+controls qualified copied-image recovery through explicit repair. They
+did not add filesystem repair to Lurker's mount path.
+
+See `synchronous-copied-ffs-audit.log`,
+`copied-ffs-preen-*-sync.json` and `result-*sync20261120.json` in the
+OpenBSD fault directory.
+
+https://man.openbsd.org/OpenBSD-8.0/mount.8
+
 ## Arch packaged runtime power cuts
 
 Packaged LUKS2/AES at `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` passed
