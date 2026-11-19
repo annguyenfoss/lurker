@@ -7,23 +7,22 @@ The current integration is not yet frozen or fully qualified. Scope/profiles:
 
 ## Non-macOS KVM qualification resumed, 2026-11-20
 
-The frozen product source for this round is
-`2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1`. Harness and documentation changes
-have separate revision identities.
+The baseline product source for this round was
+`2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1`. Platform fixes, native installers
+and harness changes retain separate revision identities.
 
 | Target | Implemented formats | Qualification at this checkpoint |
 | --- | --- | --- |
-| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | LUKS2, LUKS1, VeraCrypt (kernel and userspace), gocryptfs, CryFS, Cryptomator | Each package passed 117 privileged and 78 login-user lifecycle checks. Debian passed six packaged desktop lifecycles and four real Firefox profile lifecycles. |
-| FreeBSD | GELI, VeraCrypt, PEFS, gocryptfs | Workspace and packaged desktop passed. GELI, PEFS and VeraCrypt passed 182 CLI checks. The gocryptfs SQLite WAL checkpoint failed and a scoped native fix is being verified. |
-| OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | Workspace and package passed. Packaged lifecycle and RAID1C power-loss checks are pending. |
-| NetBSD | CGD | Workspace, 26 CLI checks, desktop callback lifecycle and X11 window passed. A new KVM power cut lost the fsynced file and SQLite WAL. The writable FFS mount policy is being investigated. |
-| DragonFly BSD | LUKS1 | Workspace tests, 39 binary-keyfile lifecycle checks and the packaged X11 window passed. Password lifecycle, desktop callbacks and abrupt power loss are being tested. The installed tool and patch provenance are in `docs/encryption-methods-matrix.md`. |
+| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | LUKS2, LUKS1, VeraCrypt (kernel and userspace), gocryptfs, CryFS, Cryptomator | Each package passed 117 privileged and 78 login-user lifecycle checks. Six native installers passed 650 additional checks. Debian passed six desktop and four Firefox profile lifecycles. |
+| FreeBSD | GELI, VeraCrypt, PEFS, gocryptfs | Rebuilt `029cf99` passed 208 CLI checks and four desktop lifecycles after fixing gocryptfs's SQLite checkpoint failure. GELI reopened after a cut but failed file and database recovery. |
+| OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | `2ebae8f` passed 117 CRYPTO/VeraCrypt CLI checks and 30 RAID1C checks. The RAID1C desktop lifecycle passed. VeraCrypt login-user desktop I/O exposed a native vnode authorization issue. FFS refused writable RAID1C reopen after a cut. |
+| NetBSD | CGD | `24dcc6e` passed 26 CLI checks, desktop and older-image compatibility with WAPBL. Two journaled power cuts recovered the fsynced file and lost the committed SQLite transaction. |
+| DragonFly BSD | LUKS1 | `2ebae8f` passed 91 CLI checks, desktop lifecycle/window and eight UFS exhaustion checks. The fault clone stopped at an outer UFS check before encrypted recovery. |
 | macOS | Apple encrypted disk images, VeraCrypt, gocryptfs, CryFS, Cryptomator | Historical `294b2b8` DMG passed 182 CLI checks and five Cryptomator crash/recovery checks. The retained initial VeraCrypt timeout and remaining desktop checks are described below. This round excludes macOS implementation and test runs. |
 
-Linux check details are in `docs/linux-package-testing.md` and
-`docs/backend-testing.md`. The OpenBSD fault
-copy receipt, guarded network identity and runner's 31 passing unit tests are
-retained under `/mnt/virt/lurker-fault-ob20261120a/`.
+See `docs/backend-testing.md`, `docs/linux-package-testing.md`,
+`docs/linux-native-packaging.md`, `docs/bsd-packaging.md` and
+`docs/vm-powerloss-testing.md` for exact evidence.
 
 ## Resumed checkpoint
 
