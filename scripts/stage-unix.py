@@ -643,11 +643,14 @@ def desktop_display_requirements(system, desktop):
     if system == "Linux":
         displays["Wayland"] = {"session": "reachable Wayland compositor in the login-user session",
                                 "libraries": ["libwayland-client", "libxkbcommon"]}
-    return {"renderer": "Slint/winit software renderer", "display_sessions": displays,
-            "session_policy": "one supported display session and its matching native libraries are required",
-            "library_audit_scope": "winit loads display/keyboard libraries with dlopen; ELF NEEDED resolution alone does not qualify these dependencies",
-            "qualification": "not performed by staging; launch an actual native winit window with the installed package",
-            "test_only_tools": ["Xvfb", "xauth"]}
+    requirements = {"renderer": "Slint/winit software renderer", "display_sessions": displays,
+                    "session_policy": "one supported display session and its matching native libraries are required",
+                    "library_audit_scope": "winit loads display/keyboard libraries with dlopen; ELF NEEDED resolution alone does not qualify these dependencies",
+                    "qualification": "not performed by staging; launch an actual native winit window with the installed package",
+                    "test_only_tools": ["Xvfb", "xauth"]}
+    if system == "Linux":
+        requirements["system_fonts"] = "at least one readable system font indexed by Fontconfig"
+    return requirements
 
 
 def desktop_authorization(selected, desktop):

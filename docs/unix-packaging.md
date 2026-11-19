@@ -51,6 +51,13 @@ share/lurker/manifest.json
 
 Only explicitly selected applicable backends ship. Selection does not claim runtime qualification. Native LUKS/GELI/CGD/softraid/PEFS facilities remain host dependencies; private third-party runtimes must be supplied for selected VeraCrypt, gocryptfs, CryFS and Cryptomator operations. Missing required tools, runtimes, notices, provenance or shared libraries block packaging. CryFS 1.x specifically needs FUSE 2 (`libfuse.so.2` plus `fusermount`); Cryptomator and the Linux VeraCrypt userspace stack need FUSE 3 / `fusermount3`. gocryptfs accepts either Linux mount helper and uses `mount_fusefs` on FreeBSD. These are recorded per backend, rather than treating the two FUSE ABIs as interchangeable.
 
+The Linux desktop requires a working X11 or Wayland session and at least one
+readable font indexed by Fontconfig. The package embeds its UI fonts, and the
+renderer also initializes Fontconfig's system collection. On minimal guests,
+install a distro font package or configure Fontconfig to expose an existing
+font. This requirement is recorded in `desktop_runtime.system_fonts` in
+`manifest.json` and applies only to the desktop.
+
 FreeBSD gocryptfs runs as the login user. The prepared test guest required loaded
 `fusefs`, access to `/dev/fuse`, and `vfs.usermount=1` in addition to
 `mount_fusefs`. An administrator must provide the intended mount/device access

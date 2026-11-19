@@ -488,6 +488,7 @@ Version needs section '.gnu.version_r' contains 2 entries:
         display = manifest["desktop_runtime"]
         self.assertIn("libxkbcommon-x11", display["display_sessions"]["X11"]["libraries"])
         self.assertIn("Wayland", display["display_sessions"])
+        self.assertEqual("at least one readable system font indexed by Fontconfig", display["system_fonts"])
         self.assertIn("not performed by staging", display["qualification"])
         self.assertIn("dlopen", display["library_audit_scope"])
         self.assertEqual(["Xvfb", "xauth"], display["test_only_tools"])
