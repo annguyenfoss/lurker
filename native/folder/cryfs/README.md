@@ -6,6 +6,17 @@ AES-256-GCM, 16384-byte blocks, scrypt, ciphertext format, block names and
 integrity/version checks remain upstream's. Linux and macOS builds share this
 patch; native macOS qualification remains outstanding.
 
+Linux also applies `linux-localstate.patch`. CryFS previously wrote the
+local client identity, base-directory mapping and integrity history with
+truncating streams. A rapid Arch KVM power cut left the client metadata
+unreadable and normal reopen failed before accessing ciphertext blocks.
+The patch uses the same atomic write and sync implementation for Linux
+ciphertext blocks and local state. First publication preserves the original
+client ID when two processes initialize it concurrently. Legacy client ID
+migration retires the old file after publishing and syncing its replacement.
+Invalid or unreadable existing state still stops mount. The patch preserves
+the on-disk formats and when upstream checkpoints integrity history.
+
 Upstream `Fuse::fsyncdir` returned success without doing any work. In addition,
 file/blob flushes could leave ciphertext in `CachingBlockStore2`, and on-disk
 stores used buffered stream writes without OS fsync. A successful fsync followed
@@ -78,7 +89,7 @@ python native/folder/cryfs/build-durability-test.py \
   target/PATCHED_CRYFS_SOURCE target/cryfs-durability-test
 ```
 
-Transfer the executable to the dedicated native test host, create an empty
+After a Linux build with both patches, transfer the executable to the dedicated native test host, create an empty
 private directory whose path starts with `/tmp/lurker-cryfs-durable-`, and pass
 that directory as its only argument. `--finite-tmpfs` additionally requires that
 same directory to be an already mounted tmpfs of at most 16 MiB; it refuses to

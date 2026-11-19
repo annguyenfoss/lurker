@@ -56,9 +56,10 @@ class NoticeTests(unittest.TestCase):
 
 class PlatformPatchTests(unittest.TestCase):
     def test_mac_compiler_patch_preserves_common_durability_and_native_fuse(self):
-        common = BUILD.selected_patches("cryfs", "Linux")
+        common = ["native/folder/cryfs/fsyncdir.patch"]
+        linux = BUILD.selected_patches("cryfs", "Linux")
         mac = BUILD.selected_patches("cryfs", "Darwin")
-        self.assertEqual(common, ["native/folder/cryfs/fsyncdir.patch"])
+        self.assertEqual(linux, common + ["native/folder/cryfs/linux-localstate.patch"])
         self.assertEqual(mac, common + ["native/folder/cryfs/macos-compiler.patch"])
         compiler = (BUILD.ROOT / mac[-1]).read_text()
         self.assertIn("IdWrapper.h", compiler)
@@ -137,12 +138,16 @@ class PatchedSourceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source, revision, git = self.make_source(root)
+            (source / "unit.cc").write_text("intermediate\n")
+            (root / "first.patch").write_text(git("diff", "--binary"))
+            git("add", "unit.cc")
             (source / "unit.cc").write_text("patched\n")
             (root / "fix.patch").write_text(git("diff", "--binary"))
+            git("reset", "-q", "HEAD")
             (source / "unit.cc").write_text("original\n")
             cache = root / "cache"
             cache.mkdir()
-            with patch.object(BUILD, "ROOT", root), patch.object(BUILD, "PINS", {"fake": (str(source), revision, "v1")}), patch.object(BUILD, "PATCHES", {"fake": ["fix.patch"]}), (root / "build.log").open("wb") as log:
+            with patch.object(BUILD, "ROOT", root), patch.object(BUILD, "PINS", {"fake": (str(source), revision, "v1")}), patch.object(BUILD, "PATCHES", {"fake": ["first.patch", "fix.patch"]}), (root / "build.log").open("wb") as log:
                 worktree, identities = BUILD.patched_source("fake", source, cache, log)
                 self.assertEqual((source / "unit.cc").read_text(), "original\n")
                 self.assertEqual((worktree / "unit.cc").read_text(), "patched\n")

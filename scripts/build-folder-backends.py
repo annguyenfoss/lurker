@@ -24,6 +24,7 @@ PINS = {
 }
 PATCHES = {"cryfs": ["native/folder/cryfs/fsyncdir.patch"]}
 PLATFORM_PATCHES = {
+    "Linux": {"cryfs": ["native/folder/cryfs/linux-localstate.patch"]},
     "Darwin": {"cryfs": ["native/folder/cryfs/macos-compiler.patch"]},
     "FreeBSD": {"gocryptfs": ["native/folder/gocryptfs/freebsd-futimes.patch"]},
 }
@@ -174,12 +175,14 @@ def patched_source(name: str, pristine: Path, cache: Path, log, *, system: str |
         worktree = cache / f"{name}-{PINS[name][1]}-patched-{key[:20]}"
         index_env = dict(os.environ, GIT_INDEX_FILE=str(inputs / "expected.index"))
         run(["git", "read-tree", "HEAD"], pristine, log, index_env)
-        run(["git", "apply", "--cached", "--whitespace=nowarn", *snapshots], pristine, log, index_env)
+        for snapshot in snapshots:
+            run(["git", "apply", "--cached", "--whitespace=nowarn", snapshot], pristine, log, index_env)
         flags = ["--binary", "--no-ext-diff", "--no-renames"]
         expected = capture(["git", "diff", *flags, "--cached", "HEAD"], pristine, index_env)
         if not worktree.exists():
             run(["git", "worktree", "add", "--detach", str(worktree), PINS[name][1]], pristine, log)
-            run(["git", "apply", "--index", "--whitespace=nowarn", *snapshots], worktree, log)
+            for snapshot in snapshots:
+                run(["git", "apply", "--index", "--whitespace=nowarn", snapshot], worktree, log)
         if capture(["git", "rev-parse", "HEAD"], worktree) != PINS[name][1]:
             raise RuntimeError(f"Unexpected patched {name} source revision: {worktree}")
         actual = capture(["git", "diff", *flags, "HEAD"], worktree)
