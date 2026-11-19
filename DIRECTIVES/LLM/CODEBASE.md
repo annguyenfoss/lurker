@@ -21,7 +21,7 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 
 - `crates/lurker-core`
   - `src/folder.rs`: shared login-user gocryptfs/CryFS/Cryptomator lifecycle, fixed profiles, private backend discovery and identity-checked sessions
-  - `src/bsd.rs`, `src/bsd/`: shared native BSD file-container lifecycle with FreeBSD GELI, NetBSD CGD, OpenBSD softraid and DragonFly LUKS1 adapters; PEFS and private VeraCrypt qualification continue
+  - `src/bsd.rs`, `src/bsd/`: shared BSD file-container lifecycle with FreeBSD GELI and PEFS, NetBSD CGD, OpenBSD CRYPTO and RAID1C, and DragonFly LUKS1. FreeBSD and OpenBSD use the private VeraCrypt engine.
   - `src/api.rs`: shared serde command/response types
   - `src/model.rs`: enums such as `VolumeType`, `CreateCipher`, `SourceKind`
   - `src/credentials.rs`: password/keyfile exclusivity and keyfile validation
@@ -54,7 +54,7 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 - `scripts/remote-test.py`: isolated exact-commit remote jobs with bounded summaries; see `docs/remote-testing.md`
 - `scripts/test-backends.py`: CLI conformance using private `/tmp` fixtures, PTY passwords and retained JSON evidence
 - `scripts/build-macos-dmg.py`: native release app bundle and drag-to-Applications DMG packaging; helper stays beside the desktop executable inside `Contents/MacOS`
-- `scripts/build-linux-userspace.py`: builds pinned, patched VeraCrypt and LKL filesystem helpers without installation or elevation; integration patches live under `native/linux-userspace/patches`
+- `scripts/build-linux-userspace.py`: builds the private VeraCrypt and LKL helpers from verified source archives and patches without installation or elevation. The LKL build applies the pinned Linux stable patch before the Lurker integration patch. Integration patches live under `native/linux-userspace/patches`.
 - `docs/linux-userspace.md`: stock VeraCrypt/FUSE distinction, Linux privileged/unprivileged comparison, security findings, implementation lessons, validation evidence and open hardening work
 
 ## Core Invariants
@@ -66,6 +66,7 @@ Bundled third-party engines replace a separately installed VeraCrypt requirement
 - Create cipher matters only on create. Mount/unmount detect existing volumes.
 - Linux create uses `btrfs`; macOS Apple images use APFS and VeraCrypt uses exFAT.
 - Linux Btrfs mounts use `compress=zstd`.
+- OpenBSD mounts writable FFS synchronously on CRYPTO, RAID1C, and VeraCrypt. Filesystem repair remains a manual native operation.
 - VeraCrypt tags are unsupported.
 - Do not implement VeraCrypt authentication requiring a password and keyfile together: losing either required credential can lose access to the data. This decision does not prohibit keyfile-only authentication; see the authentication decision in `CIPHER.md`.
 - The desktop app never invokes the installed CLI binary. Check helper capability flags before sending keyfile or keyslot requests so older helpers cannot ignore credential fields.
