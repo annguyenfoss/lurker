@@ -157,3 +157,20 @@ The Debian, Ubuntu, Fedora and openSUSE build run was
 Build receipts, all-case lifecycle summaries, native installer logs and
 window results are indexed under `target/linux-coordinated-a60e4bc/`
 and `target/linux-matrix-a60e4bc/arch/`.
+
+### Arch offline install and lifecycle
+
+An isolated Arch KVM clone installed the same native `a60e4bc` package
+with `pacman -U` and native dependency checks. Both installs and all
+runtime commands used a network namespace with loopback as its only
+interface. The package runner found no separate VeraCrypt, gocryptfs,
+CryFS, Cryptomator or Java runtime.
+
+The offline replay passed all 117 privileged and 78 login-user checks.
+The first login-user launcher passed root's runtime directory to the
+login user and was rejected before creating a container. The repeat
+supplied an owned private directory and used the same package. Both runs
+removed the package and restored the mount and loop-device inventories.
+The package SHA-256 is
+`843800e0d61d24436e8e27c57216e01479bee467e789ea1f8196277cd3aaa289`.
+Evidence is under `target/goal-validation/arch-offline-a60e4bc/`.
