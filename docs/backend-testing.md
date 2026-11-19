@@ -656,3 +656,35 @@ its backing storage and these workload sizes.
 
 The archives, wrapper receipt, lifecycle results and measurements are under
 `target/openbsd-ffs-sync/`.
+## DragonFly guarded LUKS1 metadata
+
+The DragonFly adapter in `e98bcc6b585a7e5bf481e8d3a6c6ef2caf5ab61a`
+validates the supported LUKS1 layout and uses a root-private metadata
+copy for native unlock. The owned KVM clone passed 91 development CLI
+checks without skips across AES, Serpent and Twofish, including
+password and binary-keyfile unlocks, Auto selection, wrong credentials,
+busy close and retry, and read-only mounts. The build used
+`60f294c6f4e19ac8d7d8a92561fe79d40aaf3cab` with a recorded overlay
+matching the committed runtime sources. Workspace check and tests
+passed with 92 passing and three ignored tests.
+
+The guarded development CLI separately reopened an older AES keyfile
+vault through Auto in read-only mode and recovered its recorded payload.
+The session journal identified the root-owned mode 0600 metadata file,
+whose bytes matched the original prefix. Final mount, vnode, mapper and
+session checks found no new resources. The initial keyfile test attempt
+used a test-only Python interpreter that lost its loader path during the
+busy case. The corrected wrapper restored the holder process and the
+full matrix passed. Evidence is in
+`target/dragonfly-metadata-v1/dev-final/`.
+
+The exact native CLI package at
+`dfc7fdc33bde59682c9719823da5d934e52d27bf` installed using the stock
+DragonFly package manager in the same isolated clone. Native checksum
+verification passed, and all 49 files in Lurker's payload manifest
+matched their installed hashes and modes. Its AES password suite passed
+13 cases with no failures or skips. Deinstallation removed the CLI and
+helper, restored the prior package inventory, and left no owned mounts,
+mapper devices, vnodes or session files. Package SHA-256
+`c01c47cb9ae126bf6f132776b5b22b28baf66c085bbe596cc05d11e2bcdd6b33`.
+Evidence is in `target/dragonfly-metadata-v1/native-final/`.
