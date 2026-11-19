@@ -244,3 +244,18 @@ For a separate diagnostic on a new NetBSD CGD fault fixture, add
 `--netbsd-sync-diagnostic` to `guest-setup`. It remounts the newly opened
 fixture in synchronous journaled mode before the worker starts and records the
 effective flags in the result. This option applies only to the test fixture.
+
+## FreeBSD, OpenBSD and DragonFly repeat tests
+
+| KVM clone and source | Result after the confirmed power cut |
+| --- | --- |
+| FreeBSD GELI/UFS at `029cf99` | Writable reopen succeeded. The 65,536-byte file had a different digest. The 82,432-byte WAL was visible, but SQLite on copies of the recovered files found no committed table. |
+| OpenBSD RAID1C/FFS at `2ebae8f` | Both members were supplied for the native reopen. FFS refused writable mount and required a filesystem check. Acknowledged data could not be inspected. |
+| DragonFly LUKS1/UFS at `2ebae8f` | The clone's outer UFS root failed its normal boot check and stopped at a single-user prompt before networking. Encrypted volume recovery could not be tested. |
+
+The cut followed acknowledgment by 0.45 seconds on FreeBSD and 2.07 seconds
+on OpenBSD. All three guests used isolated disk copies and kept the live
+workload at the cut. No manual repair was performed. The recorded package
+identities, result files and hypervisor events are under
+`/mnt/virt/lurker-fault-fb20261120a/`, `/mnt/virt/lurker-fault-ob20261120a/`
+and `/mnt/virt/lurker-fault-dfwin20261120/`.
