@@ -510,6 +510,11 @@ def audit_dependencies(prefix):
         fail("readelf/llvm-readelf is a packaging prerequisite; ldd is deliberately not used")
     defaults = [Path(p) for p in ("/lib", "/lib64", "/usr/lib", "/usr/lib64", "/usr/local/lib", "/usr/pkg/lib")]
     defaults += list(Path("/lib").glob("*-linux-gnu")) + list(Path("/usr/lib").glob("*-linux-gnu"))
+    host_search_paths = defaults.copy()
+    if platform.system() == "NetBSD":
+        # NetBSD's desktop explicitly links the native X11 library directory.
+        # Accept its RUNPATH without treating X11 as a default loader location.
+        host_search_paths.append(Path("/usr/X11R7/lib"))
     cache = {}
     ldconfig = shutil.which("ldconfig")
     if ldconfig:
@@ -580,7 +585,7 @@ def audit_dependencies(prefix):
             directory = Path(expanded)
             if "$" in expanded or not directory.is_absolute():
                 fail("unsupported/relative ELF search path: " + item)
-            if not directory.resolve().is_relative_to(prefix.resolve()) and not any(directory.resolve().is_relative_to(base.resolve()) for base in defaults):
+            if not directory.resolve().is_relative_to(prefix.resolve()) and not any(directory.resolve().is_relative_to(base.resolve()) for base in host_search_paths):
                 fail("developer/untrusted ELF search path: " + item)
             search.append(directory)
         dependencies = []
