@@ -715,6 +715,31 @@ See `result-fbgelisujc20261120.json`, `geli-suj-copy-recovery.json` and
 
 https://man.freebsd.org/cgi/man.cgi?query=tunefs&sektion=8
 
+### FreeBSD GELI with a fully allocated backing file
+
+An isolated FreeBSD 15.1 KVM test used the archived `029cf99` package to
+create a 128 MiB GELI AES volume. The newly created sparse file on the
+guest's outer UFS occupied 753,664 bytes. The test wrote a byte-identical
+copy sequentially, verified its digest and synced it before mounting.
+The fully allocated image occupied 134,250,496 bytes after the workload.
+The guest retained its normal VirtIO write-back setting.
+
+The coordinator requested the cut 0.193 seconds after workload readiness.
+After reboot, the vault and readiness record survived. Some harness files
+were missing, so the verifier restored their exact archived bytes and
+retained a hash-matched copy of the recovered ciphertext before mounting.
+The normal CLI then recovered the exact 65,536-byte fsynced file and
+committed SQLite FULL/WAL row, excluded the uncommitted row, and detached
+normally. All five recovery checks passed and the clone shut down with
+an empty MD inventory.
+
+This is one passing fully allocated fixture at an earlier product revision.
+The separate sparse `029cf99` test above still records a failed recovery.
+A matched repeat on the current package is needed to verify allocation as
+a product remedy. The production create policy is unchanged. Receipts are
+under `/mnt/virt/lurker-fault-fbgelialloc20261120/` and
+`target/freebsd-geli-prealloc/`.
+
 FreeBSD gocryptfs at `a60e4bc` passed all five recovery checks after
 explicit session reconciliation. Direct reopen first refused the recorded
 session. Normal close quarantined the dead session and reported that its
