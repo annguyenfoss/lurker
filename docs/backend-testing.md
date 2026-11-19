@@ -289,6 +289,41 @@ The build, package, and runtime receipts are under
 `target/freebsd-vc-barrier/`. The guest retained the runtime logs under
 `/tmp/lurker-freebsd-qualification-jwei413n/`.
 
+### FreeBSD GELI, PEFS and gocryptfs storage exhaustion
+
+The exact `a5a1857312fcad45bab0bf94e503810900774caa` native package passed
+24 checks on FreeBSD 15.1-RELEASE-p6 amd64 in remote run
+`20261119T200542Z-3b2501de`. Workspace check and build passed, with 112
+tests passed, 0 failed and 10 ignored. The package installed and was
+removed in an isolated root and package database.
+
+Each eight-check workload created and unlocked a new vault, fsynced a
+file and a renamed directory entry, and committed a SQLite FULL/WAL
+transaction. Writes through the mounted vault filled a dedicated 128 MiB
+filesystem. GELI used its inner UFS. PEFS and gocryptfs each used a separate
+file-backed UFS for ciphertext. The gocryptfs workload ran as UID 1300.
+
+| Backend | Filler size at `ENOSPC` | SQLite write error |
+| --- | ---: | --- |
+| GELI | 129,302,528 bytes | `SQLITE_FULL` |
+| PEFS | 129,105,920 bytes | `SQLITE_FULL` |
+| gocryptfs | 128,122,880 bytes | `SQLITE_FULL` |
+
+Previously committed file and SQLite contents remained readable at
+exhaustion. After deleting the filler, each vault accepted a new fsynced
+file and a SQLite commit. Ordinary close, reopen, read-back, database
+integrity and final close passed. The rejected transaction stayed absent.
+The guest restored its original mount, md, GELI, session, kernel-module,
+FUSE and package-database state. The separate GELI abrupt power-loss
+results are recorded in `docs/vm-powerloss-testing.md`.
+
+The native package SHA-256 is
+`3522c4f1fc050c0867a7085fac72607a85ca62ab6e36b9b6205f9fce1bafd188`.
+The portable archive SHA-256 is
+`94fc0f365e7a88dee16a0fe2de204337aa14226d414d07aef628260253ff101d`.
+Build and runtime receipts are under `target/freebsd-full-a5a1857/`.
+The guest retained the workload logs in `/tmp/lurker-freebsd-enospc-dx9mkgyn/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
