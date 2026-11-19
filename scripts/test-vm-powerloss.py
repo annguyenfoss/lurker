@@ -823,8 +823,8 @@ def freebsd_suj_diagnostic(source, secret):
         result = subprocess.run(["/sbin/tunefs", "-p", provider], capture_output=True,
                                 text=True, timeout=60, check=True)
         report = result.stdout + result.stderr
-        require(re.search(r"soft updates journaling:\s+(?:\(-j\)\s+)?enabled\b", report)
-                is not None, "SUJ was not enabled on the test filesystem")
+        require(re.search(r"soft update journaling:\s+\(-j\)\s+enabled\b", report) is not None,
+                "SUJ was not enabled in the native tunefs report")
         return {"command": command, "filesystem": report}
     finally:
         verify_backing()
