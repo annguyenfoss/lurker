@@ -56,6 +56,7 @@ without an external network route.
 | Arch cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | Debian 13 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | Ubuntu 26.10 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
+| openSUSE Leap 16.1 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | FreeBSD 15.1 cloud image | `ca3c845` | 208 across GELI, VeraCrypt, PEFS and gocryptfs | X11 passed |
 | OpenBSD 8.0 stock install | `ca3c845` | 69 across CRYPTO, AES VeraCrypt and RAID1C | X11 passed |
 | NetBSD 11.1 stock image | `ca3c845` | 13 CGD checks, including read-only Auto reopen | X11 passed |
