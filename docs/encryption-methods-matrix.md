@@ -93,6 +93,33 @@ evidence. Source receipts and installed hashes are under
 `target/dragonfly-native-review/`. The stock-guest header receipts are in
 `target/dragonfly-stock-ca3c845/headers.json`.
 
+#### DragonFly private metadata mapping feasibility
+
+The reviewed maintenance and development branches both retain the same
+LUKS1 parser as the stock release. Native `cryptsetup` 1.1.2 offers a
+header backup option. Activation still reads the header from the attached
+device. A vnode identity check or an advisory file lock does not freeze
+the header of a login-user-owned source.
+
+An isolated DragonFly 6.4.2 KVM guest verified a native alternative on an
+ordinary AES vault created with the `ca3c845` package. The base `dm-linear`
+target mapped a root-private copy of the 4,040-sector metadata prefix and
+the original payload tail at their existing sector addresses. The stock
+cryptsetup unlocked the composite device. The test confirmed both native
+dependencies, wrote and synced 128 KiB, and recovered the exact bytes
+through the composite device and an ordinary Lurker reopen. The original
+header bytes, inode, ownership and mode matched. Reverse teardown restored
+the initial mount, mapper, vnode and module state.
+
+The prototype establishes that the stock kernel can supply a stable
+metadata copy to the base parser. Release qualification still requires
+structural validation of that copy and a reviewed adapter that records
+and safely tears down the added devices. The test covered one AES fixture.
+Artifacts and the guest transcript are in
+`target/dragonfly-linear-feasibility/`.
+
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/dev/disk/dm/linear/dm_target_linear.c
+
 ## How to read the matrix
 
 Platform codes describe the surveyed method or implementation:
