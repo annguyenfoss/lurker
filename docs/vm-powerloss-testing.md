@@ -336,14 +336,47 @@ calls to `vn_rdwr` from that worker. The NetBSD 11 source selects vnode
 read/write for a sparse backing file and permits the direct strategy path
 when the backing vnode and device geometry support it. Full allocation
 changed the live I/O path in this fixture without changing the container
-format or mount flags. This comparison used clean closes. WAL durability
-through an abrupt cut on the fully allocated path remains unverified.
+format or mount flags. This trace comparison used clean closes. The
+separate allocated-image cut above reproduced the WAL failure.
 See `target/netbsd-cgd-geometry/trace.log` and `backing-and-cleanup.log`.
 
 On the same outer FFS, `posix_fallocate` returned `EOPNOTSUPP` for a new
 file and an existing sparse 128 MiB file. The call left both allocations
 unchanged and preserved the bytes already present. The fully allocated
 copy above used sequential writes. See `target/netbsd-cgd-geometry/posix-fallocate.log`.
+
+### Matched NetBSD FFS journal controls
+
+Two fresh, networkless NetBSD 11.1 KVM clones used the same native
+`ca3c8456e507102a1c6e2b9194981afbd48df8db` package and stock SQLite 3.45.1
+consumer. Each clone used a byte-identical fully allocated copy of its
+new CGD image, a separate VirtIO fixture disk with QEMU `directsync`,
+and guest disk write-back disabled. Both inner FFSv2 mounts were
+synchronous. The package first mounted with WAPBL as usual, and the
+diagnostic remount then selected `sync,nolog` or kept `sync,log`.
+
+Each workload fsynced a 65,536-byte file, committed the same bytes in a
+SQLite FULL/WAL transaction, and held a second transaction open. Both
+reported 82,432 bytes of committed WAL before the second transaction.
+The coordinator requested the destructive VM cutoff about 20–21 ms
+after it observed readiness. Neither guest performed an orderly close
+before the cut. On reboot, the CLI opened each image read-only, and
+SQLite was checked on a separate copy of the recovered files.
+
+| Inner mount | File digest | Raw WAL after restart | SQLite after restart |
+| --- | --- | ---: | --- |
+| `sync,nolog` | Matched | 193,672 bytes | Integrity passed, the committed BLOB matched the file, and the second row was absent |
+| `sync,log` | Matched | 32 bytes | The journal replayed to memory and the committed table was absent |
+
+These matched controls distinguish the WAPBL setting in this KVM
+topology. The passing diagnostic disables required journaling and uses
+deployment-specific write-through storage. It does not qualify the
+packaged writable CGD profile or ordinary application fsync on other
+storage. No production profile was changed. Both clones closed the
+read-only mounts normally, removed their installed package, and shut
+down with idle CGD and vnode inventories. The source overlay and fixture
+disk hashes matched their pretest values. Receipts and console logs are
+in `target/netbsd-cgd-nolog/` and `target/netbsd-cgd-log-paired/`.
 
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
