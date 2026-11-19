@@ -127,6 +127,26 @@ refused an inaccessible native loop backing file. The separate retry completed
 with both privilege routes idle. Input manifests, CLI hashes, initial
 failures and complete result logs are in `target/session-hooks-validation/`.
 
+### Clean systemd shutdown after the close hook
+
+An isolated Arch KVM clone ran the documented explicit stop workflow with
+the CLI and helper built at `9b428fb732477bee6d23def56c29dab9ab018f19`
+in `20261119T194103Z-0266eb17`. A systemd service used a disposable
+LUKS2/Btrfs mount to fsync a file and commit a SQLite FULL/WAL transaction.
+The guest stopped the service and verified the consumer had exited. The
+`session-close` hook then returned zero without a credential prompt and
+removed the mount before the guest requested systemd poweroff.
+
+Libvirt observed a clean stop. The restarted guest had a new boot ID and
+reopened the same vault. The file digest and SQLite row matched and the
+integrity check passed. The initial post-reboot verification kept its
+SQLite reader open during unmount, which was safely refused as busy.
+The repeat explicitly closed its reader and the vault closed normally.
+The initial setup also verified safe refusal when the CLI-only test stage
+lacked its trusted helper. This case exercises an administrator-ordered
+close before shutdown. Evidence is under
+`target/goal-validation/arch-shutdown/`.
+
 ## Captured packaged CLI evidence
 
 The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected

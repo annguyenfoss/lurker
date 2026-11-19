@@ -186,9 +186,10 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   session. The final native generation and alias checks passed for OpenBSD;
   FreeBSD also passed its daemon-death recovery case.
 - The opt-in `session-close` hook passed 82 checks across Debian, FreeBSD and
-  NetBSD. Actual operating-system shutdown ordering still requires
-  qualification. Broader clean-machine/offline, signing and
-  security/maintenance evidence also remains open.
+  NetBSD. Arch also stopped its systemd consumer, ran the hook, shut down
+  cleanly, rebooted and recovered the file and SQLite data. Broader shutdown
+  integration, clean-machine/offline coverage, publisher signatures and
+  security review still require evidence.
 - macOS remains outside the current round. Its historical `294b2b8` DMG passed
   182 CLI and five crash/recovery checks. Fast-close and final desktop checks
   and the retained VeraCrypt reopen timeout remain part of Mac qualification.
