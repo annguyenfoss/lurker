@@ -13,7 +13,7 @@ and harness changes retain separate revision identities.
 
 | Target | Implemented formats | Qualification at this checkpoint |
 | --- | --- | --- |
-| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | LUKS2, LUKS1, VeraCrypt (kernel and userspace), gocryptfs, CryFS, Cryptomator | Each package passed 117 privileged and 78 login-user lifecycle checks. Six native installers passed 650 additional checks. Debian passed six desktop and four Firefox profile lifecycles. |
+| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | LUKS2, LUKS1, VeraCrypt (kernel and userspace), gocryptfs, CryFS, Cryptomator | Each baseline package passed 117 privileged and 78 login-user lifecycle checks. Six native installers passed 650 additional checks. Debian passed six desktop and four Firefox profile lifecycles. Arch power-cut checks passed across the seven routes after the LKL and CryFS fixes, with exact revisions recorded separately. |
 | FreeBSD | GELI, VeraCrypt, PEFS, gocryptfs | Rebuilt `029cf99` passed 208 CLI checks and four desktop lifecycles after fixing gocryptfs's SQLite checkpoint failure. GELI reopened after a cut but failed file and database recovery. |
 | OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | Rebuilt `264cd6e` passed 147 CLI checks, all three desktop lifecycles and an X11 window. The VeraCrypt fix passed login-user WAL persistence and denied direct access to the private image. FFS refused writable RAID1C reopen after a cut at `2ebae8f`. |
 | NetBSD | CGD | `24dcc6e` passed 26 CLI checks, desktop and older-image compatibility with WAPBL. Two journaled power cuts recovered the fsynced file and lost the committed SQLite transaction. |
@@ -153,10 +153,10 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 ## Remaining qualification work and limits
 
-- Rerun the Linux userspace VeraCrypt and CryFS power-cut cases with their
-  respective fixes, then qualify one coordinated source revision across the
-  matrix. Earlier archived and native package results retain their own product
-  and wrapper revisions.
+- Qualify one coordinated source revision across the matrix after the Linux
+  userspace VeraCrypt and CryFS power-cut fixes. The two individual fixed
+  artifacts both passed on Arch. Earlier archived and native package results
+  retain their own product and wrapper revisions.
 - NetBSD CGD and FreeBSD GELI have observed durability failures even though
   their current normal lifecycles pass. OpenBSD FFS refused writable RAID1C
   reopening after a cut. DragonFly's outer UFS prevented verification of inner
