@@ -38,6 +38,24 @@ class RemoteRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "differs"):
                 runner.verify_source(root, manifest)
 
+    def test_refreshes_archive_mtime_without_changing_source_content_or_symlinks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary)
+            archived = source / "lib.rs"
+            archived.write_text("pub fn from_this_revision() {}")
+            alias = source / "alias.rs"
+            alias.symlink_to("lib.rs")
+            os.utime(archived, (1, 1))
+            os.utime(alias, (1, 1), follow_symlinks=False)
+            manifest = {"files": {"lib.rs": {"sha256": runner.digest(archived)},
+                                  "alias.rs": {"symlink": "lib.rs"}}}
+
+            runner.refresh_source_mtimes(source, manifest)
+
+            self.assertGreater(archived.stat().st_mtime, 1)
+            self.assertEqual(1, alias.lstat().st_mtime)
+            runner.verify_source(source, manifest)
+
     def test_timeout_kills_only_launched_process_group(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -55,6 +55,14 @@ def verify_source(source, manifest):
         raise ValueError("source tree has unexpected/missing entries")
 
 
+def refresh_source_mtimes(source, manifest):
+    # Git archives use the commit date for file mtimes. A cached Cargo
+    # fingerprint can be newer than changed sources in a replayed archive.
+    for name, item in manifest["files"].items():
+        if item.get("symlink") is None:
+            os.utime(source / name, None, follow_symlinks=False)
+
+
 def cache_identities(spec, manifest, versions, environment):
     def relevant(name):
         return (name in {"RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_TARGET", "CARGO_INCREMENTAL",
@@ -228,7 +236,8 @@ def run_job(job):
         env, versions, cache = selected_environment(spec, job)
         result["stages"].append({"name": "prerequisites", "status": "passed", "free_bytes": free})
         preflight_stage = "source-verification"
-        verify_source(source, json.loads((job / "source-manifest.json").read_text()))
+        manifest = json.loads((job / "source-manifest.json").read_text())
+        verify_source(source, manifest)
         result["stages"].append({"name": "source-verification", "status": "passed"})
         preflight_stage = None
         result["toolchains"] = dict(versions, python={"path": sys.executable, "version": platform.python_version(),
@@ -247,6 +256,7 @@ def run_job(job):
             active_lock = None
             raise ValueError("host has another active/stale job; inspect active-job owner")
         (active_lock / "owner.json").write_text(json.dumps({"job": str(job), "pid": os.getpid()}))
+        refresh_source_mtimes(source, manifest)
         for stage in spec["stages"]:
             if (job / "cancel").exists():
                 result["status"] = "cancelled"
