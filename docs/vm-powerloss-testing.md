@@ -326,6 +326,11 @@ format or mount flags. This comparison used clean closes. WAL durability
 through an abrupt cut on the fully allocated path remains unverified.
 See `target/netbsd-cgd-geometry/trace.log` and `backing-and-cleanup.log`.
 
+On the same outer FFS, `posix_fallocate` returned `EOPNOTSUPP` for a new
+file and an existing sparse 128 MiB file. The call left both allocations
+unchanged and preserved the bytes already present. The fully allocated
+copy above used sequential writes. See `target/netbsd-cgd-geometry/posix-fallocate.log`.
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
