@@ -405,6 +405,23 @@ See `result-obvcfix20261120.json`, `reopen-vcflush.log`, and
 `copied-ffs-readonly-dispatch.log` under
 `/mnt/virt/lurker-fault-ob20261120a/`.
 
+### OpenBSD automatic preen on disposable copies
+
+Fresh ciphertext copies from the three OpenBSD cut fixtures were attached
+and identified as FFS2. A forced read-only check of each unmounted raw
+partition returned zero and printed inconsistencies, including a duplicate
+block and differences in allocation summaries. The subsequent native
+preen check returned exit 8 for duplicate blocks on all three cases.
+The experiment stopped at preen and normally detached each copy. It
+preserved the original ciphertext hashes and device inventories. The
+read-only checks' exit codes alone did not establish filesystem consistency.
+
+See `copy-preen-superblock-audit.log` and `copied-ffs-preen-*.json` in the
+OpenBSD fault directory. The separate read-only FFS inspections above
+recovered the acknowledged data without mutating the inner file systems.
+
+https://man.openbsd.org/OpenBSD-8.0/fsck_ffs.8
+
 ## Arch packaged runtime power cuts
 
 Packaged LUKS2/AES at `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` passed
