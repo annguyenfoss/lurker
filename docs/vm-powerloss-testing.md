@@ -261,6 +261,17 @@ mount flags showed both modes on the same filesystem. The raw post-reboot
 SQLite evidence and `result-nb20261120sync.json` are retained. Synchronous
 mounting did not recover the transaction in this test.
 
+An isolated `a60e4bc` repeat kept the normal WAPBL mount and selected
+read-cache-only mode on the guest's backing VirtIO disk with
+`dkctl ld0 setcache r`. The guest reported its read cache enabled and
+omitted write-back from `getcache`. The fsynced file recovered with its
+original digest. The SQLite WAL recovered at 32 bytes and the committed
+table was absent. Disabling virtual disk write-back alone did not recover
+the transaction. See `result-nbwt20261120.json` under
+`/mnt/virt/lurker-fault-nb20261120a/`.
+
+https://man.netbsd.org/NetBSD-11.x-BRANCH/dkctl.8
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
