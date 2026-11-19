@@ -5,7 +5,25 @@ Active completion pass, 2026-11-14. The earlier frozen candidate was
 The current integration is not yet frozen or fully qualified. Scope/profiles:
 `DIRECTIVES/LLM/CIPHER.md`. Public-release qualification remains separate.
 
-## Non-macOS KVM qualification resumed, 2026-11-20
+## Coordinated non-macOS native qualification, 2026-11-20
+
+All ten KVM targets built and exercised native packages from
+`a60e4bc69a3b78b8dd6e2297c2300a38f4508251`. Each installed package
+passed real encrypted create, unlock, write, close, reopen and read-back.
+
+| Target | Native installed CLI checks | Desktop and additional evidence |
+| --- | ---: | --- |
+| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | 195 each, 1,170 total | Actual X11 window on each, with Gentoo Portage dependencies resolved. Four Debian Firefox profiles passed. |
+| FreeBSD | 208 | All four desktop backend lifecycles, X11, VeraCrypt generation recovery. |
+| OpenBSD | 147 | All three desktop backend lifecycles, X11, raw-image privacy and WAL reopen. |
+| NetBSD | 26 | CGD desktop, X11, legacy-image compatibility, eight full-storage checks on the byte-matched portable package. |
+| DragonFly BSD | 91 | Desktop, X11, eight full-storage checks and verified LUKS1 headers. |
+
+Exact artifacts and run receipts are recorded in `docs/linux-native-packaging.md`
+and `docs/bsd-packaging.md`. Power-cut evidence has its own revision and fixture
+identities in `docs/vm-powerloss-testing.md`.
+
+## Earlier non-macOS KVM package round
 
 The baseline product source for this round was
 `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1`. Platform fixes, native installers
@@ -153,22 +171,16 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 ## Remaining qualification work and limits
 
-- Qualify one coordinated source revision across the matrix after the Linux
-  userspace VeraCrypt and CryFS power-cut fixes. The two individual fixed
-  artifacts both passed on Arch. The combined `0b412d2` archive passed all
-  91 AES/fixed-profile lifecycle checks on Arch. Earlier archived and native
-  package results retain their own product and wrapper revisions.
 - NetBSD CGD and FreeBSD GELI have observed durability failures even though
   their current normal lifecycles pass. OpenBSD FFS refused writable RAID1C
-  reopening after a cut. DragonFly's outer UFS prevented verification of inner
-  LUKS1 recovery. Native BSD adapters remain file-backed and perform no
-  automatic filesystem repair.
+  reopening after a cut. DragonFly's published LUKS1 fixture was missing
+  from a recovered copy of the separate HAMMER2 backing disk. Native BSD
+  adapters remain file-backed and perform no automatic filesystem repair.
 - OpenBSD may return ENXIO for a configured vnode after its VeraCrypt FUSE
   daemon dies, making source identity unverifiable. Production preserves that
   session. The final native generation and alias checks passed for OpenBSD;
   FreeBSD also passed its daemon-death recovery case.
-- Gentoo's full desktop dependency installation and window remain unqualified.
-  Clean-machine and offline depth, shutdown/session integration, release
+- Clean-machine and offline depth, shutdown/session integration, release
   signing and broader security/maintenance review still require evidence.
 - macOS remains outside the current round. Its historical `294b2b8` DMG passed
   182 CLI and five crash/recovery checks. Fast-close and final desktop checks
