@@ -59,7 +59,7 @@ source and logs are retained under `target/bsd-native-wrapper/`.
 | FreeBSD 15.1, full CLI and desktop | `a60e4bc` | Installed with 22 official dependency artifacts. All 208 GELI, PEFS, VeraCrypt, and gocryptfs CLI checks passed, along with four desktop lifecycles and an X11 window. The isolated package was removed and the original package database matched its baseline. Earlier `029cf99` and `2ebae8f` native packages each passed 13 GELI checks. |
 | NetBSD 11.1, full CLI and desktop | `24dcc6e` | Installed with sudo and xkbcommon. CGD passed 13 lifecycle checks before removal. |
 | OpenBSD 8.0, full CLI and desktop | `264cd6e` | Installed with signed dependencies and native shared-library checks. CRYPTO passed 13 lifecycle checks. The installed VeraCrypt helper supported login-user writes and SQLite WAL persistence after close and reopen, kept its raw FUSE data private, and safely refused read-only attach. The package was then removed. |
-| DragonFly 6.4.2, full CLI and desktop | `2ebae8f` | Installed with native dependencies and removed on a fresh isolated archive copy. The installed CLI ran, and the desktop binary matched the earlier X11 window proof. The separate CLI-only native package passed 13 LUKS1/AES lifecycle checks. |
+| DragonFly 6.4.2, full CLI and desktop | `a60e4bc` | Installed with native dependency checks on an offline archive clone. The installed CLI passed 91 LUKS1 lifecycle checks, including three binary-keyfile suites, and eight UFS exhaustion checks. The installed desktop opened an X11 window and its helper completed the login-user lifecycle. Package removal passed. |
 
 The lifecycle cases create encrypted storage, write and fsync data, close,
 reopen and verify the contents. They also cover rejected credentials and busy,
@@ -67,6 +67,21 @@ aliased and read-only operations. Backend and desktop qualifications outside
 these native installer checks retain their individual package provenance.
 
 DragonFly's full native install used a fresh verified archive copy because
-the original guest's package database was damaged. The earlier clone used
-for LUKS1/AES later stopped at its outer UFS boot check during the separate
-power-loss test and was preserved for diagnosis.
+the original guest's package database was damaged. The original KVM guest
+built and tested the frozen workspace in `20261119T184037Z-a58833ac`
+with 90 passing, zero failing and three ignored tests. Its independent
+workspace check passed in `20261119T184445Z-dd83cbd7`. The clone staged the
+verified binaries with the native sudo dependency and passed the three
+ignored native tests separately. The initial runtime attempt lacked a
+sudoers file. The callback test resumed with a validated temporary policy
+for the installed helper, then removed that policy.
+
+The seven closed lifecycle fixtures all had a LUKS1 header with the selected
+AES, Serpent or Twofish cipher, XTS/plain64, a 512-bit key and PBKDF2-HMAC-SHA256
+with one active slot. The installed desktop rendered a 1280×860 X11 window
+as UID 1300. The native package SHA-256 is
+`aa883e408098fbb470fa906eb13edca792b7342a112d98735bf20ddcd2956d59`.
+The runtime, header checks, original failed attempt and archive identities are
+in `target/dragonfly-frozen/`. Native device, mount and session inventories
+matched before and after testing. The desktop/package clone shut down normally
+and its isolated network was removed.
