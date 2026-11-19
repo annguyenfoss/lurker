@@ -581,6 +581,21 @@ detached the mount. Archive SHA-256
 `ceb81faa6e49f22a3b4b717b3136cc7781caa410ef8a1495f609f894a3ce8c3a`;
 see `result-ar20261120lklfix.json` in the Arch evidence directory.
 
+The `1e04b85` build updated LKL to the Linux `6.12.118` stable base. Its
+VeraCrypt-only archive and full Arch archive both passed all five login-user
+AES recovery checks after separate cuts. The full archive recovered the
+fsynced file and committed SQLite FULL/WAL row, excluded the uncommitted
+row and closed normally with no remaining FUSE mounts or private drivers.
+
+The first cut reverted the login runner's staged file permissions. Restoring
+the root-owned harness permissions allowed verification without altering the
+vault. The full archive repeat persisted those permissions before the workload
+and recovered through the ordinary runner. The two archives used byte-identical
+private VeraCrypt and LKL executables. The full archive SHA-256 was
+`55bec5eed39951786cfc6f693d1aea40b0809afa27a8b80f71b443458a2267ce`.
+See `result-arvcstable20261120.json`, `result-arvcfull20261120.json` and
+`lkl-stable-full-cut.log` under `/mnt/virt/lurker-fault-ar20261120a/`.
+
 ### FreeBSD GELI flush tracing
 
 On the original FreeBSD 15.1-RELEASE-p6 KVM guest, DTrace observed no GEOM

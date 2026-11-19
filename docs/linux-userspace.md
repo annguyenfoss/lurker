@@ -140,6 +140,13 @@ row and wrote a second pair. Reopening with the previous driver verified both
 pairs and SQLite integrity. The signed-tree comparison, build and runtime
 logs are under `target/goal-validation/release-inputs-review/`.
 
+The integrated Arch build verified 87,060 source inputs before a cold
+compilation and again when reusing the resulting cache. Its packaged `lurker-fs`
+SHA-256 is `34eccca4ab65712f4e14e80023f09b0b4bc42518a8046ece175968a8d99c0ebe`.
+The full `1e04b85` Arch archive passed all five login-user VeraCrypt AES
+recovery checks after an actual KVM power cut. See the packaged power-cut
+evidence in `docs/vm-powerloss-testing.md`.
+
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072/fs/btrfs
 
 https://github.com/torvalds/linux/tree/v6.12/fs/btrfs
