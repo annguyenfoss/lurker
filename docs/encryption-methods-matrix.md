@@ -20,6 +20,28 @@ This inventory covers major general-purpose data-at-rest methods, plus encrypted
 - **VeraCrypt porting questions:** the build requirements and existing OpenBSD adapter identify OS-specific work in dependencies, FUSE, virtual disks, mount discovery and cleanup. NetBSD provides PUFFS/librefuse, but this alone does not establish VeraCrypt compatibility. Porting feasibility and runtime behavior need native investigation. [S137 S138 S139]
 - **HAMMER/HAMMER2:** no qualified native filesystem-encryption backend was identified. HAMMER2 can be an inner filesystem above DragonFly's encrypted block mapping; the surveyed HAMMER2 utility has no encryption controls. [S12 S140]
 
+### DragonFly LUKS1 release provenance
+
+The DragonFly KVM guest reports `v6.4.2-RELEASE` and base
+`/sbin/cryptsetup` reports `1.1.2`. The binary SHA-256 is
+`93c3c006d15f2ed8ec446f303e1c3908c87c65ca07425f59755e24811b101f45`.
+Lurker invokes that base tool over a file-backed vnode disk and formats UFS
+inside the mapping. The approved AES, Serpent and Twofish profiles use
+XTS/plain64, 512-bit combined keys and PBKDF2/SHA-256. See the
+[cipher directive](../DIRECTIVES/LLM/CIPHER.md) for the complete profiles.
+
+The upstream release tree records a 1.1.2 import and local changes for libdm,
+memory locking, LibreSSL compatibility, and an encrypted-disk I/O hang in
+the kernel. These sources identify the vendor lineage and specific fixes.
+Release qualification still needs an assessment of applicable security fixes
+in the shipped userland and kernel paths.
+
+- https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/contrib/cryptsetup/README.DRAGONFLY
+- https://github.com/DragonFlyBSD/DragonFlyBSD/commit/6819d6844a76
+- https://github.com/DragonFlyBSD/DragonFlyBSD/commit/239cd26e6de1
+- https://github.com/DragonFlyBSD/DragonFlyBSD/commit/6f5ec8b51c95
+- https://github.com/DragonFlyBSD/DragonFlyBSD/commit/8345afad56be
+
 ## How to read the matrix
 
 Platform codes describe the surveyed method or implementation:
