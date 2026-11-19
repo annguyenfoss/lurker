@@ -485,3 +485,38 @@ The engine SHA-256 is
 `0c3db467e0abc33f67997a22f6deba438cfcab228a4095c063715b0a564be99e`.
 Trace summaries, the archive, and lifecycle receipts are under
 `target/openbsd-vc-barrier/`.
+
+### OpenBSD synchronous FFS mount policy
+
+`32e14e5` applies `rw,sync` to OpenBSD's writable FFS mounts for softraid
+CRYPTO, RAID1C and VeraCrypt. The shared mount helper also passes the option
+during new filesystem ownership initialization. OpenBSD still requires a
+manual filesystem check when FFS refuses a writable reopen after an abrupt
+shutdown. The [OpenBSD cut controls](vm-powerloss-testing.md#openbsd-synchronous-ffs-after-a-fresh-cut)
+record successful native preen and writable recovery on verified copies.
+
+Build `ca3c845` included the RustSec lockfile updates. KVM run
+`20261119T201835Z-1a695499` passed workspace check and build and 111 workspace
+tests, with 17 ignored. The native-installed CLI passed 147 lifecycle checks
+across the three routes, including AES, Serpent and Twofish VeraCrypt password
+and binary-keyfile cases, plus normal-user and degraded RAID1C operation. All
+28 successful FFS mounts recorded the kernel's `synchronous` flag. Native
+package removal and the final device and mount inventories matched the baseline.
+The native package SHA-256 is
+`e3587d4723b52732df4cd5302652e5a8307cafa740c0410b2dd8fcd2c4c34e55`.
+The portable archive SHA-256 is
+`22d42cd27e6f2e41d9a8e619ce03ebbfe54813b387792d3e589958832e657310`.
+
+The CRYPTO benchmark used six fresh, hash-verified copies of one FFS seed.
+It interleaved three trials under each policy and checked the kernel mount
+flags on every trial. The medians are specific to this OpenBSD 8.0 KVM guest,
+its backing storage and these workload sizes.
+
+| Workload | Previous FFS policy | Synchronous FFS | Time ratio |
+| --- | ---: | ---: | ---: |
+| 32 MiB sequential write and final fsync | 1.404 s | 2.935 s | 2.09× |
+| 128 × 4 KiB writes with an fsync after each | 0.217 s | 0.281 s | 1.30× |
+| 32 autocommits with SQLite FULL/WAL | 0.078 s | 0.336 s | 4.31× |
+
+The archives, wrapper receipt, lifecycle results and measurements are under
+`target/openbsd-ffs-sync/`.
