@@ -7,6 +7,7 @@ The runner never force-unmounts, detaches devices itself, or repairs storage.
 import argparse
 import errno
 import hashlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import termios
+import threading
 import time
 
 SCHEMA = 1
@@ -59,6 +61,69 @@ def file_hash(path):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+class BrowserProfile:
+    """Exercise a new Firefox profile against a local-only test origin."""
+
+    def __init__(self, suite):
+        self.suite = suite
+        self.token = os.urandom(16).hex()
+        received = self.received = []
+        token = self.token
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path in {"/write", "/read"}:
+                    initialize = f"localStorage.setItem('lurker-fixture', '{token}');" if self.path == "/write" else ""
+                    body = f"""<!doctype html><title>Lurker profile test</title><script>
+{initialize}
+const request = new XMLHttpRequest();
+request.open('GET', '/observed/' + localStorage.getItem('lurker-fixture'), false);
+request.send();
+</script>""".encode()
+                else:
+                    if self.path.startswith("/observed/"):
+                        received.append(self.path.removeprefix("/observed/"))
+                    body = b""
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def exercise(self, phase):
+        suite = self.suite
+        profile = suite.mountpoint / "firefox-profile"
+        if not os.path.ismount(suite.mountpoint):
+            raise AssertionError("Firefox profile requires the owned encrypted mount")
+        if phase == "write":
+            profile.mkdir(mode=0o700)
+        before = len(self.received)
+        url = f"http://127.0.0.1:{self.server.server_port}/{phase}"
+        log = suite.logs / f"firefox-{phase}.log"
+        with log.open("wb") as stream:
+            subprocess.run(
+                [str(suite.options.firefox), "--headless", "--no-remote", "--profile", str(profile),
+                 "--screenshot", str(suite.root / f"firefox-{phase}.png"), url],
+                stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,
+                timeout=suite.options.timeout, check=True,
+            )
+        if self.received[before:] != [self.token]:
+            raise AssertionError(f"Firefox did not return the expected profile data during {phase}; {log}")
+
+    def close(self):
+        self.server.shutdown()
+        self.thread.join()
+        self.server.server_close()
 
 
 def snapshot(path):
@@ -448,7 +513,12 @@ class Suite:
         self.close()
 
     def run(self):
+        browser = None
         try:
+            if self.options.firefox:
+                browser = BrowserProfile(self)
+                self.result["firefox"] = {"path": str(self.options.firefox),
+                                          "sha256": file_hash(self.options.firefox)}
             for name, function in [
                 ("create", self.create), ("no-overwrite", self.no_overwrite),
                 ("unlock", self.mount), ("application-io", self.write_workload),
@@ -457,12 +527,17 @@ class Suite:
                 ("reopen", self.mount), ("persistence", self.verify), ("reclose", self.close),
             ]:
                 self.case(name, function)
+                if browser and name in {"application-io", "persistence"}:
+                    phase = "write" if name == "application-io" else "read"
+                    self.case(f"firefox-profile-{phase}", lambda: browser.exercise(phase))
             self.case("readonly", self.readonly_unsupported if self.options.expect_readonly_unsupported else self.readonly,
                       skip=self.options.skip_readonly)
             self.result["status"] = "passed"
         except Exception as error:
             self.result.update(status="failed", diagnostic=str(error))
         finally:
+            if browser:
+                browser.close()
             self.result["finished"] = time.time()
             self.result["duration_seconds"] = round(self.result["finished"] - self.result["started"], 3)
             self.result["counts"] = {name: sum(c["status"] == name for c in self.result["cases"])
@@ -482,6 +557,7 @@ def parse_args(argv=None):
     parser.add_argument("--size-gb", default="0.25")
     parser.add_argument("--timeout", type=float, default=240)
     parser.add_argument("--commit", help="Source SHA supplied by the verified build coordinator")
+    parser.add_argument("--firefox", type=Path, help="Run a fresh headless Firefox profile on the encrypted mount as the login user")
     parser.add_argument("--unprivileged", action="store_true", help="Use Linux's explicit VeraCrypt user route")
     parser.add_argument("--auto-detect", action="store_true",
                         help="Use --type auto for mount/unmount while creating the explicitly selected format")
@@ -493,6 +569,10 @@ def parse_args(argv=None):
     options.binary = options.binary.resolve()
     if not options.binary.is_file() or not os.access(options.binary, os.X_OK):
         parser.error("--binary must name an existing executable artifact")
+    if options.firefox:
+        options.firefox = options.firefox.resolve()
+        if os.geteuid() == 0 or not options.firefox.is_file() or not os.access(options.firefox, os.X_OK):
+            parser.error("--firefox requires an executable Firefox and a login-user run")
     if options.backend in DIRECTORIES and options.cipher:
         parser.error("Directory backend profiles do not accept --cipher")
     if options.timeout <= 0:

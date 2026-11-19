@@ -41,6 +41,13 @@ fails the suite. The script never supplies sudo/administrator passwords. Native 
 suites outside macOS require running the suite with administrator privileges;
 userspace directory engines must run as the login user.
 
+For a login-user run, add `--firefox /absolute/path/to/firefox` to verify a
+real browser profile on the encrypted mount. The suite launches headless
+Firefox with a new profile, stores a generated value through a loopback page,
+and checks that a second Firefox process reads it after the vault has closed
+and reopened. The standard 13 cases still run and the report includes the two
+Firefox cases separately.
+
 For a native API that cannot attach read-only, use
 `--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
 the read-only CLI request and requires both a nonzero exit and no mount at the
