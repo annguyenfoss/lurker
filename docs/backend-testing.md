@@ -324,6 +324,31 @@ The portable archive SHA-256 is
 Build and runtime receipts are under `target/freebsd-full-a5a1857/`.
 The guest retained the workload logs in `/tmp/lurker-freebsd-enospc-dx9mkgyn/`.
 
+### FreeBSD native package after the Rust dependency updates
+
+FreeBSD 15.1-RELEASE-p6 amd64 built and wrapped the exact
+`ca3c8456e507102a1c6e2b9194981afbd48df8db` workspace in run
+`20261119T204122Z-30b37113`. Workspace check and tests had passed at the
+same source in `20261119T202105Z-c5d427b1` (112 passed, 0 failed, 10
+ignored). The private VeraCrypt and gocryptfs binaries, libfuse and
+libiconv matched the `a5a1857` native package byte for byte.
+
+The native installation reused 22 official dependencies in the isolated
+package root. It passed all 208 CLI checks (39 GELI, 39 PEFS, 104
+VeraCrypt and 26 gocryptfs), four login-user desktop storage lifecycles,
+VeraCrypt daemon recovery and the 1280×860 X11 window check as UID 1300.
+The replay resumed from the successful explicit GELI result after
+correcting a fixture cleanup check for its deliberate hard link. The
+guest restored its mount, device, session, FUSE and module inventories
+and both package databases after removal.
+
+The native package SHA-256 is
+`9fed88319d7339a1a36ce1aba36e5dca45fdd2d8b04e6974df9f9fa3b17c6022`.
+The portable archive SHA-256 is
+`7281db84b8c9f0efc8efe19fe031feab31b3eb826072a3c90eeb084bfe045cb6`.
+The packages and receipts are under `target/freebsd-ca3c8456/`. Guest
+workload logs are under `/tmp/lurker-freebsd-ca3c8456-gdkpbq_m/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
