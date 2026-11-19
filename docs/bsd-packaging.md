@@ -85,3 +85,28 @@ The runtime, header checks, original failed attempt and archive identities are
 in `target/dragonfly-frozen/`. Native device, mount and session inventories
 matched before and after testing. The desktop/package clone shut down normally
 and its isolated network was removed.
+
+### DragonFly native cryptsetup provenance
+
+The original 6.4.2 x86-64 KVM guest reports `cryptsetup 1.1.2` for its
+statically linked base-system `/sbin/cryptsetup`. The executable SHA-256 is
+`93c3c006d15f2ed8ec446f303e1c3908c87c65ca07425f59755e24811b101f45`.
+Lurker uses that base-system program and the kernel's native dm-crypt target.
+
+The 6.4.2 source builds the imported 1.1.2 code against DragonFly's own
+libdm and private LibreSSL. The release-branch history includes a 2018
+change to use the native `mlockall`, a 2020 dm-crypt fix for resource waits
+under memory pressure, and a 2022 compatibility change for the LibreSSL
+upgrade. The tested version string and these changes establish provenance.
+Current security-fix coverage for the native LUKS1 implementation still
+requires review before public release.
+
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/contrib/cryptsetup/README.DRAGONFLY
+
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/gnu/sbin/cryptsetup/Makefile
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/commit/239cd26e6de1b7874f315638a56288ca9aec92c0
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/commit/8345afad56bed8074dc4836acd98dfb6a80bbeb7
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/commit/6f5ec8b51c959914fd0128aa84612579c0400168
