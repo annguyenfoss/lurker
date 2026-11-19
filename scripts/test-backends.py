@@ -515,7 +515,7 @@ class Suite:
     def run(self):
         browser = None
         try:
-            if self.options.firefox:
+            if getattr(self.options, "firefox", None):
                 browser = BrowserProfile(self)
                 self.result["firefox"] = {"path": str(self.options.firefox),
                                           "sha256": file_hash(self.options.firefox)}
