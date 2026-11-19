@@ -467,6 +467,18 @@ UFS lacked the acknowledged file and all SQLite files. The vault closed
 normally after collecting the empty recovery inventory. See
 `result-fbvc20261120.json` in the same FreeBSD evidence directory.
 
+FreeBSD VeraCrypt AES at `2fda5f7ca413f73ac7c9d3ec51feac007119386e`
+passed all five recovery checks after a fresh cut on the same isolated
+FreeBSD 15.1 KVM clone, with its default VirtIO write-back setting.
+The cut began 0.41 seconds after the worker recorded readiness.
+The normal CLI reopened the UFS volume, recovered the exact fsynced
+file and committed SQLite row, reported database integrity OK, and
+excluded the uncommitted row. Normal CLI close removed the mount.
+The tested archive SHA-256 is
+`be8d7cf4aa3c5cc5dbb20755f2702d7df8c0c597332716411bf12ab07e81bb3f`.
+See `result-fbvcflush20261120.json` and the associated readiness and
+hypervisor events in the same evidence directory.
+
 On the original FreeBSD 15.1-RELEASE-p6 guest, DTrace tied 43
 `fuse_vnop_write` calls with `IO_SYNC` to the disposable VeraCrypt vnode md
 thread. The identified private engine descriptor recorded 45 ciphertext

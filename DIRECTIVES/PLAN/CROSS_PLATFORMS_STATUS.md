@@ -171,9 +171,11 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 ## Remaining qualification work and limits
 
-- FreeBSD GELI and VeraCrypt and NetBSD CGD lost acknowledged writes after
-  abrupt power cuts. FreeBSD PEFS and gocryptfs passed the recovery workload,
-  with explicit dead-session reconciliation needed for gocryptfs.
+- FreeBSD GELI and NetBSD CGD lost acknowledged writes after abrupt power
+  cuts. FreeBSD VeraCrypt at `2fda5f7` recovered the acknowledged file and
+  committed SQLite row and closed normally after a repeat cut. FreeBSD PEFS
+  and gocryptfs also passed the recovery workload, with explicit dead-session
+  reconciliation needed for gocryptfs.
 - OpenBSD FFS refused writable RAID1C reopening after a cut. On OpenBSD
   VeraCrypt at `4189679`, a read-only FFS mount on a disposable ciphertext
   copy recovered the acknowledged file and SQLite transaction after a cut.
