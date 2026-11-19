@@ -241,3 +241,27 @@ read-only reopen. Remote run `20261119T174204Z-c04be4b9` passed workspace check,
 build, and package staging, with 93 regular tests passed, 0 failed and 4
 ignored. The exact archive and original-guest results are in
 `target/netbsd-cgd-wapbl/`.
+
+The coordinated `a60e4bc69a3b78b8dd6e2297c2300a38f4508251` build on NetBSD
+11.1 amd64 passed workspace check and build, with 93 passed, 0 failed and 4
+ignored in the regular workspace test run
+(`20261119T184032Z-07601f9f`). All four ignored tests passed separately.
+The native package installed with dependency checks in an alternate root
+and package database. Its installed executables passed the 26 CGD CLI
+checks, the login-user desktop callback lifecycle, and the X11 window
+probe. A `2ebae8f` image opened with WAPBL and preserved both its original
+file and a new file after a read-only reopen. The byte-matched portable
+stage passed eight additional FFSv2 exhaustion checks. It reached ENOSPC
+after writing 124,780,544 bytes to an owned 128 MiB fixture, then accepted
+new writes after freeing space and preserved the file and SQLite data
+after reopening.
+
+The portable archive SHA-256 is
+`09e9eba7bf94ba6497e490346a425b519709699e0b7c67806f4f3189627ca7fa`.
+The native package SHA-256 is
+`c828baf34c1405255e9c6fe92d8270933f691a3fdc5262f55d38bd9816237a5a`.
+An initial local-only dependency installation required libxml2 and
+xmlcatmgr. The retry used exact official dependency archives, with local
+copies and digests retained. Native removal left the global package list
+unchanged, temporary sudo authorization was removed, and CGD/VND devices
+were idle. Results and package receipts are under `target/netbsd-a60e4bc/`.
