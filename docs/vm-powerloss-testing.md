@@ -319,6 +319,16 @@ detached the fixture. See `result-nballocated20261120.json` and
 `allocated-cgd-recovery-and-close.log` under the NetBSD fault directory.
 The control found no basis to make full allocation the CGD default.
 
+NetBSD's `wapbl(9)` manual describes how FFS metadata can reach stable
+storage before newly appended file data. NetBSD tracks the wider FFS
+ordering issue in open report `kern/47231`. The matched CGD tests isolate
+WAPBL as a condition for the observed WAL loss. The specific write sequence
+that produced the 32-byte WAL remains unverified.
+
+https://man.netbsd.org/wapbl.9
+
+https://gnats.netbsd.org/47231
+
 https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/ufs/ffs/ffs_vnops.c
 
 https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/dev/cgd.c
