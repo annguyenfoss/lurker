@@ -127,6 +127,46 @@ reclaimed with retained hash/provenance markers. Failed evidence was preserved.
 These prepared-guest checks do not establish clean-machine independence,
 fault-injection, desktop or release-signing qualification.
 
+## Resumed FreeBSD package qualification
+
+FreeBSD 15.1-RELEASE-p6 amd64 passed 208 packaged CLI checks at
+`029cf99a9c3876e038d03d80747f7ac7f2d3470d`, with no failures or skips.
+
+| Backend | Passed | Routes exercised |
+| --- | ---: | --- |
+| GELI | 39 | Explicit and Auto passwords, Auto binary keyfiles |
+| PEFS | 39 | Explicit and Auto passwords, Auto binary keyfiles |
+| VeraCrypt | 104 | AES, Serpent and Twofish with passwords and binary keyfiles, plus Auto AES for both credential types |
+| gocryptfs | 26 | Explicit and Auto as UID 1300 |
+
+The suites created real encrypted storage, wrote and fsynced data, closed and
+reopened, checked persisted contents and SQLite WAL/locking, and exercised
+wrong credentials, busy close and read-only behavior. Four login-user desktop
+callback tests performed real create/write/reopen/close operations through the
+installed helper. The installed desktop rendered a 1280×860 X11 window with
+1,088 sampled pixel colors on a private Xvfb 21.1.26 display. The native
+VeraCrypt generation test passed after killing its identified disposable
+daemon, using the engine from this same package.
+
+The earlier `2ebae8f` package failed both gocryptfs suites at SQLite WAL
+checkpoint. FreeBSD FUSE combined the requested size with a deferred atime
+update, and the pinned backend sent the timestamp to the current directory
+descriptor. The FreeBSD-only patch in `029cf99` uses the open file descriptor.
+The original failed fixture database, WAL, and shared-memory snapshots were
+hashed and retained before ordinary close. The patched package passed both
+complete gocryptfs suites. Temporary mount permissions, sysctl and kernel
+modules were restored. No owned mount, memory disk, GELI mapping, or active
+session remained. Expected failed-authentication receipts were retained.
+
+Remote build `20261119T174352Z-63783019` passed workspace check, build, and
+tests (110 passed, 0 failed, 10 ignored). The staging audit covered 17 ELF
+records and verified 77 payload files. Package SHA-256
+`f77ebaf466876d7ff12f026b9592d778f2c87f2a4f37fe751bc130ffc134ba91`.
+The guest result is `/tmp/lurker-freebsd-qualification-rhu9eg1v/summary.json`,
+with an earlier failure and diagnosis under
+`/tmp/lurker-freebsd-qualification-wx0843tb/`. The collected summary, package
+manifest, and X11 frame receipt are under `target/freebsd-final-resume/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
