@@ -467,3 +467,40 @@ the stock image digest matched. Receipts are under
 `target/goal-validation/gentoo-clean-1e04b85/`.
 
 https://github.com/kdave/btrfs-progs/blob/v7.1/common/open-utils.c#L83-L106
+
+## Native replay with the formatter working-directory fix
+
+The six prepared Linux KVM guests rebuilt their native packages from
+`c21e0cc795dcbc48e2f091f8f6f767fd4f15c50e` in run
+`20261119T223357Z-8942c847`. The builder verified the attested
+`1e04b85` private engine input and compared all 131 private backend
+entries against the corresponding package manifest. All hashes matched,
+including the stable LKL driver. Each guest verified all 251 installed
+entries before testing.
+
+| Guest | Installed package SHA-256 prefix | Privileged | Login user | Installed X11 window |
+| --- | --- | ---: | ---: | --- |
+| Arch | `e07ef7fb39df56fa` | 117 | 78 | Passed |
+| Debian | `e7c55a5d0c278813` | 117 | 78 | Passed |
+| Ubuntu | `31d9abdf0c8a3012` | 117 | 78 | Passed |
+| Fedora | `5e763f98dc9fc232` | 117 | 78 | Passed |
+| openSUSE Leap | `ed01b215de53b8b8` | 117 | 78 | Passed |
+| Gentoo GPKG | `04c543deff04810e` | 117 | 78 on retry | Passed |
+
+The completed coverage has 1,170 offline lifecycle checks and six
+1280×860 X11 windows. Arch and Gentoo also passed 13 VeraCrypt AES
+checks apiece as UID 1300 with an inherited root-owned mode-0700 working
+directory. Their native Btrfs formatters were 7.3 and 7.1 respectively.
+
+The first Gentoo login-user attempt passed 64 checks and stopped when
+CryFS read-only close returned `Cannot verify backend process: No such
+process (os error 3)` after the mount detached. The byte-identical
+Gentoo GPKG passed all 78 login-user checks on retry. Both receipts are
+retained.
+
+Cleanup restored the native package inventories and left no owned mounts,
+loops, or qualification processes. The only change between whole-guest
+mount inventories was the temporary `/run/user/1300` mount closing.
+The artifact digests and transcripts are indexed in
+`target/linux-coordinated-c21e0cc/matrix.json`. The independent stock-image
+qualifications above used `1e04b85`.
