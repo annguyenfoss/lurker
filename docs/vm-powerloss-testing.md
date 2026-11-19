@@ -326,6 +326,22 @@ identities, result files and hypervisor events are under
 `/mnt/virt/lurker-fault-fb20261120a/`, `/mnt/virt/lurker-fault-ob20261120a/`
 and `/mnt/virt/lurker-fault-dfwin20261120/`.
 
+### OpenBSD RAID1C recovery on copied members
+
+The original `2ebae8f` RAID1C writable-reopen failure remained reproducible
+evidence. In a separate diagnostic, two hash-verified copies of its cut
+ciphertext members were attached by the native tools. Both member roles and
+the array UUID matched the recorded descriptor. The inner FFS mounted
+read-only and recovered the exact fsynced file and committed SQLite row.
+SQLite integrity passed and the uncommitted row was absent.
+
+Native assembly used writable ciphertext copies and changed them. Both
+original member hashes were unchanged. The read-only inner filesystem
+unmounted normally and the vnode and softraid inventories matched their
+pretest state. No repair ran. The normal CLI writable-reopen failure remains
+open. See `raid1c-copied-ffs-readonly-dispatch.log` in the OpenBSD fault
+directory.
+
 ### DragonFly with separate fixture storage
 
 At `a60e4bc`, the cloned guest used a synchronous UFS boot filesystem and a

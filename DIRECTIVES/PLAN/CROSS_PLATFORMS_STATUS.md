@@ -176,10 +176,10 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   committed SQLite row and closed normally after a repeat cut. FreeBSD PEFS
   and gocryptfs also passed the recovery workload, with explicit dead-session
   reconciliation needed for gocryptfs.
-- OpenBSD FFS refused writable RAID1C reopening after a cut. On OpenBSD
-  VeraCrypt at `4189679`, a read-only FFS mount on a disposable ciphertext
-  copy recovered the acknowledged file and SQLite transaction after a cut.
-  The normal CLI writable reopen still failed during mount.
+- OpenBSD RAID1C at `2ebae8f` and VeraCrypt at `4189679` recovered
+  acknowledged files and SQLite transactions from read-only FFS mounts
+  of disposable ciphertext copies after cuts. Normal writable CLI reopen
+  still failed during mount for both.
 - DragonFly's published LUKS1 fixture was missing from a recovered copy of
   the separate HAMMER2 backing disk. Native BSD adapters remain file-backed
   and perform no automatic filesystem repair.
