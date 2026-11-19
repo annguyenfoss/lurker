@@ -84,10 +84,13 @@ gocryptfs, CryFS and Cryptomator passed ten owned daemon-crash recovery
 checks, including reporting an unclean exit and reopening committed file
 and SQLite data.
 
-Fresh per-case privileged evidence for Fedora, Ubuntu and openSUSE comes
-from `20261119T172158Z-5bf6b405`, `20261119T172159Z-eaf690c9` and
-`20261119T172319Z-263017eb`, respectively. Each repeated all 117 passing
-checks against its identical installed package. The original privilege
-reports remain retained. Earlier command-level logs under guest `/tmp`
-did not survive the guest reboot. The fresh suite JSON was copied to
-`target/linux-final-2ebae8f/resumed/`.
+Arch, Fedora, Ubuntu and openSUSE each repeated all 117 privileged checks
+against their identical installed packages. The runs were
+`20261119T172319Z-ff5b28c2`, `20261119T172158Z-5bf6b405`,
+`20261119T172159Z-eaf690c9` and `20261119T172319Z-263017eb`, respectively.
+The original privilege reports remain retained. Earlier command-level logs
+under guest `/tmp` did not survive the guest reboot. The fresh suite JSON
+and post-run mount/loop audits were copied to
+`target/linux-final-2ebae8f/resumed/`. The six package-lifecycle fixture
+audits found no remaining mounts or loop devices belonging to their recorded
+fixture roots.
