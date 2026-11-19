@@ -822,10 +822,14 @@ def guest_worker(run_id):
     connection.execute("CREATE TABLE committed (id INTEGER PRIMARY KEY, value BLOB)")
     connection.execute("INSERT INTO committed VALUES (1, ?)", (payload,))
     connection.commit()
-    for name in ("profile.sqlite", "profile.sqlite-wal"):
+    database_files = ("profile.sqlite", "profile.sqlite-wal")
+    for name in database_files:
         fsync_path(mountpoint / name)
     fsync_path(mountpoint)
-    sizes = {path.name: path.stat().st_size for path in mountpoint.iterdir()}
+    # Native encrypted-directory engines can expose reserved names in readdir
+    # that do not resolve through the decrypted view. Measure only our files.
+    sizes = {name: (mountpoint / name).stat().st_size
+             for name in ("durable record", *database_files, "profile.sqlite-shm")}
     # Start an intentionally uncommitted transaction. Its visibility after
     # recovery is characterized separately and never counted as durable data.
     connection.execute("INSERT INTO committed VALUES (2, ?)", (secrets.token_bytes(8192),))
