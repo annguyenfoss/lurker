@@ -155,8 +155,9 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 - Qualify one coordinated source revision across the matrix after the Linux
   userspace VeraCrypt and CryFS power-cut fixes. The two individual fixed
-  artifacts both passed on Arch. Earlier archived and native package results
-  retain their own product and wrapper revisions.
+  artifacts both passed on Arch. The combined `0b412d2` archive passed all
+  91 AES/fixed-profile lifecycle checks on Arch. Earlier archived and native
+  package results retain their own product and wrapper revisions.
 - NetBSD CGD and FreeBSD GELI have observed durability failures even though
   their current normal lifecycles pass. OpenBSD FFS refused writable RAID1C
   reopening after a cut. DragonFly's outer UFS prevented verification of inner

@@ -94,3 +94,20 @@ and post-run mount/loop audits were copied to
 `target/linux-final-2ebae8f/resumed/`. The six package-lifecycle fixture
 audits found no remaining mounts or loop devices belonging to their recorded
 fixture roots.
+
+## Combined package with both durability fixes
+
+Arch KVM build `20261119T183311Z-769a2572` staged a full `0b412d2` archive
+with the previously tested `390f468` LKL/VeraCrypt binaries and Debian-built
+CryFS from `0b412d2`. The native LKL inputs were unchanged between the two
+source revisions. The new archive retains the same LKL and CryFS binary
+digests as the individual successful power-cut tests.
+
+The isolated Arch guest passed all 91 AES/fixed-profile lifecycle checks
+with the combined archive. The report contains 39 kernel checks and 52
+login-user checks, with no failures or skips. All seven suites closed their
+fixture mounts. Archive SHA-256
+`1a6ca7155290b0d6f7b1f41794a1d9a229d6cb17439a3558b6860582aeceaa19`.
+Exact archive and results are under `target/vm-powerloss-packages/` and
+`/mnt/virt/lurker-fault-ar20261120a/`, respectively. The original guests
+remained running and the isolated fault domains and networks were stopped.
