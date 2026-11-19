@@ -21,6 +21,7 @@ REQUIRED_BACKENDS = {
 }
 REQUIRED_ARTIFACTS = {"veracrypt-userspace", "gocryptfs", "cryfs", "cryptomator"}
 PRODUCTS = ("lurker", "lurker-desktop", "lurker-helper")
+RPM_DISTROS = {"fedora", "opensuse-leap"}
 
 
 def require_full_package(prefix, manifest):
@@ -54,7 +55,7 @@ def copy_layout(prefix, image):
         target.chmod(0o644)
 
 
-def debian_dependencies(manifest):
+def glibc_floor(manifest):
     versions = []
     for binary in manifest["native_dependencies"]:
         if binary["bundled"]:
@@ -64,9 +65,12 @@ def debian_dependencies(manifest):
                         versions.append(tuple(map(int, version.removeprefix("GLIBC_").split("."))))
     if not versions:
         raise ValueError("Staged native dependency audit has no glibc version requirements")
-    glibc = ".".join(map(str, max(versions)))
+    return ".".join(map(str, max(versions)))
+
+
+def debian_dependencies(manifest):
     return [
-        f"libc6 (>= {glibc})", "cryptsetup-bin", "btrfs-progs", "util-linux", "mount",
+        f"libc6 (>= {glibc_floor(manifest)})", "cryptsetup-bin", "btrfs-progs", "util-linux", "mount",
         "fuse3", "libfuse2t64", "libfuse3-4", "libgcc-s1", "libgomp1", "libstdc++6",
         "fontconfig", "fonts-dejavu-core", "libx11-6", "libxcursor1", "libx11-xcb1",
         "libxi6", "libxcb1", "libxkbcommon0", "libxkbcommon-x11-0", "libwayland-client0",
@@ -96,6 +100,57 @@ def build_deb(image, output, version, manifest):
     )
 
 
+def build_rpm(image, output, version, manifest, distro):
+    native_dependencies = ["cryptsetup", "util-linux", "fuse", "fuse3", "fontconfig", "sudo"]
+    if distro == "fedora":
+        native_dependencies += [
+            "btrfs-progs", "fuse-libs", "fuse3-libs", "libgcc", "libgomp", "libstdc++",
+            "dejavu-sans-fonts", "libX11", "libX11-xcb", "libXcursor", "libXi", "libxcb",
+            "libxkbcommon", "libxkbcommon-x11", "libwayland-client",
+        ]
+    else:
+        native_dependencies += [
+            "btrfsprogs", "libfuse2", "libgcc_s1", "libgomp1", "libstdc++6",
+            "dejavu-fonts", "libX11-6", "libX11-xcb1", "libXcursor1", "libXi6", "libxcb1",
+            "libxkbcommon0", "libxkbcommon-x11-0", "libwayland-client0", "libfuse3-3",
+        ]
+    requirements = "\n".join("Requires: " + dep for dep in native_dependencies)
+    work = image.parent
+    spec = work / "lurker.spec"
+    spec.write_text(f"""Name: lurker
+Version: {version}
+Release: 1
+Summary: Create and mount encrypted volumes and directories
+License: GPL-3.0-only
+AutoReqProv: no
+Requires: glibc >= {glibc_floor(manifest)}
+{requirements}
+
+%description
+Lurker provides a command-line tool and desktop application with private
+encryption engines.
+
+%install
+mkdir -p %{{buildroot}}
+cp -a %{{_sourcedir}}/root/usr %{{buildroot}}/
+
+%files
+%defattr(-,root,root,-)
+/usr/bin/lurker
+/usr/bin/lurker-desktop
+/usr/lib/lurker
+/usr/share/applications/io.lurker.desktop.desktop
+/usr/share/pixmaps/lurker.png
+""")
+    subprocess.run([
+        "rpmbuild", "--define", f"_topdir {work}", "--define", f"_sourcedir {work}",
+        "--define", "__os_install_post %{nil}", "--define", "debug_package %{nil}",
+        "--define", "_build_id_links none", "-bb", str(spec),
+    ], check=True)
+    [artifact] = (work / "RPMS").glob("*/lurker-*.rpm")
+    artifact.rename(output)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, required=True, help="Exact stage-unix package.tar.gz")
@@ -108,25 +163,35 @@ def main():
         os.umask(0o022)
         if os.geteuid() == 0:
             raise ValueError("Build native packages as the login user")
-        if platform.system() != "Linux" or platform.freedesktop_os_release()["ID"] not in {"debian", "ubuntu"}:
-            raise ValueError("Build .deb packages on the intended Debian or Ubuntu guest")
+        if platform.system() != "Linux":
+            raise ValueError("Build Linux native packages on the intended distribution guest")
+        distro = platform.freedesktop_os_release()["ID"]
+        if distro in {"debian", "ubuntu"}:
+            suffix, builder, version_pattern = ".deb", build_deb, r"[0-9][0-9A-Za-z.+~\-]*"
+        elif distro in RPM_DISTROS:
+            suffix, builder, version_pattern = ".rpm", build_rpm, r"[0-9][0-9A-Za-z.+~^]*"
+        else:
+            raise ValueError("No native package builder for this distribution: " + distro)
         if not re.fullmatch(r"[0-9a-f]{64}", args.sha256):
             raise ValueError("An exact staged archive SHA-256 is required")
         if not re.fullmatch(r"[0-9a-f]{40}", args.source_commit):
             raise ValueError("An exact source commit is required")
-        if not re.fullmatch(r"[0-9][0-9A-Za-z.+~\-]*", args.version):
-            raise ValueError("Invalid Debian package version")
+        if not re.fullmatch(version_pattern, args.version):
+            raise ValueError("Invalid native package version")
         output = args.output.absolute()
-        if output.suffix != ".deb" or output.exists() or output.is_symlink():
-            raise ValueError("Output must be a new .deb file")
-        with tempfile.TemporaryDirectory(prefix=".lurker-deb-", dir=output.parent) as work:
+        if not output.name.endswith(suffix) or output.exists() or output.is_symlink():
+            raise ValueError("Output must be a new " + suffix + " file")
+        with tempfile.TemporaryDirectory(prefix=".lurker-native-", dir=output.parent) as work:
             scratch = Path(work)
             prefix, manifest = unpack_archive(args.archive, args.sha256, args.source_commit, scratch)
             require_full_package(prefix, manifest)
             image = scratch / "root"
             copy_layout(prefix, image)
             artifact = scratch / output.name
-            build_deb(image, artifact, args.version, manifest)
+            if distro in RPM_DISTROS:
+                builder(image, artifact, args.version, manifest, distro)
+            else:
+                builder(image, artifact, args.version, manifest)
             digest = STAGE.digest(artifact)
             os.link(artifact, output)
         print(json.dumps({"status": "built", "source_commit": args.source_commit,
