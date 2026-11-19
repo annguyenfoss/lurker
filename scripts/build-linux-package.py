@@ -152,6 +152,29 @@ cp -a %{{_sourcedir}}/root/usr %{{buildroot}}/
     artifact.rename(output)
 
 
+def build_arch(image, output, version, manifest):
+    work = image.parent
+    (work / "PKGBUILD").write_text(f"""pkgname=lurker
+pkgver={version}
+pkgrel=1
+pkgdesc='Create and mount encrypted volumes and directories'
+arch=('{platform.machine()}')
+license=('GPL-3.0-only')
+depends=('glibc>={glibc_floor(manifest)}' 'cryptsetup' 'btrfs-progs' 'util-linux'
+         'fuse2' 'fuse3' 'gcc-libs' 'fontconfig' 'ttf-dejavu' 'libx11' 'libxcursor'
+         'libxi' 'libxcb' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'sudo')
+options=('!strip' '!debug' '!zipman' '!purge' 'docs' 'libtool' 'staticlibs' 'emptydirs' '!lto')
+
+package() {{
+    cp -a "$startdir/root/usr" "$pkgdir/"
+}}
+""")
+    env = os.environ | {"PKGDEST": str(work), "BUILDDIR": str(work)}
+    subprocess.run(["makepkg", "--nodeps", "--noconfirm"], cwd=work, env=env, check=True)
+    [artifact] = work.glob("lurker-*.pkg.tar.zst")
+    artifact.rename(output)
+
+
 def build_gentoo(image, output, version, manifest, commit):
     arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
     if not arch:
@@ -233,6 +256,8 @@ def main():
             suffix, builder, version_pattern = ".deb", build_deb, r"[0-9][0-9A-Za-z.+~\-]*"
         elif distro in RPM_DISTROS:
             suffix, builder, version_pattern = ".rpm", build_rpm, r"[0-9][0-9A-Za-z.+~^]*"
+        elif distro == "arch":
+            suffix, builder, version_pattern = ".pkg.tar.zst", build_arch, r"[0-9][0-9A-Za-z.+_]*"
         elif distro == "gentoo":
             suffix, builder, version_pattern = ".gentoo.tar.gz", build_gentoo, r"[0-9]+(?:\.[0-9]+)+"
         else:

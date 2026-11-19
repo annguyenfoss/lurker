@@ -27,6 +27,22 @@ The RPM includes public CLI and desktop entries and the private helper under
 permissions. These are local build artifacts. Sign packages through the
 distribution's normal release process before publishing them to a repository.
 
+## Arch Linux
+
+Use the native `makepkg` tooling on Arch. Run the same wrapper as the login
+user and select a `.pkg.tar.zst` output:
+
+```bash
+python scripts/build-linux-package.py \
+  --archive target/packages/lurker-native/package.tar.gz \
+  --sha256 FULL_ARCHIVE_SHA256 --source-commit FULL_SOURCE_SHA \
+  --version 0.1.0 --output target/packages/lurker-0.1.0-1-x86_64.pkg.tar.zst
+```
+
+After verifying the emitted package digest, use `pacman -U` on the resulting
+package to install it and resolve its Arch runtime dependencies. The wrapper
+disables payload stripping and preserves the private engines and manifest.
+
 ## Gentoo Portage
 
 Use the same wrapper on the Gentoo build guest. Select a dotted numeric
