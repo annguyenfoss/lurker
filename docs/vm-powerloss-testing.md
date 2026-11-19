@@ -222,3 +222,25 @@ at its console after reboot. No test-container repair or forced detach ran.
 The earlier passing case at `76f05fb` remains a separate observation.
 Package deployment, readiness, KVM events and the failed result remain
 under `/mnt/virt/lurker-fault-nb20261120a/`.
+
+Writable CGD mounts at `24dcc6e7ff7f4bd1318ccbc238a9616cd7c791dd` had active
+WAPBL journaling and the guest's WAPBL disk-cache flush setting was enabled.
+The repeat cut about 0.9 seconds after readiness preserved the fsynced
+65,536-byte file and its renamed directory entry. The raw SQLite WAL recovered
+at 32 bytes instead of the acknowledged 82,432 bytes. The database reopened
+without the committed table. This is a partial recovery and a second failed
+durability attempt. See `result-nb20261120log.json` in the same evidence directory.
+
+On NetBSD 11, ordinary application `fsync` requests `FSYNC_WAIT`. Plain FFS
+requests an underlying cache flush in its explicit `FSYNC_CACHE` path. FFS
+with WAPBL may skip a journal flush for a vnode without dirty metadata buffers,
+and a WAPBL journal commit can request a cache flush through CGD and vnd.
+`vndconfig -i` selects the vnode file-I/O path that the kernel already selects
+for sparse images. Its writes use `IO_DIRECT` and have no explicit `IO_SYNC`
+flag. These paths do not establish that the tested SQLite acknowledgment
+reached the encrypted backing file before power loss.
+
+For a separate diagnostic on a new NetBSD CGD fault fixture, add
+`--netbsd-sync-diagnostic` to `guest-setup`. It remounts the newly opened
+fixture in synchronous journaled mode before the worker starts and records the
+effective flags in the result. This option applies only to the test fixture.

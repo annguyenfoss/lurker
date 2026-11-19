@@ -664,11 +664,33 @@ def guest_volume_arguments(action, manifest):
     return command
 
 
+def netbsd_sync_diagnostic(mountpoint):
+    """Remount the test fixture before issuing any measured application writes."""
+    # NetBSD <sys/statvfs.h> ST_LOG (MNT_LOG). Python only exports ST_SYNCHRONOUS.
+    journal = 0x02000000
+    before = os.statvfs(mountpoint)
+    require(os.path.ismount(mountpoint) and before.f_flag & journal
+            and not before.f_flag & os.ST_RDONLY,
+            "Diagnostic requires an existing writable journaled CGD fixture")
+    command = ["/sbin/mount", "-u", "-o", "sync,log", str(mountpoint)]
+    run(command)
+    after = os.statvfs(mountpoint)
+    require(os.path.ismount(mountpoint) and after.f_fsid == before.f_fsid
+            and after.f_flag & journal and after.f_flag & os.ST_SYNCHRONOUS
+            and not after.f_flag & os.ST_RDONLY,
+            "Diagnostic remount did not establish synchronous journaled mode on the fixture")
+    return {"command": command, "fsid": before.f_fsid, "before_flags": before.f_flag,
+            "workload_flags": after.f_flag, "journaled": True, "synchronous": True}
+
+
 def guest_setup(args):
     require(args.persistent_home_confirmed, "Confirm the home filesystem is persistent, not tmpfs")
     require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Exact candidate Git commit required")
     try:
         route = validate_guest_route(args.backend, args.unprivileged, args.cipher)
+        if args.netbsd_sync_diagnostic:
+            require(platform.system() == "NetBSD" and args.backend == "cgd" and os.geteuid() == 0,
+                    "Synchronous FFS diagnostic is available only for native NetBSD CGD")
         package, manifest_digest = verify_staged_package(args.cli, args.commit, args.backend)
         guest_prerequisites(package, args.backend, args.unprivileged)
     except Exception as error:
@@ -704,6 +726,9 @@ def guest_setup(args):
     guest_cli(directory, guest_volume_arguments("create", manifest), secret)
     guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
     require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
+    if args.netbsd_sync_diagnostic:
+        manifest["netbsd_sync_diagnostic"] = netbsd_sync_diagnostic(mountpoint)
+        write_json(directory / "guest.json", manifest)
     # Persist only test credentials/recovery metadata before the measured
     # workload. No global sync and no clean detach occurs before poweroff.
     fsync_path(directory)
@@ -834,6 +859,8 @@ def main():
     setup.add_argument("--commit", required=True)
     setup.add_argument("--unprivileged", action="store_true")
     setup.add_argument("--persistent-home-confirmed", action="store_true")
+    setup.add_argument("--netbsd-sync-diagnostic", action="store_true",
+                       help="For NetBSD CGD, require a synchronous journaled fixture before the workload")
     for action in ("guest-worker", "guest-verify"):
         guest = commands.add_parser(action)
         guest.add_argument("--run", required=True)
