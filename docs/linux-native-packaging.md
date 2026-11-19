@@ -436,3 +436,34 @@ image were preserved. Receipts are under
 `target/goal-validation/opensuse-clean-1e04b85/`.
 
 https://download.opensuse.org/download/distribution/openSUSE-current/appliances/Leap-16.1-Minimal-VM.x86_64-Cloud-Build3.13.qcow2.mirrorlist
+
+## Clean Gentoo installation and offline runtime
+
+An independent KVM copy used the stock cloud image
+`di-amd64-cloudinit-20261108T170107Z.qcow2`. The Gentoo release key
+verified the image, SHA-256
+`69e1e4f8932bd7b36e34e6bdc0ea09fc3001b64e2e28b9ee2a13bbb801bffffa`.
+The guest booted Linux 6.18.62 with glibc 2.43-r4. Prerequisites included
+43 vendor-signed binary packages and five X11 ebuilds from a verified
+Gentoo-signed Portage snapshot, including Xvfb 21.1.24.
+
+Portage installed the exact `1e04b85` developer package offline. The
+GPKG SHA-256 was
+`00cf19c6d7fe606968df1b906b5e237e57667bfc687e10d21d9e7eceac7ac967`.
+All 251 payload manifest entries matched. The installed CLI passed 117
+privileged and 78 login-user lifecycle checks across 15 combinations. The
+desktop rendered an authenticated 1280×860 X11 window as UID 1300.
+
+The first login-user run inherited a root-owned mode-0700 working
+directory. Gentoo's `mkfs.btrfs` 7.1 failed to check mount status when
+it tried to resolve relative mount-table entries from that directory.
+The six login-user suites passed when run from a user-owned directory.
+The qualification retained the first attempt and its native diagnostic.
+
+Portage removed all 256 candidate entries and retained the 474 unrelated
+package records. Cleanup found no remaining fixture mounts or loop
+devices. The owned guest shut down, its isolated network stopped, and
+the stock image digest matched. Receipts are under
+`target/goal-validation/gentoo-clean-1e04b85/`.
+
+https://github.com/kdave/btrfs-progs/blob/v7.1/common/open-utils.c#L83-L106
