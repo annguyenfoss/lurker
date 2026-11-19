@@ -81,6 +81,30 @@ Run identifiers:
 
 The local aggregate is `target/remote-test/final-matrix-result.json`; each run retains its manifest, result JSON, source hash, toolchains, stage exits and log references. Generated artifacts remain ignored by Git. The earlier `76f05fbd2167313273c53201a070252719e4f4ea` baseline remains separately labeled in `target/remote-test/baseline-76f05fbd-matrix-result.json`: ten completed hosts, 511 passed, 0 failed, 85 ignored.
 
+## Workspace checks after adding session-close
+
+Product source `0eea358686b0c62bf7a3c4804b7743f4c8674a4a` adds the
+opt-in close hook and includes the OpenBSD VeraCrypt write barrier.
+Workspace check and test stages passed on all ten non-macOS KVM targets.
+The suite reported 1,220 passed, zero failed and 112 ignored tests.
+
+| Target | Passed | Ignored | Run |
+| --- | ---: | ---: | --- |
+| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | 135 each | 13 each | `20261119T191922Z-a6a0f932` |
+| FreeBSD | 112 | 10 | `20261119T191922Z-5cc3fef1` |
+| NetBSD | 95 | 4 | `20261119T191922Z-f9e80819` |
+| DragonFly BSD | 92 | 3 | `20261119T192627Z-ac23277c` |
+| OpenBSD | 111 | 17 | `20261119T192845Z-4c49ced8` |
+
+The OpenBSD retry used exact checkout `9b428fb732477bee6d23def56c29dab9ab018f19`,
+which has identical Rust and native backend sources to `0eea358`. The first
+OpenBSD attempt reused a stale Cargo core artifact and failed at compile
+time. The passing retry used the same cache with refreshed source-file
+timestamps. DragonFly's first dispatch selected an unusable Python shim.
+Its passing repeat used repository Python 3.12 via the corrected inventory.
+The aggregate and both failed run IDs are retained in
+`target/goal-validation/combined-0eea358/matrix.json`.
+
 BSD core results do not claim BSD desktop qualification. macOS runtime/FUSE limitations remain documented separately. No runtime encryption tests were performed on endeavour.
 
 
