@@ -153,11 +153,25 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 ## Remaining qualification work and limits
 
-- Finish Mac packaged fast-close/desktop callback checks and characterize the retained VeraCrypt reopen timeout. The rebuilt five-backend `294b2b8` DMG passes 182 CLI and five crash/recovery checks; macOS FUSE remains separately installed.
-- Finish final packaged native tests at one frozen source across all six Linux distributions and four BSDs. Minimal pinned wxBase/private ELF payloads now pass dependency audits on the six Linux distributions; installed developer tools do not establish clean-machine independence.
-- Repeat BSD VeraCrypt generation/recovery proofs against final packages. Current native generation guards pass, including FreeBSD daemon-death recovery. OpenBSD can return ENXIO for a configured vnode after its FUSE daemon dies, making source identity unverifiable. Production preserves that session rather than guessing or force-detaching it.
-- The DragonFly IDE/UEFI clone adapter is implemented and its isolated clone is ready; power-loss testing awaits the current package. OpenBSD FFS still requires checking after the characterized power cut; no automatic repair is performed.
-- Native BSD support remains file-container oriented. Full-home/session automation, clean-machine/public-release qualification, signing/notarization and broader fault/security review remain separate gates.
+- Rerun the Linux userspace VeraCrypt and CryFS power-cut cases with their
+  respective fixes, then qualify one coordinated source revision across the
+  matrix. Earlier archived and native package results retain their own product
+  and wrapper revisions.
+- NetBSD CGD and FreeBSD GELI have observed durability failures even though
+  their current normal lifecycles pass. OpenBSD FFS refused writable RAID1C
+  reopening after a cut. DragonFly's outer UFS prevented verification of inner
+  LUKS1 recovery. Native BSD adapters remain file-backed and perform no
+  automatic filesystem repair.
+- OpenBSD may return ENXIO for a configured vnode after its VeraCrypt FUSE
+  daemon dies, making source identity unverifiable. Production preserves that
+  session. The final native generation and alias checks passed for OpenBSD;
+  FreeBSD also passed its daemon-death recovery case.
+- Gentoo's full desktop dependency installation and window remain unqualified.
+  Clean-machine and offline depth, shutdown/session integration, release
+  signing and broader security/maintenance review still require evidence.
+- macOS remains outside the current round. Its historical `294b2b8` DMG passed
+  182 CLI and five crash/recovery checks. Fast-close and final desktop checks
+  and the retained VeraCrypt reopen timeout remain part of Mac qualification.
 
 Earlier Linux archive: `target/linux-package-a16cd18b84/package/package.tar.gz`.
 Earlier Mac developer DMG: `dist/macos/a16cd18/Lurker-0.1.0-macos-arm64.dmg`.
