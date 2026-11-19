@@ -203,3 +203,25 @@ Public signatures require the publisher's real release key.
 https://www.gnupg.org/documentation/manuals/gnupg/Operational-GPG-Commands.html
 
 https://www.gnupg.org/documentation/manuals/gnupg/gpgv.html
+
+### gocryptfs shipped dependency check
+
+The packaged gocryptfs v2.7.0 binaries from Arch `a60e4bc` and FreeBSD
+`2fda5f7` were extracted from their hash-verified packages and inspected on
+the Gentoo KVM guest with `govulncheck` v1.10.0 in binary mode. Both embed Go
+1.27.4 and `golang.org/x/crypto` v0.58.0. The Go advisory database returned
+one module-level match, GO-2026-5932, for the `openpgp` package family.
+The scans found no matching package or symbol.
+
+The Linux and FreeBSD dependency graphs were checked separately from pinned
+source `756cd453d7afe69fd2a00a7592fd2d9869a6f756`, including the packaged
+FreeBSD patch. Both include `golang.org/x/crypto/scrypt` and exclude the
+affected `openpgp` packages. The module-level finding therefore does not
+apply to either inspected executable. This check is scoped to the two artifact
+digests and Go database snapshot dated 2026-11-11 02:51:11 UTC. Binary build
+metadata, scanner output and package graphs are retained in
+`target/goal-validation/go-runtime-review/`.
+
+https://go.dev/doc/security/vuln/
+
+https://pkg.go.dev/vuln/GO-2026-5932
