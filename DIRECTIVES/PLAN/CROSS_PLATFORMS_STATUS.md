@@ -13,15 +13,15 @@ have separate revision identities.
 
 | Target | Implemented formats | Qualification at this checkpoint |
 | --- | --- | --- |
-| Arch, Debian, Ubuntu, Fedora, openSUSE | LUKS2, LUKS1, VeraCrypt (kernel and userspace), gocryptfs, CryFS, Cryptomator | Each package passed 117 privileged and 78 login-user lifecycle checks. Workspace, desktop and extended fault checks are separate. |
-| Gentoo | Same Linux formats and routes | Package staged and native lifecycle checks started. |
+| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | LUKS2, LUKS1, VeraCrypt (kernel and userspace), gocryptfs, CryFS, Cryptomator | Each package passed 117 privileged and 78 login-user lifecycle checks. Debian passed six packaged desktop lifecycles and four real Firefox profile lifecycles. |
 | FreeBSD | GELI, VeraCrypt, PEFS, gocryptfs | Earlier package results are below. Current package build resumed after a damaged compiler cache was identified. |
 | OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | Earlier CRYPTO and VeraCrypt results are below. Current RAID1C qualification and workspace rebuild are in progress. The isolated OpenBSD fault clone has booted and is reachable. |
 | NetBSD | CGD | Earlier package results are below. Current workspace and package rebuild are in progress. |
 | DragonFly BSD | LUKS1 | Earlier package results are below. Current package and desktop qualification are in progress. The vendor tool and patch provenance are recorded in `docs/encryption-methods-matrix.md`. |
 | macOS | Apple encrypted disk images, VeraCrypt, gocryptfs, CryFS, Cryptomator | Historical `294b2b8` DMG passed 182 CLI checks and five Cryptomator crash/recovery checks. The retained initial VeraCrypt timeout and remaining desktop checks are described below. This round excludes macOS implementation and test runs. |
 
-Linux check details are in `docs/linux-package-testing.md`. The OpenBSD fault
+Linux check details are in `docs/linux-package-testing.md` and
+`docs/backend-testing.md`. The OpenBSD fault
 copy receipt, guarded network identity and runner's 31 passing unit tests are
 retained under `/mnt/virt/lurker-fault-ob20261120a/`.
 

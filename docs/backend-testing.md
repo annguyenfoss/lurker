@@ -48,6 +48,14 @@ and checks that a second Firefox process reads it after the vault has closed
 and reopened. The standard 13 cases still run and the report includes the two
 Firefox cases separately.
 
+On the Debian KVM guest, Firefox ESR 153.7.0 passed both browser-profile
+checks for gocryptfs, CryFS, Cryptomator, and AES VeraCrypt in the
+unprivileged route. Each suite passed 15 checks and ended with its mount
+closed. The packaged CLI source was
+`2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` and the harness was
+`ed94676`. Collected results and hashes are under
+`target/browser-profile-qualification/`.
+
 For a native API that cannot attach read-only, use
 `--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
 the read-only CLI request and requires both a nonzero exit and no mount at the
