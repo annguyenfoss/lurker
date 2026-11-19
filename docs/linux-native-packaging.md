@@ -102,9 +102,58 @@ denied the test's custom FUSE mount path. Ordinary login sessions passed with
 the existing guest policies, and those initial results remain in the reports.
 Gentoo built a local gpkg from the generated ebuild. Portage's dependency
 preview identified required X11 and Wayland USE settings, and the local
-binary-package merge exercised the prepared guest's CLI routes. Gentoo's
-installed desktop with its complete dependency set remains unqualified.
+binary-package merge exercised the prepared guest's CLI routes. That run
+left Gentoo's installed desktop with its complete dependency set unqualified.
 
 The six test packages were removed after verifying that the test mounts had
 closed. Full build identities, case summaries, prior attempts, and remote
 evidence paths are retained under `target/linux-native-installers/`.
+
+## Coordinated native replay at a60e4bc
+
+Each of the six Linux KVM guests built a native package from exact source
+`a60e4bc69a3b78b8dd6e2297c2300a38f4508251`, with the VeraCrypt userspace
+flush and CryFS local-state fixes. The build recipes verified the reusable
+engine inputs and audited the staged runtime dependencies on each guest.
+The install tests verified the package and installed file digests before
+running the CLI suites and desktop probes.
+
+| Guest | Installed package SHA-256 prefix | Privileged | Login user | Installed X11 window |
+| --- | --- | ---: | ---: | --- |
+| Arch | `843800e0d61d2443` | 117 | 78 | Passed |
+| Debian | `4255150bd3f28d08` | 117 | 78 | Passed |
+| Ubuntu | `da19e8de1f34fa07` | 117 | 78 | Passed |
+| Fedora | `35dfc5a3a11b5c2c` | 117 | 78 | Passed |
+| openSUSE Leap | `0d3d2163a8cdb3f4` | 117 | 78 | Passed |
+| Gentoo | `dd32a9fbd2d066fe` | 117 | 78 | Passed |
+
+The 1,170 passing checks covered AES, Serpent and Twofish in the container
+routes, both VeraCrypt privilege modes, and the gocryptfs, CryFS and
+Cryptomator fixed profiles. They exercised creation, unlock, file sync and
+SQLite WAL, close, reopen, read-back, credential rejection and read-only
+handling. Privileged suites ran in isolated network namespaces. Login-user
+suites used ordinary SSH sessions on the prepared guests. Gentoo's local
+Portage GPKG resolved its full desktop dependencies and ran the installed
+launcher as UID 1300 under the official Xvfb package. Go was present on that
+guest.
+
+Debian also passed 60 additional checks using Firefox ESR 153.7.0 with
+fresh profiles on VeraCrypt userspace, gocryptfs, CryFS and Cryptomator.
+Each profile wrote data through the installed backend and read the same
+data after reopening. Arch passed 26 additional VeraCrypt binary-keyfile,
+eight cross-mode and ten loop-lease checks. All six workspace replays had
+133 passes and 13 ignored tests per guest.
+
+The initial Debian and Ubuntu test installs encountered an APT local-path
+error in no-download mode. The retry ran a dependency preflight and installed
+the verified local artifact with dpkg. Fedora's initial local RPM preflight
+required a signature. The test retry checked the exact local artifact's
+SHA-256 and used RPM's unsigned local install mode with dependency checks.
+The native packages were removed after verifying the owned fixtures were
+closed.
+
+The Debian, Ubuntu, Fedora and openSUSE build run was
+`20261119T184136Z-8ae08b9d`. Gentoo used `20261119T184400Z-b06b1894`.
+Build receipts, all-case lifecycle summaries, native installer logs and
+window results are indexed under `target/linux-coordinated-a60e4bc/`
+and `target/linux-matrix-a60e4bc/arch/`.
