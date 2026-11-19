@@ -166,6 +166,29 @@ Evidence and package hashes are under
 `/mnt/virt/lurker-fault-fb20261120a/` in `native-shutdown-result.json` and
 the matching staging and inventory logs.
 
+### DragonFly LUKS1 close hook in `rc.shutdown`
+
+A standalone copy of the verified DragonFly 6.4.2 stock installation used
+the native `ca3c845` package, SHA-256
+`67941ec7534a0449da3c84ef43ba8e213e2ab97a8fa72a50ca0a377cf2423d6a`.
+The SQLite consumer fsynced a 64 KiB file, committed a FULL/WAL row and
+left a second row uncommitted. The temporary `/etc/rc.local.d` hook ran
+under DragonFly's native `rc.shutdown`. It matched the writer's process
+identity and requested exit. After SQLite rolled back and closed and the
+writer exited, the hook ran `lurker session-close` with the absolute source.
+The command returned zero with stdin closed. The mount, vnode, mapper
+and journal inventories matched baseline before libvirt recorded the
+guest's graceful poweroff.
+
+After reboot, the installed CLI reopened the same LUKS1 vault. The file
+digest matched, SQLite integrity passed, and only the committed row was
+visible. Ordinary unmount restored the native inventory. The first trial
+recorded a safe refusal when the configured source was under `/var/tmp`.
+The passing trial used an administrator-controlled path under `/root`.
+The guest removed the package and temporary hook, shut down normally, and
+its isolated network was removed. The stock template's SHA-256 matched
+its starting value. Evidence is under `target/dragonfly-native-shutdown/`.
+
 ### OpenBSD close hook in `rc.shutdown`
 
 A dedicated OpenBSD 8.0 KVM overlay installed the native `ca3c845` package
