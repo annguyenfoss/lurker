@@ -291,11 +291,19 @@ through `DIOCCACHESYNC` while the SQLite connection remained open. CGD
 forwards this explicit request to vnd, which asks the backing filesystem
 to sync the ciphertext vnode with `FSYNC_DATAONLY | FSYNC_WAIT |
 FSYNC_CACHE`. This verifies an opt-in device ioctl on the tested mount.
-The explicit request requires privileged raw-device access. No cut
-qualified its durability or its effect on an ordinary application
-commit. The fixture closed normally, all CGD and vnd devices were idle,
-and the original guest configuration was untouched. Evidence is under
-`target/netbsd-cgd-barrier/`.
+The explicit request requires privileged raw-device access. The fixture
+closed normally, all CGD and vnd devices were idle, and the original guest
+configuration was untouched. Evidence is under `target/netbsd-cgd-barrier/`.
+
+On the isolated clone, the exact `a60e4bc` package and a fresh WAPBL fixture
+repeated the workload. `dkctl cgd0 synccache force` returned success with
+82,432 bytes of WAL and the workload process still alive. The cut began
+1.17 seconds after the ioctl returned. Normal CLI reopen recovered the
+acknowledged file digest. The raw WAL had 32 bytes and the committed SQLite
+table was absent. Normal close detached the mount. The explicit device
+flush left this WAL durability failure unresolved. See
+`synccache-nbcgdflush20261120.json`, `result-nbcgdflush20261120.json`
+and `synccache-recovery-and-close.log` under the NetBSD fault directory.
 
 https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/ufs/ffs/ffs_vnops.c
 
