@@ -225,3 +225,44 @@ metadata, scanner output and package graphs are retained in
 https://go.dev/doc/security/vuln/
 
 https://pkg.go.dev/vuln/GO-2026-5932
+
+### Rust workspace dependency check
+
+On Arch KVM, the exact `a5a1857` Cargo lockfile was audited with
+`cargo-audit` 0.23.0 from a signed Arch Linux Archive package. Both the
+baseline and update used RustSec advisory database commit
+`074ea9a7ed619f511b5b7374c7a97e98d1e98be4` and disabled database refresh and
+yank checking. The baseline had 593 packages, six vulnerability records,
+three unsoundness notices, and nine unmaintained notices.
+
+| Class | Locked package update | RustSec IDs |
+|---|---|---|
+| Vulnerability | webbrowser 1.2.1 → 1.2.2 | RUSTSEC-2026-0257 |
+| Vulnerability | pulldown-cmark 0.13.3 → 0.13.6 | RUSTSEC-2026-0414, RUSTSEC-2026-0433 |
+| Vulnerability | crossbeam-epoch 0.9.18 → 0.9.20 | RUSTSEC-2026-0204 |
+| Vulnerability | quick-xml 0.39.2 → 0.41.0 through wayland-scanner 0.31.10 → 0.31.11 | RUSTSEC-2026-0194, RUSTSEC-2026-0195 |
+| Unsound | anyhow 1.0.102 → 1.0.103 | RUSTSEC-2026-0190 |
+| Unsound | event-listener 5.4.1 → 5.4.2 | RUSTSEC-2026-0221 |
+| Unsound | memmap2 0.9.10 → 0.9.11 | RUSTSEC-2026-0186 |
+
+The Linux dependency graph includes webbrowser through Slint's winit backend
+and pulldown-cmark through Slint core. Its crossbeam-epoch path goes through
+the Slint compiler, and its affected quick-xml path goes through the
+Wayland scanner proc macro. The graph identifies dependency selection.
+Finding reachability requires separate testing.
+
+The updated lock has 592 packages, zero vulnerability and unsoundness records
+at the same database revision, and the same nine unmaintained notices:
+bincode, chrono, paste, pin-utils, rustybuzz, ttf-parser, zbus_names, zvariant,
+and zvariant_derive. These results cover Cargo dependencies. The packaged
+native and JVM dependencies have separate provenance and maintenance checks.
+
+The exact `ca3c845` commit passed offline `cargo check --workspace --locked`
+and `cargo test --workspace --locked` on Arch KVM with Cargo/Rust 1.100.0.
+Run `20261119T201634Z-4b1cae2e` reported 135 passed, zero failed and 13
+ignored. The updated lockfile SHA-256 is
+`e0a352930ba76478e4a263d696c6acbdef783d6872d0868eabeeb282f830f546`.
+The audit JSON, tool signature, dependency graph, and workspace receipts are
+in `target/goal-validation/linux-runtime-audit-a5a1857/`.
+
+https://github.com/RustSec/advisory-db/tree/074ea9a7ed619f511b5b7374c7a97e98d1e98be4
