@@ -19,6 +19,11 @@ passed real encrypted create, unlock, write, close, reopen and read-back.
 | NetBSD | 26 | CGD desktop, X11, legacy-image compatibility, eight full-storage checks on the byte-matched portable package. |
 | DragonFly BSD | 91 | Desktop, X11, eight full-storage checks and verified LUKS1 headers. |
 
+All six Linux guests ran the 117 privileged and 78 login-user cases in
+isolated network namespaces across the normal and follow-up replays. Arch
+also installed the exact package in a loopback-only namespace. The
+replays used prepared guests and their existing native runtime prerequisites.
+
 Exact artifacts and run receipts are recorded in `docs/linux-native-packaging.md`
 and `docs/bsd-packaging.md`. Power-cut evidence has its own revision and fixture
 identities in `docs/vm-powerloss-testing.md`.
@@ -190,8 +195,8 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 - The opt-in `session-close` hook passed 82 checks across Debian, FreeBSD and
   NetBSD. Arch also stopped its systemd consumer, ran the hook, shut down
   cleanly, rebooted and recovered the file and SQLite data. Broader shutdown
-  integration, clean-machine/offline coverage, publisher signatures and
-  security review still require evidence.
+  integration, clean-machine qualification, offline BSD coverage, publisher
+  signatures and security review still require evidence.
 - macOS remains outside the current round. Its historical `294b2b8` DMG passed
   182 CLI and five crash/recovery checks. Fast-close and final desktop checks
   and the retained VeraCrypt reopen timeout remain part of Mac qualification.
