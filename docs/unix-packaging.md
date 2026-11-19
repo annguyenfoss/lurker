@@ -153,3 +153,53 @@ python -m unittest discover -s scripts/tests -p test_stage_unix.py
 ```
 
 Tests cover external symlinks, traversal, special/setuid files, internal runtime links, source/binary identity, missing runtimes, dependency failures and competing publication. They execute no encryption operations.
+
+## Release maintenance and signatures
+
+Use the installed package's `share/lurker/manifest.json` and neighboring
+license and provenance files to identify the shipped dependencies. The builder
+pins VeraCrypt, LKL and wxWidgets in `scripts/build-linux-userspace.py` and
+`scripts/build-bsd-backends.py`, and gocryptfs and CryFS in
+`scripts/build-folder-backends.py`. The Cryptomator dependencies are in
+`native/folder/cryptomator/dependencies.lock.json`. Record the build JDK
+distribution and version as well as the private runtime manifest.
+
+When an upstream release or advisory affects a shipped component, identify
+the affected builds from their installed manifests. Review the new source,
+checksums, local patches, transitive dependencies and notices before updating
+the pins. Rebuild affected packages at one source commit and repeat their
+native lifecycle and relevant fault checks. Supply the corresponding source
+for the released binaries and dependencies, including Lurker's patches and
+build inputs and the source and notices required by each component's license.
+Keep the source and binary receipts together.
+
+After applying any package-manager or repository signatures, generate a
+detached signature for the final portable archives and native package hashes
+with the publisher's release key. From the release directory on a signing
+host, enumerate the exact files to publish:
+
+```sh
+sha256sum lurker_0.1.0_amd64.deb lurker-openbsd-0.1.0.tgz > SHA256SUMS
+gpg --local-user "$RELEASE_KEY_FINGERPRINT" --detach-sign \
+    --output SHA256SUMS.sig SHA256SUMS
+```
+
+Verify the signature with an independently trusted publisher keyring before
+checking the downloaded artifacts. This example uses GnuPG and GNU coreutils.
+Repository and native package-manager trust continue to follow each
+distribution's own verification rules.
+
+```sh
+gpgv --keyring /absolute/path/to/trusted-publisher.gpg SHA256SUMS.sig SHA256SUMS &&
+    sha256sum --strict -c SHA256SUMS
+```
+
+An Arch KVM test signed the coordinated `a60e4bc` native package checksum
+with a disposable key. Both verification steps passed. A modified checksum
+file failed signature verification and a modified artifact failed the
+checksum check. Evidence is under `target/goal-validation/release-signature/`.
+Public signatures require the publisher's real release key.
+
+https://www.gnupg.org/documentation/manuals/gnupg/Operational-GPG-Commands.html
+
+https://www.gnupg.org/documentation/manuals/gnupg/gpgv.html
