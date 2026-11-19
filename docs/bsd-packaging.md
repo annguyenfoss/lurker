@@ -46,3 +46,22 @@ OpenBSD `pkg_add -B` relocates payload paths and needs an explicit
 `PKG_DBDIR` for database isolation. Seed the alternate root with the
 distribution runtime dependencies before checking native install, and
 verify the original database and install paths independently.
+
+## KVM validation
+
+The following native packages were built from the recorded portable stage
+sources. Install and removal used separate package databases and roots with
+native dependency checks enabled. Archive digests, package digests, toolchain
+source and logs are retained under `target/bsd-native-wrapper/`.
+
+| Guest and payload | Product source | Native installation proof |
+| --- | --- | --- |
+| FreeBSD 15.1, full CLI and desktop | `2ebae8f` | Installed with 22 official dependency artifacts. GELI passed 13 lifecycle checks before removal. |
+| NetBSD 11.1, full CLI and desktop | `24dcc6e` | Installed with sudo and xkbcommon. CGD passed 13 lifecycle checks before removal. |
+| OpenBSD 8.0, full CLI and desktop | `2ebae8f` | Installed with signed dependencies and native shared-library checks. The installed CLI ran and the package was removed. |
+| DragonFly 6.4.2, CLI | `2ebae8f` | Installed on an isolated KVM copy, passed 13 LUKS1/AES lifecycle checks and was removed. |
+
+The lifecycle cases create encrypted storage, write and fsync data, close,
+reopen and verify the contents. They also cover rejected credentials and busy,
+aliased and read-only operations. Backend and desktop qualifications outside
+these native installer checks retain their individual package provenance.
