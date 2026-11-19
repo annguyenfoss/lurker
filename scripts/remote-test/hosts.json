@@ -7,7 +7,7 @@
   "gentoo": {"ssh": "adjutant@gentoo-core-01", "os": "Linux", "arch": "x86_64", "rust": "rustup", "cache_root": "~/.cache/lurker/remote-test"},
   "freebsd": {"ssh": "adjutant@freebsd-core-01", "os": "FreeBSD", "arch": "amd64", "primary": true, "rust": "rustup", "cache_root": "~/.cache/lurker/remote-test"},
   "netbsd": {"ssh": "adjutant@netbsd-core-01", "os": "NetBSD", "arch": "amd64", "primary": true, "rust": "rustup", "cache_root": "~/.cache/lurker/remote-test"},
-  "dragonflybsd": {"ssh": "adjutant@dragonflybsd-core-01", "os": "DragonFly", "arch": "x86_64", "primary": true, "rust": "system", "cache_root": "~/.cache/lurker/remote-test"},
+  "dragonflybsd": {"ssh": "adjutant@dragonflybsd-core-01", "os": "DragonFly", "arch": "x86_64", "primary": true, "rust": "system", "cache_root": "~/.cache/lurker/remote-test", "python": "/usr/local/bin/python3.12"},
   "openbsd": {"ssh": "adjutant@openbsd-core-01", "os": "OpenBSD", "arch": "amd64", "primary": true, "rust": "system", "cache_root": "~/.cache/lurker/remote-test"},
   "macos": {"ssh": "adjutant@buran", "os": "Darwin", "arch": "arm64", "primary": true, "rust": "rustup", "cache_root": "~/.cache/lurker/remote-test", "rust_bin": "/opt/homebrew/opt/rustup/bin", "uv": "/opt/homebrew/bin/uv", "python_request": "3.15"}
 }
