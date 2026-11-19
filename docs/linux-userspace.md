@@ -103,6 +103,19 @@ The architectural advantage is a smaller initial privilege scope for some failur
 
 Further work should verify memory/dump/debugger policies, assess a dedicated process sandbox, and extend fault injection to resource exhaustion and abrupt termination across startup/shutdown stages. Benchmark performance and exercise full cross-mode persistence before making stronger comparative claims. These are open review/verification items, not implemented protections.
 
+On Debian KVM (`6.12.117+deb13-cloud-amd64`), the hash-verified `a60e4bc`
+package was extracted without installation. UID 1300 created, opened, wrote
+to, and closed a disposable VeraCrypt volume. The live LKL driver and two
+VeraCrypt processes reported `VmLck: 0 kB` and an 8 MiB locked-memory limit.
+The guest had no active swap. All three processes inherited a zero soft core
+size limit with an unlimited hard limit and had `coredump_filter` set to
+`00000033`. The guest's `core_pattern` was `core` and `ptrace_scope` was 0.
+This observation establishes the settings for that login session. It leaves
+dumpability, tracing, and paging on other environments untested. Teardown
+removed the fixture and left neither FUSE layer, any live owned process, nor
+a session record. The package and binary digests and raw `/proc` fields are
+in `target/goal-validation/linux-runtime-audit-a5a1857/lkl-runtime.json`.
+
 ## Source identity and cross-mode exclusion
 
 Native Linux file mounts hold a nonblocking exclusive inode lock through mapper startup. Administrator-controlled `losetup` attaches the pinned source descriptor; cryptsetup queries and opens that loop block device, avoiding a conflicting metadata flock on the container file. The loop backing filesystem/inode and the opened mapper are verified before filesystem access. The owned loop is detached after handled failures or marked for automatic removal when its mapper closes. Hard links and renamed backing files cannot bypass the inode check. The CLI needs read access to lock the source; run the privileged CLI as root for root-owned unreadable containers. Missing or ambiguous native identity metadata fails closed.
