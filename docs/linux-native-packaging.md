@@ -504,3 +504,36 @@ mount inventories was the temporary `/run/user/1300` mount closing.
 The artifact digests and transcripts are indexed in
 `target/linux-coordinated-c21e0cc/matrix.json`. The independent stock-image
 qualifications above used `1e04b85`.
+
+
+## Native folder replay after the process-exit fix
+
+The six Linux KVM guests rebuilt their packages from
+`8bb689ccb39ac90f4813210e02e0604ff3565fb9` in runs
+`20261119T225146Z-d0fdf0cd` and `20261119T225216Z-2e6bdab4`. All 131
+private backend entries matched their corresponding `c21e0cc` package.
+The harness verified all 251 installed entries on every guest.
+
+| Guest | Installed package SHA-256 prefix | Login-user folder checks | Installed X11 window |
+| --- | --- | ---: | --- |
+| Arch | `77215f7d6cc6eb3b` | 39 | Passed |
+| Debian | `1f4a49ebdfd01e32` | 39 | Passed |
+| Ubuntu | `1dfba45300c7afa2` | 39 | Passed |
+| Fedora | `45722d6f63e3b0e3` | 39 | Passed |
+| openSUSE Leap | `b5bad9e44d933fdd` | 39 | Passed |
+| Gentoo GPKG | `56a4e3deefd20b04` | 39 | Passed |
+
+All 234 installed gocryptfs, CryFS, and Cryptomator checks passed with
+zero failures or skips. Each suite ran offline as UID 1300. The cases
+included read-only close, busy refusal, writes, normal close, and reopen.
+The six installed desktops rendered 1280×860 X11 windows. The broader
+kernel and VeraCrypt lifecycle qualification above used `c21e0cc`.
+
+Cleanup restored the six native package inventories and removed the
+owned fixtures, runtime directories, and X11 resources. No qualification
+mounts, loop devices, or namespace processes remained. The only changes
+to whole-guest mount snapshots were the temporary `/run/user/1300`
+mounts closing on Debian and Fedora.
+
+Exact artifacts, per-case logs and runtime reports, and cleanup receipts
+are indexed in `target/linux-coordinated-8bb689c/matrix.json`.
