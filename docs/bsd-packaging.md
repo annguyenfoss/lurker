@@ -190,6 +190,38 @@ receipts and rendered frame are under `target/openbsd-clean-20261120/evidence/`.
 
 https://www.openbsd.org/80.html
 
+### DragonFly clean-machine offline install
+
+The stock DragonFly 6.4.2 installer populated a blank, standalone KVM disk
+with HAMMER2. The untouched source ISO matched the vendor's published MD5,
+and the read-only copy matched its SHA-256. The installed guest had a
+host-only control network without forwarding or a default route. All 57
+local package archives matched DragonFly's HTTPS catalogue and their SHA-256
+digests matched on the guest before installation. The configured DragonFly
+repository uses an unsigned catalogue.
+
+Stock `pkg add` kept older installed versions of nine same-name prerequisites,
+leaving `libcrypto.so.17` unresolved for Xvfb and sudo. An explicit offline
+upgrade to the verified DragonFly packages resolved those libraries. The
+native package manager then installed the same `ca3c845` package, SHA-256
+`67941ec7534a0449da3c84ef43ba8e213e2ab97a8fa72a50ca0a377cf2423d6a`.
+
+The installed package passed 91 LUKS1 lifecycle checks across the three
+ciphers and both credential modes, eight UFS exhaustion checks, and two
+native core regressions. The CLI used short persistent fixtures on HAMMER2
+after the initial paths triggered the native 80-byte mountpoint limit. The
+installed desktop rendered a 1280×860 X11 window as UID 1300 and its helper
+passed the login-user callback lifecycle. Package removal and the native
+resource inventory checks passed. The disposable guest shut down normally
+and its isolated network was removed. The original KVM guest's package
+database digest and native inventories matched the baseline. Media receipts,
+failed attempts, inventories and the rendered frame are in
+`target/dragonfly-stock-ca3c845/`.
+
+https://www.dragonflybsd.org/release64/
+
+https://mirror-master.dragonflybsd.org/dports/dragonfly:6.4:x86:64/LATEST/packagesite.pkg
+
 ### DragonFly native cryptsetup provenance
 
 The original 6.4.2 x86-64 KVM guest reports `cryptsetup 1.1.2` for its
