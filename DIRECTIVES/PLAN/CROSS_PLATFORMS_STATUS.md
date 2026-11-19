@@ -56,6 +56,7 @@ without an external network route.
 | Arch cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | Debian 13 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | Ubuntu 26.10 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
+| Fedora 45 cloud image | `1e04b85` | 195 across all approved Linux routes, SELinux enforcing | X11 passed |
 | openSUSE Leap 16.1 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | FreeBSD 15.1 cloud image | `ca3c845` | 208 across GELI, VeraCrypt, PEFS and gocryptfs | X11 passed |
 | OpenBSD 8.0 stock install | `ca3c845` | 69 across CRYPTO, AES VeraCrypt and RAID1C | X11 passed |
@@ -263,8 +264,8 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   NetBSD. Arch also stopped its systemd consumer, ran the hook, shut down
   cleanly, rebooted and recovered the file and SQLite data. FreeBSD ran the
   hook from `rc.shutdown` for GELI and recovered both after reboot. Broader
-  shutdown integration, stock Fedora, openSUSE and Gentoo qualification,
-  publisher signatures and security review still require evidence.
+  shutdown integration, stock Gentoo qualification, publisher signatures,
+  and security review still require evidence.
 - The `ca3c845` private LKL Btrfs tree matches Linux `v6.12`. The builder
   now pins `v6.12.118` and rechecks its applied sources. A rebuilt helper
   passed 39 Arch login-user checks. The full `1e04b85` Arch archive passed
