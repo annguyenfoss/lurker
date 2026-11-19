@@ -91,7 +91,7 @@ option after verifying the exact archive digest. The platform packaging
 guides record source image identities, dependency receipts and cleanup.
 The aggregate is in `target/goal-validation/clean-install-matrix-summary.json`.
 
-## Final Linux qualification after the formatter and process-exit fixes
+## Linux qualification after the formatter, process-exit, and packaging changes
 
 All six native Linux packages at `c21e0cc` passed 1,170 offline lifecycle
 checks and six installed X11 probes. Arch and Gentoo also passed 26
@@ -104,6 +104,17 @@ installed X11 probes passed. Each package preserved all 131 private
 backend entries from `c21e0cc`. Cleanup restored the package inventories
 and cleared the owned test resources. Exact artifacts and receipts are in
 `target/linux-coordinated-c21e0cc/` and `target/linux-coordinated-8bb689c/`.
+
+The six native installers at `14197ef` verified 899 installed entries
+per guest, including a matching catalog of 372 locked Rust crates and
+647 notice files. All 131 private backend files matched `8bb689c`. The
+installed gocryptfs suites passed 78 checks covering create, unlock,
+SQLite writes, close and reopen. All six installed X11 windows rendered
+at 1280 × 860. Cleanup restored the package and loop inventories. On
+Gentoo, the transient `/run/user/1300` mount expired during the replay.
+The first manifest comparison omitted the executable flag. The corrected
+comparison passed against the same package bytes. See
+`target/linux-coordinated-14197ef/matrix.json` for both attempts.
 
 ## Coordinated non-macOS native qualification, 2026-11-20
 
