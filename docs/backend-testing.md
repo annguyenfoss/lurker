@@ -146,3 +146,20 @@ X11 RUNPATH. Packaging fix `7e242073a8d5eeebceff44a95193ceefa128e819` staged
 the same compiled binaries. The archive and complete results are in
 `target/netbsd-final-resume/`. The archive SHA-256 is
 `91b001fd98ddbcd9df240c8dcccfa814d51864b4d1c7a5982c955d9acf175d41`.
+
+## Resumed DragonFly LUKS1 keyfile qualification
+
+DragonFly 6.4.2 x86-64 passed 39 binary-keyfile checks across AES, Serpent
+and Twofish using the packaged `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1`
+CLI and native cryptsetup 1.1.2 with UFS. Each cipher covered creation with
+a 256-byte binary keyfile, Auto unlock, synced file and SQLite writes,
+close, wrong-keyfile rejection, reopen, read-only mounting, and cleanup
+of the vnode, mapper and owned session. Every case passed without skips.
+
+Build `20261119T172622Z-beaa837c` produced the CLI/helper archive with
+SHA-256 `0f13bd11325740ec454b02164fdd72673479030d6a5fa32cf24a0662cd3e942b`.
+The CLI SHA-256 is
+`3e4b9a0a0023e16ff47b6c7a92f4e8956b1c3a5c58b64b32ef596902306360c7`.
+Results from the isolated KVM copy are in
+`target/dragonfly-resume/keyfiles/`. Harness `b78d314` enables native
+resource checks, using the compatibility fix in `12d7e7f`.
