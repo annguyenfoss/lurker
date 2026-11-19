@@ -170,8 +170,22 @@ Native BSD defaults are GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD), softraid CRYPTO/
 (OpenBSD), and LUKS1/UFS (DragonFly). Native containers take `<file> <size-gb>` and
 administrator authorization. BSD physical-device creation is excluded. Keep
 NetBSD `.cgdparams` and PEFS `.pefs.conf`/`.pefs.db` metadata with their encrypted
-data. OpenBSD CRYPTO read-only attachment and multi-source RAID1C are unavailable.
+data. OpenBSD CRYPTO and RAID1C refuse read-only attachment.
 See `docs/backend-testing.md` for the exact tested revisions and remaining gates.
+
+OpenBSD RAID1C is an explicit two-file mirror. Size is per member.
+
+```bash
+lurker create --type raid1c --member ./mirror-b.img ./mirror-a.img 1
+mkdir ./mirror-mount
+lurker mount --type raid1c --member ./mirror-b.img ./mirror-a.img ./mirror-mount
+lurker unmount ./mirror-mount
+```
+
+Keep both members and the `.raid1c.json` descriptor. To unlock an existing
+array with only one surviving member, use
+`lurker mount --type raid1c --degraded ./mirror-a.img ./mirror-mount`.
+RAID1C uses a password and refuses forced replacement of existing files.
 
 ## macOS Drag-and-Drop Installer
 
