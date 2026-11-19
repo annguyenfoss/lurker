@@ -42,6 +42,57 @@ in the shipped userland and kernel paths.
 - https://github.com/DragonFlyBSD/DragonFlyBSD/commit/6f5ec8b51c95
 - https://github.com/DragonFlyBSD/DragonFlyBSD/commit/8345afad56be
 
+#### DragonFly LUKS1 release security review
+
+On 2026-11-20 the vendor mirror resolved tag `v6.4.2` to
+`54d7118100cb99b741fe92cfd8d542c623b6f8d0` and the
+`DragonFly_RELEASE_6_4` branch to
+`fa3b19cbc1d785319e3359e67e3f806e59af267e`. The reviewed cryptsetup
+setup and LUKS1 parser sources, vnode code, device-mapper crypt target and
+software crypto source were byte-identical at those two revisions. The
+installed `dm_target_crypt.ko` SHA-256 was
+`056672e4c5865edb45e87012d0b00c5c869dc13cf4eaea69979377c3dd0d99b3`.
+The base cryptsetup build compiles the vendor parser with libdm and private
+LibreSSL crypto. The vendor's development branch has a newer default crypt
+target. The 6.4 release and qualification evidence concern the stable target.
+The vendor mirror lists no published security advisories. The advisory listing
+provides no module-specific maintenance or backport assurance.
+
+- https://www.dragonflybsd.org/release64/
+- https://github.com/DragonFlyBSD/DragonFlyBSD/security/advisories
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/gnu/sbin/cryptsetup/Makefile
+- https://github.com/DragonFlyBSD/DragonFlyBSD/commit/f9c79d28d9ec0c95b4e78c6374f774077944db5e
+
+The upstream report for CVE-2016-4484 concerns Debian's boot-time initramfs
+script. CVE-2020-14382 concerns LUKS2 format validation and CVE-2021-4122
+concerns LUKS2 online reencryption recovery. Those components fall outside
+Lurker's DragonFly vnode-backed LUKS1 create and unlock commands.
+
+- https://gitlab.com/cryptsetup/cryptsetup/-/blob/main/FAQ.md
+- https://www.cve.org/CVERecord?id=CVE-2020-14382
+
+The shipped LUKS1 reader checks magic, the version and hash support. Its
+privileged unlock path lacks the structural keyslot geometry checks present
+in upstream cryptsetup 2.8.7 at `0e2fadbd02be23796006d57d448dbf1080b79cea`.
+Lurker's explicit and Auto routes both reach that reader. Vnode identity and
+session guards govern the file and mapping. They leave header validation to
+cryptsetup. The Linux metadata helpers consume native `luksDump` output and
+provide no independent pre-open validation on DragonFly.
+
+- https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/54d7118100cb99b741fe92cfd8d542c623b6f8d0/contrib/cryptsetup/luks/keymanage.c
+- https://gitlab.com/cryptsetup/cryptsetup/-/raw/0e2fadbd02be23796006d57d448dbf1080b79cea/lib/luks1/keymanage.c
+
+Keep security qualification open pending a vendor-supported parser fix or a
+reviewed equivalent. A Lurker-side check would need to enforce documented
+header bounds before the privileged reader and ensure that the validated bytes
+remain stable through unlock. Native compatibility evidence covers the approved
+AES, Serpent and Twofish XTS/plain64 profiles with PBKDF2/SHA-256 and 512-bit
+combined keys, using passwords and binary keyfiles. Broader imported-volume
+compatibility and kernel or crypto-library security assurance require separate
+evidence. Source receipts and installed hashes are under
+`target/dragonfly-native-review/`. The stock-guest header receipts are in
+`target/dragonfly-stock-ca3c845/headers.json`.
+
 ## How to read the matrix
 
 Platform codes describe the surveyed method or implementation:
