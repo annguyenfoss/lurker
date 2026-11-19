@@ -27,6 +27,24 @@ with the same no-debug build profile used 1,938 MiB. Per-guest stages and
 log digests are in
 `target/goal-validation/secure-synchronous-ca3c845/workspace-summary.json`.
 
+The native installers from the same `ca3c845` revision passed 1,642 real
+CLI lifecycle checks. Each target also rendered an installed X11 window.
+
+| Target | CLI checks | Additional installed evidence |
+| --- | ---: | --- |
+| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | 195 each, 1,170 total | 117 privileged and 78 login-user checks per guest ran offline. |
+| FreeBSD | 208 | Four desktop storage lifecycles and VeraCrypt daemon recovery. |
+| OpenBSD | 147 | Three desktop storage lifecycles and synchronous FFS confirmed at runtime. |
+| NetBSD | 26 | Explicit and Auto CGD, with 13 checks each. |
+| DragonFly BSD | 91 | Desktop LUKS1 lifecycle and eight UFS exhaustion checks on an isolated archive clone. |
+
+The base DragonFly VM built the package binaries. Its package database
+required installation in a prepared archive clone. Linux removed the test
+packages and verified that all owned mounts, loops and processes were gone.
+Whole-guest mount inventory equality remained unverified on Linux. The
+artifact digests and lifecycle receipts are in
+`target/goal-validation/secure-synchronous-ca3c845/native-package-summary.json`.
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from
