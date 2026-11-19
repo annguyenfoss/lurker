@@ -283,6 +283,11 @@ fsync and a SQLite FULL/WAL commit. The old LKL block device advertised no
 flush support and rejected the two-buffer form of a flush request before its
 host I/O callback. The failing fixture remains in the same evidence directory.
 
+Cryptomator passed all five checks. CryFS refused to reopen the vault on the
+first attempt and on retry. The private engine reported a parse failure in
+`LocalStateMetadata` and exited before mounting. Its ciphertext and
+integrity state were retained, along with the result and redacted diagnostic.
+
 ### FreeBSD GELI flush tracing
 
 On the original FreeBSD 15.1-RELEASE-p6 KVM guest, DTrace observed no GEOM
