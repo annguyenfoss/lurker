@@ -18,7 +18,7 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const HELPER_VERSION: &str = "lurker-userspace-3";
+const HELPER_VERSION: &str = "lurker-userspace-4";
 const READY_TIMEOUT: Duration = Duration::from_secs(45);
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 

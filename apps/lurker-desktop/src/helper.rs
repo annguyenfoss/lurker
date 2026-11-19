@@ -178,9 +178,9 @@ fn run_helper_checked(
         }
         if unprivileged
             && (capabilities["protocol_version"] != 3
-                || capabilities["userspace_backend_protocol"] != 3)
+                || capabilities["userspace_backend_protocol"] != 4)
         {
-            return Err("Installed lurker-helper does not support the source-locking userspace backend protocol. Update the helper and native components together.".into());
+            return Err("Installed lurker-helper does not support the durable userspace backend protocol. Update the helper and native components together.".into());
         }
         if (keyfile && capabilities["keyfile_authentication"] != true)
             || (keyslots && capabilities["luks_keyslots"] != true)
@@ -734,7 +734,7 @@ fi
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn userspace_requests_reject_helpers_without_the_source_locking_protocol() {
+    fn userspace_requests_reject_helpers_without_the_durable_protocol() {
         let _guard = HELPER_TEST_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -746,7 +746,7 @@ fi
         let helper = directory.join("helper");
         fs::write(&helper, r#"#!/bin/sh
 if [ "$1" = capabilities ]; then
-  printf '%s\n' '{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":2}'
+  printf '%s\n' '{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":3}'
 else
   touch "${0}.ran"
 fi
@@ -760,7 +760,7 @@ fi
         });
         assert!(run_helper(&helper, command)
             .unwrap_err()
-            .contains("source-locking userspace backend protocol"));
+            .contains("durable userspace backend protocol"));
         assert!(!directory.join("helper.ran").exists());
         fs::remove_dir_all(directory).unwrap();
     }

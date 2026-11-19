@@ -35,7 +35,7 @@ fn run() -> i32 {
                     "noninteractive_sudo": !cfg!(target_os = "macos"),
                     "trusted_privileged_tools": !cfg!(target_os = "macos"),
                     "unprivileged_veracrypt": cfg!(target_os = "linux"),
-                    "userspace_backend_protocol": if cfg!(target_os = "linux") { Some(3) } else { None },
+                    "userspace_backend_protocol": if cfg!(target_os = "linux") { Some(4) } else { None },
                     "linux_loop_lease_protocol": if cfg!(target_os = "linux") { Some(1) } else { None },
                     "keyfile_authentication": true,
                     "luks_keyslots": cfg!(target_os = "linux"),

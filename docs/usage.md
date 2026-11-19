@@ -123,10 +123,10 @@ The CLI exposes the same route:
 
 Mount points must be empty. A missing final directory is created when its parent exists. New containers belong to your user. Existing containers preserve their permissions. Read-only mounts protect both the encryption and filesystem layers. Standard user FUSE support, including access to `/dev/fuse` and the installed `fusermount3` helper, is required; that system helper performs the restricted FUSE mount without prompting for administrator credentials.
 
-Native userspace components now require transport protocol 3, which keeps an
-exclusive source-inode lock and prevents duplicate kernel/userspace attachment.
-Update the Rust helper and native components together. Close legacy protocol-2
-sessions before upgrading; do not replace live storage components in place.
+Native userspace components require transport protocol 4. It keeps an exclusive
+source-inode lock to prevent duplicate kernel/userspace attachment and forwards
+filesystem writeback barriers to the encrypted backing file. Close active
+sessions before upgrading the Rust helper and native components together.
 For kernel operations on unreadable root-owned images, run the CLI as root;
 the source-inode guard must open the image before permitting attachment.
 

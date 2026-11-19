@@ -105,7 +105,7 @@ index 247eca7..052974a 100644
  {
 +	if (argc == 2 && strcmp (argv[1], "--lurker-userspace-version") == 0)
 +	{
-+		std::cout << "lurker-userspace-3" << std::endl;
++		std::cout << "lurker-userspace-4" << std::endl;
 +		return 0;
 +	}
 +	if (geteuid() == 0)

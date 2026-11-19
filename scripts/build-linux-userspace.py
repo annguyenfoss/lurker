@@ -334,7 +334,7 @@ def main():
         temporary.chmod(0o755)
         run(["strip", "--strip-unneeded", temporary])
         version = subprocess.check_output([temporary, "--lurker-userspace-version"], text=True).strip()
-        if version != "lurker-userspace-3":
+        if version != "lurker-userspace-4":
             raise RuntimeError(f"Invalid userspace helper: {binary}")
         temporary.replace(destination)
     publish_creator(vc, output)
