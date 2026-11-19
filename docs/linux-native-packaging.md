@@ -322,6 +322,32 @@ match and runtime receipts are under
 
 https://cloud.debian.org/images/cloud/trixie/20261103-2651/SHA512SUMS
 
+## Clean Arch installation and offline runtime
+
+A new KVM guest used an untouched copy of
+`Arch-Linux-x86_64-cloudimg-20261101.620452.qcow2`. Its checksum and
+detached signature verified against the upstream Arch-boxes release key.
+The guest ran kernel `7.2.11-arch1-1` with glibc 2.44. It had no separately
+installed VeraCrypt, gocryptfs, CryFS, Java, or Cryptomator executables.
+
+The guest verified 54 official prerequisite package signatures and
+installed the prerequisites offline with `pacman`. The exact `1e04b85`
+developer package SHA-256 was
+`bbd412b644533aa81f6609714c07b67a5f0f1fea0678ccbde7bead35fc62f486`.
+Its local install verified the archive digest and used a package-specific
+unsigned policy for that invocation.
+
+All 117 privileged and 78 login-user lifecycle checks passed in a
+loopback-only namespace. The installed desktop rendered a 1280×860 X11
+window. Cleanup found no fixture mounts, loop devices, or private backend
+processes. The whole-guest inventory included one newly active system
+`binfmt_misc` mount. The package, guest, and isolated network were removed.
+Receipts are in `target/goal-validation/arch-clean-1e04b85/`.
+
+https://geo.mirror.pkgbuild.com/images/v20261101.620452/
+
+https://github.com/archlinux/arch-boxes
+
 ## Clean Ubuntu installation and offline runtime
 
 A separate Ubuntu 26.10 KVM guest booted from a copy-on-write overlay

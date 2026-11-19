@@ -53,6 +53,7 @@ without an external network route.
 
 | Guest | Product source | Installed lifecycle checks | Desktop |
 | --- | --- | ---: | --- |
+| Arch cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | Debian 13 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | Ubuntu 26.10 cloud image | `1e04b85` | 195 across all approved Linux routes | X11 passed |
 | FreeBSD 15.1 cloud image | `ca3c845` | 208 across GELI, VeraCrypt, PEFS and gocryptfs | X11 passed |
