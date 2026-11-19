@@ -321,3 +321,39 @@ match and runtime receipts are under
 `target/goal-validation/debian-clean-1e04b85/`.
 
 https://cloud.debian.org/images/cloud/trixie/20261103-2651/SHA512SUMS
+
+## Clean Ubuntu installation and offline runtime
+
+A separate Ubuntu 26.10 KVM guest booted from a copy-on-write overlay
+over a verified copy of Canonical's `release-20261105` amd64 cloud image.
+The source image SHA-256
+`9ef2243a4319e43164ab11d61e324efa0dd19ed850979d10c3a6e44feb5684c5`
+matched Canonical's signed checksum file. The isolated bridge had no
+default route, and the first-boot serial console supplied the guest SSH
+host key. The guest ran kernel `7.3.0-10-generic` and glibc 2.44.
+
+The Ubuntu `1e04b85` .deb had SHA-256
+`cb8cef3c6b6d885ce0f663dcc61555b86275974a7b6270e157e8c59c7330a78c`.
+APT resolved 59 native dependencies, including the X11 smoke-test tools,
+against the pristine guest package inventory. The archive signature
+checks bound the selected package indexes and the 59 archives to Ubuntu's
+signed SHA-512 metadata. The clean guest verified the archives and
+installed the dependencies and .deb together with dpkg in a loopback-only
+namespace. All 251 installed entries matched the artifact manifest.
+The guest exposed no separate VeraCrypt, gocryptfs, CryFS, Java, or
+Cryptomator executables on the standard search path.
+
+The installed package passed 117 privileged and 78 login-user checks
+with zero failures or skips. The workload covered normal file and SQLite
+writes, close, reopen, and read-back across all approved Linux profiles.
+The X11 probe passed at 1280×860 as UID 1300 after a retry used the
+harness's private output directory under `/tmp`.
+
+The mount and loop inventories matched. Cleanup removed the tested package
+and left no processes in the qualification namespaces. The guest halted
+and its transient KVM domain and bridge were retired. The source image
+retained its original checksum and file metadata. The signed checksums,
+package index receipts, native install log, and runtime evidence are under
+`target/goal-validation/ubuntu-clean-26.10/`.
+
+https://cloud-images.ubuntu.com/releases/stonking/release-20261105/SHA256SUMS
