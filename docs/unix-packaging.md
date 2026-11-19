@@ -195,25 +195,34 @@ for the released binaries and dependencies, including Lurker's patches and
 build inputs and the source and notices required by each component's license.
 Keep the source and binary receipts together.
 
-After applying any package-manager or repository signatures, generate a
-detached signature for the final portable archives and native package hashes
-with the publisher's release key. From the release directory on a signing
-host, enumerate the exact files to publish:
+After applying any package-manager or repository signatures, place the
+final native packages, portable archives and corresponding-source archives
+in one release directory. Assemble `SHA256SUMS` from the reviewed artifact
+digests. Use one lowercase SHA-256 digest, two spaces and a filename per
+line. Filenames use ASCII letters, digits, dots, underscores, plus signs
+and hyphens. Use the complete fingerprint of the publisher's actual signing
+key or subkey.
 
 ```sh
-sha256sum lurker_0.1.0_amd64.deb lurker-openbsd-0.1.0.tgz > SHA256SUMS
-gpg --local-user "$RELEASE_KEY_FINGERPRINT" --detach-sign \
-    --output SHA256SUMS.sig SHA256SUMS
+python3 scripts/release-signatures.py sign /path/to/release \
+    --signer "$RELEASE_SIGNING_SUBKEY_FINGERPRINT"
 ```
 
-Verify the signature with an independently trusted publisher keyring before
-checking the downloaded artifacts. This example uses GnuPG and GNU coreutils.
-Repository and native package-manager trust continue to follow each
-distribution's own verification rules.
+The signing command checks each artifact against the approved inventory
+before publishing `SHA256SUMS.sig`. Prepare replacements in a fresh release
+directory. `gpg` uses the signing host's existing key store and agent.
+
+Verify using a current publisher keyring and signing fingerprint acquired
+through an independent trusted channel. The verifier authenticates the exact
+inventory before checking the downloaded contents. With no `--artifact`
+arguments it checks every listed file. Native package-manager verification
+also follows each distribution's trust rules. Keep the verification keyring
+current because GnuPG's `gpgv` trusts the keyring for key status.
 
 ```sh
-gpgv --keyring /absolute/path/to/trusted-publisher.gpg SHA256SUMS.sig SHA256SUMS &&
-    sha256sum --strict -c SHA256SUMS
+python3 scripts/release-signatures.py verify /path/to/downloads \
+    --signer "$RELEASE_SIGNING_SUBKEY_FINGERPRINT" \
+    --keyring /path/to/trusted-publisher.gpg --artifact lurker_0.1.0_amd64.deb
 ```
 
 An Arch KVM test signed the coordinated `a60e4bc` native package checksum
