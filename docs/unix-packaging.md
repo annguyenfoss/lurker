@@ -230,8 +230,13 @@ The six Linux installers with build-specific notices use `14197ef`.
 From its exact unpacked source archive and an empty Cargo home, Arch KVM
 resolved all 592 packages offline and ran the standard Unix builder for
 a CLI-only LUKS package. The result contained the expected 22 vendored
-crates and 46 notice files. The archive, build receipts and verification
-are under `target/goal-validation/rust-corresponding-source/exact-linux-notice-build/`.
+crates and 46 notice files. The portable package passed all 13 LUKS2
+checks on Arch, including encrypted writes, close and reopen. The first
+run staged it under shared `/var/tmp`, where the privileged helper trust
+check correctly refused it. The same bytes passed from an
+administrator-controlled directory, with the loop and mount inventories
+restored. The receipts are under
+`target/goal-validation/rust-corresponding-source/exact-linux-notice-build/`.
 Archive SHA-256 is
 `98cc851aa62dd17899bfb99b11e490091091fa15faa6144baa9b93ba5a4f77c1`.
 
