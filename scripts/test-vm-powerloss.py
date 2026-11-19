@@ -799,7 +799,9 @@ def freebsd_suj_diagnostic(source, secret):
     require(stat.S_ISREG(identity.st_mode) and identity.st_uid == os.geteuid()
             and identity.st_nlink == 1, "SUJ control requires an owned, new regular fixture")
     existing = set(run(["/sbin/mdconfig", "-l"]).split())
-    unit = run(["/sbin/mdconfig", "-a", "-t", "vnode", "-S", "4096", "-f", str(source)]).strip()
+    # The candidate's new GELI file sits on 512-byte md sectors. GELI's
+    # 4096-byte encrypted sectors describe the provider above that md device.
+    unit = run(["/sbin/mdconfig", "-a", "-t", "vnode", "-S", "512", "-f", str(source)]).strip()
     require(re.fullmatch(r"md(?:0|[1-9][0-9]*)", unit) and unit not in existing,
             "SUJ control requires a newly attached device")
     raw = "/dev/" + unit
