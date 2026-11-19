@@ -42,3 +42,20 @@ file creation, unlock, writes and SQLite WAL, close, reopening and reading
 the persisted data, wrong passwords, read-only behavior and busy mount
 handling. Keyfile, block-device, crash and desktop evidence is collected
 separately.
+
+Gentoo completed the same 117 privileged and 78 login-user checks with zero
+failures or skips. The privileged run used the root-owned staging copy and the
+login-user run was `20261119T172340Z-3c3ad178`, both with harness `8293000`.
+Gentoo has a Go executable on PATH. Its prepared-host result confirms the
+packaged gocryptfs lifecycle and leaves clean-install dependency qualification
+open. Across all six guests the packages passed **1,170 lifecycle checks**.
+
+On Debian, the packaged winit software renderer opened a real X11 window in
+an authenticated, TCP-disabled Xvfb session. In the same qualification job,
+each of the six backend families passed a login-user GUI callback lifecycle
+using the packaged helper. Each case created its vault, unlocked, wrote and
+synced a payload, closed, reopened and compared the contents before the final
+close. Run `20261119T172330Z-56a5f376` used the unchanged Rust code in the
+`a39b34f` source snapshot. Its retained first window attempt
+`20261119T172156Z-3eaff65c` diagnosed a missing `libxkbcommon-x11` library.
+Installing Debian's `libxkbcommon-x11-0` resolved the prerequisite.
