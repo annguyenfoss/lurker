@@ -29,6 +29,9 @@ runner can supply `--source-manifest` for its verified deployed Git archive.
 Successful packaging is build evidence; native lifecycle qualification remains
 a separate required step.
 
+See [Linux native packages](linux-native-packaging.md) for the distribution
+wrappers and installed-artifact results.
+
 The BSD package managers use native package formats. See
 [native BSD packages](bsd-packaging.md) for the verified archive wrapper,
 dependency declarations and installer commands.
