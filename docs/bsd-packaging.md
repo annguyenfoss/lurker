@@ -289,3 +289,24 @@ the native mount, mapping, vnode and session inventories returned to their
 exact baseline. This tests process interruption and explicit recovery with
 the guest still running. The transcript, fixture identity and source
 comparisons are in `target/dragonfly-native-review/`.
+
+### NetBSD clean poweroff and restart
+
+The native NetBSD 11.1 package from
+`ca3c8456e507102a1c6e2b9194981afbd48df8db` passed the CGD shutdown lifecycle
+on a networkless KVM clone. A consumer fsynced a 65,536-byte file and its
+directory entry, committed a SQLite FULL/WAL row, and held a second row
+uncommitted. The clone's fixture shutdown hook ran under `/etc/rc.shutdown`,
+verified the consumer's identity, waited for it to roll back and exit, and
+ran `lurker session-close` without a credential prompt. The mounted
+filesystem was gone and all eight CGD and four vnode devices were idle
+before the guest powered off.
+
+After booting the same clone, the packaged CLI reopened the container.
+The file matched its digest, the database passed its integrity check, and
+only the committed row was visible. Normal close left the native inventory
+idle. The hook and native package were removed, and the transient domain
+was shut down. Both source-disk hashes matched their pretest values.
+The first hook attempt stopped at the consumer identity check. The retry
+trimmed NetBSD `ps` padding and used a new container. Both consoles and the
+final receipt are in `target/netbsd-native-shutdown/`.
