@@ -206,6 +206,39 @@ Native and JVM engines and their dependencies have separate source inputs.
 
 https://doc.rust-lang.org/cargo/commands/cargo-vendor.html
 
+## Collected native and JVM source inputs
+
+The `8bb689c` Linux package audit verified 131 matching private backend
+entries across the six native packages. A local staging inventory now
+records digest-verified source archives for VeraCrypt, LKL, its Linux
+stable patch, both wxWidgets builds, patchelf, CryFS and gocryptfs. It
+also holds source ZIPs and module declarations for all nine linked Go
+modules. See `target/goal-validation/collected-native-sources/receipt.json`.
+
+The FreeBSD `ca3c845` VeraCrypt payload includes FreeBSD Ports builds of
+libfuse 2.9.9 and libiconv 1.18. Both upstream tarballs matched `distinfo`
+at ports commit `9b1792b1d9fdc91f491da6648a888173b85bab04`. The exact port
+recipes and patches were archived from the same commit. The input files
+and hashes are under `target/goal-validation/freebsd-port-sources/`.
+
+The private Cryptomator runtime comes from Temurin 25.0.5+8. Its official
+Linux x64 release metadata names the JDK tree at
+`7ec19fb1eda7e42498b7ee4ebde29f77aa961a1c` and the Temurin build tree at
+`1cf43d7a3e77886bfea7d550a902e151a87d724d`. Debian KVM archived both Git
+objects and verified the commit identifiers. The JDK archive includes
+the HotSpot native sources and Java class libraries. The release metadata,
+archives and digests are under `target/goal-validation/temurin-source/`.
+
+Source assembly still needs the exact Maven source artifacts, relocated
+Arch library sources and recipes, and the remaining CryFS Conan source
+archives. The Rust crate notices still need an installed inventory tied
+to the shipped binaries. See the package audit under
+`target/goal-validation/linux-source-readiness-8bb689c/`.
+
+https://github.com/adoptium/temurin25-binaries/releases/tag/jdk-25.0.5%2B8
+
+https://github.com/freebsd/freebsd-ports/tree/9b1792b1d9fdc91f491da6648a888173b85bab04
+
 ## Release maintenance and signatures
 
 Use the installed package's `share/lurker/manifest.json` and neighboring
