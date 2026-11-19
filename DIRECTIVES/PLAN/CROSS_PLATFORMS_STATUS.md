@@ -91,6 +91,20 @@ option after verifying the exact archive digest. The platform packaging
 guides record source image identities, dependency receipts and cleanup.
 The aggregate is in `target/goal-validation/clean-install-matrix-summary.json`.
 
+## Final Linux qualification after the formatter and process-exit fixes
+
+All six native Linux packages at `c21e0cc` passed 1,170 offline lifecycle
+checks and six installed X11 probes. Arch and Gentoo also passed 26
+VeraCrypt checks from an inherited root-only working directory. Gentoo's
+initial CryFS close error is retained with its complete passing retry.
+
+All six packages rebuilt at `8bb689c`. The installed gocryptfs, CryFS,
+and Cryptomator routes passed 234 focused offline checks, and all six
+installed X11 probes passed. Each package preserved all 131 private
+backend entries from `c21e0cc`. Cleanup restored the package inventories
+and cleared the owned test resources. Exact artifacts and receipts are in
+`target/linux-coordinated-c21e0cc/` and `target/linux-coordinated-8bb689c/`.
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from
