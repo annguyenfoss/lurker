@@ -86,6 +86,27 @@ in `target/dragonfly-frozen/`. Native device, mount and session inventories
 matched before and after testing. The desktop/package clone shut down normally
 and its isolated network was removed.
 
+### OpenBSD native package with the VeraCrypt write barrier
+
+OpenBSD 8.0 amd64 wrapped the exact `4189679` stage as the build user. The
+native package SHA-256 is
+`4929fc8a53c78053e40721c69425306828c07920c19a0a487e3b47dc5000a1b9`.
+The alternate install root and package database used preinstalled sudo and
+xkbcommon dependencies. All ten payloads matched their hashes and root
+ownership. The six base tool paths and eight system library hashes matched
+the staging receipt. The installed CLI rejected an ordinary-user-owned
+backend, a group-writable backend and a group-writable backend ancestor
+before the test backend could execute.
+
+The installed package passed 69 lifecycle checks across softraid CRYPTO,
+VeraCrypt AES password and binary keyfile, and RAID1C. The RAID1C checks
+included application I/O and WAL recovery as the invoking login user.
+Inherited OpenBSD syscall traces observed no IPv4 or IPv6 sockets during
+wrapping, install, lifecycle and removal. The guest kept its existing
+network configuration. Removal cleared the package registration and
+payloads. The host package, device and mount inventories matched the
+baseline. The archive and summaries are under `target/openbsd-vc-barrier/`.
+
 ### DragonFly native cryptsetup provenance
 
 The original 6.4.2 x86-64 KVM guest reports `cryptsetup 1.1.2` for its
