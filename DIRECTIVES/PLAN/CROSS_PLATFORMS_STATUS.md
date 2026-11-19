@@ -107,7 +107,7 @@ option after verifying the exact archive digest. The platform packaging
 guides record source image identities, dependency receipts and cleanup.
 The aggregate is in `target/goal-validation/clean-install-matrix-summary.json`.
 
-## Linux qualification after the formatter, process-exit, and packaging changes
+## Qualification after the Linux runtime and Unix packaging changes
 
 All six native Linux packages at `c21e0cc` passed 1,170 offline lifecycle
 checks and six installed X11 probes. Arch and Gentoo also passed 26
@@ -131,6 +131,14 @@ Gentoo, the transient `/run/user/1300` mount expired during the replay.
 The first manifest comparison omitted the executable flag. The corrected
 comparison passed against the same package bytes. See
 `target/linux-coordinated-14197ef/matrix.json` for both attempts.
+
+NetBSD 11.1 built the optimized CLI, helper and desktop from `14197ef`.
+The native package matched all 645 staged payload files. The Cargo
+catalog covered 369 built dependencies and 638 notice files, checked
+against the locked archives. The installed CLI passed all 13 CGD
+lifecycle checks, including SQLite writes and reopen. The alternate
+installation was removed and the original guest inventory matched.
+Evidence is in `target/netbsd-rust-notices-14197ef/qualification-summary.json`.
 
 ## Coordinated non-macOS native qualification, 2026-11-20
 
