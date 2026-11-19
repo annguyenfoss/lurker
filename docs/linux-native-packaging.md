@@ -383,3 +383,38 @@ package index receipts, native install log, and runtime evidence are under
 `target/goal-validation/ubuntu-clean-26.10/`.
 
 https://cloud-images.ubuntu.com/releases/stonking/release-20261105/SHA256SUMS
+
+## Clean Fedora installation and offline runtime
+
+A new Fedora 45 Cloud KVM guest booted from an independent copy of
+`Fedora-Cloud-Base-Generic-45-1.4.x86_64.qcow2`. The upstream Fedora 45
+OpenPGP signature verified the stock image SHA-256
+`50bdc5e70f6a24f540932d15411c1c6ae9fcfa40fb990d876d83c5cc823b2ad0`.
+The running kernel was `7.2.11-300.fc45.x86_64` and SELinux was enforcing.
+
+DNF resolved the prerequisites from local copies of the Fedora and Fedora
+Updates metadata on the clean guest. The guest checked all 56 selected RPM
+digests and Fedora 45 package signatures before installing them offline.
+The exact Lurker `1e04b85` RPM had SHA-256
+`0131b9e145d403e248883f8bbc15e948ba42b8edbc5b8bdd6638be5f711a078f`.
+The developer RPM install used its verified digest, and all 251 installed
+payload entries matched the manifest. The native process environment had
+no separate VeraCrypt, gocryptfs, CryFS, Java, Cryptomator, or Go executable
+on PATH.
+
+The installed package passed 117 privileged and 78 login-user lifecycle
+checks with zero failures or skips. The privileged tests used a loopback-only
+network namespace. The ordinary login user ran on the private KVM bridge
+without IPv4 or IPv6 default routes and rendered a 1280×860 X11 window.
+There were no remaining fixture mounts, loop devices, or private backend
+processes before removal of the tested RPM.
+
+The guest closed its filesystems and halted. The owned transient domain
+and isolated bridge were removed, the stock image still matched its
+checksum, and the original Fedora guest retained its definition and disk
+sources. Package signatures, artifact receipts, logs, and the native result
+are under `target/goal-validation/fedora-clean-1e04b85/`.
+
+https://dl.fedoraproject.org/pub/fedora/linux/releases/45/Cloud/x86_64/images/Fedora-Cloud-45-1.4-x86_64-CHECKSUM
+
+https://fedoraproject.org/security/
