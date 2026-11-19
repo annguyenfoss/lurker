@@ -43,7 +43,7 @@ TOOLS = {
     "NetBSD": {"cgd": ["cgdconfig", "vnconfig", "newfs", "mount", "umount"]},
     "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"],
                 "raid1c": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
-    "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "newfs", "mount", "umount"]},
+    "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "dmsetup", "kldload", "newfs", "mount", "umount"]},
 }
 
 
@@ -952,7 +952,8 @@ def stage(args):
                         + (["gocryptfs requires FUSE; Linux accepts fusermount3 or fusermount, FreeBSD uses mount_fusefs"] if "gocryptfs" in selected else [])
                         + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])
                         + (["VeraCrypt userspace/LKL requires the FUSE kernel interface and fusermount3"] if "veracrypt-userspace" in artifacts else [])
-                        + (["PEFS module must match the FreeBSD kernel"] if "pefs" in selected else []),
+                        + (["PEFS module must match the FreeBSD kernel"] if "pefs" in selected else [])
+                        + (["LUKS1 requires the stock DragonFly dm_target_linear kernel module"] if system == "DragonFly" and "luks1" in selected else []),
                     "self_contained": False, "native_operation_qualification": "not performed by staging",
                     "files": file_manifest(prefix)}
         (share / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
