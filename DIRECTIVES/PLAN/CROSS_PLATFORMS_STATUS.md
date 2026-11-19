@@ -5,6 +5,28 @@ results and remaining release gates apply to this round. Earlier checkpoints
 retain their original dates and source revisions. The approved profiles are
 in `DIRECTIVES/LLM/CIPHER.md`.
 
+## Workspace verification after the OpenBSD and Rust dependency updates
+
+All ten non-macOS KVM guests ran locked workspace checks and tests from
+`ca3c8456e507102a1c6e2b9194981afbd48df8db`. The totals were 1,220 passed,
+zero failed, and 112 ignored.
+
+| Guest | Passed | Ignored | Remote run |
+| --- | ---: | ---: | --- |
+| Arch Linux | 135 | 13 | `20261119T201634Z-4b1cae2e` |
+| Debian, Ubuntu, Fedora, openSUSE, Gentoo | 135 each | 13 each | `20261119T201722Z-02bef4e2` |
+| FreeBSD | 112 | 10 | `20261119T202105Z-c5d427b1` |
+| OpenBSD | 111 | 17 | `20261119T201835Z-1a695499` |
+| NetBSD | 95 | 4 | `20261119T201722Z-d83260c0` |
+| DragonFly BSD | 92 | 3 | `20261119T201722Z-311c61a7` |
+
+The first FreeBSD attempt, `20261119T201722Z-d64aec4f`, stopped before
+compilation because the cache had 3,693 MiB free against a 4,096 MiB
+threshold. The retry used a 3,000 MiB threshold after a prior workspace run
+with the same no-debug build profile used 1,938 MiB. Per-guest stages and
+log digests are in
+`target/goal-validation/secure-synchronous-ca3c845/workspace-summary.json`.
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from
