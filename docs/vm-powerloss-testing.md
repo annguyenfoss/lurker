@@ -276,6 +276,23 @@ identities, result files and hypervisor events are under
 `/mnt/virt/lurker-fault-fb20261120a/`, `/mnt/virt/lurker-fault-ob20261120a/`
 and `/mnt/virt/lurker-fault-dfwin20261120/`.
 
+### DragonFly with separate fixture storage
+
+At `a60e4bc`, the cloned guest used a synchronous UFS boot filesystem and a
+separate HAMMER2 fixture disk. A clean configuration boot verified both
+mounts. The real LUKS1 AES vault used its normal inner UFS. The workload
+acknowledged file and directory fsync and SQLite FULL/WAL before the cut.
+
+The boot filesystem again stopped at the UFS check. A second isolated guest
+booted from a healthy image and mounted a SHA-256-matched copy of the cut
+fixture disk. The published vault filename and on-guest readiness receipt
+were missing. A surviving sparse staging image contained the LUKS1 magic
+and rejected the recorded passphrase during a read-only unlock. The test
+therefore failed to recover the published vault and could not inspect its
+inner UFS. Both original cut disks were preserved. Evidence is under
+`/mnt/virt/lurker-fault-dffault20261120b/` and
+`/mnt/virt/lurker-fault-dfrecover20261120/`.
+
 ## Arch packaged runtime power cuts
 
 Packaged LUKS2/AES at `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` passed
