@@ -56,7 +56,7 @@ source and logs are retained under `target/bsd-native-wrapper/`.
 
 | Guest and payload | Product source | Native installation proof |
 | --- | --- | --- |
-| FreeBSD 15.1, full CLI and desktop | `2ebae8f` | Installed with 22 official dependency artifacts. GELI passed 13 lifecycle checks before removal. |
+| FreeBSD 15.1, full CLI and desktop | `029cf99` | Installed with 22 official dependency artifacts. GELI passed 13 lifecycle checks before removal. The earlier `2ebae8f` package passed the same check. |
 | NetBSD 11.1, full CLI and desktop | `24dcc6e` | Installed with sudo and xkbcommon. CGD passed 13 lifecycle checks before removal. |
 | OpenBSD 8.0, full CLI and desktop | `2ebae8f` | Installed with signed dependencies and native shared-library checks. The installed CLI ran and the package was removed. |
 | DragonFly 6.4.2, CLI | `2ebae8f` | Installed on an isolated KVM copy, passed 13 LUKS1/AES lifecycle checks and was removed. |
@@ -65,3 +65,9 @@ The lifecycle cases create encrypted storage, write and fsync data, close,
 reopen and verify the contents. They also cover rejected credentials and busy,
 aliased and read-only operations. Backend and desktop qualifications outside
 these native installer checks retain their individual package provenance.
+
+DragonFly's full staged desktop payload rendered in a separate X11 check.
+Full native desktop package installation remains pending. The original
+guest's package database was damaged, and the isolated guest used for the
+native CLI package check later stopped at its outer UFS boot check after a
+power-loss test.
