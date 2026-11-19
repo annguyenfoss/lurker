@@ -60,6 +60,7 @@ source and logs are retained under `target/bsd-native-wrapper/`.
 | NetBSD 11.1, full CLI and desktop | `24dcc6e` | Installed with sudo and xkbcommon. CGD passed 13 lifecycle checks before removal. |
 | OpenBSD 8.0, full CLI and desktop | `264cd6e` | Installed with signed dependencies and native shared-library checks. CRYPTO passed 13 lifecycle checks. The installed VeraCrypt helper supported login-user writes and SQLite WAL persistence after close and reopen, kept its raw FUSE data private, and safely refused read-only attach. The package was then removed. |
 | DragonFly 6.4.2, full CLI and desktop | `a60e4bc` | Installed with native dependency checks on an offline archive clone. The installed CLI passed 91 LUKS1 lifecycle checks, including three binary-keyfile suites, and eight UFS exhaustion checks. The installed desktop opened an X11 window and its helper completed the login-user lifecycle. Package removal passed. |
+| DragonFly 6.4.2, full CLI and desktop | `ca3c845` | Rebuilt and installed on a separate offline archive clone. All 91 LUKS1 lifecycle checks, eight UFS exhaustion checks, two core native regressions, the desktop callback lifecycle and the X11 window passed. Package removal restored the native package inventory. |
 
 The lifecycle cases create encrypted storage, write and fsync data, close,
 reopen and verify the contents. They also cover rejected credentials and busy,
@@ -85,6 +86,32 @@ The runtime, header checks, original failed attempt and archive identities are
 in `target/dragonfly-frozen/`. Native device, mount and session inventories
 matched before and after testing. The desktop/package clone shut down normally
 and its isolated network was removed.
+
+### DragonFly rebuild after the Rust dependency updates
+
+The original guest built the CLI, helper and desktop from
+`ca3c8456e507102a1c6e2b9194981afbd48df8db` in
+`20261119T204124Z-a986983d`. The same revision passed workspace checks
+and 92 tests in `20261119T201722Z-311c61a7`, with three ignored native
+tests. The original guest lacked sudo and had a damaged package database.
+A verified archive clone staged and wrapped the digest-checked binaries.
+The first replay stopped before installation because the clone's dm-crypt
+module was unloaded. The repeat ran with the native module loaded.
+
+The seven lifecycle suites covered password and binary-keyfile access for
+AES, Serpent and Twofish, plus AES auto-detection. The closed headers
+confirmed LUKS1, XTS/plain64, 512-bit keys and PBKDF2-HMAC-SHA256. The
+installed desktop rendered a 1280×860 X11 window as UID 1300 and its helper
+completed the login-user lifecycle under a temporary sudo policy. Package
+removal restored the clone's package, mount, vnode, mapper and session
+inventories. The original guest's package database digest and native
+inventory matched their baselines. The clone shut down normally after
+restoring its transport configuration, and its isolated network was removed.
+
+The native package SHA-256 is
+`67941ec7534a0449da3c84ef43ba8e213e2ab97a8fa72a50ca0a377cf2423d6a`.
+The installer, archive, result JSON, native inventories and X11 frame are in
+`target/dragonfly-ca3c845/`.
 
 ### OpenBSD native package with the VeraCrypt write barrier
 
