@@ -288,6 +288,15 @@ first attempt and on retry. The private engine reported a parse failure in
 `LocalStateMetadata` and exited before mounting. Its ciphertext and
 integrity state were retained, along with the result and redacted diagnostic.
 
+A focused CryFS package built on Debian at `0b412d2` passed all five power-cut
+checks on the isolated Arch guest. It used a fresh persistent local state
+directory, preserving the malformed state from the earlier case. The rebuilt
+CryFS engine replaced local integrity metadata atomically and synchronized it
+before acknowledging writes. The fsynced file and SQLite FULL/WAL transaction
+both recovered. Package, readiness, result and local state path are recorded
+in the Arch evidence directory. The normal compatibility check reopened
+ciphertext from `2ebae8f` with byte-identical existing client metadata.
+
 ### FreeBSD GELI flush tracing
 
 On the original FreeBSD 15.1-RELEASE-p6 KVM guest, DTrace observed no GEOM
