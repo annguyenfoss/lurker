@@ -179,7 +179,7 @@ Exact sizes and digests are in
 ## Vendored Rust source archive
 
 The native Unix builder collects the Rust dependency inventory from the
-Cargo build log for the packaged products. It ships the deposit under
+Cargo build log for the packaged products. It ships the inventory under
 `share/lurker/licenses/rust/`, with license declarations and the notice
 files found in each checksum-verified crate. The binary provenance binds
 the inventory and individual files to the build. Build-time crates are
@@ -262,9 +262,14 @@ rebuild still needs Conan's Python dependencies and the native compiler
 and FUSE development tools. See
 `target/goal-validation/cryfs-conan-sources-8bb689c/`.
 
-The remaining source assembly includes the relocated Arch library sources
-and recipes. See the original package audit under
-`target/goal-validation/linux-source-readiness-8bb689c/`.
+The four relocated Arch libraries are libfuse3, libnuma, liburing and zlib.
+Their upstream archives matched the checksums in the exact Arch package
+recipes. The receipt retains those recipes and the signed producer package
+metadata. Reapplying the recorded patchelf command to the producer binaries
+reproduced the shipped bytes for all four libraries. The validation checked
+24 native package entries across six distributions and four portable archive
+entries. The inputs and readback results are in
+`target/goal-validation/arch-relocated-library-sources/receipt.json`.
 
 https://github.com/adoptium/temurin25-binaries/releases/tag/jdk-25.0.5%2B8
 
