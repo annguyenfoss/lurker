@@ -661,10 +661,7 @@ fn initialize_new_filesystem_owner(
         .mapped
         .as_deref()
         .ok_or_else(|| AppError::new("New filesystem has no recorded crypto mapping."))?;
-    let mut argv = args(&["-t", filesystem(), "-o", mount_options(false)]);
-    argv.push(mapped.into());
-    argv.push(target.as_os_str().to_owned());
-    exec("/sbin/mount", &argv, None)?;
+    mount_filesystem(mapped, &target, false)?;
     let mounted = mounts()?
         .into_iter()
         .find(|m| m.target == target)
@@ -920,10 +917,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                 registry.save(&session)?;
             }
         }
-        let mut argv = args(&["-t", filesystem(), "-o", mount_options(c.readonly)]);
-        argv.push(session.mapped.as_ref().unwrap().into());
-        argv.push(target.as_os_str().to_owned());
-        exec("/sbin/mount", &argv, None)?;
+        mount_filesystem(session.mapped.as_deref().unwrap(), &target, c.readonly)?;
         session.mounted = mounts()?.into_iter().find(|m| m.target == target);
         let mounted = session.mounted.as_ref().ok_or_else(|| AppError::new("Mount succeeded but native mount identity is missing; preserve session for recovery."))?;
         if mounted.source != Path::new(session.mapped.as_deref().unwrap())
@@ -1107,11 +1101,22 @@ fn filesystem() -> &'static str {
     }
 }
 
+fn mount_filesystem(mapped: &str, target: &Path, readonly: bool) -> AppResult<()> {
+    let mut argv = args(&["-t", filesystem(), "-o", mount_options(readonly)]);
+    argv.push(mapped.into());
+    argv.push(target.as_os_str().to_owned());
+    exec("/sbin/mount", &argv, None)?;
+    Ok(())
+}
+
 fn mount_options(readonly: bool) -> &'static str {
     if readonly {
         "ro"
     } else if cfg!(target_os = "netbsd") {
         "rw,log"
+    } else if cfg!(target_os = "openbsd") {
+        // Synchronous FFS writes kept cut fixtures recoverable by manual preen.
+        "rw,sync"
     } else {
         "rw"
     }

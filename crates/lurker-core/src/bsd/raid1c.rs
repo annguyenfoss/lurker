@@ -584,10 +584,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             mirror.uuid.as_deref().unwrap(),
             c.allow_degraded,
         )?;
-        let mut argv = super::args(&["-t", "ffs", "-o", "rw"]);
-        argv.push(session.mapped.as_ref().unwrap().into());
-        argv.push(target.as_os_str().to_owned());
-        exec("/sbin/mount", &argv, None)?;
+        super::mount_filesystem(session.mapped.as_deref().unwrap(), &target, false)?;
         session.mounted = mounts()?.into_iter().find(|m| m.target == target);
         let mounted = session.mounted.as_ref().ok_or_else(|| {
             AppError::new("RAID1C mount identity is missing; preserve the journal for recovery.")

@@ -367,9 +367,10 @@ operations through the OS administrator authorization tool. NetBSD images must
 be kept together with their `.cgdparams` recovery sidecars. NetBSD writable
 mounts require FFS journaling (WAPBL). The first writable mount of an older
 image may allocate a journal and requires free space inside the image.
-OpenBSD read-only
-crypto mappings and multi-source RAID1C are not implemented. Native integration
-and package qualification are tracked separately from the selected matrix.
+OpenBSD mounts writable FFS synchronously for softraid CRYPTO, RAID1C and
+VeraCrypt. OpenBSD read-only crypto attachment is unsupported. After a crash,
+FFS can require a manual filesystem check before a writable mount. Keep an
+untouched copy before performing any repair.
 Native packages carry private third-party engines; host kernel tools and FUSE
 remain prerequisites, with macOS FUSE installed separately. A Cargo-only build
 does not include every private native engine.
