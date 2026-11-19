@@ -772,8 +772,11 @@ def guest_verify(run_id):
             "Recorded mirror member paths changed")
     result = {"schema": 1, "status": "failed", "suite": "isolated-vm-abrupt-poweroff", **manifest,
               "ready": ready, "repair": False, "poweroff_method": "libvirt-destroy"}
-    phase = "reopen-through-candidate-cli"
+    phase = "verify-recovered-package"
     try:
+        _, digest = verify_staged_package(Path(manifest["cli"]), manifest["source_commit"], manifest["backend"])
+        require(digest == manifest["package_manifest_sha256"], "Staged package manifest changed after poweroff")
+        phase = "reopen-through-candidate-cli"
         guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
         require(os.path.ismount(mountpoint), "Recovery CLI did not expose the encrypted filesystem")
         phase = "capture-raw-WAL-evidence"
@@ -798,6 +801,7 @@ def guest_verify(run_id):
         result["unacknowledged_file_size"] = (mountpoint / "unacknowledged writes").stat().st_size if (mountpoint / "unacknowledged writes").exists() else None
         phase = "normal-cli-close"
         guest_cli(directory, ["unmount", str(mountpoint)], secret)
+        require(not os.path.ismount(mountpoint), "Recovery CLI reported close while the mount remains attached")
         result.update(status="passed", checks=5)
     except Exception as error:
         result.update(status="failed", failed_stage=phase, error=str(error).replace(secret, "<redacted>")[:2048])
