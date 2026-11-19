@@ -126,3 +126,23 @@ Earlier development/prototype evidence remains in the `cli-5d1ec6ec` and
 reclaimed with retained hash/provenance markers. Failed evidence was preserved.
 These prepared-guest checks do not establish clean-machine independence,
 fault-injection, desktop or release-signing qualification.
+
+## Resumed NetBSD package qualification
+
+NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
+`2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1`. The explicit and Auto suites each
+verified a real encrypted file container, writable mount, file and SQLite WAL
+persistence after close and reopen, wrong-password rejection, and read-only
+mounting. The login-user desktop callback test passed through the installed
+helper. The packaged desktop opened a 1280×860 X11 window with 1,179 sampled
+pixel colors. All CGD and vnode devices were idle afterward, the native session
+list was empty, and the temporary sudo rule was removed.
+
+Remote run `20261119T171506Z-79e7c727` passed workspace check, build, and tests
+(92 passed, 0 failed, 4 ignored). All three ignored core tests passed separately
+in an administrator-controlled test prefix, and the fourth passed in the
+login-user desktop callback run. Staging initially rejected the standard NetBSD
+X11 RUNPATH. Packaging fix `7e242073a8d5eeebceff44a95193ceefa128e819` staged
+the same compiled binaries. The archive and complete results are in
+`target/netbsd-final-resume/`. The archive SHA-256 is
+`91b001fd98ddbcd9df240c8dcccfa814d51864b4d1c7a5982c955d9acf175d41`.
