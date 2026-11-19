@@ -134,8 +134,11 @@ signed kernel.org release verified 14,055 file and mode matches, 142 matching
 deletions, and 18 LKL differences. All 85 changed Btrfs files matched the
 signed release. Arch KVM built the helper and passed 39 unprivileged VeraCrypt
 checks with AES, Serpent, and Twofish using the `ca3c845` CLI and the updated
-filesystem driver. The signed-tree comparison, build and runtime logs are
-under `target/goal-validation/release-inputs-review/`.
+filesystem driver. An additional AES vault created with the previous driver
+reopened with the updated driver, which read the original file and SQLite
+row and wrote a second pair. Reopening with the previous driver verified both
+pairs and SQLite integrity. The signed-tree comparison, build and runtime
+logs are under `target/goal-validation/release-inputs-review/`.
 
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072/fs/btrfs
 
