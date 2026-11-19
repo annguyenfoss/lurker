@@ -58,7 +58,7 @@ source and logs are retained under `target/bsd-native-wrapper/`.
 | --- | --- | --- |
 | FreeBSD 15.1, full CLI and desktop | `029cf99` | Installed with 22 official dependency artifacts. GELI passed 13 lifecycle checks before removal. The earlier `2ebae8f` package passed the same check. |
 | NetBSD 11.1, full CLI and desktop | `24dcc6e` | Installed with sudo and xkbcommon. CGD passed 13 lifecycle checks before removal. |
-| OpenBSD 8.0, full CLI and desktop | `2ebae8f` | Installed with signed dependencies and native shared-library checks. The installed CLI ran and the package was removed. |
+| OpenBSD 8.0, full CLI and desktop | `2ebae8f` | Installed with signed dependencies and native shared-library checks. CRYPTO passed 13 lifecycle checks, including safe refusal of a read-only attach, before removal. |
 | DragonFly 6.4.2, CLI | `2ebae8f` | Installed on an isolated KVM copy, passed 13 LUKS1/AES lifecycle checks and was removed. |
 
 The lifecycle cases create encrypted storage, write and fsync data, close,
