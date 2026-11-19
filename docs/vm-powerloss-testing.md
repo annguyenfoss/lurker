@@ -305,6 +305,20 @@ flush left this WAL durability failure unresolved. See
 `synccache-nbcgdflush20261120.json`, `result-nbcgdflush20261120.json`
 and `synccache-recovery-and-close.log` under the NetBSD fault directory.
 
+The `--netbsd-allocated-diagnostic` control gave the same result on
+`a60e4bc`. Before mount the harness replaced the new 128 MiB sparse
+fixture with a byte-identical, fully allocated copy and kept the sparse
+inode as evidence. Allocation rose from 425,984 to 134,299,648 bytes
+without changing the CGD parameters. Independent native trace evidence
+in `target/netbsd-cgd-geometry/` shows that this allocation switches
+vnd from vnode read/write to direct strategy I/O.
+
+After the cut, the normal WAPBL reopen recovered the file digest but
+the WAL was 32 bytes and the committed table was absent. Normal close
+detached the fixture. See `result-nballocated20261120.json` and
+`allocated-cgd-recovery-and-close.log` under the NetBSD fault directory.
+The control found no basis to make full allocation the CGD default.
+
 https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/ufs/ffs/ffs_vnops.c
 
 https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/dev/cgd.c
