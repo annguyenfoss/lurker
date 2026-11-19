@@ -229,11 +229,25 @@ objects and verified the commit identifiers. The JDK archive includes
 the HotSpot native sources and Java class libraries. The release metadata,
 archives and digests are under `target/goal-validation/temurin-source/`.
 
-Source assembly still needs the exact Maven source artifacts, relocated
-Arch library sources and recipes, and the remaining CryFS Conan source
-archives. The Rust crate notices still need an installed inventory tied
-to the shipped binaries. See the package audit under
-`target/goal-validation/linux-source-readiness-8bb689c/`.
+The `8bb689c` Cryptomator dependency lock covers 27 Maven artifacts. The
+source bundle contains 26 source JARs and 42 published POMs, including 15
+parent or imported BOM POMs. Each download matched its available Maven
+Central checksum and has a recorded SHA-256. The shipped Guava
+`listenablefuture` conflict marker contains only metadata. Its published
+and embedded POMs are retained. The bundle and per-coordinate receipt
+are under `target/goal-validation/maven-source-8bb689c/`.
+
+The CryFS bundle contains all four locked dependency archives, the six
+matching Conan recipe exports and the locked B2 and CMake build inputs.
+The CMake executable matched the qualified producer. A cold offline
+rebuild still needs Conan's Python dependencies and the native compiler
+and FUSE development tools. See
+`target/goal-validation/cryfs-conan-sources-8bb689c/`.
+
+The remaining source assembly includes the relocated Arch library
+sources and recipes. The Rust crate notices still need an installed
+inventory tied to the shipped binaries. See the original package audit
+under `target/goal-validation/linux-source-readiness-8bb689c/`.
 
 https://github.com/adoptium/temurin25-binaries/releases/tag/jdk-25.0.5%2B8
 
