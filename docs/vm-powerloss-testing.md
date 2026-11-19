@@ -272,6 +272,37 @@ the transaction. See `result-nbwt20261120.json` under
 
 https://man.netbsd.org/NetBSD-11.x-BRANCH/dkctl.8
 
+On the original NetBSD 11.1 guest, a disposable `a60e4bc` CGD mount with
+WAPBL active was used to trace SQLite 3.53.4. An ordinary FULL/WAL commit
+and a repeat with SQLite's `fullfsync` pragma enabled produced ten
+`fsync` calls each from transaction setup through normal shutdown, with
+zero `fsync_range` calls. Both left 82,432 bytes of WAL before close.
+An explicit `fsync_range(FFILESYNC | FDISKSYNC)` on the WAL succeeded for
+whole-file and nonempty-range requests. In the examined NetBSD 11 source,
+both journaled FFS paths return before the explicit `FSYNC_CACHE`
+device-flush branch. The whole-file path flushes WAPBL when the vnode has
+dirty metadata buffers. The nonempty-range path calls `wapbl_flush` when
+eligible, regardless of the vnode's dirty buffer list.
+
+The owned CGD mapping advertised write-back without a changeable cache
+mode or FUA support, and its `setcache r` request returned ENOTTY.
+`dkctl cgd0 synccache force` on that same fixture returned success
+through `DIOCCACHESYNC` while the SQLite connection remained open. CGD
+forwards this explicit request to vnd, which asks the backing filesystem
+to sync the ciphertext vnode with `FSYNC_DATAONLY | FSYNC_WAIT |
+FSYNC_CACHE`. This verifies an opt-in device ioctl on the tested mount.
+The explicit request requires privileged raw-device access. No cut
+qualified its durability or its effect on an ordinary application
+commit. The fixture closed normally, all CGD and vnd devices were idle,
+and the original guest configuration was untouched. Evidence is under
+`target/netbsd-cgd-barrier/`.
+
+https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/ufs/ffs/ffs_vnops.c
+
+https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/dev/cgd.c
+
+https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/dev/vnd.c
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
