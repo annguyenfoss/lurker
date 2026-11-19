@@ -391,6 +391,16 @@ Evidence is under `/mnt/virt/lurker-fault-fb20261120a/`.
 
 https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.0/sys/dev/virtio/block/virtio_blk.c
 
+FreeBSD gocryptfs at `a60e4bc` passed all five recovery checks after
+explicit session reconciliation. Direct reopen first refused the recorded
+session. Normal close quarantined the dead session and reported that its
+backend exit receipt was unavailable. The next reopen restored the fsynced
+file and committed SQLite WAL row, excluded the uncommitted row, and
+closed normally. The guest also lost test package access-mode changes,
+which were restored outside the ciphertext fixture before the verification
+retry. The original failure and recovery results are preserved separately
+under `/mnt/virt/lurker-fault-fb20261120a/`.
+
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sbin/mdconfig/mdconfig.c
 
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/dev/md/md.c
