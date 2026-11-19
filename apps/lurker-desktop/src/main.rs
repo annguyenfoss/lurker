@@ -642,11 +642,7 @@ mod tests {
             std::env::var("LURKER_DESKTOP_NATIVE_FORMAT").unwrap_or_else(|_| "gocryptfs".into());
         let backend = lurker_core::VolumeType::parse(&format).expect("backend name");
         assert!(backend.supports_platform(std::env::consts::OS));
-        assert_ne!(
-            backend,
-            lurker_core::VolumeType::Raid1c,
-            "mirror lifecycle has its own native suite"
-        );
+        let mirrored = backend == lurker_core::VolumeType::Raid1c;
         let uid = lurker_core::effective_uid();
         if let Ok(expected) = std::env::var("LURKER_DESKTOP_NATIVE_EXPECT_UID") {
             assert_eq!(uid, expected.parse::<u32>().expect("expected test uid"));
@@ -665,6 +661,7 @@ mod tests {
         let fixture = fixture_parent.join(format!("gui-{}", std::process::id()));
         std::fs::create_dir(&fixture).unwrap();
         let source = fixture.join("encrypted");
+        let peer = fixture.join("encrypted-peer");
         let mountpoint = fixture.join("mount");
         std::fs::DirBuilder::new()
             .mode(0o700)
@@ -727,6 +724,9 @@ mod tests {
             );
             ui.set_create_file_path(fixture.to_string_lossy().as_ref().into());
             ui.set_create_file_name("encrypted".into());
+            if mirrored {
+                ui.set_create_peer_source(peer.to_string_lossy().as_ref().into());
+            }
             ui.set_create_size(
                 if cfg!(target_os = "linux") {
                     "256"
@@ -744,7 +744,7 @@ mod tests {
             assert_eq!(ui.get_create_passphrase(), "");
             ui.set_current_view("manage".into());
             render(&window);
-            let mount = || {
+            let mount = |include_peer| {
                 ui.set_mount_source_kind(
                     if backend.is_directory() {
                         "directory"
@@ -755,6 +755,15 @@ mod tests {
                 );
                 ui.set_mount_source(source.to_string_lossy().as_ref().into());
                 ui.set_mount_point(mountpoint.to_string_lossy().as_ref().into());
+                if mirrored {
+                    ui.set_mount_mirrored(true);
+                    render(&window);
+                    ui.set_mount_peer_source(if include_peer {
+                        peer.to_string_lossy().as_ref().into()
+                    } else {
+                        "".into()
+                    });
+                }
                 ui.set_mount_passphrase("desktop native fixture password".into());
                 ui.invoke_submit_mount();
                 wait();
@@ -777,13 +786,18 @@ mod tests {
                     .iter()
                     .any(|volume| owns_volume(volume)));
             };
-            mount();
+            mount(true);
             if !backend.is_directory() && !cfg!(target_os = "macos") {
                 use std::os::unix::fs::{MetadataExt, PermissionsExt};
                 let image = std::fs::metadata(&source).unwrap();
                 let filesystem = std::fs::metadata(&mountpoint).unwrap();
                 assert_eq!(image.uid(), uid, "new image belongs to the invoking user");
                 assert_eq!(image.permissions().mode() & 0o777, 0o600);
+                if mirrored {
+                    let peer_image = std::fs::metadata(&peer).unwrap();
+                    assert_eq!(peer_image.uid(), uid);
+                    assert_eq!(peer_image.permissions().mode() & 0o777, 0o600);
+                }
                 assert_eq!(
                     filesystem.uid(),
                     uid,
@@ -799,7 +813,7 @@ mod tests {
             file.sync_all().unwrap();
             drop(file);
             unmount();
-            mount();
+            mount(false);
             assert_eq!(
                 std::fs::read(mountpoint.join("payload.bin")).unwrap(),
                 payload
