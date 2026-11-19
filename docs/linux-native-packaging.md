@@ -295,3 +295,29 @@ reports, and the post-run cleanup records are indexed in
 `target/linux-coordinated-1e04b85/matrix.json`. The Arch full portable
 archive SHA-256 is
 `55bec5eed39951786cfc6f693d1aea40b0809afa27a8b80f71b443458a2267ce`.
+
+## Clean Debian installation and offline runtime
+
+A dedicated KVM guest booted from a verified copy of Debian's published
+`debian-13-genericcloud-amd64-20261103-2651.qcow2` image. It ran kernel
+`6.12.115+deb13.1-cloud-amd64`. The source image matched Debian's SHA-512
+listing. The fresh guest exposed no separate VeraCrypt, gocryptfs, CryFS,
+Java or Cryptomator executables. The isolated network had no default routes.
+
+The Debian `1e04b85` installer SHA-256 was
+`e62ad6ce010abc1ceea1152addb9588be68b24e02b5a5b8c448311cbb5967fd0`.
+APT resolved 84 native prerequisites, including the X11 test tools, against
+the clean package inventory on a separate prepared guest. The clean guest
+verified the downloaded files and used `dpkg` to install the native package
+and prerequisites offline after APT's local-file install returned a pathname
+error. The original APT reports are retained.
+
+The installed package passed all 117 privileged and 78 login-user checks in
+a loopback-only namespace, plus a 1280×860 X11 window as UID 1300. The X11
+probe needed a retry with its requested output under the test user's temporary
+directory. Mount and loop inventories matched before and after, and removal
+left the package database consistent. The installed artifact, image checksum
+match and runtime receipts are under
+`target/goal-validation/debian-clean-1e04b85/`.
+
+https://cloud.debian.org/images/cloud/trixie/20261103-2651/SHA512SUMS
