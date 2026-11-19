@@ -249,21 +249,24 @@ Version needs section '.gnu.version_r' contains 2 entries:
                 stager.verify_bsd_patches(manifest, source)
             patches[name] = original
 
-    def test_openbsd_requires_vnd_patch_without_changing_freebsd_inventory(self):
+    def test_bsd_patches_require_the_platform_specific_durability_patch(self):
         source = mock.Mock()
         source.read.side_effect = lambda name: name.encode()
         entries = [
             ("native/veracrypt/utf8-console.patch", "COMMON_PATCH_SHA256"),
             ("native/bsd-veracrypt/auxiliary-path.patch", "PATCH_SHA256"),
             ("native/bsd-veracrypt/openbsd-vnd-io.patch", "OPENBSD_VND_PATCH_SHA256"),
+            ("native/bsd-veracrypt/freebsd-md-sync.patch", "FREEBSD_MD_PATCH_SHA256"),
         ]
         hashes = {constant: stager.hashlib.sha256(name.encode()).hexdigest() for name, constant in entries}
         source.constant.side_effect = lambda _path, name: hashes[name]
         provenance = [{"path": name, "sha256": hashes[constant]} for name, constant in entries]
-        stager.verify_bsd_patches({"platform": "OpenBSD", "patches": provenance}, source)
-        stager.verify_bsd_patches({"platform": "FreeBSD", "patches": provenance[:-1]}, source)
-        with self.assertRaisesRegex(ValueError, "artifact patch provenance"):
-            stager.verify_bsd_patches({"platform": "OpenBSD", "patches": provenance[:-1]}, source)
+        for system, local, other in (("OpenBSD", 2, 3), ("FreeBSD", 3, 2)):
+            with self.subTest(platform=system):
+                stager.verify_bsd_patches({"platform": system, "patches": provenance[:2] + [provenance[local]]}, source)
+                for invalid in (provenance[:2], provenance[:2] + [provenance[other]], provenance):
+                    with self.assertRaisesRegex(ValueError, "artifact patch provenance"):
+                        stager.verify_bsd_patches({"platform": system, "patches": invalid}, source)
 
     def test_private_jvm_preload_requires_qualified_loader_anchors(self):
         runtime = self.root / "libexec/lurker/backends/cryptomator/runtime"

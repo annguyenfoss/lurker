@@ -1,0 +1,32 @@
+--- a/src/Driver/Fuse/FuseService.cpp
++++ b/src/Driver/Fuse/FuseService.cpp
+@@ -1094,6 +1094,11 @@
+ 			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
+ 			{
+ 				FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);
++#ifdef TC_FREEBSD
++				// Vnode md writes with IO_SYNC. fusefs waits for completion
++				// but does not forward IO_SYNC to the FUSE write callback.
++				FuseService::FlushVolume();
++#endif
+ 				return size;
+ 			}
+ 
+@@ -1144,7 +1149,7 @@
+ 		return -ENOENT;
+ 	}
+ 
+-#ifdef TC_LINUX
++#if defined(TC_LINUX) || defined(TC_FREEBSD)
+ 	static int fuse_service_fsync (const char *path, int datasync, struct fuse_file_info *fi)
+ 	{
+ 		try
+@@ -1790,7 +1795,7 @@
+ 
+ 		fuse_service_oper.access = fuse_service_access;
+ 		fuse_service_oper.destroy = fuse_service_destroy;
+-#ifdef TC_LINUX
++#if defined(TC_LINUX) || defined(TC_FREEBSD)
+ 		fuse_service_oper.fsync = fuse_service_fsync;
+ #endif
+ 		fuse_service_oper.getattr = fuse_service_getattr;

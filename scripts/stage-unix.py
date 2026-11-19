@@ -218,7 +218,10 @@ def verify_bsd_patches(manifest, source):
         ("native/veracrypt/utf8-console.patch", "COMMON_PATCH_SHA256"),
         ("native/bsd-veracrypt/auxiliary-path.patch", "PATCH_SHA256"),
     ]
-    if manifest.get("platform") == "OpenBSD":
+    target = manifest.get("platform")
+    if target == "FreeBSD":
+        patches.append(("native/bsd-veracrypt/freebsd-md-sync.patch", "FREEBSD_MD_PATCH_SHA256"))
+    elif target == "OpenBSD":
         patches.append(("native/bsd-veracrypt/openbsd-vnd-io.patch", "OPENBSD_VND_PATCH_SHA256"))
     expected = []
     for name, constant in patches:

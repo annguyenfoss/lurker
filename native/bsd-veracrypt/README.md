@@ -126,6 +126,14 @@ run only on designated guests with `--ignored --test-threads=1`.
 These are native **backend adapter** results; they do not claim whole CLI,
 desktop or release-package qualification.
 
+The FreeBSD md durability patch completes a ciphertext flush before
+acknowledging a private volume-image write. Vnode md supplies `IO_SYNC` to
+fusefs, which waits for the FUSE write to complete without passing the sync
+request to the daemon. The patch also enables forwarding explicit FUSE
+fsync requests on the private image. Both paths use VeraCrypt's existing
+ciphertext flush and error translation. The engine build and staging
+manifests require the exact FreeBSD patch digest.
+
 Upstream references:
 
 - https://github.com/veracrypt/VeraCrypt/blob/7afc449f2bc69366e8b67b82ad66201325d318c3/src/Readme.txt
