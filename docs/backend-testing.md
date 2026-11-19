@@ -172,3 +172,14 @@ unused X extensions, used private Xauthority, and reaped all owned
 children. The window result and full package manifest are in
 `target/dragonfly-resume/`. The full archive SHA-256 is
 `22feef4528e2d684182b5900381721e5c076b01aabf960e43992931737e3a742`.
+
+NetBSD 11.1 repeated the same 26 packaged CLI checks, login-user desktop
+callbacks, and packaged X11 window at
+`24dcc6e7ff7f4bd1318ccbc238a9616cd7c791dd` after enabling WAPBL on writable CGD
+mounts. A container created and populated by the original `2ebae8f` package
+opened with effective journaling in the new package. The old file was intact,
+and a new file written in the journaled session persisted after close and
+read-only reopen. Remote run `20261119T174204Z-c04be4b9` passed workspace check,
+build, and package staging, with 93 regular tests passed, 0 failed and 4
+ignored. The exact archive and original-guest results are in
+`target/netbsd-cgd-wapbl/`.
