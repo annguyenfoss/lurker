@@ -178,6 +178,24 @@ Exact sizes and digests are in
 
 ## Vendored Rust source archive
 
+The native Unix builder collects the Rust dependency inventory from the
+Cargo build log for the packaged products. It ships the deposit under
+`share/lurker/licenses/rust/`, with license declarations and the notice
+files found in each checksum-verified crate. The binary provenance binds
+the inventory and individual files to the build. Build-time crates are
+included. For a manually staged Cargo build, pass its JSON build log to
+`stage-unix.py record --kind binaries --cargo-log` and keep the resulting
+`rust-notices/` directory next to the binary manifest. Use Cargo's
+`--message-format=json-render-diagnostics` when making that log.
+
+On Arch KVM, the combined package build recorded 372 compiled dependency
+crates and 647 notice files. The CLI-only build recorded 22 crates and 46
+notice files. Fifteen crates in the desktop build supplied license
+declarations without separate notice files in their registry archives.
+Their declarations remain visible in the inventory for source review.
+Both builder and staging suites passed, for 58 tests total. Evidence is
+under `target/goal-validation/rust-notices/`.
+
 To prepare the Rust portion of the release sources, extract a Git archive
 of the exact product commit into a new directory. From that directory,
 generate the vendor tree and its local Cargo configuration.
@@ -244,10 +262,9 @@ rebuild still needs Conan's Python dependencies and the native compiler
 and FUSE development tools. See
 `target/goal-validation/cryfs-conan-sources-8bb689c/`.
 
-The remaining source assembly includes the relocated Arch library
-sources and recipes. The Rust crate notices still need an installed
-inventory tied to the shipped binaries. See the original package audit
-under `target/goal-validation/linux-source-readiness-8bb689c/`.
+The remaining source assembly includes the relocated Arch library sources
+and recipes. See the original package audit under
+`target/goal-validation/linux-source-readiness-8bb689c/`.
 
 https://github.com/adoptium/temurin25-binaries/releases/tag/jdk-25.0.5%2B8
 

@@ -445,6 +445,61 @@ Version needs section '.gnu.version_r' contains 2 entries:
             receipt.write_text(json.dumps(manifest))
             self.assertEqual(self.root, stager.validate_backend("veracrypt-bsd", self.root, source))
 
+    def test_rust_notices_follow_the_build_receipt_and_verify_registry_bytes(self):
+        source = mock.Mock(root=self.root / "project", commit="a" * 40)
+        source.root.mkdir()
+        product_manifest = source.root / "Cargo.toml"
+        product_manifest.touch()
+        binary = self.root / "lurker"
+        binary.touch()
+        registry = self.root / "cargo/registry"
+        crate = "example-crate-1.0.0"
+        directory = registry / "src/mirror" / crate
+        directory.mkdir(parents=True)
+        (directory / "Cargo.toml").write_text('[package]\nname="example-crate"\nversion="1.0.0"\nlicense-file="terms.txt"\n')
+        (directory / "terms.txt").write_text("Declared license")
+        (directory / "NOTICE").write_text("Exact upstream notice")
+        archive = registry / "cache/mirror" / (crate + ".crate")
+        archive.parent.mkdir(parents=True)
+        with tarfile.open(archive, "w:gz") as stream:
+            stream.add(directory, arcname=crate)
+        registry_source = "registry+https://github.com/rust-lang/crates.io-index"
+        source.read.return_value = (f'[[package]]\nname="example-crate"\nversion="1.0.0"\n'
+                                    f'source="{registry_source}"\nchecksum="{stager.digest(archive)}"\n').encode()
+        log = self.root / "rust-build.log"
+        events = [{"reason": "compiler-artifact", "package_id": registry_source + "#example-crate@1.0.0",
+                   "manifest_path": str(directory / "Cargo.toml")},
+                  {"reason": "compiler-artifact", "package_id": "path+file:///project#0.1.0",
+                   "manifest_path": str(product_manifest), "executable": str(binary)},
+                  {"reason": "build-finished", "success": True}]
+        log.write_text("\n".join(map(json.dumps, events)))
+        destination = self.root / "notices"
+        receipt = stager.record_rust_notices(log, source, binary.parent, [binary.name], destination)
+        catalog = json.loads((destination / "packages.json").read_text())
+        self.assertEqual(catalog["packages"][0]["notices"], ["NOTICE", "terms.txt"])
+        self.assertEqual(receipt["files"][crate + "/NOTICE"]["sha256"], stager.digest(directory / "NOTICE"))
+        archive.write_bytes(b"different archive")
+        with self.assertRaisesRegex(ValueError, "differs from Cargo.lock"):
+            stager.record_rust_notices(log, source, binary.parent, [binary.name], self.root / "new-notices")
+
+    def test_stager_copies_and_attests_rust_notices(self):
+        args, source = self._stage_fixture()
+        notices = args.binary_manifest.parent / "rust-notices"
+        notices.mkdir()
+        (notices / "packages.json").write_text("[]")
+        provenance = json.loads(args.binary_manifest.read_text())
+        provenance["rust_notices"] = {"files": stager.file_manifest(notices)}
+        args.binary_manifest.write_text(json.dumps(provenance))
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "audit_dependencies", return_value=[]):
+            self.assertEqual(0, stager.stage(args))
+            installed = args.output / "share/lurker/licenses/rust/packages.json"
+            self.assertEqual(installed.read_text(), "[]")
+            args.output = self.root / "invalid-package"
+            (notices / "packages.json").write_text("modified")
+            with self.assertRaisesRegex(ValueError, "notice inventory differs"):
+                stager.stage(args)
+            self.assertFalse(args.output.exists())
+
     def test_creator_only_staging_keeps_private_libraries_and_provenance(self):
         args, source = self._stage_fixture()
         directory = self.root / "creator"

@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -633,6 +634,117 @@ def audit_dependencies(prefix):
     return records
 
 
+def cargo_artifacts(log, source, binaries, products):
+    lock = tomllib.loads(source.read("Cargo.lock").decode())
+    locked = {f"{p['source']}#{p['name']}@{p['version']}": p
+              for p in lock["package"] if "source" in p}
+    dependencies = {}
+    built = set()
+    finished = False
+    with log.open() as stream:
+        for line in stream:
+            if not line.startswith("{"):
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("reason") == "build-finished":
+                finished = event.get("success") is True
+            if event.get("reason") != "compiler-artifact":
+                continue
+            identifier = event["package_id"]
+            manifest = Path(event["manifest_path"]).resolve(strict=True)
+            if identifier in locked:
+                previous = dependencies.setdefault(identifier, manifest.parent)
+                if previous != manifest.parent:
+                    fail("Cargo reported multiple source directories for " + identifier)
+            elif identifier.startswith("path+file://") and manifest.is_relative_to(source.root):
+                if event.get("executable"):
+                    executable = Path(event["executable"]).resolve(strict=True)
+                    if executable.name in products and executable == binaries / executable.name:
+                        built.add(executable.name)
+            else:
+                fail("Cargo artifact source is absent from the locked workspace: " + identifier)
+    if not finished or built != set(products) or not dependencies:
+        fail("Cargo build log misses a successful build of the required products and dependencies")
+    return [(locked[key], dependencies[key]) for key in sorted(dependencies)]
+
+
+def crate_notices(package, directory):
+    name = package["name"] + "-" + package["version"]
+    checksum = package["checksum"]
+    build_manifest = (directory / "Cargo.toml").read_bytes()
+    declared = tomllib.loads(build_manifest.decode())["package"]
+    if (declared["name"], declared["version"]) != (package["name"], package["version"]):
+        fail("Cargo manifest name or version differs from its locked artifact: " + name)
+    license_file = declared.get("license-file")
+    if license_file:
+        license_file = str(relative(license_file))
+
+    def is_notice(path):
+        return (str(path) == license_file or any(part.lower() in {"licenses", "licences"} for part in path.parts[:-1])
+                or re.match(r"^(licen[cs]e|copying|copyright|notice)([._-]|$)", path.name, re.IGNORECASE))
+
+    contents = {}
+    vendor_checksum = directory / ".cargo-checksum.json"
+    if vendor_checksum.is_file():
+        vendor = json_file(vendor_checksum)
+        if vendor["package"] != checksum:
+            fail("Vendored package checksum differs from Cargo.lock: " + name)
+        if hashlib.sha256(build_manifest).hexdigest() != vendor["files"].get("Cargo.toml"):
+            fail("Vendored Cargo manifest checksum differs: " + name)
+        for entry, expected in vendor["files"].items():
+            path = relative(entry)
+            if is_notice(path):
+                verified = (directory / path).resolve(strict=True)
+                if not verified.is_relative_to(directory):
+                    fail("Vendored Cargo notice is outside its package: " + name + "/" + entry)
+                data = verified.read_bytes()
+                if hashlib.sha256(data).hexdigest() != expected:
+                    fail("Vendored Cargo notice checksum differs: " + name + "/" + entry)
+                contents[str(path)] = data
+    else:
+        if directory.parent.parent.name != "src" or len(directory.parents) < 3:
+            fail("Cargo package is outside the registry cache: " + name)
+        archive = directory.parents[2] / "cache" / directory.parent.name / (name + ".crate")
+        if not archive.is_file() or digest(archive) != checksum:
+            fail("Cargo registry archive is missing or differs from Cargo.lock: " + name)
+        with tarfile.open(archive) as bundle:
+            manifest = bundle.extractfile(name + "/Cargo.toml")
+            if manifest is None or manifest.read() != build_manifest:
+                fail("Cargo build manifest differs from the verified registry archive: " + name)
+            for member in bundle:
+                if member.isfile() and member.name.startswith(name + "/"):
+                    path = relative(member.name[len(name) + 1:])
+                    if is_notice(path):
+                        contents[str(path)] = bundle.extractfile(member).read()
+    if license_file and license_file not in contents:
+        fail("Cargo package is missing its declared license file: " + name)
+    return {"name": package["name"], "version": package["version"], "source": package["source"],
+            "archive_sha256": checksum, "license": declared.get("license"),
+            "repository": declared.get("repository"), "notices": sorted(contents)}, contents
+
+
+def record_rust_notices(log, source, binaries, products, destination):
+    dependencies = cargo_artifacts(log, source, binaries, products)
+    destination.mkdir()
+    catalog = []
+    for package, directory in dependencies:
+        notice, files = crate_notices(package, directory)
+        crate = destination / relative(package["name"] + "-" + package["version"])
+        for name, data in files.items():
+            target = crate / relative(name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("xb") as stream:
+                stream.write(data)
+        catalog.append(notice)
+    (destination / "packages.json").write_text(json.dumps({"source_commit": source.commit,
+        "scope": "Cargo compiler artifacts for the shipped products, including build-time crates",
+        "products": sorted(products), "packages": catalog}, indent=2) + "\n")
+    return {"cargo_log_sha256": digest(log), "files": file_manifest(destination)}
+
+
 def record(args):
     source = Source(args.source_root, args.source_commit, args.source_manifest)
     source.verify_clean_build_source()
@@ -648,6 +760,11 @@ def record(args):
         files = file_manifest(root, exclude=("artifact-manifest.json",))
     manifest = {"schema": 1, "source_commit": source.commit, "backend": args.kind,
                 "os": platform.system(), "architecture": platform.machine(), "files": files}
+    if args.cargo_log:
+        if args.kind != "binaries":
+            fail("a Cargo build log applies only to the Rust product binaries")
+        manifest["rust_notices"] = record_rust_notices(args.cargo_log, source, root, required,
+                                                      args.output.parent / "rust-notices")
     if args.upstream_revision:
         manifest["upstream_revision"] = args.upstream_revision
     with args.output.open("x") as stream:
@@ -768,6 +885,15 @@ def stage(args):
         verify_files(prefix / "bin", {name: provenance["files"][name] for name in required})
         (share / "provenance/rust-binaries.json").write_text(json.dumps(provenance, indent=2) + "\n")
         (share / "licenses/LURKER-LICENSE").write_bytes(source.read("LICENSE"))
+        if "rust_notices" in provenance:
+            notices = args.binary_manifest.parent / "rust-notices"
+            expected = provenance["rust_notices"]["files"]
+            installed = share / "licenses/rust"
+            if file_manifest(notices) != expected or "packages.json" not in expected:
+                fail("Rust notice inventory differs from binary provenance")
+            copy_tree(notices, installed)
+            if file_manifest(installed) != expected:
+                fail("Rust notices changed during staging")
         for kind, directory in artifacts.items():
             snapshot = input_snapshots[kind]
             def copied_file(name, target):
@@ -870,6 +996,7 @@ def main():
     record_parser.add_argument("--kind", choices=["binaries", *ARTIFACTS], required=True)
     record_parser.add_argument("--directory", type=Path, required=True)
     record_parser.add_argument("--upstream-revision")
+    record_parser.add_argument("--cargo-log", type=Path, help="Collect Rust dependency notices from this Cargo JSON build log")
     stage_parser = sub.choices["stage"]
     stage_parser.add_argument("--binaries", type=Path, required=True)
     stage_parser.add_argument("--binary-manifest", type=Path, required=True)
@@ -878,7 +1005,7 @@ def main():
     args = parser.parse_args()
     try:
         return record(args) if args.command == "record" else stage(args)
-    except (ValueError, OSError, KeyError, zipfile.BadZipFile, subprocess.SubprocessError) as error:
+    except (ValueError, OSError, KeyError, tarfile.TarError, zipfile.BadZipFile, subprocess.SubprocessError) as error:
         print(json.dumps({"status": "blocked", "error": str(error)}), file=sys.stderr)
         return 2
 

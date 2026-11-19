@@ -127,14 +127,16 @@ def recipe(args, system, selected, artifacts, cache, work, module):
     stages = []
     cargo_target = Path(os.environ.get("CARGO_TARGET_DIR", str(cache / "cargo"))).expanduser().absolute()
     binaries = cargo_target / "release"
-    build = ["cargo", "build", "--locked", "--release", "--jobs", str(args.jobs), "--target-dir", str(cargo_target),
+    build = ["cargo", "build", "--locked", "--release", "--message-format=json-render-diagnostics",
+             "--jobs", str(args.jobs), "--target-dir", str(cargo_target),
              "-p", "lurker-cli", "-p", "lurker-helper"]
     if not args.cli_only:
         build += ["-p", "lurker-desktop"]
     stages.append(("rust-build", build))
     binary_record = work / "rust-binaries.json"
     record = [python, str(scripts / "stage-unix.py"), "record", *source_args, "--kind", "binaries",
-              "--directory", str(binaries), "--output", str(binary_record)]
+              "--directory", str(binaries), "--output", str(binary_record),
+              "--cargo-log", str(work / "rust-build.log")]
     if not args.cli_only:
         record.append("--desktop")
     stages.append(("rust-provenance", record))

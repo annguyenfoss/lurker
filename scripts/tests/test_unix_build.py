@@ -38,6 +38,8 @@ class UnixBuild(unittest.TestCase):
         stages = dict(self.recipe("NetBSD", {"cgd"}))
         self.assertIn("lurker-desktop", stages["rust-build"])
         self.assertIn("--locked", stages["rust-build"])
+        self.assertIn("--message-format=json-render-diagnostics", stages["rust-build"])
+        self.assertIn(str(self.root / "work/rust-build.log"), stages["rust-provenance"])
         self.assertIn("--desktop", stages["rust-provenance"])
         self.assertIn("--desktop", stages["package"])
         for name in ("rust-provenance", "package"):
