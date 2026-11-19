@@ -409,6 +409,30 @@ inner UFS. Both original cut disks were preserved. Evidence is under
 `/mnt/virt/lurker-fault-dffault20261120b/` and
 `/mnt/virt/lurker-fault-dfrecover20261120/`.
 
+### DragonFly with a vault published before a clean reboot
+
+The same `a60e4bc` package created a LUKS1 AES vault on a separate HAMMER2
+fixture disk. A clean shutdown and a new guest boot proved the published
+container survived with identical ciphertext. The normal CLI then unlocked
+and mounted its inner UFS. The clone was cut 1.01 seconds after the host
+observed the file fsync and SQLite FULL/WAL acknowledgement. The workload was
+still running at the cut.
+
+A healthy, isolated DragonFly guest mounted a byte-identical copy of the cut
+HAMMER2 disk. The published vault survived and its 128 MiB ciphertext still
+matched the digest from before the workload. The on-guest readiness receipt
+was missing. The recovery harness used the host's saved receipt on the copy
+only. The normal CLI unlocked and mounted the vault, but the fsynced file and
+all three SQLite files were absent. Normal close detached the mapping and
+vnode. No filesystem repair ran, and the original cut image kept its SHA-256.
+
+This establishes loss of the acknowledged writes for an established vault
+in this HAMMER2-backed configuration. It does not isolate the component that
+failed to persist the writes. The cut and recovery guests, receipts, and
+device inventory are recorded under
+`/mnt/virt/lurker-fault-dfexisting20261120/` and
+`/mnt/virt/lurker-fault-dfreadexist20261120/`.
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
