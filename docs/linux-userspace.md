@@ -37,7 +37,7 @@ Lurker’s Unprivileged route reuses VeraCrypt’s crypto/FUSE implementation, b
 
 Both creation routes use the same normal-volume AES/Serpent/Twofish, SHA-512, PIM 0 and password-or-keyfile authentication profiles, and create Btrfs with zstd mounting. Choosing Unprivileged does not select weaker encryption defaults.
 
-The container format is intended to be interchangeable after unmounting, subject to filesystem support and permissions. Tests confirmed that cryptsetup accepts both password-only and keyfile-only headers from userspace-created containers using `--test-passphrase`. That check does not prove a full cross-mode filesystem read/write cycle; dedicated mount/write/remount tests in both directions remain useful follow-up work. Never open the same container concurrently through the two routes.
+The container format can be used through either route after a normal close, subject to filesystem support and permissions. The Arch KVM cross-mode tests below verified read and write access in both directions with passwords and binary keyfiles. Never open the same container concurrently through the two routes.
 
 The userspace route adds two FUSE layers and a 192 MiB LKL memory arena per mounted filesystem, plus VeraCrypt buffers. The Arch KVM comparison below measures three write workloads through both routes.
 
@@ -101,7 +101,7 @@ The architectural advantage is a smaller initial privilege scope for some failur
 - **More integration code needs review.** Sector adaptation, process startup, journal draining and recovery are new code paths. The tests below establish exercised behavior, not an independent security audit. Narrower host privileges do not establish stronger overall confidentiality or data-loss resistance.
 - **Pinned dependencies need ongoing maintenance.** Host kernel updates do not update the filesystem code embedded in lurker-fs. Review upstream VeraCrypt/LKL security fixes and refresh/rebuild the bundled helpers when needed; pinning provides reproducibility, not an assurance that a revision has no vulnerabilities.
 
-Further work should verify memory/dump/debugger policies, assess a dedicated process sandbox, and extend fault injection to resource exhaustion and abrupt termination across startup/shutdown stages. Benchmark performance and exercise full cross-mode persistence before making stronger comparative claims. These are open review/verification items, not implemented protections.
+Further work should verify memory/dump/debugger policies, assess a dedicated process sandbox, and extend fault injection to resource exhaustion and abrupt termination across startup/shutdown stages.
 
 On Debian KVM (`6.12.117+deb13-cloud-amd64`), the hash-verified `a60e4bc`
 package was extracted without installation. UID 1300 created, opened, wrote
@@ -165,7 +165,7 @@ The private userspace crypto driver holds the same exclusive inode lock for the 
 
 Forced creation in either Linux route replaces only the unchanged regular-file inode locked at startup. If no destination existed at startup, publication uses atomic no-clobber even with `--force`; a destination appearing during encryption is preserved. Replacing or removing an originally locked path aborts publication. This identity check coordinates cooperative Lurker operations; it does not make check-and-rename atomic against malicious changes to a writable parent directory.
 
-Native bundle protocol 3 is required. Before upgrading a protocol-2 installation, close its existing userspace volumes using the old installed Lurker; already-running old drivers do not acquire the new locks merely because files on disk were updated. Do not kill mounted drivers as an upgrade procedure. This work does not install or replace the production Lurker on endeavour.
+New userspace mounts require native bundle protocol 4. Normally close existing volumes before upgrading. Already-running drivers keep their existing lock and flush behavior until the mount closes.
 
 ## Unprivileged session safety and recovery
 
@@ -319,3 +319,16 @@ LKL's resident memory after the workload was 68.1–68.5 MiB across the
 three trials. VeraCrypt process memory was outside this measurement.
 Timings apply to this guest, storage and workload. The receipt and trial
 logs are under `target/goal-validation/login-user-overhead/`.
+
+## Read and write across VeraCrypt routes (2026-11-20)
+
+On the same isolated Arch guest, the `c21e0cc` package exercised four AES
+VeraCrypt/Btrfs containers. Each route created one password-protected and
+one binary-keyfile-protected container. The opposite route reopened each
+container, verified the original synced file and SQLite FULL/WAL row, and
+added its own synced file and row. The creating route then reopened each
+container and verified both files and both rows. The ordinary login user
+ran every file and database operation.
+
+All four cases restored the original mount, loop and mapper inventories.
+Case receipts are in `target/goal-validation/cross-mode-persistence/`.
