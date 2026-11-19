@@ -468,6 +468,16 @@ Evidence is under `/mnt/virt/lurker-fault-fb20261120a/`.
 
 https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.0/sys/dev/virtio/block/virtio_blk.c
 
+A separate live `a60e4bc` fixture checked whether a privileged caller could
+send `DIOCGFLUSH` to the mounted GELI provider itself. The device opened
+read-only, but the ioctl returned EPERM. Opening the mounted provider
+read-write also returned EPERM. FreeBSD's GEOM cache-flush BIO requires
+write access to the provider. No power cut was triggered for this control.
+The owned fixture closed normally. See `mounted-geli-explicit-flush-access.json`
+under the FreeBSD fault directory.
+
+https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.0/sys/sys/disk.h
+
 FreeBSD gocryptfs at `a60e4bc` passed all five recovery checks after
 explicit session reconciliation. Direct reopen first refused the recorded
 session. Normal close quarantined the dead session and reported that its
