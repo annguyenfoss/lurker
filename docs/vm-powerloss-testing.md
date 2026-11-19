@@ -467,6 +467,31 @@ UFS lacked the acknowledged file and all SQLite files. The vault closed
 normally after collecting the empty recovery inventory. See
 `result-fbvc20261120.json` in the same FreeBSD evidence directory.
 
+On the original FreeBSD 15.1-RELEASE-p6 guest, DTrace tied 43
+`fuse_vnop_write` calls with `IO_SYNC` to the disposable VeraCrypt vnode md
+thread. The identified private engine descriptor recorded 45 ciphertext
+`pwrite` calls and zero ciphertext sync calls. An explicit auxiliary-image
+fsync reached `fuse_vnop_fsync` with no ciphertext sync. The baseline
+observer inherited ignored SIGINT. Its exact trace process terminated on
+SIGTERM, then the fixture closed normally and the kernel module baseline
+was restored.
+
+FreeBSD's `2fda5f7` patch completes a ciphertext flush before returning a
+successful FUSE image write and forwards explicit auxiliary fsync. The
+packaged engine returned successful ciphertext fsync in every measured
+workload window: four during file fsync, three during rename and parent
+directory fsync, 19 during SQLite FULL/WAL commit, and three during the
+follow-up syncs. The explicit auxiliary fsync control returned two successful
+ciphertext syncs. The file and SQLite row matched after ordinary reopen.
+The portable archive SHA-256 is
+`be8d7cf4aa3c5cc5dbb20755f2702d7df8c0c597332716411bf12ab07e81bb3f`.
+Both trace logs and the patched phase result are under
+`target/freebsd-vc-barrier/`.
+
+https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/fs/fuse/fuse_vnops.c
+
+https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/fs/fuse/fuse_io.c
+
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sbin/mdconfig/mdconfig.c
 
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/dev/md/md.c
