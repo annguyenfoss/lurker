@@ -227,6 +227,8 @@ def verify_bsd_patches(manifest, source):
 
 def verify_folder_patches(kind, manifest, source):
     paths = source.constant("scripts/build-folder-backends.py", "PATCHES").get(kind, [])
+    platform_patches = source.constant("scripts/build-folder-backends.py", "PLATFORM_PATCHES")
+    paths = paths + platform_patches.get(platform.system(), {}).get(kind, [])
     expected = {name: hashlib.sha256(source.read(name)).hexdigest() for name in paths}
     if manifest.get("patches", {}) != expected:
         fail("folder artifact patch provenance differs from exact source: " + kind)

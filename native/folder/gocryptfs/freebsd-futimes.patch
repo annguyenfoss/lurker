@@ -1,0 +1,7 @@
+diff --git a/internal/syscallcompat/sys_freebsd.go b/internal/syscallcompat/sys_freebsd.go
+--- a/internal/syscallcompat/sys_freebsd.go
++++ b/internal/syscallcompat/sys_freebsd.go
+@@ -111,2 +111,2 @@ func FutimesNano(fd int, a *time.Time, m *time.Time) (err error) {
+-	return unix.UtimesNanoAt(unix.AT_FDCWD, "", ts, AT_EMPTY_PATH)
++	return unix.UtimesNanoAt(fd, "", ts, AT_EMPTY_PATH)
+ }

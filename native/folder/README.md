@@ -47,6 +47,13 @@ suite passed on the dedicated guest with temporary `vfs.usermount=1` and
 does not change sysctl/devfs policy, grant device access or elevate this backend.
 An administrator must prepare that host prerequisite for ordinary user sessions.
 
+FreeBSD builds also require `gocryptfs/freebsd-futimes.patch`. The kernel can
+combine an access-time update with a truncate in one FUSE request. Apply the
+timestamp to the opened ciphertext file descriptor so that the size change
+can complete. The pinned upstream implementation used the current directory
+descriptor instead and failed SQLite WAL checkpointing with
+`SQLITE_IOERR_TRUNCATE`. The Unix stager verifies this FreeBSD patch digest.
+
 Creation refuses existing targets, sizes, force, keyfiles and alternate cipher
 families. A private target directory is reserved with atomic mkdir, initialized
 in an internal staging directory, synced and published with the native vault

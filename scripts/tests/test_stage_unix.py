@@ -200,7 +200,7 @@ Version needs section '.gnu.version_r' contains 2 entries:
         import hashlib
         name = "native/folder/cryfs/fsyncdir.patch"
         source = mock.Mock()
-        source.constant.return_value = {"cryfs": [name]}
+        source.constant.side_effect = lambda _, constant: {"cryfs": [name]} if constant == "PATCHES" else {}
         source.read.return_value = b"final durability patch"
         correct = {"patches": {name: hashlib.sha256(source.read.return_value).hexdigest()}}
         stager.verify_folder_patches("cryfs", correct, source)
@@ -211,6 +211,22 @@ Version needs section '.gnu.version_r' contains 2 entries:
         stager.verify_folder_patches("gocryptfs", {"patches": {}}, source)
         with self.assertRaisesRegex(ValueError, "patch provenance"):
             stager.verify_folder_patches("gocryptfs", correct, source)
+
+    def test_freebsd_gocryptfs_requires_its_platform_patch(self):
+        name = "native/folder/gocryptfs/freebsd-futimes.patch"
+        patch = stager.ROOT / name
+        source = mock.Mock()
+        source.constant.side_effect = lambda _, key: {"FreeBSD": {"gocryptfs": [name]}} if key == "PLATFORM_PATCHES" else {}
+        source.read.return_value = patch.read_bytes()
+        patched = {"patches": {name: stager.digest(patch)}}
+        with mock.patch.object(stager.platform, "system", return_value="FreeBSD"):
+            stager.verify_folder_patches("gocryptfs", patched, source)
+            with self.assertRaisesRegex(ValueError, "patch provenance"):
+                stager.verify_folder_patches("gocryptfs", {}, source)
+        with mock.patch.object(stager.platform, "system", return_value="Linux"):
+            stager.verify_folder_patches("gocryptfs", {}, source)
+            with self.assertRaisesRegex(ValueError, "patch provenance"):
+                stager.verify_folder_patches("gocryptfs", patched, source)
 
     def test_bsd_patch_identity_binds_both_patches_to_exact_source_bytes(self):
         import hashlib

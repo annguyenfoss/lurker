@@ -23,7 +23,10 @@ PINS = {
     "cryfs": ("https://github.com/cryfs/cryfs.git", "5d0cc36785d93e12250696a3ffc928042f2e8d61", "1.0.3"),
 }
 PATCHES = {"cryfs": ["native/folder/cryfs/fsyncdir.patch"]}
-PLATFORM_PATCHES = {"Darwin": {"cryfs": ["native/folder/cryfs/macos-compiler.patch"]}}
+PLATFORM_PATCHES = {
+    "Darwin": {"cryfs": ["native/folder/cryfs/macos-compiler.patch"]},
+    "FreeBSD": {"gocryptfs": ["native/folder/gocryptfs/freebsd-futimes.patch"]},
+}
 
 
 def selected_patches(name: str, system: str | None = None) -> list[str]:
@@ -149,13 +152,13 @@ def source(name: str, cache: Path, log) -> Path:
     return path
 
 
-def patched_source(name: str, pristine: Path, cache: Path, log) -> tuple[Path, dict[str, str]]:
+def patched_source(name: str, pristine: Path, cache: Path, log, *, system: str | None = None) -> tuple[Path, dict[str, str]]:
     """Verify the entire effective diff against snapshotted reviewed patches.
 
     Build in a separate worktree, retaining the original pristine checkout.
     Never reset an existing cache that differs from the expected source.
     """
-    paths = selected_patches(name)
+    paths = selected_patches(name, system)
     if not paths:
         return pristine, {}
     with tempfile.TemporaryDirectory(prefix="patch-input-", dir=cache) as temporary:
@@ -230,13 +233,18 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
     logpath = cache / f"{name}.log"
     with logpath.open("wb") as log:
         pristine = source(name, cache, log)
-        src, patches = patched_source(name, pristine, cache, log)
+        build_system = platform.system()
+        source_system = build_system
+        if name == "gocryptfs":
+            if not shutil.which("go"):
+                raise RuntimeError("Go 1.26+ is required as a build tool")
+            target_os, target_arch = capture(["go", "env", "GOOS", "GOARCH"], pristine).splitlines()
+            source_system = {"linux": "Linux", "darwin": "Darwin", "freebsd": "FreeBSD"}.get(target_os, target_os)
+        src, patches = patched_source(name, pristine, cache, log, system=source_system)
         env = os.environ.copy()
         native_manifest = {}
         env["CMAKE_BUILD_PARALLEL_LEVEL"] = str(jobs)
         if name == "gocryptfs":
-            if not shutil.which("go"):
-                raise RuntimeError("Go 1.26+ is required as a build tool")
             toolchain = capture(["go", "version"], src)
             env.update(CGO_ENABLED="0", GOMAXPROCS=str(jobs))
             # Direct build avoids upstream build.bash installing into GOPATH/bin.
@@ -244,10 +252,8 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             run(["go", "build", "-p", str(jobs), "-mod=readonly", "-trimpath", "-ldflags="
                  f"-X main.GitVersion={version} -X main.BuildDate=2026-11-11",
                  "-o", str(output / name), "."], src, log, env)
-            target_os, target_arch = (capture(["go", "env", key], src) for key in ("GOOS", "GOARCH"))
-            host_os = {"Linux": "linux", "Darwin": "darwin", "FreeBSD": "freebsd"}.get(platform.system())
-            host_arch = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
-            if (target_os, target_arch) == (host_os, host_arch):
+            host_arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
+            if (source_system, target_arch) == (build_system, host_arch):
                 run([str(output / name), "-version"], src, log, env)
             else:
                 # Cross-compiled pure-Go artifacts still require native tests.
@@ -302,7 +308,7 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         target = {"os": platform.system(), "machine": platform.machine()}
         if name == "gocryptfs":
             dependencies = go_module_notices(src, license_dir / "modules")
-            target = {key: capture(["go", "env", key], src) for key in ("GOOS", "GOARCH")}
+            target = {"GOOS": target_os, "GOARCH": target_arch}
             (license_dir / "modules.json").write_text(json.dumps(dependencies, indent=2) + "\n")
             runtime_notices = go_runtime_notices(src, license_dir / "go-runtime")
             (license_dir / "go-runtime.json").write_text(json.dumps(runtime_notices, indent=2) + "\n")
