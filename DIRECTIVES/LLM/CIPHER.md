@@ -15,7 +15,8 @@ Use this file as the source of truth for selected encryption backends and create
 | gocryptfs | 🟦 | ✅ | ✅ | — | — | — |
 | GELI | — | — | ✅ | — | — | — |
 | CGD | — | — | — | — | ✅ | — |
-| softraid CRYPTO / RAID1C | — | — | — | — | — | ✅ CRYPTO only |
+| softraid CRYPTO | — | — | — | — | — | ✅ |
+| softraid RAID1C | — | — | — | — | — | ✅ |
 | PEFS | — | — | ✅ | — | — | — |
 | Cryptomator | 🟦 | ✅ | — | — | — | — |
 | LUKS1 | — | ✅ | — | ✅ | — | — |

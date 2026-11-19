@@ -21,6 +21,7 @@ Protect disks, file containers and directories. A simple CLI across six operatin
 | GELI | — | — | ✅ | — | — | — |
 | CGD | — | — | — | — | ✅ | — |
 | softraid CRYPTO | — | — | — | ✅ | — | — |
+| softraid RAID1C | — | — | — | ✅ | — | — |
 | gocryptfs | ✅ | — | ✅ | — | — | — |
 | CryFS | ✅ | — | — | — | — | — |
 | PEFS | — | — | ✅ | — | — | — |
