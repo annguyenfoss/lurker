@@ -190,6 +190,33 @@ receipts and rendered frame are under `target/openbsd-clean-20261120/evidence/`.
 
 https://www.openbsd.org/80.html
 
+### OpenBSD native package signing
+
+OpenBSD 8.0 signs native binary packages with
+`pkg_sign -s signify2 -s /path/to/maintainer-pkg.sec -o /path/to/output`.
+The matching public key is enrolled as `/etc/signify/maintainer-pkg.pub`
+on the system that installs the package. Default `pkg_add` validates both
+the signed compressed data and the trusted signer.
+
+An isolated clone signed a disposable copy of the exact `ca3c845` native
+archive with a throwaway maintainer key. All ten payload files and their
+ownership and mode metadata matched the original archive. Stock `pkg_add`
+rejected the signer before its public key was enrolled in the clone. After
+enrollment it refused a copy with one altered compressed byte, then installed
+the valid copy with default signature enforcement. Standalone `signify`
+reported a signature mismatch for the altered copy. The native package
+database recorded the expected signer and matched the baseline again after
+removal. The temporary keys, clone overlay and bridge were removed, and the
+backing disk and original native archive retained their hashes. Evidence is
+under `target/openbsd-signing-20261120/evidence/`.
+
+A public native release requires an authorized publisher package-signing key
+and an authenticated channel for distributing its public key.
+
+https://man.openbsd.org/OpenBSD-8.0/pkg_sign.1
+
+https://man.openbsd.org/OpenBSD-8.0/pkg_add.1
+
 ### DragonFly clean-machine offline install
 
 The stock DragonFly 6.4.2 installer populated a blank, standalone KVM disk
