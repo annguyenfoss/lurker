@@ -736,8 +736,8 @@ an empty MD inventory.
 This is one passing fully allocated fixture at an earlier product revision.
 The separate sparse `029cf99` test above still records a failed recovery.
 A matched repeat on the current package is needed to verify allocation as
-a product remedy. The production create policy is unchanged. Receipts are
-under `/mnt/virt/lurker-fault-fbgelialloc20261120/` and
+a product remedy. Receipts are under
+`/mnt/virt/lurker-fault-fbgelialloc20261120/` and
 `target/freebsd-geli-prealloc/`.
 
 FreeBSD gocryptfs at `a60e4bc` passed all five recovery checks after
