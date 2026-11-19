@@ -70,3 +70,24 @@ because Fontconfig indexed zero fonts. Their retries
 passed using a job-private Fontconfig configuration pointed at the repository
 fonts. The CLI and helper sources were unchanged. See the per-guest
 `workspace-qualified.json` files for test results and toolchain identities.
+
+## Supplemental native checks
+
+Arch job `20261119T172319Z-ff5b28c2` qualified the same `2ebae8f` package
+with eight cross-mode checks, nine disposable loop-device profiles, 24
+forced-publication checks across four modes, and ten loop-lease checks.
+Binary-keyfile conformance passed 78/78 checks across all three VeraCrypt
+ciphers in both privilege modes. The LUKS keyslot suite passed interactive
+enrollment, removal and helper JSON handling. Both CLI/helper frontend
+routes passed interactive prompt and mount lifecycle tests. Each of
+gocryptfs, CryFS and Cryptomator passed ten owned daemon-crash recovery
+checks, including reporting an unclean exit and reopening committed file
+and SQLite data.
+
+Fresh per-case privileged evidence for Fedora, Ubuntu and openSUSE comes
+from `20261119T172158Z-5bf6b405`, `20261119T172159Z-eaf690c9` and
+`20261119T172319Z-263017eb`, respectively. Each repeated all 117 passing
+checks against its identical installed package. The original privilege
+reports remain retained. Earlier command-level logs under guest `/tmp`
+did not survive the guest reboot. The fresh suite JSON was copied to
+`target/linux-final-2ebae8f/resumed/`.
