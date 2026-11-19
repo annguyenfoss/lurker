@@ -246,3 +246,52 @@ compared the complete 131-file inventories, using the existing verified
 portable artifacts. Exact native archives, installed digests, per-case
 receipts and post-run audits are indexed in
 `target/linux-coordinated-ca3c845/matrix.json`.
+
+## Coordinated native replay with the LKL stable update
+
+The six KVM guests rebuilt their native packages from
+`1e04b8523bb6d39ca73e1c9e09d36b02f3f8932e` in run
+`20261119T210239Z-0ecd5fc7`. The cold Arch build verified 87,060 LKL
+source inputs and applied the pinned Linux 6.12.118 stable patch before
+compiling. All six packages used the resulting `lurker-fs` SHA-256
+`34eccca4ab65712f4e14e80023f09b0b4bc42518a8046ece175968a8d99c0ebe`.
+The private FUSE closure matched the previous qualified build byte for
+byte. Both VeraCrypt executables also reproduced their prior hashes in
+the cold build. The native package manifests retain the stable patch
+identity and verify all 251 installed entries per guest.
+
+The helper and its private FUSE dependency closure require glibc symbols
+through `GLIBC_2.38`. The host glibc versions were 2.40 on openSUSE,
+2.41 on Debian, 2.43 on Gentoo, and 2.44 on Arch, Fedora, and Ubuntu.
+The exact helper loaded and returned protocol `lurker-userspace-4` on
+every guest using its packaged private library search path.
+
+| Guest | Installed package SHA-256 prefix | Privileged | Login user | Installed X11 window |
+| --- | --- | ---: | ---: | --- |
+| Arch | `bbd412b644533aa8` | 117 | 78 | Passed |
+| Debian | `e62ad6ce010abc1c` | 117 | 78 | Passed |
+| Ubuntu | `cb8cef3c6b6d885c` | 117 | 78 | Passed |
+| Fedora | `0131b9e145d403e2` | 117 | 78 | Passed |
+| openSUSE Leap | `0c163cfb6a9fba48` | 117 | 78 | Passed |
+| Gentoo GPKG | `00cf19c6d7fe6069` | 117 | 78 | Passed |
+
+All 1,170 lifecycle checks passed with zero failures or skips. The package
+install and lifecycle cases ran offline in private network namespaces.
+The workload checked creation, file and directory sync, SQLite WAL, normal
+close and reopen, credential rejection, and read-only handling. It covered
+AES, Serpent, and Twofish on LUKS1, LUKS2, and both VeraCrypt routes, plus
+the fixed gocryptfs, CryFS, and Cryptomator profiles. The 78 login-user
+checks and the 1280×860 X11 smoke test on each guest ran as UID 1300.
+
+The cleanup checked all 15 owned fixture roots per guest and found zero
+owned mounts, loop devices, or remaining namespace processes. All native
+package inventories matched their pre-test snapshots after removal,
+including Arch's 30 temporary signed X11 dependencies. The only whole-guest
+mount difference was the disappearance of the temporary
+`/run/user/1300` mount. The loop-device inventories matched.
+
+Exact native archives, the Gentoo recipe and installed GPKG, all six ELF
+reports, and the post-run cleanup records are indexed in
+`target/linux-coordinated-1e04b85/matrix.json`. The Arch full portable
+archive SHA-256 is
+`55bec5eed39951786cfc6f693d1aea40b0809afa27a8b80f71b443458a2267ce`.
