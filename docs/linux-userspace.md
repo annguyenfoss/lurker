@@ -202,3 +202,32 @@ LURKER_USERSPACE_DIR=/usr/lib/lurker/userspace ./scripts/test-linux-userspace.sh
 ```
 
 Use the helper directory produced by the builder when testing a local helper build.
+
+## Mounted sync verification (2026-11-20)
+
+Protocol 4 was qualified on the Arch KVM guest with the full package built
+from `390f46897c0752d53cdb8b040829dd194109b002`, runner
+`20261119T182630Z-dbde68ef`. Workspace check and test passed with 133
+tests passed and 13 native tests ignored. Running the three dedicated native
+userspace suites separately passed all three, including binary-keyfile
+authentication, external filesystem interoperability and driver recovery.
+
+The disposable Btrfs fixture traced both native processes while the vault
+was mounted. File fsync, directory fsync after rename, and a SQLite FULL
+WAL commit each produced two successful LKL `fdatasync` calls on the
+decrypted FUSE image and two successful VeraCrypt `fsync` calls on the
+ciphertext file before the application call returned. The probe stopped
+tracing before unmount, then reopened and verified file bytes and SQLite
+integrity. A separate fixture confirmed the new CLI rejected protocol-3
+binaries for new mounts, closed an already-running protocol-3 session and
+reopened its data with protocol 4. No fixture mounts remained.
+
+The package, trace and upgrade reports are retained under
+`target/linux-fsync-390f468/`. Archive SHA-256 is
+`ceb81faa6e49f22a3b4b717b3136cc7781caa410ef8a1495f609f894a3ce8c3a`.
+The initial native build lacked PC/SC headers. The initial trace runner
+launched the unprivileged formatter with a root-only working directory.
+Both attempts are retained, and the reruns used the signed Arch PC/SC
+build dependency and a working directory accessible to the login user.
+The separate abrupt power-loss proof is recorded in
+`docs/vm-powerloss-testing.md`.
