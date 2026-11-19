@@ -2,6 +2,7 @@
 """Wrap a verified full Linux staging archive in a native distribution package."""
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -151,6 +152,68 @@ cp -a %{{_sourcedir}}/root/usr %{{buildroot}}/
     artifact.rename(output)
 
 
+def build_gentoo(image, output, version, manifest, commit):
+    arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
+    if not arch:
+        raise ValueError("Unsupported Gentoo package architecture")
+    work = image.parent
+    repo = work / "repository"
+    package = repo / "app-crypt/lurker"
+    package.mkdir(parents=True)
+    (repo / "metadata").mkdir()
+    (repo / "profiles").mkdir()
+    (repo / "profiles/repo_name").write_text("lurker-local\n")
+    (repo / "profiles/categories").write_text("app-crypt\n")
+    (repo / "metadata/layout.conf").write_text("masters = gentoo\nthin-manifests = true\n")
+    distfiles = work / "distfiles"
+    distfiles.mkdir()
+    payload = distfiles / f"lurker-install-{version}-{commit[:12]}.tar.gz"
+    with tarfile.open(payload, "w:gz") as archive:
+        archive.add(image, arcname="lurker-install")
+    checksums = {}
+    for algorithm in ("blake2b", "sha512"):
+        with payload.open("rb") as stream:
+            checksums[algorithm.upper()] = hashlib.file_digest(stream, algorithm).hexdigest()
+    (package / "Manifest").write_text(
+        f"DIST {payload.name} {payload.stat().st_size} "
+        + " ".join(f"{name} {digest}" for name, digest in checksums.items()) + "\n"
+    )
+    (package / f"lurker-{version}.ebuild").write_text(f"""EAPI=8
+
+DESCRIPTION="Create and mount encrypted volumes and directories"
+SRC_URI="{payload.name}"
+S="${{WORKDIR}}/lurker-install"
+LICENSE="GPL-3"
+SLOT="0"
+KEYWORDS="~{arch}"
+RESTRICT="fetch mirror strip"
+RDEPEND="
+    >=sys-libs/glibc-{glibc_floor(manifest)}
+    sys-fs/cryptsetup
+    sys-fs/btrfs-progs
+    sys-apps/util-linux
+    sys-fs/fuse:0
+    sys-fs/fuse:3
+    app-admin/sudo
+    media-libs/fontconfig
+    media-fonts/dejavu
+    x11-libs/libX11
+    x11-libs/libXcursor
+    x11-libs/libXi
+    x11-libs/libxcb
+    x11-libs/libxkbcommon[X,wayland]
+    dev-libs/wayland
+"
+
+src_install() {{
+    cp -a usr "${{ED}}" || die "copying verified Lurker payload failed"
+}}
+""")
+    with tarfile.open(output, "w:gz") as bundle:
+        bundle.add(repo, arcname="repository")
+        bundle.add(distfiles, arcname="distfiles")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, required=True, help="Exact stage-unix package.tar.gz")
@@ -170,6 +233,8 @@ def main():
             suffix, builder, version_pattern = ".deb", build_deb, r"[0-9][0-9A-Za-z.+~\-]*"
         elif distro in RPM_DISTROS:
             suffix, builder, version_pattern = ".rpm", build_rpm, r"[0-9][0-9A-Za-z.+~^]*"
+        elif distro == "gentoo":
+            suffix, builder, version_pattern = ".gentoo.tar.gz", build_gentoo, r"[0-9]+(?:\.[0-9]+)+"
         else:
             raise ValueError("No native package builder for this distribution: " + distro)
         if not re.fullmatch(r"[0-9a-f]{64}", args.sha256):
@@ -190,6 +255,8 @@ def main():
             artifact = scratch / output.name
             if distro in RPM_DISTROS:
                 builder(image, artifact, args.version, manifest, distro)
+            elif distro == "gentoo":
+                builder(image, artifact, args.version, manifest, args.source_commit)
             else:
                 builder(image, artifact, args.version, manifest)
             digest = STAGE.digest(artifact)
