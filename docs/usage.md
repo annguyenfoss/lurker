@@ -56,6 +56,42 @@ Linux examples:
 ./target/release/lurker unmount /mnt/vault
 ```
 
+### Opt-in session and shutdown close on Linux and BSD
+
+Add one `session-close` call for each managed vault to the script that ends your
+application session. Stop its consumers and wait for them to exit first. Run
+the hook in the same mount namespace, while the vault source, mount and native
+tools are still available. Continue the logout or shutdown only after the close
+returns zero. For example, a Linux administrator can stop the service that
+uses a native LUKS vault, then run the close before requesting shutdown.
+
+```sh
+systemctl stop example-profile.service &&
+    /usr/local/bin/lurker session-close --type luks --timeout 30 /srv/vaults/profile.img
+```
+
+Use the explicit backend and the absolute path of the encrypted directory or
+container file. Native hooks require existing administrator authority and an
+administrator-owned CLI installation and vault source parent hierarchy. Run
+directory backends other than PEFS as the login user that opened the vault.
+For Linux user-mode VeraCrypt, add `--unprivileged` and keep the opening user's
+runtime directory available. Use manual `unmount` for tagged mappings or
+physical devices.
+
+The default close deadline is 30 seconds and `--timeout` accepts 1–300 seconds.
+A busy filesystem returns the usual close error and remains mounted. Exit
+status `124` means the normal close may still be running. The hook reports
+its PID and leaves the drain running. Keep the session available and check
+the mount and worker before retrying. The hook has no credential prompt.
+
+On Linux, run the hook before `systemctl poweroff` or login-session teardown.
+An `ExecStop` job that kills leftover processes in its unit cgroup can
+interrupt a worker after the hook returns `124`. On BSD, call the hook from
+the explicit session or service stop workflow before invoking `shutdown`.
+Late shutdown scripts may run after consumers, runtime directories or mounts
+have already been torn down, and a failed stop job alone does not cancel an
+operating-system shutdown. Lurker installs no login or shutdown hooks.
+
 ### Desktop App
 
 The desktop app is intentionally simple for now:

@@ -350,10 +350,33 @@ class Suite:
             self.mounted = target == self.mountpoint
 
     def close(self):
-        self.cli(self.args("unmount", self.mountpoint))
+        self.cli(self.close_args())
         if os.path.ismount(self.mountpoint):
             raise AssertionError("CLI reported success but owned mount remains attached")
         self.mounted = False
+
+    def close_args(self):
+        if getattr(self.options, "session_close", False):
+            return self.args("session-close", self.source)
+        return self.args("unmount", self.mountpoint)
+
+    def reject_mountpoint_as_source(self):
+        outcome = self.cli(self.args("session-close", self.mountpoint), expected=False)
+        assert outcome["exit_code"] != 124, "Mountpoint rejection did not complete"
+        assert os.path.ismount(self.mountpoint), "Hook detached a vault addressed by mountpoint"
+        self.verify()
+
+    def replaced_source(self):
+        original = self.source.with_suffix(".retained")
+        self.source.rename(original)
+        try:
+            self.source.write_bytes(b"Different backing file")
+            outcome = self.cli(self.close_args(), expected=False)
+            assert outcome["exit_code"] != 124, "Replacement check did not complete"
+            assert os.path.ismount(self.mountpoint), "Hook detached a vault after source replacement"
+            self.verify()
+        finally:
+            original.rename(self.source)
 
     def create(self):
         self.cli(self.create_args(), password=self.password)
@@ -443,7 +466,8 @@ class Suite:
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"], cwd=self.mountpoint,
                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
-            self.cli(self.args("unmount", self.mountpoint), expected=False)
+            outcome = self.cli(self.close_args(), expected=False)
+            assert outcome["exit_code"] != 124, "Busy close did not complete"
             if not os.path.ismount(self.mountpoint):
                 raise AssertionError("Busy unmount detached live application storage")
             self.verify()
@@ -519,6 +543,8 @@ class Suite:
                 browser = BrowserProfile(self)
                 self.result["firefox"] = {"path": str(self.options.firefox),
                                           "sha256": file_hash(self.options.firefox)}
+            hook = getattr(self.options, "session_close", False)
+            self.result["close_command"] = "session-close" if hook else "unmount"
             for name, function in [
                 ("create", self.create), ("no-overwrite", self.no_overwrite),
                 ("unlock", self.mount), ("application-io", self.write_workload),
@@ -527,6 +553,11 @@ class Suite:
                 ("reopen", self.mount), ("persistence", self.verify), ("reclose", self.close),
             ]:
                 self.case(name, function)
+                if hook and name == "busy" and self.options.backend in DIRECTORIES:
+                    self.case("mountpoint-is-not-source", self.reject_mountpoint_as_source)
+                if (hook and name == "busy" and platform.system() == "Linux"
+                        and self.options.backend not in DIRECTORIES and not self.options.unprivileged):
+                    self.case("replaced-source", self.replaced_source)
                 if browser and name in {"application-io", "persistence"}:
                     phase = "write" if name == "application-io" else "read"
                     self.case(f"firefox-profile-{phase}", lambda: browser.exercise(phase))
@@ -561,11 +592,15 @@ def parse_args(argv=None):
     parser.add_argument("--unprivileged", action="store_true", help="Use Linux's explicit VeraCrypt user route")
     parser.add_argument("--auto-detect", action="store_true",
                         help="Use --type auto for mount/unmount while creating the explicitly selected format")
+    parser.add_argument("--session-close", action="store_true",
+                        help="Use the opt-in bounded close hook for this owned fixture")
     readonly = parser.add_mutually_exclusive_group()
     readonly.add_argument("--skip-readonly", metavar="REASON", help="Record an explicit unsupported-readonly exception")
     readonly.add_argument("--expect-readonly-unsupported", action="store_true",
                           help="Execute read-only mount and require rejection without any attached storage")
     options = parser.parse_args(argv)
+    if options.session_close and platform.system() == "Darwin":
+        parser.error("--session-close is available on Linux and BSD")
     options.binary = options.binary.resolve()
     if not options.binary.is_file() or not os.access(options.binary, os.X_OK):
         parser.error("--binary must name an existing executable artifact")

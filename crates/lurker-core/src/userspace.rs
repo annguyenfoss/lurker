@@ -55,6 +55,14 @@ struct Tools {
 }
 
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
+    run_inner(command, output, false)
+}
+
+pub(crate) fn unmount_source(command: UnmountCommand, output: Output) -> AppResult<()> {
+    run_inner(CommandAction::Unmount(command), output, true)
+}
+
+fn run_inner(command: CommandAction, output: Output, source_only: bool) -> AppResult<()> {
     if crate::effective_uid() == 0 {
         return Err(AppError::new(
             "Unprivileged mode must run as your login user, without sudo.",
@@ -66,7 +74,7 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     match command {
         CommandAction::Create(c) => create(&runtime, &tools, c, output),
         CommandAction::Mount(c) => mount(&runtime, &tools, c, output),
-        CommandAction::Unmount(c) => unmount(&runtime, &tools, c, output),
+        CommandAction::Unmount(c) => unmount(&runtime, &tools, c, output, source_only),
         CommandAction::Keyslots(_) => Err(AppError::new(
             "LUKS keyslot management requires Privileged mode.",
         )),
@@ -834,7 +842,13 @@ fn mount(runtime: &Runtime, tools: &Tools, c: MountCommand, output: Output) -> A
     Ok(())
 }
 
-fn unmount(runtime: &Runtime, tools: &Tools, c: UnmountCommand, output: Output) -> AppResult<()> {
+fn unmount(
+    runtime: &Runtime,
+    tools: &Tools,
+    c: UnmountCommand,
+    output: Output,
+    source_only: bool,
+) -> AppResult<()> {
     let expanded = expand(&c.target)?;
     let target = absolute_path(&expanded).unwrap_or(expanded);
     let identity = fs::metadata(&target).ok().map(|m| (m.dev(), m.ino()));
@@ -843,9 +857,8 @@ fn unmount(runtime: &Runtime, tools: &Tools, c: UnmountCommand, output: Output) 
         .into_iter()
         .filter(|(dir, s)| {
             s.source == target
-                || s.mountpoint == target
-                || raw_path(dir) == target
                 || identity == Some((s.source_device, s.source_inode))
+                || (!source_only && (s.mountpoint == target || raw_path(dir) == target))
         })
         .collect();
     if matches.len() != 1 {

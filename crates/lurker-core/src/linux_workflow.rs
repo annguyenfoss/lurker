@@ -4,9 +4,10 @@ use crate::error::{AppError, AppResult};
 use crate::linux::{
     absolute_path, is_block_device_target, mapper_device_path, mapper_name_for_source,
     read_mountinfo, resolve_umount_target, size_gb_to_mib, source_kind_for_path,
+    ResolvedUmountTarget,
 };
 use crate::linux_source::{lock_file_source, publish_locked_container as publish_container};
-use crate::model::{CreateCipher, SourceKind, VolumeType};
+use crate::model::{CreateCipher, ResolvedTargetKind, SourceKind, VolumeType};
 use crate::output::Output;
 use crate::system::{trim_stdout, AppContext};
 use std::fs::{self, File, OpenOptions};
@@ -141,7 +142,25 @@ fn mount_device(ctx: &mut AppContext, mut command: MountCommand) -> AppResult<()
 
 fn unmount_device(ctx: &mut AppContext, command: UnmountCommand) -> AppResult<()> {
     warn_ignored_umount_tag(ctx, &command.target, command.tag.as_deref());
+    // Hold the same inode lock used by create and mount for source-addressed
+    // closes, including the opt-in shutdown hook.
+    let source_guard = if source_kind_for_path(&command.target) == Some(SourceKind::File) {
+        Some(lock_file_source(&absolute_path(&command.target)?)?)
+    } else {
+        None
+    };
     let resolved = resolve_umount_target(&command.target, command.tag.as_deref())?;
+    match (resolved.target_kind, source_guard.as_ref()) {
+        (ResolvedTargetKind::File, Some(source)) => {
+            verify_mapper_source(ctx, &resolved.mapper_name, source, &resolved.origin)?;
+        }
+        (ResolvedTargetKind::File, None) | (_, Some(_)) => {
+            return Err(AppError::new(
+                "Container path changed before close. Retry with the intended source.",
+            ));
+        }
+        (_, None) => {}
+    }
     let actual_type = active_mapper_volume_type(ctx, &resolved.mapper_name)?;
     let detected_type = resolve_volume_type(
         command.volume_type,
@@ -153,7 +172,7 @@ fn unmount_device(ctx: &mut AppContext, command: UnmountCommand) -> AppResult<()
     if detected_type == VolumeType::Veracrypt {
         require_supported_veracrypt_tag(command.tag.as_deref())?;
     }
-    dmcrypt_umount_device(ctx, &command.target, command.tag.as_deref())
+    dmcrypt_umount_device(ctx, &resolved)
 }
 
 fn assert_create_target(ctx: &mut AppContext, command: &CreateCommand) -> AppResult<()> {
@@ -676,13 +695,7 @@ fn tcrypt_mount_device(
     Ok(())
 }
 
-fn dmcrypt_umount_device(
-    ctx: &mut AppContext,
-    target: &Path,
-    tag_override: Option<&str>,
-) -> AppResult<()> {
-    let resolved = resolve_umount_target(target, tag_override)?;
-
+fn dmcrypt_umount_device(ctx: &mut AppContext, resolved: &ResolvedUmountTarget) -> AppResult<()> {
     ctx.output.msg(&format!(
         "Unmounting {} target {}",
         resolved.target_kind,
@@ -837,7 +850,7 @@ fn verify_mapper_source(
     crate::linux_source::verify_path_identity(source, path)?;
     let expected = file_source_identity(source)?;
     let mapper_device = fs::metadata(mapper_device_path(mapper))
-        .map_err(|error| AppError::io("Cannot inspect newly opened mapper", error))?
+        .map_err(|error| AppError::io("Cannot inspect active mapper", error))?
         .rdev();
     let slaves = PathBuf::from(format!(
         "/sys/dev/block/{}:{}/slaves",
@@ -866,14 +879,16 @@ fn verify_mapper_source(
         ) == expected_device
         {
             if backing != expected {
-                return Err(AppError::new("Opened mapper does not match the locked container. Refusing filesystem access."));
+                return Err(AppError::new(
+                    "Active mapper does not match the locked container.",
+                ));
             }
             crate::linux_source::verify_path_identity(source, path)?;
             return Ok(());
         }
     }
     Err(AppError::new(
-        "Cannot verify the opened mapper's backing file. Refusing filesystem access.",
+        "Cannot verify the active mapper's backing file.",
     ))
 }
 

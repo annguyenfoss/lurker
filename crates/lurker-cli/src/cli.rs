@@ -8,6 +8,7 @@ use std::io::IsTerminal;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct Cli {
@@ -18,6 +19,11 @@ pub struct Cli {
 #[derive(Debug)]
 pub enum ParseOutcome {
     Run(Cli),
+    SessionClose {
+        command: UnmountCommand,
+        timeout: Option<Duration>,
+        color_mode: ColorMode,
+    },
     Help(HelpRequest),
 }
 
@@ -71,6 +77,7 @@ where
     let mut keyfile = None;
     let mut new_keyfile = None;
     let mut slot = None;
+    let mut close_timeout = None;
     let mut parsed_args = Vec::new();
 
     let mut index = 0usize;
@@ -79,7 +86,7 @@ where
         let option = current.split('=').next().unwrap();
         if matches!(
             option,
-            "--key-file" | "--new-key-file" | "--slot" | "--member"
+            "--key-file" | "--new-key-file" | "--slot" | "--member" | "--timeout"
         ) {
             let value = if current.contains('=') {
                 OsString::from_vec(raw_args[index].as_bytes()[option.len() + 1..].to_vec())
@@ -105,6 +112,29 @@ where
             }
             match option {
                 "--member" => peer_sources.push(PathBuf::from(value)),
+                "--timeout" => {
+                    let seconds = value
+                        .to_str()
+                        .and_then(|value| value.parse::<u64>().ok())
+                        .filter(|seconds| (1..=300).contains(seconds))
+                        .ok_or_else(|| {
+                            usage_failure(
+                                &script_name,
+                                color_mode,
+                                "Timeout must be 1–300 seconds.",
+                            )
+                        })?;
+                    if close_timeout
+                        .replace(Duration::from_secs(seconds))
+                        .is_some()
+                    {
+                        return Err(usage_failure(
+                            &script_name,
+                            color_mode,
+                            "Specify --timeout only once.",
+                        ));
+                    }
+                }
                 "--key-file" => {
                     if keyfile.replace(PathBuf::from(value)).is_some() {
                         return Err(usage_failure(
@@ -330,7 +360,31 @@ where
     }
 
     let mut action = first;
-    if action == "unmount" {
+    let close_worker = action == "__session-close-worker";
+    let session_close = action == "session-close" || close_worker;
+    if session_close {
+        if os == "macos" {
+            return Err(usage_failure(
+                &script_name,
+                color_mode,
+                "Session hooks are available on Linux and BSD.",
+            ));
+        }
+        if close_worker && close_timeout.is_some() {
+            return Err(usage_failure(
+                &script_name,
+                color_mode,
+                "--timeout requires session-close.",
+            ));
+        }
+        action = "umount".into();
+    } else if close_timeout.is_some() {
+        return Err(usage_failure(
+            &script_name,
+            color_mode,
+            "--timeout requires session-close.",
+        ));
+    } else if action == "unmount" {
         action = "umount".into();
     }
 
@@ -818,14 +872,31 @@ where
                 ));
             }
 
+            let command = UnmountCommand {
+                privilege_mode,
+                target: PathBuf::from(&action_args[0]),
+                tag,
+                volume_type,
+            };
+            if session_close {
+                if !command.target.is_absolute()
+                    || volume_type == VolumeType::Auto
+                    || !volume_type.supports_platform(os)
+                    || command.tag.is_some()
+                {
+                    return Err(usage_failure(&script_name, color_mode,
+                        "Session close requires an absolute vault source and an explicit supported backend without a mapper tag."));
+                }
+                return Ok(ParseOutcome::SessionClose {
+                    command,
+                    timeout: (!close_worker)
+                        .then(|| close_timeout.unwrap_or(Duration::from_secs(30))),
+                    color_mode,
+                });
+            }
             Ok(ParseOutcome::Run(Cli {
                 color_mode,
-                command: CommandAction::Unmount(UnmountCommand {
-                    privilege_mode,
-                    target: PathBuf::from(&action_args[0]),
-                    tag,
-                    volume_type,
-                }),
+                command: CommandAction::Unmount(command),
             }))
         }
         _ => Err(ParseFailure {
@@ -859,6 +930,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     };
 
     let directory_help = "\nDirectory backends (where supported):\n  create --type gocryptfs|cryfs|cryptomator|pefs <directory>\n  mount --type BACKEND <encrypted-directory> <mountpoint>\n  unmount --type BACKEND <mountpoint>\n  No size or cipher option; fixed native encryption profile.\n";
+    let session_help = "\nSession shutdown hook:\n  session-close --type BACKEND [--timeout SECONDS] <absolute-vault-source>\n";
     let raid_help = if cfg!(target_os = "openbsd") {
         "\nRAID1C (two mirrored file members, native AES/password only):\n  create --type raid1c --member <peer-file> <file> <size-gb>\n  mount [--type raid1c] [--member <peer-file>] <file> <mountpoint>\n  mount --type raid1c --degraded <surviving-file> <mountpoint>\n  --degraded explicitly recovers an existing array; never used during create.\n  Keep both files and their RAID1C descriptors together; no --force or keyfiles.\n"
     } else {
@@ -866,7 +938,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     };
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return format!(
-            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\nNative default: {}. File containers only; native device operations require administrator privileges.\n{raid_help}{directory_help}",
+            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\nNative default: {}. File containers only; native device operations require administrator privileges.\n{raid_help}{directory_help}{session_help}",
             VolumeType::default_create()
         );
     }
@@ -877,7 +949,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     }
 
     format!(
-        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} keyslots <source>{reset}\n  {accent}{script_name} add-key <source> [--slot N] [--key-file FILE] [--new-key-file FILE]{reset}\n  {accent}{script_name} remove-key <source> --slot N [--key-file FILE]{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--slot N{reset}          LUKS slot to add (optional) or remove (required)\n  {accent}--new-key-file FILE{reset}   New LUKS credential for add-key; otherwise prompt for a new password\n  {accent}--unprivileged{reset}    Linux VeraCrypt files without elevation (userspace helpers required)\n  {accent}--privileged{reset}      Use the existing kernel-backed route (default)\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), luks1, apple (macOS default), veracrypt, geli, cgd, softraid, raid1c, pefs, gocryptfs, cryfs, cryptomator; auto for mount/unmount\n  {accent}--key-file FILE{reset}   Use a keyfile instead of a password (LUKS/VeraCrypt create or mount)\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n{directory_help}"
+        "\n{header}Usage:{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <file> <size-gb> [-F|--force]{reset}\n  {accent}{script_name} createvc [--cipher CIPHER] <block-device> [-F|--force]{reset}\n  {accent}{script_name} mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>{reset}\n  {accent}{script_name} unmount [--type TYPE] [-t TAG] <target>{reset}\n  {accent}{script_name} keyslots <source>{reset}\n  {accent}{script_name} add-key <source> [--slot N] [--key-file FILE] [--new-key-file FILE]{reset}\n  {accent}{script_name} remove-key <source> --slot N [--key-file FILE]{reset}\n  {accent}{script_name} help{reset}\n\n{header}Examples:{reset}\n  {accent}{script_name} create ./vault.img 4{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault-serpent.hc 4{reset}\n  {accent}{script_name} create --cipher twofish /dev/sda2 --force{reset}\n  {accent}{script_name} create --type veracrypt --cipher serpent ./vault.hc 4{reset}\n  {accent}{script_name} createvc --cipher twofish /dev/sdb2 --force{reset}\n  {accent}{script_name} mount ./vault.img /mnt/vault{reset}\n  {accent}{script_name} mount -t work /dev/sda2 /mnt/work{reset}\n  {accent}{script_name} unmount /mnt/work{reset}\n  {accent}{script_name} unmount -t work /dev/sda2{reset}\n\n{header}Options:{reset}\n  {accent}-F, --force{reset}       Overwrite an existing file or allow destructive block-device create\n  {accent}-t TAG{reset}            Linux LUKS only: use /dev/mapper/lurker_TAG\n  {accent}--slot N{reset}          LUKS slot to add (optional) or remove (required)\n  {accent}--new-key-file FILE{reset}   New LUKS credential for add-key; otherwise prompt for a new password\n  {accent}--unprivileged{reset}    Linux VeraCrypt files without elevation (userspace helpers required)\n  {accent}--privileged{reset}      Use the existing kernel-backed route (default)\n  {accent}--type TYPE{reset}       Container type: luks (Linux default), luks1, apple (macOS default), veracrypt, geli, cgd, softraid, raid1c, pefs, gocryptfs, cryfs, cryptomator; auto for mount/unmount\n  {accent}--key-file FILE{reset}   Use a keyfile instead of a password (LUKS/VeraCrypt create or mount)\n  {accent}--readonly{reset}        Open and mount a volume read-only (mount only)\n  {accent}--cipher CIPHER{reset}   Create cipher: aes (default), serpent, twofish; Apple uses AES-256 only\n  {accent}--color=WHEN{reset}      Color output: auto, always, never\n  {accent}-h, --help{reset}        Show this help text\n{directory_help}{session_help}"
     )
 }
 
@@ -1020,6 +1092,63 @@ mod tests {
     use super::{parse_env_args, CommandAction, ParseOutcome};
     use lurker_core::{CreateCipher, SourceKind, VolumeType};
     use std::ffi::OsString;
+
+    #[test]
+    fn session_close_requires_an_explicit_backend_and_absolute_source() {
+        let parse = |args: &[&str], os: &str| {
+            super::parse_args_for_platform(args.iter().copied().map(OsString::from), os)
+        };
+        let ParseOutcome::SessionClose {
+            command, timeout, ..
+        } = parse(
+            &[
+                "lurker",
+                "session-close",
+                "--type=raid1c",
+                "--timeout",
+                "7",
+                "/vault/a.img",
+            ],
+            "openbsd",
+        )
+        .unwrap()
+        else {
+            panic!("expected the session close hook");
+        };
+        assert_eq!(command.target, std::path::Path::new("/vault/a.img"));
+        assert_eq!(command.volume_type, VolumeType::Raid1c);
+        assert_eq!(timeout.unwrap().as_secs(), 7);
+        for args in [
+            &["lurker", "session-close", "/vault/a.img"][..],
+            &["lurker", "session-close", "--type=luks", "a.img"],
+            &[
+                "lurker",
+                "session-close",
+                "--type=luks",
+                "--timeout=0",
+                "/vault/a.img",
+            ],
+            &[
+                "lurker",
+                "unmount",
+                "--type=luks",
+                "--timeout=1",
+                "/vault/a.img",
+            ],
+        ] {
+            assert!(parse(args, "linux").is_err());
+        }
+        assert!(parse(
+            &[
+                "lurker",
+                "session-close",
+                "--type=veracrypt",
+                "/vault/a.img"
+            ],
+            "macos",
+        )
+        .is_err());
+    }
 
     #[test]
     fn raid1c_create_parses_one_peer_without_changing_native_default() {
@@ -1504,7 +1633,7 @@ mod tests {
 
         let command = match parse_env_args(args).unwrap() {
             ParseOutcome::Run(command) => command,
-            ParseOutcome::Help(_) => panic!("unexpected help"),
+            _ => panic!("unexpected parse outcome"),
         };
 
         match command.command {
@@ -1529,7 +1658,7 @@ mod tests {
 
         let command = match parse_env_args(args).unwrap() {
             ParseOutcome::Run(command) => command,
-            ParseOutcome::Help(_) => panic!("unexpected help"),
+            _ => panic!("unexpected parse outcome"),
         };
 
         match command.command {
@@ -1554,7 +1683,7 @@ mod tests {
 
         let command = match parse_env_args(args).unwrap() {
             ParseOutcome::Run(command) => command,
-            ParseOutcome::Help(_) => panic!("unexpected help"),
+            _ => panic!("unexpected parse outcome"),
         };
 
         match command.command {

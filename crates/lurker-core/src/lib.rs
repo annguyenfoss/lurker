@@ -52,6 +52,8 @@ pub use model::{
 };
 pub use output::{Output, OutputBuffer, OutputEntry, OutputLevel};
 pub use trust::{trusted_privileged_executable, trusted_system_executable};
+#[cfg(not(target_os = "macos"))]
+pub use trust::trusted_privileged_storage_source;
 
 #[cfg(target_os = "linux")]
 use crate::linux::{canonical_device_path, read_mountinfo};
@@ -90,6 +92,23 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     {
         bsd::run(command, output)
     }
+}
+
+/// Close a configured encrypted source through the normal teardown path.
+#[cfg(not(target_os = "macos"))]
+pub fn run_configured_close(command: UnmountCommand, output: Output) -> AppResult<()> {
+    if !command.volume_type.is_directory() {
+        #[cfg(target_os = "linux")]
+        if command.privilege_mode == PrivilegeMode::Unprivileged {
+            return userspace::unmount_source(command, output);
+        }
+        return run(CommandAction::Unmount(command), output);
+    }
+    #[cfg(target_os = "freebsd")]
+    if command.volume_type == VolumeType::Pefs {
+        return bsd::unmount_source(command, output);
+    }
+    folder::unmount_source(command, output)
 }
 
 /// Directory engines must remain in the login user's session even when an

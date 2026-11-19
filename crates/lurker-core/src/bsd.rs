@@ -1130,6 +1130,15 @@ fn require_write_journal(_mounted: &Mounted) -> AppResult<()> {
 }
 
 fn unmount(c: UnmountCommand, output: Output) -> AppResult<()> {
+    unmount_matching(c, output, false)
+}
+
+#[cfg(target_os = "freebsd")]
+pub(crate) fn unmount_source(c: UnmountCommand, output: Output) -> AppResult<()> {
+    unmount_matching(c, output, true)
+}
+
+fn unmount_matching(c: UnmountCommand, output: Output, source_only: bool) -> AppResult<()> {
     if c.tag.is_some() {
         return Err(AppError::new("Native BSD unmount does not support tags."));
     }
@@ -1139,6 +1148,9 @@ fn unmount(c: UnmountCommand, output: Output) -> AppResult<()> {
         .unwrap_or(c.target);
     let identity = fs::metadata(&target).ok();
     let mut found = registry.records()?.into_iter().filter(|s| {
+        if source_only {
+            return s.source == target;
+        }
         s.source == target
             || s.peer_sources.iter().any(|peer| peer == &target)
             || {

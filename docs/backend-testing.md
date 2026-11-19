@@ -31,6 +31,12 @@ mount/unmount, including incorrect-credential, alias, busy and read-only cases.
 Results identify `detection_mode` as `auto` or `explicit`; keep these qualification
 runs distinct. A new empty vault has no header to detect, so create stays explicit.
 
+`--session-close` selects the Linux/BSD shutdown hook for the busy and normal
+close cases using the encrypted source path. Use an administrator-owned CLI
+installation and test parent for native backends. Linux native file cases
+also reject a replacement source while the original mount is still live.
+Directory cases reject closing a vault by passing its plaintext mountpoint.
+
 The suite checks create, protection of an existing destination, unlock, Unicode
 and spaces, fsync, atomic rename/truncation, SQLite WAL and integrity, duplicate and aliased-source
 attachment refusal, busy close refusal, close, wrong credentials, reopen and

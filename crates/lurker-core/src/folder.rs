@@ -656,20 +656,29 @@ fn mount_args(
 }
 
 pub(crate) fn run(command: CommandAction, output: Output) -> AppResult<()> {
+    let runtime = user_runtime()?;
+    match command {
+        CommandAction::Create(c) => create(&runtime, c, output),
+        CommandAction::Mount(c) => mount(&runtime, c, output),
+        CommandAction::Unmount(c) => unmount(&runtime, c, output, false),
+        _ => Err(AppError::new(
+            "Directory backends do not support LUKS keyslots.",
+        )),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn unmount_source(command: UnmountCommand, output: Output) -> AppResult<()> {
+    unmount(&user_runtime()?, command, output, true)
+}
+
+fn user_runtime() -> AppResult<Runtime> {
     if crate::effective_uid() == 0 {
         return Err(AppError::new(
             "Directory encryption runs as your login user; do not use sudo.",
         ));
     }
-    let runtime = Runtime::lock()?;
-    match command {
-        CommandAction::Create(c) => create(&runtime, c, output),
-        CommandAction::Mount(c) => mount(&runtime, c, output),
-        CommandAction::Unmount(c) => unmount(&runtime, c, output),
-        _ => Err(AppError::new(
-            "Directory backends do not support LUKS keyslots.",
-        )),
-    }
+    Runtime::lock()
 }
 
 fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> {
@@ -745,6 +754,7 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
                     volume_type: c.volume_type,
                 },
                 Output::silent(),
+                false,
             )?;
             fs::remove_dir(mp).map_err(|e| AppError::io("Cannot remove initial mountpoint", e))?;
         } else {
@@ -1063,7 +1073,7 @@ fn native_unmount(path: &Path) -> AppResult<()> {
     }
 }
 
-fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output) -> AppResult<()> {
+fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bool) -> AppResult<()> {
     if c.tag.is_some() {
         return Err(AppError::new(
             "Directory unmount does not accept mapper tags.",
@@ -1074,7 +1084,7 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output) -> AppResult<()
     let sessions = runtime.sessions()?;
     let matches: Vec<_> = sessions
         .into_iter()
-        .filter(|(_, s)| s.source == target || s.mountpoint == target)
+        .filter(|(_, s)| s.source == target || (!source_only && s.mountpoint == target))
         .collect();
     let [(dir, mut session)] = matches.try_into().map_err(|_| {
         AppError::new("Target must identify exactly one directory session owned by you.")

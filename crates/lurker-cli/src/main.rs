@@ -1,4 +1,6 @@
 mod cli;
+#[cfg(not(target_os = "macos"))]
+mod session_close;
 
 use cli::{ParseFailure, ParseOutcome};
 use lurker_core::{run, Output};
@@ -21,6 +23,28 @@ fn main_entry() -> i32 {
                     error_output.error(&err.message);
                     err.exit_code
                 }
+            }
+        }
+        Ok(ParseOutcome::SessionClose {
+            command,
+            timeout,
+            color_mode,
+        }) => {
+            #[cfg(not(target_os = "macos"))]
+            {
+                let output = Output::new(color_mode);
+                match session_close::close(command, timeout, &output) {
+                    Ok(()) => 0,
+                    Err(err) => {
+                        output.error(&err.message);
+                        err.exit_code
+                    }
+                }
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let _ = (command, timeout, color_mode);
+                1
             }
         }
         Ok(ParseOutcome::Help(help)) => {

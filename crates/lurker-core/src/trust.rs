@@ -27,6 +27,20 @@ pub fn trusted_privileged_executable(path: &Path) -> AppResult<PathBuf> {
     Ok(canonical)
 }
 
+/// An unattended native close takes a configured source, never a caller's
+/// mountpoint or mapper alias. Its ancestors must prevent path replacement
+/// by other users while the worker resolves the source.
+#[cfg(not(target_os = "macos"))]
+pub fn trusted_privileged_storage_source(path: &Path) -> AppResult<PathBuf> {
+    let source = fs::canonicalize(path)
+        .map_err(|error| AppError::io("Resolve the configured vault source", error))?;
+    let parent = source
+        .parent()
+        .ok_or_else(|| AppError::new("The filesystem root is not a vault source."))?;
+    validate_runtime_ownership(parent)?;
+    Ok(source)
+}
+
 fn validate_runtime_ownership(path: &Path) -> AppResult<()> {
     if !path.is_absolute() {
         return Err(AppError::new("Privileged runtime paths must be absolute."));
