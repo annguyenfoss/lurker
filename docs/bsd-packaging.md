@@ -97,9 +97,24 @@ The 6.4.2 source builds the imported 1.1.2 code against DragonFly's own
 libdm and private LibreSSL. The release-branch history includes a 2018
 change to use the native `mlockall`, a 2020 dm-crypt fix for resource waits
 under memory pressure, and a 2022 compatibility change for the LibreSSL
-upgrade. The tested version string and these changes establish provenance.
-Current security-fix coverage for the native LUKS1 implementation still
-requires review before public release.
+upgrade. The release's installed dm, opencrypto and vnode headers matched
+the `v6.4.2` source byte for byte. As of November 19, 2026 UTC, eight
+reviewed files covering cryptsetup setup and key management, dm-crypt,
+opencrypto and vnode handling were byte-identical between `v6.4.2` and 6.4
+maintenance branch head `fa3b19cbc1d785319e3359e67e3f806e59af267e`. The
+reviewed opencrypto history includes a 2023 CTR key-length fix, outside
+the selected XTS profiles. Comprehensive LUKS1 security-fix coverage
+remains a public-release gate.
+
+The released dm-crypt target accepts the three selected XTS/plain64 profiles
+with 512-bit combined keys. It selects the AES, Twofish and Serpent XTS
+identifiers from the installed opencrypto header, all registered by the
+native software provider. On this release, dm-crypt forwards flush requests
+to its backing vnode, which issues a synchronous `VOP_FSYNC` when it
+receives one. That conditional path leaves abrupt-power durability to be
+qualified separately. The development branch switched its default dm-crypt
+module in 2025 and still lists all three XTS ciphers in its new kernel crypto
+API. The native runtime results cover 6.4.2.
 
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/contrib/cryptsetup/README.DRAGONFLY
 
@@ -110,3 +125,31 @@ https://github.com/DragonFlyBSD/DragonFlyBSD/commit/239cd26e6de1b7874f315638a562
 https://github.com/DragonFlyBSD/DragonFlyBSD/commit/8345afad56bed8074dc4836acd98dfb6a80bbeb7
 
 https://github.com/DragonFlyBSD/DragonFlyBSD/commit/6f5ec8b51c959914fd0128aa84612579c0400168
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/tree/fa3b19cbc1d785319e3359e67e3f806e59af267e
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/commit/02793a4afc03607c685abfc69cc73f22a999abba
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/dev/disk/dm/crypt/dm_target_crypt.c
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/opencrypto/cryptosoft.c
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/dev/disk/vn/vn.c
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/commit/f9c79d28d9ec0c95b4e78c6374f774077944db5e
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/4ab67026e6d18a4be2a7ea459c919705bee786af/sys/dev/disk/dm/crypt/dm_target_crypt.c
+
+### DragonFly interrupted creation
+
+On the original 6.4.2 guest, the CLI from the verified `a60e4bc` package
+stage passed five checks on a private AES LUKS1 binary-keyfile fixture. The
+test killed the create process group after verifying its staging journal and
+live backing vnode, before it established a crypto mapping. The existing
+`--force` destination retained its original bytes and inode. The journal
+survived and a normal `lurker unmount --type luks1` against the abandoned
+stage released its vnode and journal. The stage digest was unchanged, and
+the native mount, mapping, vnode and session inventories returned to their
+exact baseline. This tests process interruption and explicit recovery with
+the guest still running. The transcript, fixture identity and source
+comparisons are in `target/dragonfly-native-review/`.
