@@ -96,3 +96,21 @@ that failure; it does not suppress the exception or turn it into a clean close.
 Arbitrary power-loss safety and complete full-storage recovery remain
 unqualified. See `native/folder/cryfs/README.md` for the persistence patch and its
 other native regressions.
+
+## Linux process exit during close
+
+An installed Gentoo `c21e0cc` run detached a read-only CryFS mount and
+then reported `No such process` while checking the exiting backend. A
+retry with the same native package passed all 78 login-user checks.
+Linux can return `ESRCH` when a process is reaped between opening and
+reading its procfs `stat` file.
+
+The close path recognizes `ESRCH` as process exit. It continues to
+require the recorded mount identity and supervisor exit result, and
+reports permission or other inspection errors. A Linux regression test
+opens a live child process's stat file, reaps the child and verifies
+the kernel's `ESRCH` result. The Gentoo report and regression receipts
+are under `target/linux-coordinated-c21e0cc/` and
+`target/goal-validation/folder-process-exit/`.
+
+https://github.com/torvalds/linux/blob/v6.12/fs/proc/base.c

@@ -359,6 +359,12 @@ fn nonce() -> u128 {
         .as_nanos()
 }
 
+#[cfg(target_os = "linux")]
+fn linux_stat_process_absent(error: &std::io::Error) -> bool {
+    // An opened procfs stat file returns ESRCH if the task is reaped before read.
+    error.kind() == std::io::ErrorKind::NotFound || error.raw_os_error() == Some(libc::ESRCH)
+}
+
 // Distinguish a confirmed exit from an inspection/permission failure. An
 // unreadable process must never authorize recovery of an unreadable mount.
 fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
@@ -366,7 +372,7 @@ fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
     {
         let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
             Ok(value) => value,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) if linux_stat_process_absent(&error) => return Ok(None),
             Err(error) => return Err(AppError::io("Cannot verify backend process", error)),
         };
         let (_, fields) = stat
@@ -1225,6 +1231,26 @@ mod tests {
             assert!(!process_query_absent(-1, 1088, Some(error)));
         }
         assert!(!process_query_absent(0, 1088, None));
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn proc_stat_read_recognizes_a_task_reaped_after_open() {
+        let mut child = Command::new("/bin/cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut stat = File::open(format!("/proc/{}/stat", child.id())).unwrap();
+        drop(child.stdin.take());
+        assert!(child.wait().unwrap().success());
+
+        let error = stat.read_to_string(&mut String::new()).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::ESRCH));
+        assert!(linux_stat_process_absent(&error));
+        for errno in [libc::EPERM, libc::EACCES, libc::EINTR, libc::EIO] {
+            assert!(!linux_stat_process_absent(&std::io::Error::from_raw_os_error(errno)));
+        }
     }
     #[cfg(target_os = "freebsd")]
     #[test]
