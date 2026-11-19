@@ -743,12 +743,25 @@ committed SQLite FULL/WAL row, excluded the uncommitted row, and detached
 normally. All five recovery checks passed and the clone shut down with
 an empty MD inventory.
 
-This is one passing fully allocated fixture at an earlier product revision.
-The separate sparse `029cf99` test above still records a failed recovery.
-A matched repeat on the current package is needed to verify allocation as
-a product remedy. Receipts are under
+The separate sparse `029cf99` test above records failed recovery.
+Receipts for the earlier control are under
 `/mnt/virt/lurker-fault-fbgelialloc20261120/` and
 `target/freebsd-geli-prealloc/`.
+
+Two isolated clones repeated both arms with the exact native `ca3c845`
+package and byte-identical 128 MiB GELI images before writing. They used
+the same outer UFS and VirtIO cache settings. Both cuts were requested
+200 ms after the coordinator observed workload readiness. The sparse
+image occupied 753,664 bytes before writing. It unlocked after the cut
+and returned a changed file digest and no committed SQLite table.
+The fully allocated image occupied 134,250,496 bytes before writing
+and passed all five recovery checks, including normal detach.
+
+The allocated clone needed an additional boot to restore isolated SSH.
+The post-cut ciphertext hash matched its pre-transport and pre-reopen
+copies. Its damaged test package database prevented package removal.
+Both clones shut down and their isolated networks were removed.
+See `target/freebsd-geli-matched-ca3c845/aggregate.json`.
 
 FreeBSD gocryptfs at `a60e4bc` passed all five recovery checks after
 explicit session reconciliation. Direct reopen first refused the recorded

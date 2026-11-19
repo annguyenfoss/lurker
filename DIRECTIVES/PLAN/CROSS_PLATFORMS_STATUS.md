@@ -18,7 +18,7 @@ a committed SQLite FULL/WAL row, and an uncommitted row.
 | Linux | LUKS2, LUKS1, privileged VeraCrypt | All three routes recovered the file and committed row on Arch. |
 | Linux | Login-user VeraCrypt | Recovered both on Arch with the `1e04b85` full package after fixing the LKL write barrier. |
 | Linux | gocryptfs, CryFS, Cryptomator | All three recovered both on Arch. CryFS required the atomic client-state fix. |
-| FreeBSD | GELI | Sparse fixtures lost acknowledged data after a cut. One fully allocated `029cf99` diagnostic and a separate orderly shutdown both recovered the synced file and SQLite row. |
+| FreeBSD | GELI | The matched `ca3c845` sparse fixture lost acknowledged data. The fully allocated fixture passed all five recovery checks. A separate orderly shutdown also preserved the file and SQLite row. |
 | FreeBSD | VeraCrypt, PEFS, gocryptfs | All three recovered the file and committed row. VeraCrypt needed the ciphertext flush fix. gocryptfs required explicit stale-session reconciliation. |
 | OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | All three needed native FFS preen on separate ciphertext copies before writable reopen. With synchronous FFS, each copy then recovered the file and committed row. |
 | NetBSD | CGD | The journaled `sync,log` control recovered the file and lost the committed SQLite row. Its paired `sync,nolog` diagnostic recovered both under write-through storage. The supported profile requires WAPBL. |
