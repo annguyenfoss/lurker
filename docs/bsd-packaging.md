@@ -134,6 +134,32 @@ network configuration. Removal cleared the package registration and
 payloads. The host package, device and mount inventories matched the
 baseline. The archive and summaries are under `target/openbsd-vc-barrier/`.
 
+### FreeBSD clean-machine offline install
+
+A standalone copy of the vendor FreeBSD 15.1-RELEASE amd64 BASIC CLOUDINIT
+UFS image booted on a transient KVM guest. The guest had no IPv4 or IPv6
+default route, and its control network had no forwarding or DNS. The
+vendor package database contained no Lurker, VeraCrypt or gocryptfs.
+Native `pkg` 2.6.2_1 installed the checksum-verified `ca3c845` package at
+`/usr/local` after installing 72 verified local dependencies for the product
+and test harness. These included the matching `pefs-kmod` and an archived
+official Xvfb package. The CLI, helper and desktop resolved their shared
+libraries on the clean guest.
+
+The installed package passed all 208 CLI cases (39 GELI, 39 PEFS, 104
+VeraCrypt and 26 gocryptfs), and rendered a 1280×860 X11 window as UID 1300.
+The runner resumed the two pending binary-keyfile suites and the X11 probe
+under `/tmp` after their fixture-path checks rejected `/var/tmp`. All storage
+and kernel resource inventories matched their baselines after cleanup.
+Package removal also restored the vendor package inventory. The guest shut
+down normally, its isolated network was removed, and the vendor image
+retained its original SHA-256.
+
+The native package SHA-256 is
+`9fed88319d7339a1a36ce1aba36e5dca45fdd2d8b04e6974df9f9fa3b17c6022`.
+The input receipts, workload logs, and teardown audit are in
+`target/freebsd-clean-ca3c8456/`.
+
 ### OpenBSD clean-machine offline install
 
 A new amd64 KVM guest installed stock OpenBSD 8.0 and its X11 sets from
