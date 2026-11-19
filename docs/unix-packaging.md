@@ -196,6 +196,12 @@ Their declarations remain visible in the inventory for source review.
 Both builder and staging suites passed, for 58 tests total. Evidence is
 under `target/goal-validation/rust-notices/`.
 
+The exact upstream commits supplied candidate license files for 12 of
+those 15 crates. Three had no matching license file in the checked paths.
+The review preserves the upstream commit, package source comparison
+and candidate file hashes in
+`target/goal-validation/rust-notices/upstream/review.json`.
+
 To prepare the Rust portion of the release sources, extract a Git archive
 of the exact product commit into a new directory. From that directory,
 generate the vendor tree and its local Cargo configuration.
@@ -219,6 +225,15 @@ network-namespace test attempts hit the host identity and tool-discovery
 assumptions in the test fixtures. The receipts and archive are under
 `target/goal-validation/rust-corresponding-source/`. Archive SHA-256 is
 `0b240ba625b2a65eff78ca467420e1a07096d119e047cc17d639e93b37a5a30e`.
+
+The six Linux installers with build-specific notices use `14197ef`.
+From its exact unpacked source archive and an empty Cargo home, Arch KVM
+resolved all 592 packages offline and ran the standard Unix builder for
+a CLI-only LUKS package. The result contained the expected 22 vendored
+crates and 46 notice files. The archive, build receipts and verification
+are under `target/goal-validation/rust-corresponding-source/exact-linux-notice-build/`.
+Archive SHA-256 is
+`98cc851aa62dd17899bfb99b11e490091091fa15faa6144baa9b93ba5a4f77c1`.
 
 The coordinated BSD packages at `ca3c845` use the same `Cargo.lock`.
 Arch KVM repackaged that exact project revision with the verified vendor
