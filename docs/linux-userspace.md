@@ -39,7 +39,7 @@ Both creation routes use the same normal-volume AES/Serpent/Twofish, SHA-512, PI
 
 The container format is intended to be interchangeable after unmounting, subject to filesystem support and permissions. Tests confirmed that cryptsetup accepts both password-only and keyfile-only headers from userspace-created containers using `--test-passphrase`. That check does not prove a full cross-mode filesystem read/write cycle; dedicated mount/write/remount tests in both directions remain useful follow-up work. Never open the same container concurrently through the two routes.
 
-No comparative throughput or latency benchmark has been run. The userspace route adds two FUSE layers and a 192 MiB LKL memory arena per mounted filesystem, plus VeraCrypt buffers. Extra overhead is an architectural expectation, not a measured slowdown.
+The userspace route adds two FUSE layers and a 192 MiB LKL memory arena per mounted filesystem, plus VeraCrypt buffers. The Arch KVM comparison below measures three write workloads through both routes.
 
 Interactive LUKS creation retains two passphrase entries. Lurker validates staged-file publication and explicit destructive `--force` itself, then uses native batch mode with explicit passphrase verification to avoid a second cryptsetup `YES` confirmation.
 
@@ -299,3 +299,23 @@ left no mounts. The Arch native recovery suite also verifies the formatter
 directory while injecting a failure during container replacement. The
 comparison and native tests are under
 `target/goal-validation/formatter-cwd/`.
+
+## VeraCrypt write timings on Arch KVM (2026-11-20)
+
+The full `c21e0cc` portable package ran three interleaved trials per
+route on a two-vCPU Arch guest with Linux `7.2.11-arch1-1` and Btrfs
+backing storage. Each trial used a fresh 128 MiB AES VeraCrypt container
+with Btrfs inside. UID 1300 ran the same write script on both routes.
+Each trial reopened the volume, verified the file bytes and all committed
+rows, and detached normally. The table shows median elapsed time.
+
+| Workload | Kernel route | Login-user route |
+| --- | ---: | ---: |
+| 32 MiB sequential write and final fsync | 104 ms | 171 ms |
+| 32 × 4 KiB writes with an fsync after each | 228 ms | 227 ms |
+| 32 SQLite FULL/WAL commits | 235 ms | 238 ms |
+
+LKL's resident memory after the workload was 68.1–68.5 MiB across the
+three trials. VeraCrypt process memory was outside this measurement.
+Timings apply to this guest, storage and workload. The receipt and trial
+logs are under `target/goal-validation/login-user-overhead/`.
