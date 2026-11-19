@@ -312,6 +312,28 @@ acknowledged file, and none of the SQLite database, WAL or SHM files
 was available to copy. Normal close succeeded after collection.
 Evidence is in `result-obvc20261120.json` under the OpenBSD fault directory.
 
+With the ciphertext-write barrier in
+`4189679af84777daf222033ceaa5c0317b79291b`, another cut followed workload
+acknowledgment by 2.07 seconds. The normal CLI reopen reached FFS, which
+required a read-only mount and suggested a filesystem check. The failed
+reopen left no mounted inner filesystem or attached vnode disk.
+
+For diagnosis, the exact private engine attached a SHA-256-verified disposable
+copy of the ciphertext and the inner FFS was mounted read-only. The fsynced
+file matched its recorded digest. SQLite on separate working copies of the
+recovered database and WAL reported integrity OK, returned the committed
+row intact, and excluded the uncommitted row. Normal unmount and dismount
+restored the original device inventory. Both ciphertext hashes were unchanged
+and no repair ran. This verified recovery of the acknowledged data on the
+tested copy. The regular CLI writable-reopen check still failed. The diagnostic
+used a writable crypto attachment to the copy and a read-only FFS mount.
+
+The staged archive SHA-256 was
+`52829c0d1b9b3d7f4d96309882d634d51fc2b96a745dad9f0ee9f2a6711d8b68`.
+See `result-obvcfix20261120.json`, `reopen-vcflush.log`, and
+`copied-ffs-readonly-dispatch.log` under
+`/mnt/virt/lurker-fault-ob20261120a/`.
+
 ## Arch packaged runtime power cuts
 
 Packaged LUKS2/AES at `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` passed

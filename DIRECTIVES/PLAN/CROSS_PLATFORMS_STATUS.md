@@ -171,17 +171,24 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 ## Remaining qualification work and limits
 
-- NetBSD CGD and FreeBSD GELI have observed durability failures even though
-  their current normal lifecycles pass. OpenBSD FFS refused writable RAID1C
-  reopening after a cut. DragonFly's published LUKS1 fixture was missing
-  from a recovered copy of the separate HAMMER2 backing disk. Native BSD
-  adapters remain file-backed and perform no automatic filesystem repair.
+- FreeBSD GELI and VeraCrypt and NetBSD CGD lost acknowledged writes after
+  abrupt power cuts. FreeBSD PEFS and gocryptfs passed the recovery workload,
+  with explicit dead-session reconciliation needed for gocryptfs.
+- OpenBSD FFS refused writable RAID1C reopening after a cut. On OpenBSD
+  VeraCrypt at `4189679`, a read-only FFS mount on a disposable ciphertext
+  copy recovered the acknowledged file and SQLite transaction after a cut.
+  The normal CLI writable reopen still failed during mount.
+- DragonFly's published LUKS1 fixture was missing from a recovered copy of
+  the separate HAMMER2 backing disk. Native BSD adapters remain file-backed
+  and perform no automatic filesystem repair.
 - OpenBSD may return ENXIO for a configured vnode after its VeraCrypt FUSE
   daemon dies, making source identity unverifiable. Production preserves that
   session. The final native generation and alias checks passed for OpenBSD;
   FreeBSD also passed its daemon-death recovery case.
-- Clean-machine and offline depth, shutdown/session integration, release
-  signing and broader security/maintenance review still require evidence.
+- The opt-in `session-close` hook passed 82 checks across Debian, FreeBSD and
+  NetBSD. Actual operating-system shutdown ordering still requires
+  qualification. Broader clean-machine/offline, signing and
+  security/maintenance evidence also remains open.
 - macOS remains outside the current round. Its historical `294b2b8` DMG passed
   182 CLI and five crash/recovery checks. Fast-close and final desktop checks
   and the retained VeraCrypt reopen timeout remain part of Mac qualification.
