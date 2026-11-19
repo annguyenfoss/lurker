@@ -332,6 +332,24 @@ class Ownership(unittest.TestCase):
 
 
 class GuestFixture(unittest.TestCase):
+    def test_openbsd_sync_control_requires_same_writable_ffs_device(self):
+        fixture = Path("/owned/open data")
+        before = f"/dev/vnd0a on {fixture} type ffs (local, nodev)"
+        command = ["/sbin/mount", "-u", "-o", "sync", str(fixture)]
+        synchronized = f"/dev/vnd0a on {fixture} type ffs (local, nodev, synchronous)"
+        with patch.object(VM.os.path, "ismount", return_value=True):
+            with patch.object(VM, "run", side_effect=[before, "", synchronized]) as native:
+                observed = VM.openbsd_sync_diagnostic(fixture)
+                self.assertEqual(observed["device"], "/dev/vnd0a")
+                self.assertIn("synchronous", observed["workload_flags"])
+                native.assert_any_call(command)
+            for unsafe in (synchronized.replace("vnd0a", "vnd1a"),
+                           synchronized.replace("synchronous", "read-only"),
+                           before):
+                with self.subTest(unsafe=unsafe), patch.object(VM, "run", side_effect=[before, "", unsafe]):
+                    with self.assertRaisesRegex(RuntimeError, "Diagnostic"):
+                        VM.openbsd_sync_diagnostic(fixture)
+
     def test_raid_workload_reopens_the_same_two_recorded_members(self):
         manifest = {"backend": "raid1c", "source": "/owned/primary", "peer_sources": ["/owned/peer"],
                     "mountpoint": "/owned/open", "size_gb": "0.125", "cipher": "aes"}

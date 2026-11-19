@@ -742,6 +742,31 @@ def netbsd_sync_diagnostic(mountpoint):
             "workload_flags": after.f_flag, "journaled": True, "synchronous": True}
 
 
+def openbsd_sync_diagnostic(mountpoint):
+    """Make regular-file writes synchronous on the test fixture before measurement."""
+    mount_row = re.compile(r"(/dev/(?:sd[1-9][0-9]*|vnd[0-3])a) on "
+                           + re.escape(str(mountpoint)) + r" type ffs \(([^)]+)\)")
+
+    def mounted_ffs():
+        matches = [match.groups() for line in run(["/sbin/mount"]).splitlines()
+                   if (match := mount_row.fullmatch(line))]
+        require(os.path.ismount(mountpoint) and len(matches) == 1,
+                "Diagnostic requires a single identified native OpenBSD FFS fixture")
+        device, flags = matches[0]
+        flags = flags.split(", ")
+        require("read-only" not in flags and "asynchronous" not in flags,
+                "Diagnostic requires a writable OpenBSD FFS fixture")
+        return device, flags
+
+    device, before = mounted_ffs()
+    command = ["/sbin/mount", "-u", "-o", "sync", str(mountpoint)]
+    run(command)
+    after_device, after = mounted_ffs()
+    require(after_device == device and "synchronous" in after,
+            "Diagnostic remount did not establish synchronous mode on the same fixture")
+    return {"command": command, "device": device, "before_flags": before, "workload_flags": after}
+
+
 def guest_setup(args):
     require(args.persistent_home_confirmed, "Confirm the home filesystem is persistent, not tmpfs")
     require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Exact candidate Git commit required")
@@ -750,6 +775,10 @@ def guest_setup(args):
         if args.netbsd_sync_diagnostic:
             require(platform.system() == "NetBSD" and args.backend == "cgd" and os.geteuid() == 0,
                     "Synchronous FFS diagnostic is available only for native NetBSD CGD")
+        if args.openbsd_sync_diagnostic:
+            require(platform.system() == "OpenBSD" and args.backend in {"veracrypt", "softraid", "raid1c"}
+                    and os.geteuid() == 0,
+                    "Synchronous FFS diagnostic requires a native OpenBSD container")
         package, manifest_digest = verify_staged_package(args.cli, args.commit, args.backend)
         guest_prerequisites(package, args.backend, args.unprivileged)
     except Exception as error:
@@ -787,6 +816,9 @@ def guest_setup(args):
     require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
     if args.netbsd_sync_diagnostic:
         manifest["netbsd_sync_diagnostic"] = netbsd_sync_diagnostic(mountpoint)
+        write_json(directory / "guest.json", manifest)
+    if args.openbsd_sync_diagnostic:
+        manifest["openbsd_sync_diagnostic"] = openbsd_sync_diagnostic(mountpoint)
         write_json(directory / "guest.json", manifest)
     # Persist only test credentials/recovery metadata before the measured
     # workload. No global sync and no clean detach occurs before poweroff.
@@ -925,6 +957,8 @@ def main():
     setup.add_argument("--persistent-home-confirmed", action="store_true")
     setup.add_argument("--netbsd-sync-diagnostic", action="store_true",
                        help="For NetBSD CGD, require a synchronous journaled fixture before the workload")
+    setup.add_argument("--openbsd-sync-diagnostic", action="store_true",
+                       help="For an OpenBSD container, require synchronous FFS before the workload")
     for action in ("guest-worker", "guest-verify"):
         guest = commands.add_parser(action)
         guest.add_argument("--run", required=True)
