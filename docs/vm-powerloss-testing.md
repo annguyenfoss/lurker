@@ -266,6 +266,16 @@ identities, result files and hypervisor events are under
 `/mnt/virt/lurker-fault-fb20261120a/`, `/mnt/virt/lurker-fault-ob20261120a/`
 and `/mnt/virt/lurker-fault-dfwin20261120/`.
 
+## Arch LUKS2 repeat test
+
+Packaged LUKS2/AES at `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` passed
+all five recovery checks after an actual KVM cut. The synchronized file
+and SQLite FULL/WAL commit recovered, the uncommitted row stayed invisible,
+and normal close detached the filesystem. The isolated guest had Btrfs
+outside and inside the encrypted image. The package SHA-256 was
+`3781b6dd12b2487f0a584ed7e5e1c4077cdac2be6620ff484c0755c2f29174d0`.
+Evidence is under `/mnt/virt/lurker-fault-ar20261120a/`.
+
 ### FreeBSD GELI flush tracing
 
 On the original FreeBSD 15.1-RELEASE-p6 KVM guest, DTrace observed no GEOM
