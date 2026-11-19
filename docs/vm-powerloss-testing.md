@@ -203,3 +203,22 @@ disk as evidence after the transient clone stops.
 
 Libvirt documents fresh template initialization and retained transient NVRAM:
 https://libvirt.org/formatdomain.html#bios-bootloader
+
+## NetBSD CGD repeat test on the 2026-11-20 candidate
+
+The hash-verified `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` package
+(`91b001fd98ddbcd9df240c8dcccfa814d51864b4d1c7a5982c955d9acf175d41`)
+created and opened a 128 MiB CGD/FFSv2 container on an isolated NetBSD 11.1
+clone backed by persistent FFS. The worker acknowledged file fsync, rename
+and directory fsync, and a SQLite FULL/WAL commit with the connection held
+open. The live worker was still present at the guarded KVM power cut, about
+25 seconds after readiness.
+
+The package and CLI hashes were verified after reboot. Normal writable CLI
+reopen succeeded, but the mounted filesystem was empty. The acknowledged
+file and SQLite DB/WAL were absent, so this attempt failed durability
+verification. The clone's network needed the same static address reapplied
+at its console after reboot. No test-container repair or forced detach ran.
+The earlier passing case at `76f05fb` remains a separate observation.
+Package deployment, readiness, KVM events and the failed result remain
+under `/mnt/virt/lurker-fault-nb20261120a/`.
