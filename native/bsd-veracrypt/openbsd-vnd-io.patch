@@ -1,0 +1,103 @@
+--- a/src/Driver/Fuse/FuseService.cpp
++++ b/src/Driver/Fuse/FuseService.cpp
+@@ -870,19 +870,35 @@
+-		}
++		}
+-
++
+-		return 0;
++		return 0;
+-	}
++	}
+-
++
++	// OpenBSD vnd opens the private image with root credentials, but its
++	// backing I/O carries the process context of the upper filesystem.
++	// Accept only the kernel handle issued by our authorized data-node open.
++	// OpenBSD enforces the root-only auxiliary directory and image modes.
++	static const uint64 LurkerOpenBsdVolumeHandle = 1;
++
++	static bool fuse_service_data_access (const char *path, const struct fuse_file_info *fi)
++	{
++		return (fi && fi->fh == LurkerOpenBsdVolumeHandle
++			&& strcmp (path, FuseService::GetVolumeImagePath()) == 0)
++			|| FuseService::CheckAccessRights();
++	}
++
+-	static int fuse_service_open (const char *path, struct fuse_file_info *fi)
++	static int fuse_service_open (const char *path, struct fuse_file_info *fi)
+-	{
++	{
+-		try
++		try
+-		{
++		{
+-			if (!FuseService::CheckAccessRights())
++			if (!FuseService::CheckAccessRights())
+-				return -EACCES;
++				return -EACCES;
+-
++
+-			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
++			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
++			{
++				fi->fh = LurkerOpenBsdVolumeHandle;
+-				return 0;
++				return 0;
++			}
+-
++
+-			if (strcmp (path, FuseService::GetAuxDeviceInfoPath()) == 0)
++			if (strcmp (path, FuseService::GetAuxDeviceInfoPath()) == 0)
+-			{
++			{
+-				fi->direct_io = 1;
++				fi->direct_io = 1;
+-				return 0;
++				return 0;
+@@ -913,11 +929,11 @@
+-
++
+-	static int fuse_service_read (const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
++	static int fuse_service_read (const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+-	{
++	{
+-		try
++		try
+-		{
++		{
+-			if (!FuseService::CheckAccessRights())
++			if (!fuse_service_data_access (path, fi))
+-				return -EACCES;
++				return -EACCES;
+-
++
+-			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
++			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
+-			{
++			{
+-				try
++				try
+@@ -1086,11 +1102,11 @@
+-
++
+-	static int fuse_service_write (const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
++	static int fuse_service_write (const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+-	{
++	{
+-		try
++		try
+-		{
++		{
+-			if (!FuseService::CheckAccessRights())
++			if (!fuse_service_data_access (path, fi))
+-				return -EACCES;
++				return -EACCES;
+-
++
+-			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
++			if (strcmp (path, FuseService::GetVolumeImagePath()) == 0)
+-			{
++			{
+-				FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);
++				FuseService::WriteVolumeSectors (BufferPtr ((uint8 *) buf, size), offset);

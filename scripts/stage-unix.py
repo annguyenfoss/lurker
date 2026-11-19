@@ -214,9 +214,14 @@ def require_executable(path):
 
 
 def verify_bsd_patches(manifest, source):
+    patches = [
+        ("native/veracrypt/utf8-console.patch", "COMMON_PATCH_SHA256"),
+        ("native/bsd-veracrypt/auxiliary-path.patch", "PATCH_SHA256"),
+    ]
+    if manifest.get("platform") == "OpenBSD":
+        patches.append(("native/bsd-veracrypt/openbsd-vnd-io.patch", "OPENBSD_VND_PATCH_SHA256"))
     expected = []
-    for name, constant in (("native/veracrypt/utf8-console.patch", "COMMON_PATCH_SHA256"),
-                           ("native/bsd-veracrypt/auxiliary-path.patch", "PATCH_SHA256")):
+    for name, constant in patches:
         actual = hashlib.sha256(source.read(name)).hexdigest()
         if source.constant("scripts/build-bsd-backends.py", constant) != actual:
             fail("BSD VeraCrypt source patch differs from its reviewed digest: " + name)

@@ -100,25 +100,33 @@ class SourceProvenance(unittest.TestCase):
             member = tarfile.TarInfo("upstream/" + builder.PATCH_TARGET)
             member.size = len(original)
             tar.addfile(member, io.BytesIO(original))
-            # Preserve each exact reviewed CoreUnix hunk in a reduced fixture.
-            core_hunks = []
-            in_core = False
-            for line in (builder.ROOT / "native/bsd-veracrypt/auxiliary-path.patch").read_bytes().splitlines(keepends=True):
-                if line.startswith(b"--- a/"):
-                    in_core = line.rstrip() == b"--- a/src/Core/Unix/CoreUnix.cpp"
-                elif in_core and line.startswith(b"@@ "):
-                    core_hunks.append([])
-                elif in_core and core_hunks and line[:1] in (b" ", b"-"):
-                    core_hunks[-1].append(line[1:])
-            core_original = b"\n// reduced fixture separator\n".join(b"".join(h) for h in core_hunks)
-            member = tarfile.TarInfo("upstream/src/Core/Unix/CoreUnix.cpp")
-            member.size = len(core_original)
-            tar.addfile(member, io.BytesIO(core_original))
+            # Preserve the exact upstream contexts of the reviewed hunks.
+            for patch_name, target in (
+                ("auxiliary-path.patch", "src/Core/Unix/CoreUnix.cpp"),
+                ("openbsd-vnd-io.patch", "src/Driver/Fuse/FuseService.cpp"),
+            ):
+                hunks = []
+                matches_target = False
+                patch_path = builder.ROOT / "native/bsd-veracrypt" / patch_name
+                for line in patch_path.read_bytes().splitlines(keepends=True):
+                    if line.startswith(b"--- a/"):
+                        matches_target = line.rstrip() == b"--- a/" + target.encode()
+                    elif matches_target and line.startswith(b"@@ "):
+                        hunks.append([])
+                    elif matches_target and hunks and line[:1] in (b" ", b"-"):
+                        hunks[-1].append(line[1:])
+                upstream = b"\n// reduced fixture separator\n".join(b"".join(h) for h in hunks)
+                member = tarfile.TarInfo("upstream/" + target)
+                member.size = len(upstream)
+                tar.addfile(member, io.BytesIO(upstream))
         pin = {"revision": "fixed", "url": "https://example.invalid/source", "sha256": builder.digest(archive)}
-        with patch.dict(builder.PINS, {"veracrypt": pin}):
+        with patch.dict(builder.PINS, {"veracrypt": pin}), patch.object(builder.platform, "system", return_value="OpenBSD"):
             source = builder.prepare("veracrypt", self.cache, offline=True)
             self.assertIn(b"Lurker Auxiliary Directory:", (source / builder.PATCH_TARGET).read_bytes())
             self.assertEqual(builder.prepare("veracrypt", self.cache, offline=True), source)
+            service = (source / "src/Driver/Fuse/FuseService.cpp").read_bytes()
+            self.assertIn(b"fi->fh = LurkerOpenBsdVolumeHandle;", service)
+            self.assertEqual(service.count(b"!fuse_service_data_access (path, fi)"), 2)
             core = source / "src/Core/Unix/CoreUnix.cpp"
             reviewed = core.read_bytes()
             self.assertIn(b"arc4random_buf (nonce, sizeof (nonce))", reviewed)

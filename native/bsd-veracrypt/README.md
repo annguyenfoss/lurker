@@ -30,7 +30,16 @@ saved auxiliary generation absent is rejected. Legacy numeric helpers/proof v1
 cannot establish the new recovery contract. No encryption or format primitive
 is changed. The shared `native/veracrypt/utf8-console.patch`
 fixes libc++ wide-stream listing output on BSD/macOS so a Unicode path cannot
-truncate the identity record. The manifest records both patch digests.
+truncate the identity record.
+
+OpenBSD also applies `openbsd-vnd-io.patch`. The vnode disk retains the root
+credentials that opened the backing image, while subsequent FUSE requests can
+carry the application process's identity. The engine accepts those reads and
+writes only on the kernel handle returned by an authorized open of the private
+image. Directory traversal, opening the image and control-file operations keep
+their existing checks. OpenBSD enforces permissions on the root-owned auxiliary
+directory and image. The build and package manifests require the patch digest
+for OpenBSD.
 
 The staged executable uses upstream's text/stdin interface. It is intended for
 Lurker's trusted, administrator-controlled private backend directory; a normal
@@ -121,3 +130,5 @@ Upstream references:
 OpenBSD identity ABI reference:
 
 - https://github.com/openbsd/src/blob/master/sys/dev/vnd.c#L548-L567
+- https://github.com/openbsd/src/blob/master/sys/dev/vnd.c#L315-L324
+- https://man.openbsd.org/fuse_mount.3
