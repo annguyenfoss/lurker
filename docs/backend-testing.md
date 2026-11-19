@@ -147,7 +147,7 @@ the same compiled binaries. The archive and complete results are in
 `target/netbsd-final-resume/`. The archive SHA-256 is
 `91b001fd98ddbcd9df240c8dcccfa814d51864b4d1c7a5982c955d9acf175d41`.
 
-## Resumed DragonFly LUKS1 keyfile qualification
+## Resumed DragonFly LUKS1 package qualification
 
 DragonFly 6.4.2 x86-64 passed 39 binary-keyfile checks across AES, Serpent
 and Twofish using the packaged `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1`
@@ -172,6 +172,22 @@ unused X extensions, used private Xauthority, and reaped all owned
 children. The window result and full package manifest are in
 `target/dragonfly-resume/`. The full archive SHA-256 is
 `22feef4528e2d684182b5900381721e5c076b01aabf960e43992931737e3a742`.
+
+The full archive also passed 91 live CLI checks with no skips: 52 password
+checks across AES, Serpent, Twofish and AES Auto, plus 39 binary-keyfile
+checks across the three ciphers. The packaged helper passed the login-user
+desktop callback lifecycle, including create, synced write, close and
+reopen/read. Build `20261119T172622Z-beaa837c` passed workspace checks,
+build and unit tests (90 passed, 3 ignored). The remaining two native core
+tests passed separately on owned storage.
+
+An eight-case UFS exhaustion run filled the owned encrypted filesystem until
+`ENOSPC`, read the existing payload, freed the filler, wrote and synced new
+data, and verified both files and SQLite after reopening. Post-test checks
+found idle vnode devices, an empty mapper list, and no Lurker session records.
+The temporary sudo files and authorization were removed. The failed initial
+orchestration output is retained on the guest along with the successful
+results in `target/dragonfly-resume/full/`.
 
 ## NetBSD CGD with WAPBL
 
