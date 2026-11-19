@@ -88,6 +88,43 @@ class Ownership(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 VM.disk_source(xml)
 
+    def test_dragonfly_fixture_disk_is_restricted_to_owned_path_and_serial(self):
+        source = SOURCE.replace('<target dev="vda"/>', '<target dev="hda" bus="ide"/>')
+        owned = {**self.m, "os": "dragonflybsd", "fixture_disk": str(self.directory / "fixture.qcow2")}
+        with patch.object(VM, "firmware_policy", return_value=None), patch.object(VM, "validate_firmware_xml"):
+            xml = VM.clone_xml(source, owned)
+        self.assertEqual(VM.clone_disks(ET.fromstring(xml), owned), owned["disk"])
+        for changed in (
+            xml.replace(owned["fixture_disk"], "/foreign.qcow2"),
+            xml.replace(VM.FIXTURE_DISK_SERIAL, "another-disk"),
+            xml.replace("<devices>", '<devices><disk><target dev="vdc"/></disk>'),
+        ):
+            with self.assertRaises(RuntimeError):
+                VM.clone_disks(ET.fromstring(changed), owned)
+        with self.assertRaises(RuntimeError):
+            VM.fixture_disk({**owned, "os": "archlinux"})
+
+    def test_fixture_disk_replacement_cannot_authorize_boot_or_poweroff(self):
+        root = self.directory / "root.qcow2"
+        data = self.directory / "fixture.qcow2"
+        root.touch()
+        data.touch()
+        owned = {**self.m, "os": "dragonflybsd", "fixture_disk": str(data)}
+        clone = VM.OwnedClone(self.directory, owned)
+        VM.write_json(self.directory / "copy-result.json", {
+            "disk_identity": {"device": root.stat().st_dev, "inode": root.stat().st_ino},
+        })
+        VM.write_json(self.directory / "fixture-disk.json", {
+            "path": str(data), "device": data.stat().st_dev, "inode": data.stat().st_ino,
+        })
+        clone.verify_disk()
+        data.rename(self.directory / "saved-fixture.qcow2")
+        data.touch()
+        with patch.object(VM, "virsh") as call:
+            with self.assertRaisesRegex(RuntimeError, "Fixture disk inode changed"):
+                clone.poweroff()
+            call.assert_not_called()
+
     def test_writable_firmware_rejected(self):
         with self.assertRaises(RuntimeError):
             VM.clone_xml(SOURCE.replace("</os>", "<nvram>/original</nvram></os>"), self.m)

@@ -32,6 +32,8 @@ SOURCES = {name: name + "-core-01" for name in
            ("archlinux", "freebsd", "netbsd", "openbsd", "dragonflybsd")}
 
 DISK_TARGETS = {name: "hda" if name == "dragonflybsd" else "vda" for name in SOURCES}
+FIXTURE_DISK_TARGET = "vdb"
+FIXTURE_DISK_SERIAL = "LURKERFAULTDATA"
 UEFI_CODE = "/usr/share/edk2/x64/OVMF_CODE.4m.fd"
 UEFI_VARS = "/usr/share/edk2/x64/OVMF_VARS.4m.fd"
 
@@ -154,6 +156,33 @@ def disk_target(manifest):
     return expected
 
 
+def fixture_disk(manifest):
+    if "fixture_disk" not in manifest:
+        return None
+    require(manifest["os"] == "dragonflybsd", "Dedicated fixture disk is reviewed for DragonFly only")
+    expected = Path(manifest["disk"]).with_name("fixture.qcow2")
+    require(manifest["fixture_disk"] == str(expected), "Fixture disk path changed")
+    return expected
+
+
+def clone_disks(domain, manifest):
+    if fixture_disk(manifest) is not None:
+        disks = domain.findall("./devices/disk")
+        require(len(disks) == 2, "DragonFly clone must have only its root and fixture disks")
+        candidates = [disk for disk in disks if disk.find("target").get("dev") == FIXTURE_DISK_TARGET]
+        require(len(candidates) == 1, "Owned fixture disk missing or ambiguous")
+        disk = candidates[0]
+        source, target, driver = (disk.find(tag) for tag in ("source", "target", "driver"))
+        require(disk.get("type") == "file" and disk.get("device") == "disk"
+                and target.get("bus") == "virtio" and disk.findtext("serial") == FIXTURE_DISK_SERIAL
+                and driver is not None and driver.get("type") == "qcow2"
+                and source is not None and source.get("file") == manifest["fixture_disk"]
+                and disk.find("mirror") is None and disk.find("backingStore/source") is None,
+                "Owned fixture disk definition changed")
+        domain.find("devices").remove(disk)
+    return disk_source(ET.tostring(domain, encoding="unicode"), disk_target(manifest))
+
+
 def trusted_firmware_file(path):
     path = Path(path)
     for entry in (path, *path.parents):
@@ -217,6 +246,12 @@ def clone_xml(source, manifest):
         for element in disk.findall(tag):
             disk.remove(element)
     ET.SubElement(disk, "source", {"file": manifest["disk"]})
+    if fixture_disk(manifest) is not None:
+        fixture = ET.SubElement(devices, "disk", {"type": "file", "device": "disk"})
+        ET.SubElement(fixture, "driver", {"name": "qemu", "type": "qcow2", "cache": "none"})
+        ET.SubElement(fixture, "source", {"file": manifest["fixture_disk"]})
+        ET.SubElement(fixture, "target", {"dev": FIXTURE_DISK_TARGET, "bus": "virtio"})
+        ET.SubElement(fixture, "serial").text = FIXTURE_DISK_SERIAL
     for interface in devices.findall("interface"):
         devices.remove(interface)
     interface = ET.SubElement(devices, "interface", {"type": "network"})
@@ -272,6 +307,7 @@ class OwnedClone:
         require(manifest["network"] == directory.name, "Network ownership mismatch")
         require(manifest["marker"] == "lurker-disposable-fault:" + manifest["run"], "Marker mismatch")
         disk_target(manifest)
+        fixture_disk(manifest)
         firmware_policy(manifest)
         return cls(directory, manifest)
 
@@ -304,7 +340,7 @@ class OwnedClone:
         require(domain.findtext("uuid") == self.manifest["uuid"], "Clone UUID changed")
         require(domain.findtext("name") == self.manifest["name"], "Clone name changed")
         require(domain.findtext("description") == self.manifest["marker"], "Clone marker changed")
-        require(disk_source(ET.tostring(domain, encoding="unicode"), disk_target(self.manifest)) == self.manifest["disk"], "Clone disk changed")
+        require(clone_disks(domain, self.manifest) == self.manifest["disk"], "Clone disk changed")
         interfaces = domain.findall("devices/interface")
         require(len(interfaces) == 1, "Clone must have only the isolated NIC")
         require(interfaces[0].find("source").get("network") == self.manifest["network"], "Clone network changed")
@@ -320,6 +356,26 @@ class OwnedClone:
         recorded = json.loads((self.directory / "copy-result.json").read_text())
         require(recorded["disk_identity"] == {"device": metadata.st_dev, "inode": metadata.st_ino},
                 "Clone disk inode changed")
+        fixture = fixture_disk(self.manifest)
+        if fixture is not None:
+            identity = fixture.lstat()
+            require(stat.S_ISREG(identity.st_mode), "Fixture disk must be a regular private file")
+            recorded_fixture = json.loads((self.directory / "fixture-disk.json").read_text())
+            require(recorded_fixture == {"path": str(fixture), "device": identity.st_dev, "inode": identity.st_ino},
+                    "Fixture disk inode changed")
+
+    def provision_fixture_disk(self):
+        path = fixture_disk(self.manifest)
+        require(path is not None, "Run has no dedicated fixture disk")
+        require(self.manifest["uuid"] not in virsh("list", "--all", "--uuid").split(),
+                "Cannot provision storage while the clone is defined")
+        # Reserving the path exclusively prevents replacing any earlier fixture.
+        with path.open("xb"):
+            pass
+        run(["qemu-img", "create", "-f", "qcow2", str(path), "1G"])
+        identity = path.lstat()
+        write_json(self.directory / "fixture-disk.json",
+                   {"path": str(path), "device": identity.st_dev, "inode": identity.st_ino})
 
     def verify_firmware_resources(self, before_boot=False):
         firmware = firmware_policy(self.manifest)
@@ -437,7 +493,7 @@ class OwnedClone:
                    timeout, input_text=script)
 
 
-def prepare(os_name, run_id, subnet, bandwidth):
+def prepare(os_name, run_id, subnet, bandwidth, dragonfly_fixture_disk=False):
     require(re.fullmatch(r"[a-z0-9]{8,20}", run_id), "Run ID must be 8–20 lowercase letters/digits")
     network = ipaddress.ip_network(subnet)
     require(network.version == 4 and network.prefixlen == 24 and network.is_private, "Private IPv4 /24 required")
@@ -476,6 +532,9 @@ def prepare(os_name, run_id, subnet, bandwidth):
                                 "nvram": str(directory / "nvram.fd"),
                                 "loader_sha256": trusted_firmware_file(UEFI_CODE),
                                 "template_sha256": trusted_firmware_file(UEFI_VARS)}
+    if dragonfly_fixture_disk:
+        require(os_name == "dragonflybsd", "Dedicated fixture disk is reviewed for DragonFly only")
+        manifest["fixture_disk"] = str(directory / "fixture.qcow2")
     # Validate before allocating any plan directory.
     clone_xml(inactive, manifest)
     # Traverse-only access allows libvirt's QEMU uid to use its relabeled image;
@@ -845,7 +904,8 @@ def main():
     plan.add_argument("--run", required=True)
     plan.add_argument("--subnet", required=True)
     plan.add_argument("--bandwidth", type=int, default=32)
-    for action in ("copy-boot", "finish-copy-boot", "static-transport", "network-stop", "inspect", "poweroff", "boot", "ssh"):
+    plan.add_argument("--dragonfly-fixture-disk", action="store_true")
+    for action in ("copy-boot", "finish-copy-boot", "provision-fixture-disk", "static-transport", "network-stop", "inspect", "poweroff", "boot", "ssh"):
         command = commands.add_parser(action)
         command.add_argument("directory", type=Path)
         if action == "ssh":
@@ -874,7 +934,7 @@ def main():
         return guest_verify(args.run)
     if args.action == "prepare":
         require(1 <= args.bandwidth <= 64, "Bandwidth must be 1–64 MiB/s")
-        clone = prepare(args.os, args.run, args.subnet, args.bandwidth)
+        clone = prepare(args.os, args.run, args.subnet, args.bandwidth, args.dragonfly_fixture_disk)
         print(json.dumps(clone.manifest, indent=2))
         return 0
     clone = OwnedClone.load(args.directory)
@@ -882,6 +942,8 @@ def main():
         copy_and_boot(clone)
     elif args.action == "finish-copy-boot":
         finish_copy_and_boot(clone)
+    elif args.action == "provision-fixture-disk":
+        clone.provision_fixture_disk()
     elif args.action == "static-transport":
         clone.register_static_transport()
     elif args.action == "network-stop":

@@ -204,6 +204,16 @@ disk as evidence after the transient clone stops.
 Libvirt documents fresh template initialization and retained transient NVRAM:
 https://libvirt.org/formatdomain.html#bios-bootloader
 
+For a DragonFly run with separate fixture storage, pass
+`--dragonfly-fixture-disk` to `prepare` and run `provision-fixture-disk` on
+the prepared directory before boot. The new 1 GiB qcow2 is empty and has
+a recorded inode. The clone has exactly its IDE root and the VirtIO disk
+with serial `LURKERFAULTDATA`. Boot and poweroff require both identities.
+Inside the clone, confirm the device against that topology before formatting
+it. Mount the new filesystem at the guest's fixture base and record both the
+root and fixture filesystem options. Keep the original source and previous
+fault disks intact.
+
 ## NetBSD CGD repeat test on the 2026-11-20 candidate
 
 The hash-verified `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` package
