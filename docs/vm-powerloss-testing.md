@@ -245,6 +245,12 @@ For a separate diagnostic on a new NetBSD CGD fault fixture, add
 fixture in synchronous journaled mode before the worker starts and records the
 effective flags in the result. This option applies only to the test fixture.
 
+The synchronous journaled diagnostic also recovered the acknowledged file
+but had a 32-byte WAL and no committed table after the cut. The effective
+mount flags showed both modes on the same filesystem. The raw post-reboot
+SQLite evidence and `result-nb20261120sync.json` are retained. Synchronous
+mounting did not recover the transaction in this test.
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
