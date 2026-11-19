@@ -48,10 +48,12 @@ def find_display_libraries(system):
     result = {}
     for library in DESKTOP_LIBRARIES:
         paths = [path for root in candidates for path in sorted(root.glob(f"lib{library}.so.*"))
-                 if path.is_file() and path.stat().st_size]
+                 if path.is_file()]
         if not paths:
             raise ValueError(f"desktop package needs the native lib{library} runtime on the build guest")
         path = paths[0].resolve()
+        if STAGE.magic(path) != b"\x7fELF":
+            raise ValueError("native desktop library is not ELF: " + str(path))
         result[str(path)] = path.name
     return result
 

@@ -6,6 +6,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 SCRIPTS = Path(__file__).resolve().parents[1]
@@ -77,3 +78,11 @@ class PackagePayloadTests(unittest.TestCase):
         files["bin/sudo"] = executable
         with self.assertRaisesRegex(ValueError, "layout"):
             BSD.payload_files(manifest, "FreeBSD")
+
+    def test_native_desktop_rejects_damaged_library(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lib = Path(directory) / "lib"
+            lib.mkdir()
+            (lib / "libX11.so.1").write_bytes(b"\0" * 4096)
+            with patch.dict(BSD.PREFIXES, {"FreeBSD": directory}), self.assertRaisesRegex(ValueError, "not ELF"):
+                BSD.find_display_libraries("FreeBSD")
