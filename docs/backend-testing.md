@@ -388,6 +388,18 @@ copies and digests retained. Native removal left the global package list
 unchanged, temporary sudo authorization was removed, and CGD/VND devices
 were idle. Results and package receipts are under `target/netbsd-a60e4bc/`.
 
+On the original NetBSD 11.1 guest, a separate test killed the process group
+of the hash-verified `a60e4bc` helper during create. The helper had recorded
+both native device identities in the root-owned session journal, and the
+destination and its parameter file were still unpublished. Replacing the
+staged image inode caused ordinary CLI unmount to refuse cleanup and leave
+the mapping and journal intact. After restoring the original inode, the
+same unmount removed the session and detached both devices. A normal create
+retry then passed mount, write, close and reopen checks, with the file and
+SQLite data preserved. All CGD and vnd devices were idle afterward. This
+test covers interruption after the device identities reach the journal.
+The receipt and refusal log are under `target/netbsd-cgd-interrupted/`.
+
 ## Coordinated OpenBSD native package
 
 OpenBSD 8.0 amd64 built and checked workspace source
