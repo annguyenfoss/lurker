@@ -2,6 +2,7 @@
 import importlib.util
 import hashlib
 import io
+import lzma
 import tarfile
 from pathlib import Path
 import tempfile
@@ -153,6 +154,36 @@ class NativeSourcePreparation(unittest.TestCase):
         binding = json.loads((self.source / '.lurker-source-inputs.json').read_text())
         self.assertEqual(binding['revision'], 'fixed-revision')
         self.assertEqual(binding['verified_source_files'], 2)
+
+    def test_lkl_stable_patch_is_pinned_and_applies_before_the_integration_patch(self):
+        self.builder.SOURCES['lkl'] = self.builder.SOURCES['example']
+        archive = self.cache / 'lkl-fixed-revision.tar.gz'
+        with tarfile.open(archive, 'w:gz') as output:
+            directory = tarfile.TarInfo('example-fixed/removed')
+            directory.type = tarfile.DIRTYPE
+            output.addfile(directory)
+            for name, contents in [('example.c', b'upstream\n'), ('removed/empty.h', b'')]:
+                entry = tarfile.TarInfo('example-fixed/' + name)
+                entry.size = len(contents)
+                output.addfile(entry, io.BytesIO(contents))
+        self.builder.SOURCE_ARCHIVE_SHA256['lkl'] = hashlib.sha256(archive.read_bytes()).hexdigest()
+        lkl_patch = self.patch.with_name('lkl.patch')
+        lkl_patch.write_text(self.patch.read_text().replace('-upstream', '-stable'))
+        stable = self.cache / 'patch-test.xz'
+        stable.write_bytes(lzma.compress(b'--- a/example.c\n+++ b/example.c\n@@ -1 +1 @@\n-upstream\n+stable\n'
+                                        b'diff --git a/removed/empty.h b/removed/empty.h\ndeleted file mode 100644\n'
+                                        b'index e69de29..0000000\n'))
+        self.builder.LKL_STABLE_PATCH = {'version': 'test', 'url': 'https://example.invalid/patch-test.xz',
+                                         'sha256': hashlib.sha256(stable.read_bytes()).hexdigest()}
+
+        source = self.builder.prepare('lkl', self.cache, offline=True)
+        self.assertEqual((source / 'example.c').read_text(), 'patched\n')
+        self.assertFalse((source / 'removed' / 'empty.h').exists())
+        self.assertEqual(self.builder.prepare('lkl', self.cache, offline=True), source)
+
+        stable.write_bytes(b'bad cached input')
+        with self.assertRaisesRegex(RuntimeError, 'Pinned LKL stable patch checksum mismatch'):
+            self.builder.prepare('lkl', self.cache, offline=True)
 
 
 class NativePrivatePackaging(unittest.TestCase):

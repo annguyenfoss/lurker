@@ -20,6 +20,17 @@ index 45332b692..d676948d1 100644
 +CONFIG_NTFS3_FS=y
 +CONFIG_NTFS3_LZX_XPRESS=y
 +CONFIG_NTFS3_FS_POSIX_ACL=y
+diff --git a/arch/lkl/include/asm/Kbuild b/arch/lkl/include/asm/Kbuild
+--- a/arch/lkl/include/asm/Kbuild
++++ b/arch/lkl/include/asm/Kbuild
+@@ -10,6 +10,7 @@ generic-y += parport.h
+ generic-y += pci_iomap.h
+ generic-y += resource.h
++generic-y += ring_buffer.h
+ generic-y += seccomp.h
+ generic-y += signal.h
+ generic-y += statfs.h
+ generic-y += user.h
 diff --git a/tools/lkl/include/lkl.h b/tools/lkl/include/lkl.h
 index eaf6c4cee..80615eb00 100644
 --- a/tools/lkl/include/lkl.h

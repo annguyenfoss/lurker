@@ -116,22 +116,34 @@ removed the fixture and left neither FUSE layer, any live owned process, nor
 a session record. The package and binary digests and raw `/proc` fields are
 in `target/goal-validation/linux-runtime-audit-a5a1857/lkl-runtime.json`.
 
-The shipped LKL revision `d0f76a77e8c2ca68bd7d96190b8da09040eab072`
-also matched the LKL default branch on 2026-11-20. Its `fs/btrfs` Git
-tree ID is identical to mainline Linux `v6.12`. The corresponding
-`v6.12.118` stable tree has the same 140 files, with different contents
-in 85 of them. Lurker's LKL patch changes its configuration and host I/O
-integration without changing that filesystem subtree. This establishes the
-Btrfs maintenance gap relative to the stable kernel tree. Advisory
-applicability, integration with later stable changes and rebuilt runtime
-qualification remain open. The compared tree and blob IDs are recorded in
-`target/goal-validation/release-inputs-review/`.
+The `ca3c845` package used LKL revision
+`d0f76a77e8c2ca68bd7d96190b8da09040eab072`. Its 140-file Btrfs tree matched
+mainline `v6.12`, and the `v6.12.118` stable release changed 85 of those files.
+
+New userspace builds apply the pinned `v6.12.118` stable patch to that LKL
+revision before Lurker's integration patch. The integration uses the stable
+kernel's generic tracing header for the LKL architecture. The builder verifies
+the patch archive on every build and independently reconstructs affected source
+files to check the build cache. Offline builds use an existing verified
+`patch-6.12.118.xz` in the source cache. The versioned LKL source directory
+leaves earlier caches available. The package provenance includes the stable
+patch version, source URL and SHA-256.
+
+The stable update applied to 14,215 paths. Comparing the result with the
+signed kernel.org release verified 14,055 file and mode matches, 142 matching
+deletions, and 18 LKL differences. All 85 changed Btrfs files matched the
+signed release. Arch KVM built the helper and passed 39 unprivileged VeraCrypt
+checks with AES, Serpent, and Twofish using the `ca3c845` CLI and the updated
+filesystem driver. The signed-tree comparison, build and runtime logs are
+under `target/goal-validation/release-inputs-review/`.
 
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072/fs/btrfs
 
 https://github.com/torvalds/linux/tree/v6.12/fs/btrfs
 
 https://github.com/gregkh/linux/tree/v6.12.118/fs/btrfs
+
+https://www.kernel.org/signature.html
 
 ## Source identity and cross-mode exclusion
 

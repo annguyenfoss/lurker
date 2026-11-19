@@ -8,8 +8,10 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import lzma
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -31,6 +33,12 @@ SOURCE_ARCHIVE_SHA256 = {
     "veracrypt": "1bf27ae89671943fbd2ff0cc63e9c727951a774a5c6c3cb26e058bdea0ca39d1",
     "veracrypt-create": "1bf27ae89671943fbd2ff0cc63e9c727951a774a5c6c3cb26e058bdea0ca39d1",
     "lkl": "ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e168",
+}
+
+LKL_STABLE_PATCH = {
+    "version": "6.12.118",
+    "url": "https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.12.118.xz",
+    "sha256": "422a33351c5ac482c3b4a1f3897b17f9dc5670eb6938eb9eadd9cef84b948ee5",
 }
 
 
@@ -66,8 +74,8 @@ def generated_input(name, relative):
            'arch/lkl/include/generated/', '.checked-atomic-', '.tmp_vmlinux'))
 
 
-def verify_source_cache(name, source, archive, patch):
-    """Bind cached tracked inputs to the verified archive plus the exact patch.
+def verify_source_cache(name, source, archive, patches):
+    """Bind cached tracked inputs to the archive and ordered patches.
 
     Build outputs absent from the archive are deliberately ignored; every
     upstream input, including entire patched files, is verified on each reuse.
@@ -75,20 +83,32 @@ def verify_source_cache(name, source, archive, patch):
     source = source.resolve()
     inputs = {"repository": SOURCES[name][0], "revision": SOURCES[name][1],
               "archive_sha256": SOURCE_ARCHIVE_SHA256[name],
-              "patch_sha256": hashlib.sha256(patch.read_bytes()).hexdigest()}
+              "patch_sha256": hashlib.sha256(patches[-1].read_bytes()).hexdigest()}
+    if name == "lkl":
+        inputs["stable_patch"] = LKL_STABLE_PATCH
     binding = source / '.lurker-source-inputs.json'
     if binding.exists():
         previous = json.loads(binding.read_text())
         if any(previous.get(key) != value for key, value in inputs.items()):
             raise RuntimeError(f"Source cache inputs changed: {source}. Use a fresh source directory for the new revision/patch.")
     affected = set()
-    for line in patch.read_text().splitlines():
-        if line.startswith(('--- a/', '+++ b/')):
-            relative = Path(line.split()[1][2:])
-            if relative.is_absolute() or '..' in relative.parts:
-                raise RuntimeError('Unsafe source patch path')
-            affected.add(relative.as_posix())
-    manifest, mismatches = {}, []
+    for patch in patches:
+        with patch.open(encoding="utf-8", errors="surrogateescape") as contents:
+            for line in contents:
+                if line.startswith('diff --git '):
+                    names = shlex.split(line)[2:]
+                    if len(names) != 2 or not names[0].startswith('a/') or not names[1].startswith('b/'):
+                        raise RuntimeError('Invalid git patch paths')
+                elif line.startswith(('--- a/', '+++ b/')):
+                    names = [line[4:].split('\t', 1)[0].rstrip('\n')]
+                else:
+                    continue
+                for name_in_patch in names:
+                    relative = Path(name_in_patch[2:])
+                    if not relative.parts or relative.is_absolute() or '..' in relative.parts:
+                        raise RuntimeError('Unsafe source patch path')
+                    affected.add(relative.as_posix())
+    manifest, mismatches, missing_directories = {}, [], []
     def compare(relative, expected, kind='file'):
         actual = source / relative
         if kind == 'link':
@@ -103,7 +123,7 @@ def verify_source_cache(name, source, archive, patch):
                     valid = hashlib.file_digest(stream, 'sha256').hexdigest() == expected
         manifest[relative] = {kind: expected}
         if not valid and len(mismatches) < 10: mismatches.append(relative)
-    with tempfile.TemporaryDirectory(prefix='lurker-source-verify-') as directory:
+    with tempfile.TemporaryDirectory(prefix='lurker-source-verify-', dir=archive.parent) as directory:
         expected_root = Path(directory)
         top = None
         with tarfile.open(archive, 'r|gz') as tar:
@@ -117,12 +137,16 @@ def verify_source_cache(name, source, archive, patch):
                 relative = Path(*parts[1:]); key = relative.as_posix()
                 if member.isdir():
                     actual = source / relative
-                    if (not actual.is_dir() or actual.is_symlink()) and len(mismatches) < 10: mismatches.append(key)
+                    if not actual.exists() and not actual.is_symlink():
+                        missing_directories.append(key)
+                    elif (not actual.is_dir() or actual.is_symlink()) and len(mismatches) < 10:
+                        mismatches.append(key)
                 elif member.issym():
-                    compare(key, member.linkname, 'link')
                     if key in affected:
                         target = expected_root / relative; target.parent.mkdir(parents=True, exist_ok=True)
                         target.symlink_to(member.linkname)
+                    else:
+                        compare(key, member.linkname, 'link')
                 elif member.isfile():
                     stream = tar.extractfile(member)
                     if key in affected:
@@ -131,14 +155,23 @@ def verify_source_cache(name, source, archive, patch):
                     else:
                         compare(key, hashlib.file_digest(stream, 'sha256').hexdigest())
                 else: raise RuntimeError('Unsupported pinned source archive member')
-        applied = subprocess.run(['patch', '-p1', '--forward', '--force', '--batch', '--fuzz=0', '-i', str(patch.resolve())],
-                                 cwd=expected_root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        if applied.returncode: raise RuntimeError('Cannot derive exact patched source inputs from the pinned archive: ' + applied.stdout.decode(errors='replace')[-2000:])
+        for patch in patches:
+            applied = subprocess.run(['patch', '-p1', '--forward', '--force', '--batch', '--fuzz=0',
+                                      '--no-backup-if-mismatch', '-i', str(patch.resolve())],
+                                     cwd=expected_root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            if applied.returncode:
+                raise RuntimeError('Cannot derive exact patched source inputs from the pinned archive: '
+                                   + applied.stdout.decode(errors='replace')[-2000:])
         for key in affected:
             expected = expected_root / key
             if expected.is_symlink(): compare(key, os.readlink(expected), 'link')
             elif expected.is_file(): compare(key, hashlib.sha256(expected.read_bytes()).hexdigest())
             else: compare(key, True, 'deleted')
+    # GNU patch removes an empty parent after deleting its last file.
+    for directory in missing_directories:
+        members = [entry for key, entry in manifest.items() if key.startswith(directory + '/')]
+        if (not members or any('deleted' not in entry for entry in members)) and len(mismatches) < 10:
+            mismatches.append(directory)
     source_suffixes = {'.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx', '.S', '.s', '.asm', '.inc', '.py', '.sh', '.pl', '.in'}
     for actual in source.rglob('*'):
         if not (actual.is_file() or actual.is_symlink()): continue
@@ -156,9 +189,44 @@ def verify_source_cache(name, source, archive, patch):
     return inputs
 
 
+def unpack_lkl_stable_patch(cache, offline, destination):
+    pin = LKL_STABLE_PATCH
+    archive = cache / f"patch-{pin['version']}.xz"
+    if not archive.is_file():
+        if offline:
+            raise RuntimeError(f"Missing source archive {archive}; run once without --offline.")
+        cache.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=cache, prefix=archive.name + ".") as directory:
+            temporary = Path(directory) / archive.name
+            with urllib.request.urlopen(pin["url"], timeout=120) as response, temporary.open("wb") as output:
+                shutil.copyfileobj(response, output)
+            with temporary.open("rb") as downloaded:
+                if hashlib.file_digest(downloaded, "sha256").hexdigest() != pin["sha256"]:
+                    raise RuntimeError(f"Pinned LKL stable patch checksum mismatch: {archive}")
+            temporary.replace(archive)
+    with archive.open("rb") as compressed:
+        if hashlib.file_digest(compressed, "sha256").hexdigest() != pin["sha256"]:
+            raise RuntimeError(f"Pinned LKL stable patch checksum mismatch: {archive}")
+        compressed.seek(0)
+        with lzma.open(compressed, "rb") as source, destination.open("wb") as output:
+            shutil.copyfileobj(source, output)
+    return destination
+
+
 def prepare(name, cache, offline):
+    patch = ROOT / "native/linux-userspace/patches" / f"{name}.patch"
+    if name == "lkl":
+        if not offline:
+            cache.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="lurker-lkl-stable-", dir=cache if cache.is_dir() else None) as directory:
+            stable = unpack_lkl_stable_patch(cache, offline, Path(directory) / "stable.patch")
+            return prepare_source(name, cache, offline, (stable, patch))
+    return prepare_source(name, cache, offline, (patch,))
+
+
+def prepare_source(name, cache, offline, patches):
     repository, revision = SOURCES[name]
-    source = cache / name
+    source = cache / (f"lkl-{LKL_STABLE_PATCH['version']}" if name == "lkl" else name)
     archive = cache / f"{name}-{revision}.tar.gz"
     if archive.exists():
         verify_archive(name, archive)
@@ -187,8 +255,10 @@ def prepare(name, cache, offline):
         actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
         if actual != revision:
             raise RuntimeError(f"{source} is {actual}; expected pinned revision {revision}.")
-    patch = ROOT / "native/linux-userspace/patches" / f"{name}.patch"
+    patch = patches[-1]
     digest = hashlib.sha256(patch.read_bytes()).hexdigest()
+    if name == "lkl":
+        digest = hashlib.sha256((LKL_STABLE_PATCH["sha256"] + ":" + digest).encode()).hexdigest()
     stamp = source / ".lurker-patch-sha256"
     if stamp.exists() and stamp.read_text().strip() != digest:
         raise RuntimeError(f"Patch changed: remove the generated source directory {source} and rebuild.")
@@ -201,8 +271,10 @@ def prepare(name, cache, offline):
     if reversed_patch.returncode:
         if stamp.exists():
             raise RuntimeError(f"Cached sources do not match their patch: {source}. Restore pristine sources and remove the stamp.")
-        run(["patch", "-p1", "--forward", "--force", "--batch", "-i", patch], cwd=source)
-    verify_source_cache(name, source, archive, patch)
+        for source_patch in patches:
+            run(["patch", "-p1", "--forward", "--force", "--batch", "--fuzz=0", "--no-backup-if-mismatch",
+                 "-i", source_patch], cwd=source)
+    verify_source_cache(name, source, archive, patches)
     stamp.write_text(digest + "\n")
     return source.resolve()
 
@@ -345,6 +417,7 @@ def main():
     shutil.copytree(lkl / "LICENSES", licenses / "Linux", dirs_exist_ok=True)
     (output / "source-archives.json").write_text(json.dumps(SOURCE_ARCHIVE_SHA256, indent=2) + "\n")
     (output / "sources.json").write_text(json.dumps(SOURCES, indent=2) + "\n")
+    (output / "lkl-stable-source.json").write_text(json.dumps(LKL_STABLE_PATCH, indent=2) + "\n")
     finalize_private_libraries(output, ["lurker-veracrypt", "lurker-fs", "lurker-veracrypt-create"], wx_metadata, args.tool_cache_dir, args.offline)
     print(f"Userspace helpers built in {output}. Nothing was installed.")
 

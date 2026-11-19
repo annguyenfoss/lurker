@@ -224,9 +224,10 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   cleanly, rebooted and recovered the file and SQLite data. Broader shutdown
   integration, clean-machine qualification, offline BSD coverage, publisher
   signatures and security review still require evidence.
-- The private LKL Btrfs tree matches Linux `v6.12`. The maintained
-  `v6.12.118` Btrfs tree differs in 85 files. Updating and requalifying the
-  private filesystem engine remains part of the release security review.
+- The `ca3c845` private LKL Btrfs tree matches Linux `v6.12`. The builder
+  now pins `v6.12.118` and rechecks its applied sources. A rebuilt helper
+  passed 39 Arch login-user checks. The updated private engine still needs
+  the coordinated native package and power-cut replay.
 - macOS remains outside the current round. Its historical `294b2b8` DMG passed
   182 CLI and five crash/recovery checks. Fast-close and final desktop checks
   and the retained VeraCrypt reopen timeout remain part of Mac qualification.

@@ -396,6 +396,9 @@ def validate_backend(kind, directory, source):
                 fail("Linux userspace source pins differ")
             if json_file(root / "source-archives.json") != archives:
                 fail("Linux userspace source archive checksums differ")
+            stable_patch = source.constant("scripts/build-linux-userspace.py", "LKL_STABLE_PATCH")
+            if json_file(root / "lkl-stable-source.json") != stable_patch:
+                fail("LKL stable patch provenance differs")
             envelope = json_file(root / "artifact-manifest.json")
             verify_envelope(envelope, root, source, kind)
     else:
@@ -800,7 +803,7 @@ def stage(args):
                 copied_tree("licenses", share / "licenses" / kind)
                 if kind == "veracrypt-userspace":
                     copied_file("private-libraries.json", private / "private-libraries.json")
-                metadata = ["bsd-veracrypt-source.json"] if kind == "veracrypt-bsd" else ["sources.json", "source-archives.json", "creator-source.json", "artifact-manifest.json", "private-libraries.json"]
+                metadata = ["bsd-veracrypt-source.json"] if kind == "veracrypt-bsd" else ["sources.json", "source-archives.json", "lkl-stable-source.json", "creator-source.json", "artifact-manifest.json", "private-libraries.json"]
                 for name in metadata:
                     if (directory / name).is_file():
                         target = share / "provenance" / kind
