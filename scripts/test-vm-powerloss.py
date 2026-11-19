@@ -793,6 +793,44 @@ def netbsd_allocated_diagnostic(source):
             "logical_size": after.st_size, "sha256": digest}
 
 
+def freebsd_suj_diagnostic(source, secret):
+    """Enable UFS soft-updates journaling on a fresh, unmounted GELI fixture."""
+    identity = source.lstat()
+    require(stat.S_ISREG(identity.st_mode) and identity.st_uid == os.geteuid()
+            and identity.st_nlink == 1, "SUJ control requires an owned, new regular fixture")
+    existing = set(run(["/sbin/mdconfig", "-l"]).split())
+    unit = run(["/sbin/mdconfig", "-a", "-t", "vnode", "-S", "4096", "-f", str(source)]).strip()
+    require(re.fullmatch(r"md(?:0|[1-9][0-9]*)", unit) and unit not in existing,
+            "SUJ control requires a newly attached device")
+    raw = "/dev/" + unit
+    provider = raw + ".eli"
+
+    def verify_backing():
+        listing = run(["/sbin/geom", "md", "list", unit])
+        expected = f"ident: MD-DEV{identity.st_dev}-INO{identity.st_ino}"
+        require(expected in [line.strip() for line in listing.splitlines()],
+                "SUJ control backing identity changed")
+
+    verify_backing()
+    attached = False
+    try:
+        run(["/sbin/geli", "attach", "-j", "-", raw], input_text=secret + "\n")
+        attached = True
+        command = ["/sbin/tunefs", "-j", "enable", provider]
+        run(command)
+        result = subprocess.run(["/sbin/tunefs", "-p", provider], capture_output=True,
+                                text=True, timeout=60, check=True)
+        report = result.stdout + result.stderr
+        require(re.search(r"soft updates journaling:\s+(?:\(-j\)\s+)?enabled\b", report)
+                is not None, "SUJ was not enabled on the test filesystem")
+        return {"command": command, "filesystem": report}
+    finally:
+        verify_backing()
+        if attached:
+            run(["/sbin/geli", "detach", raw])
+        run(["/sbin/mdconfig", "-d", "-u", unit])
+
+
 def guest_setup(args):
     require(args.persistent_home_confirmed, "Confirm the home filesystem is persistent, not tmpfs")
     require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Exact candidate Git commit required")
@@ -805,6 +843,9 @@ def guest_setup(args):
             require(platform.system() == "OpenBSD" and args.backend in {"veracrypt", "softraid", "raid1c"}
                     and os.geteuid() == 0,
                     "Synchronous FFS diagnostic requires a native OpenBSD container")
+        if args.freebsd_suj_diagnostic:
+            require(platform.system() == "FreeBSD" and args.backend == "geli" and os.geteuid() == 0,
+                    "SUJ diagnostic requires a native FreeBSD GELI container")
         package, manifest_digest = verify_staged_package(args.cli, args.commit, args.backend)
         guest_prerequisites(package, args.backend, args.unprivileged)
     except Exception as error:
@@ -840,6 +881,9 @@ def guest_setup(args):
     guest_cli(directory, guest_volume_arguments("create", manifest), secret)
     if args.netbsd_allocated_diagnostic:
         manifest["netbsd_allocated_diagnostic"] = netbsd_allocated_diagnostic(source)
+        write_json(directory / "guest.json", manifest)
+    if args.freebsd_suj_diagnostic:
+        manifest["freebsd_suj_diagnostic"] = freebsd_suj_diagnostic(source, secret)
         write_json(directory / "guest.json", manifest)
     guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
     require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
@@ -990,6 +1034,8 @@ def main():
                        help="For an OpenBSD container, require synchronous FFS before the workload")
     setup.add_argument("--netbsd-allocated-diagnostic", action="store_true",
                        help="For NetBSD CGD, mount an allocated copy of the new fixture")
+    setup.add_argument("--freebsd-suj-diagnostic", action="store_true",
+                       help="For FreeBSD GELI, enable soft-updates journaling on the new fixture")
     for action in ("guest-worker", "guest-verify"):
         guest = commands.add_parser(action)
         guest.add_argument("--run", required=True)

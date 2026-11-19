@@ -332,6 +332,15 @@ class Ownership(unittest.TestCase):
 
 
 class GuestFixture(unittest.TestCase):
+    def test_freebsd_suj_control_rejects_a_changed_md_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory) / "encrypted data"
+            fixture.touch()
+            with patch.object(VM, "run", side_effect=["md3", "md0", "wrong identity"]) as native:
+                with self.assertRaisesRegex(RuntimeError, "backing identity changed"):
+                    VM.freebsd_suj_diagnostic(fixture, "fixture")
+                self.assertEqual(native.call_count, 3)
+
     def test_netbsd_allocated_control_preserves_original_sparse_ciphertext(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory) / "encrypted data"
