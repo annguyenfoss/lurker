@@ -89,6 +89,9 @@ struct Mounted {
     fsid: Vec<u8>,
     filesystem: String,
     readonly: bool,
+    #[cfg(target_os = "netbsd")]
+    #[serde(default)]
+    journaled: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -658,7 +661,7 @@ fn initialize_new_filesystem_owner(
         .mapped
         .as_deref()
         .ok_or_else(|| AppError::new("New filesystem has no recorded crypto mapping."))?;
-    let mut argv = args(&["-t", filesystem(), "-o", "rw"]);
+    let mut argv = args(&["-t", filesystem(), "-o", mount_options(false)]);
     argv.push(mapped.into());
     argv.push(target.as_os_str().to_owned());
     exec("/sbin/mount", &argv, None)?;
@@ -676,6 +679,7 @@ fn initialize_new_filesystem_owner(
     }
     session.mounted = Some(mounted.clone());
     registry.save(session)?;
+    require_write_journal(&mounted)?;
     let directory = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
@@ -916,12 +920,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                 registry.save(&session)?;
             }
         }
-        let mut argv = args(&[
-            "-t",
-            filesystem(),
-            "-o",
-            if c.readonly { "ro" } else { "rw" },
-        ]);
+        let mut argv = args(&["-t", filesystem(), "-o", mount_options(c.readonly)]);
         argv.push(session.mapped.as_ref().unwrap().into());
         argv.push(target.as_os_str().to_owned());
         exec("/sbin/mount", &argv, None)?;
@@ -935,6 +934,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             ));
         }
         registry.save(&session)?;
+        require_write_journal(mounted)?;
         Ok(())
     })();
     if let Err(error) = result {
@@ -1105,6 +1105,28 @@ fn filesystem() -> &'static str {
     } else {
         "ufs"
     }
+}
+
+fn mount_options(readonly: bool) -> &'static str {
+    if readonly {
+        "ro"
+    } else if cfg!(target_os = "netbsd") {
+        "rw,log"
+    } else {
+        "rw"
+    }
+}
+
+fn require_write_journal(_mounted: &Mounted) -> AppResult<()> {
+    // A NetBSD kernel without WAPBL can silently clear the requested flag.
+    // Plain FFS fsync does not flush the cache of the underlying CGD device.
+    #[cfg(target_os = "netbsd")]
+    if !_mounted.readonly && !_mounted.journaled {
+        return Err(AppError::new(
+            "NetBSD CGD writable mounts require active FFS journaling (WAPBL).",
+        ));
+    }
+    Ok(())
 }
 
 fn unmount(c: UnmountCommand, output: Output) -> AppResult<()> {
@@ -1498,6 +1520,8 @@ fn mounts() -> AppResult<Vec<Mounted>> {
                 fsid,
                 filesystem: text(&entry.f_fstypename)?,
                 readonly: flags & libc::MNT_RDONLY as u64 != 0,
+                #[cfg(target_os = "netbsd")]
+                journaled: flags & libc::MNT_LOG as u64 != 0,
             })
         })
         .collect()
@@ -1506,6 +1530,26 @@ fn mounts() -> AppResult<Vec<Mounted>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "netbsd")]
+    #[test]
+    fn netbsd_requests_and_requires_journaling_only_for_writable_mounts() {
+        assert_eq!(mount_options(false), "rw,log");
+        assert_eq!(mount_options(true), "ro");
+        let mut mount = Mounted {
+            source: "/dev/cgd0d".into(),
+            target: "/tmp/test".into(),
+            fsid: Vec::new(),
+            filesystem: "ffs".into(),
+            readonly: false,
+            journaled: false,
+        };
+        assert!(require_write_journal(&mount).is_err());
+        mount.journaled = true;
+        assert!(require_write_journal(&mount).is_ok());
+        mount.readonly = true;
+        mount.journaled = false;
+        assert!(require_write_journal(&mount).is_ok());
+    }
     #[test]
     #[ignore = "requires root BSD /tmp fixture"]
     fn initialization_cleanup_refuses_replacements_and_nonempty_directories() {

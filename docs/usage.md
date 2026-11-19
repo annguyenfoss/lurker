@@ -328,7 +328,10 @@ LUKS2/Argon2id. Backend/OS combinations outside the approved matrix are rejected
 BSD native containers use GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD),
 softraid CRYPTO/FFS (OpenBSD), and LUKS1/UFS (DragonFly). Run native container
 operations through the OS administrator authorization tool. NetBSD images must
-be kept together with their `.cgdparams` recovery sidecars. OpenBSD read-only
+be kept together with their `.cgdparams` recovery sidecars. NetBSD writable
+mounts require FFS journaling (WAPBL). The first writable mount of an older
+image may allocate a journal and requires free space inside the image.
+OpenBSD read-only
 crypto mappings and multi-source RAID1C are not implemented. Native integration
 and package qualification are tracked separately from the selected matrix.
 Native packages carry private third-party engines; host kernel tools and FUSE
