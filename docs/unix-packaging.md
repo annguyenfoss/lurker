@@ -220,9 +220,27 @@ assumptions in the test fixtures. The receipts and archive are under
 `target/goal-validation/rust-corresponding-source/`. Archive SHA-256 is
 `0b240ba625b2a65eff78ca467420e1a07096d119e047cc17d639e93b37a5a30e`.
 
+The coordinated BSD packages at `ca3c845` use the same `Cargo.lock`.
+Arch KVM repackaged that exact project revision with the verified vendor
+tree. From the extracted archive and an empty Cargo home, locked offline
+metadata and workspace check passed. Workspace tests reported 135 passed,
+zero failed and 13 ignored. The archive and logs are under
+`target/goal-validation/rust-corresponding-source/exact-bsd-baseline/`.
+Archive SHA-256 is
+`7e6b378a0e150046a8fb828f8b13ec4c97a1affc98fd0a7b7df85f03fb5b528a`.
+
+The upstream Rust standard library source components for 1.100.0 and
+1.98.1 also matched their signed channel manifests. The six Linux package
+receipts identify Rust 1.100.0. Current OpenBSD and DragonFly builders
+report 1.98.1 with native port builds. Those ports have separate build
+recipes. The upstream archives, signatures and verification logs are
+under `target/goal-validation/rust-toolchain-sources/`.
+
 Native and JVM engines and their dependencies have separate source inputs.
 
 https://doc.rust-lang.org/cargo/commands/cargo-vendor.html
+
+https://forge.rust-lang.org/infra/channel-layout.html
 
 ## Collected native and JVM source inputs
 
