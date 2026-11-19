@@ -59,6 +59,7 @@ without an external network route.
 | FreeBSD 15.1 cloud image | `ca3c845` | 208 across GELI, VeraCrypt, PEFS and gocryptfs | X11 passed |
 | OpenBSD 8.0 stock install | `ca3c845` | 69 across CRYPTO, AES VeraCrypt and RAID1C | X11 passed |
 | NetBSD 11.1 stock image | `ca3c845` | 13 CGD checks, including read-only Auto reopen | X11 passed |
+| DragonFly BSD 6.4.2 stock install | `ca3c845` | 91 LUKS1 checks plus eight UFS exhaustion checks | X11 passed |
 
 OpenBSD's native package manager rejects the unsigned developer archive
 under its stock policy. The clean replay used its scoped unsigned-package
@@ -260,7 +261,7 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 - The opt-in `session-close` hook passed 82 checks across Debian, FreeBSD and
   NetBSD. Arch also stopped its systemd consumer, ran the hook, shut down
   cleanly, rebooted and recovered the file and SQLite data. Broader shutdown
-  integration, clean-machine qualification, offline BSD coverage, publisher
+  integration, stock Fedora, openSUSE and Gentoo qualification, publisher
   signatures and security review still require evidence.
 - The `ca3c845` private LKL Btrfs tree matches Linux `v6.12`. The builder
   now pins `v6.12.118` and rechecks its applied sources. A rebuilt helper
