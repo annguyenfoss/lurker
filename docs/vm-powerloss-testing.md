@@ -304,6 +304,14 @@ inner UFS. Both original cut disks were preserved. Evidence is under
 `/mnt/virt/lurker-fault-dffault20261120b/` and
 `/mnt/virt/lurker-fault-dfrecover20261120/`.
 
+### OpenBSD VeraCrypt on the coordinated package
+
+The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
+encrypted image after an isolated cut. The mounted inner FFS lacked the
+acknowledged file, and none of the SQLite database, WAL or SHM files
+was available to copy. Normal close succeeded after collection.
+Evidence is in `result-obvc20261120.json` under the OpenBSD fault directory.
+
 ## Arch packaged runtime power cuts
 
 Packaged LUKS2/AES at `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` passed
