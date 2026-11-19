@@ -311,6 +311,21 @@ https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/
 
 https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/dev/vnd.c
 
+On the original NetBSD 11.1 guest, the `a60e4bc` CLI mounted and closed a
+128 MiB sparse CGD fixture and a byte-identical, fully allocated copy with
+the same parameters. Both mounts had WAPBL active and reported 512-byte vnd
+sectors. The outer FFS device also reported 512-byte sectors. DTrace
+recorded 50 calls from the vnd worker to `vn_rdwr` during the sparse
+reopen and close. During the fully allocated copy's mount and close, it
+recorded 50 direct calls to `VOP_STRATEGY` from the vnd worker and zero
+calls to `vn_rdwr` from that worker. The NetBSD 11 source selects vnode
+read/write for a sparse backing file and permits the direct strategy path
+when the backing vnode and device geometry support it. Full allocation
+changed the live I/O path in this fixture without changing the container
+format or mount flags. This comparison used clean closes. WAL durability
+through an abrupt cut on the fully allocated path remains unverified.
+See `target/netbsd-cgd-geometry/trace.log` and `backing-and-cleanup.log`.
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
