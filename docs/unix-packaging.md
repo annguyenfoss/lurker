@@ -176,6 +176,36 @@ Distribution prerequisites are separate downloads.
 Exact sizes and digests are in
 `target/goal-validation/native-package-download-sizes.json`.
 
+## Vendored Rust source archive
+
+To prepare the Rust portion of the release sources, extract a Git archive
+of the exact product commit into a new directory. From that directory,
+generate the vendor tree and its local Cargo configuration.
+
+```sh
+mkdir .cargo
+cargo vendor --locked --versioned-dirs vendor > .cargo/config.toml
+```
+
+Archive the whole directory. Unpack it for verification and use an empty
+`CARGO_HOME` with `cargo check --workspace --locked --offline` and
+`cargo test --workspace --locked --offline`. Keep the lockfile, Cargo
+configuration and original vendored license files in the archive.
+
+Arch KVM assembled the exact `8bb689c` project sources with all 588
+registry crates in `Cargo.lock`. Each vendored package checksum matched
+the lockfile. Cargo resolved all 592 packages from the unpacked archive
+with an empty Cargo home. Workspace check passed, and offline tests as the
+build login user reported 136 passed, zero failed and 13 ignored. Earlier
+network-namespace test attempts hit the host identity and tool-discovery
+assumptions in the test fixtures. The receipts and archive are under
+`target/goal-validation/rust-corresponding-source/`. Archive SHA-256 is
+`0b240ba625b2a65eff78ca467420e1a07096d119e047cc17d639e93b37a5a30e`.
+
+Native and JVM engines and their dependencies have separate source inputs.
+
+https://doc.rust-lang.org/cargo/commands/cargo-vendor.html
+
 ## Release maintenance and signatures
 
 Use the installed package's `share/lurker/manifest.json` and neighboring
