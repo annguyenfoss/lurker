@@ -91,6 +91,42 @@ mounts:
 python -m unittest discover -s scripts/tests -p test_backend_conformance.py
 ```
 
+## Session close qualification
+
+The hook change in `0eea358` passed these focused KVM checks. The source
+snapshot used base `b0c71a6` plus the byte-matched hook change and has SHA-256
+`753d50628d98dffe3ccf1f8400be53f36091c3da254313618001427f4364ffee`.
+This run is separate from the `a60e4bc` package matrix.
+
+| Guest | Backend and privilege | Passed |
+| --- | --- | ---: |
+| Debian | Native LUKS2 and VeraCrypt | 28 |
+| Debian | Login-user gocryptfs and VeraCrypt | 27 |
+| NetBSD | Native CGD | 13 |
+| FreeBSD | Native PEFS | 14 |
+
+Workspace checks passed on Debian and NetBSD. Their Rust suites passed 135
+and 95 tests with 13 and four ignored, respectively, and each guest passed
+all 22 conformance harness unit tests. The FreeBSD CLI and helper built
+against the original guest's matching official PEFS package. Its mount,
+module, permissions, package and registry inventories matched the baseline
+after cleanup.
+
+On NetBSD, holding the registry lock for the disposable CGD fixture caused
+the hook to return `124` after 1.017 seconds while the worker and mount were
+still live. Releasing the lock let the worker close the vault normally.
+Reopening recovered the synced file and SQLite data, and all CGD and vnode
+devices were idle after cleanup. The tests ran before operating-system
+teardown. The [session close usage notes](usage.md#opt-in-session-and-shutdown-close-on-linux-and-bsd)
+describe supervisor ordering and worker lifetime.
+
+The initial Debian native VeraCrypt run lacked its private creator in the
+test stage. The retry used the hash-verified creator and libraries from the
+earlier native package inputs. A concurrent login-user VeraCrypt attempt
+refused an inaccessible native loop backing file. The separate retry completed
+with both privilege routes idle. Input manifests, CLI hashes, initial
+failures and complete result logs are in `target/session-hooks-validation/`.
+
 ## Captured packaged CLI evidence
 
 The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected
