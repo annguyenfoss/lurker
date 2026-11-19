@@ -370,17 +370,10 @@ impl Tools {
     }
 }
 
-fn checked(
-    program: &Path,
-    args: &[OsString],
-    input: Option<&str>,
-    temp_dir: Option<&Path>,
-) -> AppResult<()> {
-    let mut command = Command::new(program);
+fn checked(command: &mut Command, input: Option<&str>, temp_dir: Option<&Path>) -> AppResult<()> {
     // wxWidgets uses the process locale for argv and passphrase conversion.
     // C alone corrupts non-ASCII paths before VeraCrypt opens the file.
     command
-        .args(args)
         .env("LC_ALL", "C.UTF-8")
         .env("LANG", "C.UTF-8")
         .stdin(if input.is_some() {
@@ -393,9 +386,10 @@ fn checked(
     if let Some(dir) = temp_dir {
         command.env("TMPDIR", dir);
     }
-    let mut child = command
-        .spawn()
-        .map_err(|e| AppError::io(format!("Failed to start {}", program.display()), e))?;
+    let mut child = command.spawn().map_err(|e| {
+        let program = Path::new(command.get_program());
+        AppError::io(format!("Failed to start {}", program.display()), e)
+    })?;
     let sent = if let Some(secret) = input {
         let mut stdin = child.stdin.take().unwrap();
         stdin
@@ -419,6 +413,7 @@ fn checked(
             detail = detail.replace(secret, "[redacted]");
         }
     }
+    let program = Path::new(command.get_program());
     Err(AppError::new(format!(
         "{} failed: {}",
         program.file_name().unwrap_or_default().to_string_lossy(),
@@ -495,7 +490,11 @@ fn open_raw(
         .into(),
     );
     args.push(session.source.as_os_str().into());
-    let result = checked(&tools.crypto, &args, Some(secret), Some(&dir.join("raw")));
+    let result = checked(
+        Command::new(&tools.crypto).args(&args),
+        Some(secret),
+        Some(&dir.join("raw")),
+    );
     // Persist a partial attachment too, so failure recovery only closes our mount.
     session.raw_mount_id = mount_at(raw_path(dir).parent().unwrap())?.map(|m| m.mount_id);
     save_session(dir, session)?;
@@ -668,8 +667,9 @@ fn close_session(tools: &Tools, dir: &Path, session: &Session) -> AppResult<()> 
             ));
         }
         checked(
-            &tools.fusermount,
-            &["-u".into(), session.mountpoint.as_os_str().into()],
+            Command::new(&tools.fusermount)
+                .arg("-u")
+                .arg(&session.mountpoint),
             None,
             None,
         )?;
@@ -699,8 +699,9 @@ fn close_session(tools: &Tools, dir: &Path, session: &Session) -> AppResult<()> 
             ));
         }
         checked(
-            &tools.fusermount,
-            &["-u".into(), raw.parent().unwrap().as_os_str().into()],
+            Command::new(&tools.fusermount)
+                .arg("-u")
+                .arg(raw.parent().unwrap()),
             None,
             None,
         )?;
@@ -983,7 +984,11 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
         let mut args =
             crate::workflow::userspace_veracrypt_create_args(c.cipher, size, c.keyfile.as_deref())?;
         args.push(temporary.as_os_str().into());
-        checked(&tools.crypto, &args, Some(&secret), Some(&staging))?;
+        checked(
+            Command::new(&tools.crypto).args(&args),
+            Some(&secret),
+            Some(&staging),
+        )?;
         fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))
             .map_err(|e| AppError::io("Failed to protect new container", e))?;
         let init_mount = staging.join("filesystem");
@@ -993,10 +998,15 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
         live_session = Some((dir.clone(), session.clone()));
         let prepared = (|| {
             open_raw(tools, &dir, &mut session, &secret, c.keyfile.as_deref())?;
-            let mkfs = find_program("mkfs.btrfs")?;
+            let mkfs = std::path::absolute(find_program("mkfs.btrfs")?)
+                .map_err(|e| AppError::io("Failed to resolve the Btrfs formatter", e))?;
+            // The formatter stats relative mount-table sources from its working directory.
+            // Keep those lookups in the private session directory owned by this user.
             checked(
-                &mkfs,
-                &["-q".into(), raw_path(&dir).as_os_str().into()],
+                Command::new(mkfs)
+                    .arg("-q")
+                    .arg(raw_path(&dir))
+                    .current_dir(&dir),
                 None,
                 None,
             )?;

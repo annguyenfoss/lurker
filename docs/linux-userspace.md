@@ -283,3 +283,19 @@ Both attempts are retained, and the reruns used the signed Arch PC/SC
 build dependency and a working directory accessible to the login user.
 The separate abrupt power-loss proof is recorded in
 `docs/vm-powerloss-testing.md`.
+
+## Formatter working directory (2026-11-20)
+
+New login-user VeraCrypt containers run `mkfs.btrfs` from Lurker's
+private session directory. The formatter checks relative names from the
+mount table, so it needs a working directory the login user can search.
+
+A Gentoo KVM comparison ran the same VeraCrypt AES lifecycle as UID 1300
+with an inherited root-owned mode-0700 directory. The earlier package failed
+its first format with `cannot check mount status ... Permission denied`.
+The rebuilt CLI used the same private VeraCrypt and LKL engines and passed
+all 13 checks, including writes, close, reopen, and read-back. The fixture
+left no mounts. The Arch native recovery suite also verifies the formatter
+directory while injecting a failure during container replacement. The
+comparison and native tests are under
+`target/goal-validation/formatter-cwd/`.

@@ -585,7 +585,14 @@ fn external_filesystems_and_failure_recovery() {
     let script = failed_tools.join("mkfs.btrfs");
     fs::write(
         &script,
-        "#!/bin/sh\necho 'injected mkfs failure' >&2\nexit 1\n",
+        r#"#!/bin/sh
+if [ "$(pwd -P)/raw/.veracrypt_aux_mnt1/volume" != "$2" ]; then
+    echo 'formatter did not start in the private session directory' >&2
+    exit 1
+fi
+echo 'injected mkfs failure' >&2
+exit 1
+"#,
     )
     .unwrap();
     fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
