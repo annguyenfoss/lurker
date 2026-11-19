@@ -258,6 +258,8 @@ def build(args):
             "package": str(output), "package_sha256": digest, "os": system,
             "os_release": platform.release(), "abi": abi, "desktop": desktop,
             "staged_manifest_sha256": manifest_digest, "payload_count": len(files),
+            "wrapper_sha256": STAGE.digest(Path(__file__)),
+            "archive_verifier_sha256": STAGE.digest(Path(__file__).with_name("unix_package.py")),
             "selected_backends": manifest["selected_backends"], "package_dependencies": dependencies}
 
 

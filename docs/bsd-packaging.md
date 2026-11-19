@@ -14,9 +14,9 @@ python scripts/build-bsd-package.py \
 ```
 
 On NetBSD and OpenBSD, use `lurker-0.1.0.tgz` for the output name. Save the
-JSON receipt printed by the wrapper. It identifies the source, archive and
-package digests, package ABI, selected backends and desktop payload. An output
-path already in use is refused.
+JSON receipt printed by the wrapper. It identifies the product source, archive,
+package and wrapper digests, package ABI, selected backends and desktop payload.
+An output path already in use is refused.
 
 | Target | Native tool | Install prefix |
 | --- | --- | --- |
