@@ -66,3 +66,14 @@ class PackagePayloadTests(unittest.TestCase):
         for mode in (0o4000, 0o022):
             with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "permissions"):
                 self.verify(extra_mode=mode)
+
+    def test_payload_must_keep_files_and_backends_in_scope(self):
+        executable = self.manifest["files"]["bin/lurker"]
+        files = {"bin/lurker": executable, "bin/lurker-helper": executable}
+        manifest = {"selected_backends": ["geli"], "files": files}
+        self.assertIn("bin/lurker", BSD.payload_files(manifest, "FreeBSD"))
+        with self.assertRaisesRegex(ValueError, "matrix"):
+            BSD.payload_files(manifest, "NetBSD")
+        files["bin/sudo"] = executable
+        with self.assertRaisesRegex(ValueError, "layout"):
+            BSD.payload_files(manifest, "FreeBSD")

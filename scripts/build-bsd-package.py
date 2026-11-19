@@ -20,6 +20,7 @@ PREFIXES = {"FreeBSD": "/usr/local", "DragonFly": "/usr/local",
 DESKTOP_LIBRARIES = ("X11", "X11-xcb", "Xcursor", "Xi", "xcb", "xkbcommon", "xkbcommon-x11")
 BASE_X11 = {"OpenBSD": Path("/usr/X11R6/lib"), "NetBSD": Path("/usr/X11R7/lib")}
 PKG = "/usr/local/sbin/pkg"
+PRODUCTS = {"bin/lurker", "bin/lurker-helper", "bin/lurker-desktop"}
 
 
 def command(*args, cwd=None):
@@ -196,6 +197,23 @@ def verify_package(package, install, manifest, manifest_digest, use_pkg):
         raise ValueError("native package omitted staged payload: " + ", ".join(sorted(expected)))
 
 
+def payload_files(manifest, system):
+    files = manifest["files"]
+    selected = manifest["selected_backends"]
+    if not selected or any(system not in STAGE.ALLOW.get(backend, set()) for backend in selected):
+        raise ValueError("staged backend selection is outside the native BSD matrix")
+    for path, entry in files.items():
+        if not re.fullmatch(r"[A-Za-z0-9_./+-]+", path):
+            raise ValueError("payload name incompatible with BSD packing-list syntax")
+        if path not in PRODUCTS and not path.startswith(("libexec/lurker/", "share/lurker/")):
+            raise ValueError("payload path is outside the installed Lurker layout: " + path)
+        if path in PRODUCTS and (not entry.get("executable") or "sha256" not in entry):
+            raise ValueError("staged Lurker product must be an executable regular file: " + path)
+    if not {"bin/lurker", "bin/lurker-helper"} <= files.keys():
+        raise ValueError("staged Lurker CLI or helper is missing")
+    return sorted([*files, "share/lurker/manifest.json"])
+
+
 def build(args):
     system = platform.system()
     if system not in PREFIXES:
@@ -220,9 +238,7 @@ def build(args):
         work = Path(scratch)
         prefix, manifest = unpack_archive(args.archive, args.sha256, args.commit, work)
         manifest_digest = STAGE.digest(prefix / "share/lurker/manifest.json")
-        files = sorted([*manifest["files"], "share/lurker/manifest.json"])
-        if any(not re.fullmatch(r"[A-Za-z0-9_./+-]+", file) for file in files):
-            raise ValueError("payload name incompatible with BSD packing-list syntax")
+        files = payload_files(manifest, system)
         desktop = "bin/lurker-desktop" in files
         libraries, paths = dependency_paths(system, manifest, desktop)
         products = "CLI and desktop" if desktop else "CLI"
