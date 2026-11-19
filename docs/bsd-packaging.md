@@ -134,6 +134,36 @@ network configuration. Removal cleared the package registration and
 payloads. The host package, device and mount inventories matched the
 baseline. The archive and summaries are under `target/openbsd-vc-barrier/`.
 
+### OpenBSD clean-machine offline install
+
+A new amd64 KVM guest installed stock OpenBSD 8.0 and its X11 sets from
+`install80.iso`, with the ISO verified against the signed release checksum.
+Its disk started blank with no backing image. Its sole network was a
+host-only control bridge without forwarding or an IPv4 or IPv6 default route.
+The package database was initially empty. The guest verified 16 local official
+package archives with the OpenBSD 8.0 package key, then used native `pkg_add`
+to install signed dependencies. The offline repository needed both `quirks`
+and `updatedb` for package-tool bootstrap, in addition to the declared sudo
+and xkbcommon dependencies and their closure. Python was installed separately
+for the test harness.
+
+Ordinary `pkg_add` rejected the unsigned `ca3c845` developer archive. The
+qualification installed its digest-verified bytes with `-D unsigned` scoped
+to that archive. Its SHA-256 is
+`e3587d4723b52732df4cd5302652e5a8307cafa740c0410b2dd8fcd2c4c34e55`.
+The installed CLI passed 69 checks, including 13 CRYPTO, 26 VeraCrypt AES
+password and binary-keyfile, and 30 RAID1C checks covering degraded and login-user
+operation. All 16 observed FFS mounts reported `synchronous`. The installed
+desktop rendered a 1280×860 X11 window as UID 1000. Native package removal
+and storage inventory checks passed. The guest shut down after syncing its
+disks, and its transient domain and isolated bridge were removed.
+
+The stock installer could not resolve the automatic firmware update site;
+the stock KVM drivers were sufficient for the tested routes. The clean-machine
+receipts and rendered frame are under `target/openbsd-clean-20261120/evidence/`.
+
+https://www.openbsd.org/80.html
+
 ### DragonFly native cryptsetup provenance
 
 The original 6.4.2 x86-64 KVM guest reports `cryptsetup 1.1.2` for its
