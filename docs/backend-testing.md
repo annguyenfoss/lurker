@@ -166,6 +166,28 @@ Evidence and package hashes are under
 `/mnt/virt/lurker-fault-fb20261120a/` in `native-shutdown-result.json` and
 the matching staging and inventory logs.
 
+### OpenBSD close hook in `rc.shutdown`
+
+A dedicated OpenBSD 8.0 KVM overlay installed the native `ca3c845` package
+offline. The guest mounted softraid CRYPTO, RAID1C and VeraCrypt FFS
+fixtures with the synchronous flag. Separate SQLite consumers fsynced
+their files, committed FULL/WAL transactions and held another row
+uncommitted in each vault.
+
+The native `rc.shutdown` hook verified each consumer's process identity,
+stopped it and waited for SQLite to close. It then ran `lurker session-close`
+for each vault. Every close returned zero without a credential prompt and
+the mount, vnode and softraid inventories matched the baseline before the
+console reported disk sync. Libvirt recorded a guest-requested shutdown.
+
+After reboot, the ordinary CLI reopened each vault. All three file
+digests and committed SQLite rows matched, all integrity checks passed,
+and none of the uncommitted rows appeared. Each vault detached normally
+without a filesystem repair step. The test installed its hook only on
+the clone and removed it before the final shutdown. Evidence is under
+`/mnt/virt/lurker-shutdown-ob20261120/` in `result.json`,
+`test-shutdown-serial.log` and `test-lifecycle.log`.
+
 ## Captured packaged CLI evidence
 
 The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected
