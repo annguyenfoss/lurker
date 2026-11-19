@@ -409,6 +409,11 @@ fixture closed normally, and the measured cut used a fresh fixture. See
 `pefs-workload-start.log` and `result-fbpefs20261120b.json` in the same
 FreeBSD evidence directory.
 
+FreeBSD VeraCrypt AES at `a60e4bc` reopened after the cut, but the mounted
+UFS lacked the acknowledged file and all SQLite files. The vault closed
+normally after collecting the empty recovery inventory. See
+`result-fbvc20261120.json` in the same FreeBSD evidence directory.
+
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sbin/mdconfig/mdconfig.c
 
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/dev/md/md.c
