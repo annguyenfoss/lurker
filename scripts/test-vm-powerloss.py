@@ -767,14 +767,40 @@ def openbsd_sync_diagnostic(mountpoint):
     return {"command": command, "device": device, "before_flags": before, "workload_flags": after}
 
 
+def netbsd_allocated_diagnostic(source):
+    """Use an allocated, byte-identical copy of the newly created CGD fixture."""
+    before = source.lstat()
+    require(stat.S_ISREG(before.st_mode) and before.st_uid == os.geteuid() and before.st_nlink == 1,
+            "Allocated control requires an owned, newly created regular fixture")
+    sparse_evidence = source.with_name("sparse ciphertext evidence")
+    replacement = source.with_name("allocated ciphertext temporary")
+    with source.open("rb") as original, replacement.open("xb") as allocated:
+        shutil.copyfileobj(original, allocated, length=1024 * 1024)
+        allocated.flush()
+        os.fsync(allocated.fileno())
+    after = replacement.stat()
+    require(after.st_size == before.st_size and after.st_blocks * 512 >= after.st_size,
+            "Backing filesystem did not allocate the complete ciphertext copy")
+    with source.open("rb") as original, replacement.open("rb") as allocated:
+        digest = hashlib.file_digest(original, "sha256").hexdigest()
+        require(hashlib.file_digest(allocated, "sha256").hexdigest() == digest,
+                "Allocated ciphertext differs from the source fixture")
+    os.link(source, sparse_evidence, follow_symlinks=False)
+    os.replace(replacement, source)
+    fsync_path(source.parent)
+    return {"sparse_bytes_allocated": before.st_blocks * 512,
+            "copy_bytes_allocated": after.st_blocks * 512,
+            "logical_size": after.st_size, "sha256": digest}
+
+
 def guest_setup(args):
     require(args.persistent_home_confirmed, "Confirm the home filesystem is persistent, not tmpfs")
     require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Exact candidate Git commit required")
     try:
         route = validate_guest_route(args.backend, args.unprivileged, args.cipher)
-        if args.netbsd_sync_diagnostic:
+        if args.netbsd_sync_diagnostic or args.netbsd_allocated_diagnostic:
             require(platform.system() == "NetBSD" and args.backend == "cgd" and os.geteuid() == 0,
-                    "Synchronous FFS diagnostic is available only for native NetBSD CGD")
+                    "NetBSD diagnostics require a native CGD container")
         if args.openbsd_sync_diagnostic:
             require(platform.system() == "OpenBSD" and args.backend in {"veracrypt", "softraid", "raid1c"}
                     and os.geteuid() == 0,
@@ -812,6 +838,9 @@ def guest_setup(args):
                 "mount_table": run(["mount"]), "repair": False}
     write_json(directory / "guest.json", manifest)
     guest_cli(directory, guest_volume_arguments("create", manifest), secret)
+    if args.netbsd_allocated_diagnostic:
+        manifest["netbsd_allocated_diagnostic"] = netbsd_allocated_diagnostic(source)
+        write_json(directory / "guest.json", manifest)
     guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
     require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
     if args.netbsd_sync_diagnostic:
@@ -959,6 +988,8 @@ def main():
                        help="For NetBSD CGD, require a synchronous journaled fixture before the workload")
     setup.add_argument("--openbsd-sync-diagnostic", action="store_true",
                        help="For an OpenBSD container, require synchronous FFS before the workload")
+    setup.add_argument("--netbsd-allocated-diagnostic", action="store_true",
+                       help="For NetBSD CGD, mount an allocated copy of the new fixture")
     for action in ("guest-worker", "guest-verify"):
         guest = commands.add_parser(action)
         guest.add_argument("--run", required=True)

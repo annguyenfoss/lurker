@@ -332,6 +332,22 @@ class Ownership(unittest.TestCase):
 
 
 class GuestFixture(unittest.TestCase):
+    def test_netbsd_allocated_control_preserves_original_sparse_ciphertext(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory) / "encrypted data"
+            with fixture.open("xb") as output:
+                output.seek(1024 * 1024 - 1)
+                output.write(b"x")
+            before = fixture.stat()
+            expected = fixture.read_bytes()
+            observed = VM.netbsd_allocated_diagnostic(fixture)
+            retained = fixture.with_name("sparse ciphertext evidence")
+            self.assertEqual(retained.stat().st_ino, before.st_ino)
+            self.assertNotEqual(fixture.stat().st_ino, before.st_ino)
+            self.assertEqual(fixture.read_bytes(), expected)
+            self.assertEqual(retained.read_bytes(), expected)
+            self.assertGreaterEqual(observed["copy_bytes_allocated"], len(expected))
+
     def test_openbsd_sync_control_requires_same_writable_ffs_device(self):
         fixture = Path("/owned/open data")
         before = f"/dev/vnd0a on {fixture} type ffs (local, nodev)"
