@@ -173,7 +173,9 @@ children. The window result and full package manifest are in
 `target/dragonfly-resume/`. The full archive SHA-256 is
 `22feef4528e2d684182b5900381721e5c076b01aabf960e43992931737e3a742`.
 
-NetBSD 11.1 repeated the same 26 packaged CLI checks, login-user desktop
+## NetBSD CGD with WAPBL
+
+NetBSD 11.1 repeated the 26 packaged CGD CLI checks, login-user desktop
 callbacks, and packaged X11 window at
 `24dcc6e7ff7f4bd1318ccbc238a9616cd7c791dd` after enabling WAPBL on writable CGD
 mounts. A container created and populated by the original `2ebae8f` package
