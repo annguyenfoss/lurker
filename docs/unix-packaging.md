@@ -29,6 +29,34 @@ runner can supply `--source-manifest` for its verified deployed Git archive.
 Successful packaging is build evidence; native lifecycle qualification remains
 a separate required step.
 
+## Debian and Ubuntu packages
+
+Build the full Linux staging archive on the intended Debian or Ubuntu guest.
+Then run the native wrapper as the login user, supplying the archive checksum
+from the build receipt:
+
+```bash
+python scripts/build-linux-package.py \
+  --archive target/packages/lurker-native/package.tar.gz \
+  --sha256 FULL_ARCHIVE_SHA256 --source-commit FULL_SOURCE_SHA \
+  --version 0.1.0 --output target/packages/lurker_0.1.0_amd64.deb
+```
+
+The wrapper requires `dpkg-deb`, checks every staged file and relative
+symlink, and reports the native artifact digest. Install the resulting package
+using `apt install ./lurker_0.1.0_amd64.deb` on a supported guest. The two public
+programs have `/usr/bin` entry points and the desktop menu has a Lurker
+launcher. The helper, engines and license inventory live under
+`/usr/lib/lurker`. All installed payload bytes come from the supplied staging
+archive. The archive remains a separate distribution format.
+
+The package declares kernel-tool, FUSE 2/3, native display and Fontconfig
+dependencies for current Debian and Ubuntu releases. Mount authorization and
+the kernel's device support depend on the host. Installation neither grants
+passwordless elevation nor loads kernel modules.
+
+## Portable Unix archives
+
 `scripts/stage-unix.py` stages Linux, FreeBSD, DragonFly BSD, NetBSD and OpenBSD artifacts. It does not build, install, elevate, run a payload, qualify encryption operations or change host permissions. macOS uses `scripts/build-macos-dmg.py` instead.
 
 The package layout is:
