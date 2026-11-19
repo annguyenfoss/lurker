@@ -548,6 +548,16 @@ The native package SHA-256 is
 The portable archive SHA-256 is
 `22d42cd27e6f2e41d9a8e619ce03ebbfe54813b387792d3e589958832e657310`.
 
+The same native archive rendered a 1280×860 X11 window through Slint/winit as
+UID 1300. The Slint callback test binary from the same build used the installed
+helper to create, mount, write, reopen, verify and close CRYPTO, VeraCrypt and
+RAID1C fixtures under that login account. Both mounts in each lifecycle had
+the kernel's `synchronous` flag. The test removed its temporary helper-specific
+sudo rule, restored the original sudoers file and removed the installed package
+from the alternate root. Native mount, vnode, softraid and host package
+inventories matched their initial state. The rendered frame and callback
+receipts are under `target/openbsd-ffs-sync/desktop-ca3c845/`.
+
 The CRYPTO benchmark used six fresh, hash-verified copies of one FFS seed.
 It interleaved three trials under each policy and checked the kernel mount
 flags on every trial. The medians are specific to this OpenBSD 8.0 KVM guest,
