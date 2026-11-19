@@ -229,6 +229,16 @@ An Arch KVM test signed the coordinated `a60e4bc` native package checksum
 with a disposable key. Both verification steps passed. A modified checksum
 file failed signature verification and a modified artifact failed the
 checksum check. Evidence is under `target/goal-validation/release-signature/`.
+
+On Arch KVM, the signing tool from `382743d` signed a test inventory with
+the exact `8bb689c` pacman package, its portable archive, and the archived
+Lurker Git source tree. Verification passed for the full inventory and for
+an isolated single-package download. Native `gpgv` accepted the detached
+signature. Modified copies of the package and inventory were each refused.
+All 255 script tests passed. The signing subkey was disposable, and its
+private staging directory was removed. Receipts are under
+`target/goal-validation/release-signatures-test/`.
+
 Public signatures require the publisher's real release key.
 
 https://www.gnupg.org/documentation/manuals/gnupg/Operational-GPG-Commands.html
