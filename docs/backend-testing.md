@@ -435,6 +435,22 @@ SQLite data preserved. All CGD and vnd devices were idle afterward. This
 test covers interruption after the device identities reach the journal.
 The receipt and refusal log are under `target/netbsd-cgd-interrupted/`.
 
+KVM run `20261119T204111Z-cd081ba8` rebuilt and staged the NetBSD 11.1
+amd64 package from `ca3c8456e507102a1c6e2b9194981afbd48df8db`. The native
+installer verified its dependencies in an alternate package root. The
+installed CLI passed all 26 CGD cases, split evenly between explicit
+selection and Auto, with zero failures or skips. The installed desktop
+rendered a 1280×860 X11 window with 1,179 sampled colors as UID 1300.
+The probe reaped its children, and native removal left the package,
+mount, CGD, vnd, and session inventories unchanged.
+
+The native installer SHA-256 is
+`961c865324cfdb33abcf7151eb1f47a954e0157d2092afb47bef0219403cb743`.
+The portable archive SHA-256 is
+`f3bad8e2435118700c2a3b8105b99d75cd2886e1f4cd22f4151a55502f78f8d6`.
+Both archives, the install receipt, and test evidence are under
+`target/netbsd-ca3c845/`.
+
 ## Coordinated OpenBSD native package
 
 OpenBSD 8.0 amd64 built and checked workspace source
