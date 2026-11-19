@@ -433,6 +433,28 @@ device inventory are recorded under
 `/mnt/virt/lurker-fault-dfexisting20261120/` and
 `/mnt/virt/lurker-fault-dfreadexist20261120/`.
 
+Another established vault used the same isolated configuration. After the
+application acknowledgement, a separate process opened the identified backing
+file and successfully called `fsync` on its descriptor. The clone was cut
+with the workload still running, 1.32 seconds after the host observed
+readiness. On a verified copy, the vault again unlocked and mounted. Its
+ciphertext matched the pre-workload digest, the acknowledged file and SQLite
+files were absent, and normal close restored the mapping and vnode inventory.
+The original cut disk was preserved. This control records failed durability
+even with an explicit backing-file fsync in this HAMMER2 configuration.
+
+The reference DragonFly 6.4.2 vnode disk sends an incoming flush to
+`VOP_FSYNC` on the backing file. HAMMER2's file fsync implementation
+documents a separate filesystem sync for propagating inode state to the
+volume root. This source inspection leaves the exact I/O sequence in the
+running guest unverified. Evidence is under
+`/mnt/virt/lurker-fault-dffsync20261120/` and
+`/mnt/virt/lurker-fault-dfreadfsync20261120/`.
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/dev/disk/vn/vn.c
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
