@@ -361,6 +361,17 @@ Guest evidence is under `/tmp/lurker-freebsd-geli-flush-trace.m8KH73/`.
 Both DTrace logs and the ordinary CLI summary are collected under
 `target/freebsd-final-resume/ufs-source/`.
 
+An isolated `a60e4bc` repeat set the clone's only VirtIO disk to write-through
+with `dev.vtblk.0.writecache_mode=0` before the measured workload and verified
+the effective value. After the cut, GELI reopened and the 65,536-byte recovered
+file failed its digest check. SQLite on copies of the 4,096-byte database and
+82,432-byte WAL reported integrity OK and had no committed table. The vault
+closed normally after collection. This control shows that disabling this
+virtual disk's cache alone did not repair the acknowledged-write failure.
+Evidence is under `/mnt/virt/lurker-fault-fb20261120a/`.
+
+https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.0/sys/dev/virtio/block/virtio_blk.c
+
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sbin/mdconfig/mdconfig.c
 
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/dev/md/md.c
