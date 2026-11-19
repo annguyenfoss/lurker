@@ -476,6 +476,27 @@ The portable archive SHA-256 is
 Both archives, the install receipt, and test evidence are under
 `target/netbsd-ca3c845/`.
 
+### Clean offline NetBSD guest
+
+A fresh NetBSD 11.1 amd64 KVM guest booted from a writable overlay of the
+stock live image. The compressed upstream image matched NetBSD's published
+SHA-512, and its decompressed bytes matched the local boot image. The
+guest had no network interface and started with no pkgsrc installation.
+Normal `pkg_add` installed the same `ca3c845` package and its local,
+hash-verified dependencies from read-only media. A new FFS disk provided
+space at the standard `/usr/pkg` prefix through a null mount.
+
+The installed CLI created a CGD fixture, mounted it with WAPBL, and
+preserved the synced 65,536-byte file through close and read-only Auto
+reopen. It refused a wrong passphrase and a read-only write, then detached
+both devices. The installed desktop rendered a 1340×860 X11 window with
+1,181 sampled colors as UID 1300 and logged a color-scheme watcher warning.
+Package removal and guest shutdown completed. The media verification,
+console logs, package inventory and window capture are under
+`target/netbsd-clean-ca3c845/`.
+
+https://cdn.netbsd.org/pub/NetBSD/images/11.1/SHA512
+
 ## Coordinated OpenBSD native package
 
 OpenBSD 8.0 amd64 built and checked workspace source
