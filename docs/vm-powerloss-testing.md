@@ -265,3 +265,41 @@ workload at the cut. No manual repair was performed. The recorded package
 identities, result files and hypervisor events are under
 `/mnt/virt/lurker-fault-fb20261120a/`, `/mnt/virt/lurker-fault-ob20261120a/`
 and `/mnt/virt/lurker-fault-dfwin20261120/`.
+
+### FreeBSD GELI flush tracing
+
+On the original FreeBSD 15.1-RELEASE-p6 KVM guest, DTrace observed no GEOM
+`BIO_FLUSH` during the same file fsync, rename, directory fsync and SQLite
+FULL/WAL workload on fresh, disposable `029cf99` GELI volumes. This held
+for both the ordinary UFS Soft Updates mount and a per-fixture remount whose
+effective flags included `synchronous`. A separate `DIOCGFLUSH` call on an
+owned writable raw vnode md device succeeded and produced the expected
+trace event. The trace fixtures closed normally, the DTrace modules were
+restored to the original state, and a fresh ordinary GELI AES Auto lifecycle
+passed 13 checks, including close and reopen.
+
+The kernel source corresponding to the tested release shows that vnode md
+already defaults to `IO_SYNC` writes and that GELI forwards `BIO_FLUSH`
+to md when it receives one. Vnode md then fsyncs the outer file. The
+tested outer UFS fsync waits for vnode I/O without issuing a physical
+provider flush. QEMU `cache=none` bypasses the host page cache and still
+advertises guest writeback. The original guest reported
+`dev.vtblk.0.writecache_mode=1`. These observations identify a missing cache
+barrier along this tested path. They do not locate which layer lost the
+bytes in the power cut. None of the native Lurker mount options tested
+made ordinary applications' fsync issue that barrier. The GELI lifecycle
+continues to use the native stack, with abrupt-poweroff durability unqualified.
+
+Guest evidence is under `/tmp/lurker-freebsd-geli-flush-trace.m8KH73/`.
+Both DTrace logs and the ordinary CLI summary are collected under
+`target/freebsd-final-resume/ufs-source/`.
+
+https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sbin/mdconfig/mdconfig.c
+
+https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/dev/md/md.c
+
+https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/geom/eli/g_eli.c
+
+https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/ufs/ffs/ffs_vnops.c
+
+https://www.qemu.org/docs/master/system/invocation.html
