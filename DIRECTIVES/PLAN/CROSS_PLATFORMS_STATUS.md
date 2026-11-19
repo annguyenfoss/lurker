@@ -250,10 +250,10 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   explicit preen and writable CLI recovery on copies. Conventional FFS
   controls reported duplicate blocks requiring manual intervention.
 - DragonFly's freshly published LUKS1 fixture was missing from a recovered
-  copy of the HAMMER2 backing disk. A separate vault persisted across a
-  clean reboot and unlocked after the cut. Its ciphertext matched the
-  pre-workload digest, and the acknowledged file and SQLite data were
-  missing. Native BSD adapters remain file-backed with manual repair.
+  copy of the HAMMER2 backing disk. Previously published vaults unlocked
+  after repeat cuts on HAMMER2 and synchronous UFS backing disks. Both
+  retained the pre-workload ciphertext digest and lost the acknowledged
+  file and SQLite data. The backing UFS required preen on a separate copy.
 - OpenBSD may return ENXIO for a configured vnode after its VeraCrypt FUSE
   daemon dies, making source identity unverifiable. Production preserves that
   session. The final native generation and alias checks passed for OpenBSD;

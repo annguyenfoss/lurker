@@ -455,6 +455,25 @@ https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/dev/disk/vn/vn.c
 
 https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
 
+### DragonFly with synchronous UFS backing storage
+
+A repeat used the `a60e4bc` archive and replaced the separate HAMMER2
+fixture disk with synchronous UFS. The vault was published and verified
+across a clean reboot before the same LUKS1 AES file and FULL/WAL workload.
+The kernel reported a synchronous backing UFS mount. The guest was cut
+1.32 seconds after the host observed readiness while the worker was alive.
+
+The outer UFS refused writable mounting after the cut. Native preen and a
+following read-only check succeeded on an independently hash-verified
+copy. Its on-guest readiness receipt matched the host's. The 128 MiB
+ciphertext matched its pre-workload digest, and the normal CLI mounted an
+empty inner UFS. The acknowledged file and all SQLite files were absent.
+Normal close restored the vnode and mapper inventories, and the original
+cut image retained its hash. This reproduces the loss with synchronous UFS
+as the backing filesystem. Evidence is under
+`/mnt/virt/lurker-fault-dfouterufs20261120/` and
+`/mnt/virt/lurker-fault-dfreadufs20261120/`.
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
