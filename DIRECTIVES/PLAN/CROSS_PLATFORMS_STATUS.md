@@ -5,6 +5,26 @@ results and remaining release gates apply to this round. Earlier checkpoints
 retain their original dates and source revisions. The approved profiles are
 in `DIRECTIVES/LLM/CIPHER.md`.
 
+## Supported routes and power-cut results
+
+The packaged-vault lifecycles in the following sections verify creation,
+unlock, writes, clean close, and reopen. Power-cut results below cover the
+specific guest, package revision, and workload recorded in
+`docs/vm-powerloss-testing.md`. The cut workload includes a synced file,
+a committed SQLite FULL/WAL row, and an uncommitted row.
+
+| OS | Routes with packaged lifecycles | Abrupt power-cut evidence |
+| --- | --- | --- |
+| Linux | LUKS2, LUKS1, privileged VeraCrypt | All three routes recovered the file and committed row on Arch. |
+| Linux | Login-user VeraCrypt | Recovered both on Arch with the `1e04b85` full package after fixing the LKL write barrier. |
+| Linux | gocryptfs, CryFS, Cryptomator | All three recovered both on Arch. CryFS required the atomic client-state fix. |
+| FreeBSD | GELI | Reopened after a cut. The repeat lost the acknowledged file and SQLite transaction. A separate orderly shutdown with the close hook kept both. |
+| FreeBSD | VeraCrypt, PEFS, gocryptfs | All three recovered the file and committed row. VeraCrypt needed the ciphertext flush fix. gocryptfs required explicit stale-session reconciliation. |
+| OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | All three needed native FFS preen on separate ciphertext copies before writable reopen. With synchronous FFS, each copy then recovered the file and committed row. |
+| NetBSD | CGD | Later journaled repeats recovered the file and lost the committed SQLite row. |
+| DragonFly BSD | LUKS1 | Previously published fixtures unlocked after repeat cuts on two backing filesystems. Both lost the acknowledged file and transaction. |
+| macOS | Apple encrypted disk images, VeraCrypt, gocryptfs, CryFS, Cryptomator | Historical package results only. This round excluded macOS. |
+
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
 All ten non-macOS KVM guests ran locked workspace checks and tests from
