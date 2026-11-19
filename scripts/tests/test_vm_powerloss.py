@@ -224,14 +224,17 @@ class Ownership(unittest.TestCase):
         call.assert_not_called()
     def test_ssh_selects_native_paths_and_keeps_strict_host_key(self):
         clone = VM.OwnedClone.load(self.directory)
+        command = "mount\nprintf '%s\\n' 'quoted value'"
         with patch.object(VM.OwnedClone, "lease", return_value="192.168.231.10"), patch.object(VM, "run", return_value="ready") as call:
-            self.assertEqual(clone.ssh("mount", user="root"), "ready")
+            self.assertEqual(clone.ssh(command, user="root"), "ready")
         argv = call.call_args.args[0]
         self.assertIn("StrictHostKeyChecking=yes", argv)
         self.assertIn("HostKeyAlias=archlinux-core-01", argv)
-        self.assertTrue(argv[-1].startswith("export PATH="))
-        self.assertIn("/sbin", argv[-1].splitlines()[0])
-        self.assertTrue(argv[-1].endswith("\nmount"))
+        self.assertEqual(argv[-1], "/bin/sh -s")
+        path_setup, script = call.call_args.kwargs["input_text"].split("\n", 1)
+        self.assertTrue(path_setup.startswith("export PATH="))
+        self.assertIn("/sbin", path_setup)
+        self.assertEqual(script, command + "\n")
 
     def dragonfly_fixture(self):
         m = {**self.m, "os": "dragonflybsd", "source": "dragonflybsd-core-01",
