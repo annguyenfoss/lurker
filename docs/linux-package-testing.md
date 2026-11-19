@@ -59,3 +59,14 @@ close. Run `20261119T172330Z-56a5f376` used the unchanged Rust code in the
 `a39b34f` source snapshot. Its retained first window attempt
 `20261119T172156Z-3eaff65c` diagnosed a missing `libxkbcommon-x11` library.
 Installing Debian's `libxkbcommon-x11-0` resolved the prerequisite.
+
+All six guests passed `cargo check --workspace` and `cargo test --workspace`
+with 133 tests passed, zero failed and 13 native tests ignored per guest.
+Debian, Fedora and Ubuntu used `20261119T171442Z-06f02cd7` at `8293000`;
+Gentoo used `20261119T172340Z-3c3ad178` at the same revision. The initial
+Arch and openSUSE workspace tests each failed seven desktop render tests
+because Fontconfig indexed zero fonts. Their retries
+(`20261119T172319Z-ff5b28c2` and `20261119T172319Z-263017eb` at `a39b34f`)
+passed using a job-private Fontconfig configuration pointed at the repository
+fonts. The CLI and helper sources were unchanged. See the per-guest
+`workspace-qualified.json` files for test results and toolchain identities.
