@@ -401,6 +401,14 @@ which were restored outside the ciphertext fixture before the verification
 retry. The original failure and recovery results are preserved separately
 under `/mnt/virt/lurker-fault-fb20261120a/`.
 
+FreeBSD PEFS at `a60e4bc` also passed all five recovery checks after a cut.
+The first setup stopped before poweroff because the workload tried to stat
+a PEFS internal name returned by directory listing. The corrected workload
+records sizes only for its own file, database, WAL and SHM. The initial
+fixture closed normally, and the measured cut used a fresh fixture. See
+`pefs-workload-start.log` and `result-fbpefs20261120b.json` in the same
+FreeBSD evidence directory.
+
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sbin/mdconfig/mdconfig.c
 
 https://github.com/freebsd/freebsd-src/blob/95719d8a895b/sys/dev/md/md.c
