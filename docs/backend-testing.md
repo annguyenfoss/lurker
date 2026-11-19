@@ -300,3 +300,27 @@ xmlcatmgr. The retry used exact official dependency archives, with local
 copies and digests retained. Native removal left the global package list
 unchanged, temporary sudo authorization was removed, and CGD/VND devices
 were idle. Results and package receipts are under `target/netbsd-a60e4bc/`.
+
+## Coordinated OpenBSD native package
+
+OpenBSD 8.0 amd64 built and checked workspace source
+`a60e4bc69a3b78b8dd6e2297c2300a38f4508251` in KVM run
+`20261119T184025Z-fcd5f04a`. The regular workspace suite passed 109 tests,
+with 17 ignored. Staging verified the installed VeraCrypt engine's inputs
+and reused the byte-matched patched engine from the earlier OpenBSD proof.
+The portable archive SHA-256 is
+`c1060077096f969776414b0b3ec8983c5c2088fb859aeded8787b6cf071d5b01`.
+The native package SHA-256 is
+`6e7786f6b9418c633ea8134e1348675eee8483afa8d1d022c18ab74c8ec47fbc`.
+
+All 147 CLI checks ran against the native package installed into an alternate
+root and package database with dependency checks enabled. CRYPTO passed 26,
+VeraCrypt passed 91 across AES, Serpent, Twofish, password and binary keyfile,
+and RAID1C passed 30 including paired and degraded operation. Three login-user
+desktop lifecycle tests, the packaged X11 window, two native ownership and
+alias tests, and the login-user VeraCrypt raw-image privacy test also passed.
+The privacy test verified file and SQLite WAL persistence after reopen.
+Read-only attachment cases verified safe refusal. The mount, VND and
+softraid inventories matched before and after testing. The run restored the
+original sudo configuration and removed the package from the alternate
+root. Receipts and results are under `target/openbsd-a60e4bc/`.
