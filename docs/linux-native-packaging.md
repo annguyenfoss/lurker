@@ -201,3 +201,48 @@ were removed, mount and loop inventories were restored, and no processes
 remained in the qualification namespaces. Exact package receipts, per-case
 reports, early failures and post-run audits are indexed in
 `target/goal-validation/linux-offline-a60e4bc/offline-user-matrix.json`.
+
+## Coordinated native replay at ca3c845
+
+The six Linux KVM guests built and installed packages from
+`ca3c8456e507102a1c6e2b9194981afbd48df8db`, including the RustSec dependency
+updates. Each packaged private backend inventory matched all 131 entries
+from its `a60e4bc` baseline. The installed manifest matched the native build
+receipt, and the test verified all 250 installed entries on each guest.
+
+| Guest | Installed package SHA-256 prefix | Privileged | Login user | Installed X11 window |
+| --- | --- | ---: | ---: | --- |
+| Arch | `7dba0cf603d9c162b` | 117 | 78 | Passed |
+| Debian | `09066fd7d66a35bc7` | 117 | 78 | Passed |
+| Ubuntu | `ff0c7eefa4b599212` | 117 | 78 | Passed |
+| Fedora | `f306f3e83b1320bb` | 117 | 78 | Passed |
+| openSUSE Leap | `a1eac2a6f6b88bec` | 117 | 78 | Passed |
+| Gentoo GPKG | `e4538e75e53fb383` | 117 | 78 | Passed |
+
+All 1,170 lifecycle checks and six 1280×860 X11 window checks passed. Each
+test installed the package and exercised the native routes in a network
+namespace with loopback as its only interface. The login-user suites
+and private X11 probes ran as UID 1300. The lifecycle checks exercised
+creation, unlock, file and directory sync, SQLite WAL, close, reopen,
+read-back, incorrect credentials and read-only handling. They covered AES,
+Serpent and Twofish in both VeraCrypt routes and in LUKS1 and LUKS2, plus
+the fixed gocryptfs, CryFS and Cryptomator profiles. The exact workspace
+suite passed 135 tests with 13 ignored on each guest.
+
+The initial cleanup compared whole-guest mount and loop inventories
+and reported a difference. A follow-up checked all 15 owned fixture roots
+per guest and found zero owned mounts, loop devices, or live processes
+in the qualification namespaces. It removed the private runtime directories
+and test packages. All six native package inventories matched the baseline.
+Arch also removed all 30 temporary signed X11 dependencies. Gentoo used an
+invocation-scoped local Portage repository and installed the locally verified
+GPKG. Its recipe archive SHA-256 is
+`035682ebe27018c90e694d816004e310fd13b60031e0f129c17b400de4a53f95`.
+
+The native wrapper runs were `20261119T202302Z-74e64899` and
+`20261119T202448Z-19b8ff07`. An initial wrapper guard expected too many
+private files and stopped after the portable builds. The corrected wrapper
+compared the complete 131-file inventories, using the existing verified
+portable artifacts. Exact native archives, installed digests, per-case
+receipts and post-run audits are indexed in
+`target/linux-coordinated-ca3c845/matrix.json`.
