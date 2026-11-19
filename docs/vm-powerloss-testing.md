@@ -328,8 +328,7 @@ and `/mnt/virt/lurker-fault-dfwin20261120/`.
 
 ### OpenBSD RAID1C recovery on copied members
 
-The original `2ebae8f` RAID1C writable-reopen failure remained reproducible
-evidence. In a separate diagnostic, two hash-verified copies of its cut
+After the `2ebae8f` RAID1C writable-reopen failure, two hash-verified copies of its cut
 ciphertext members were attached by the native tools. Both member roles and
 the array UUID matched the recorded descriptor. The inner FFS mounted
 read-only and recovered the exact fsynced file and committed SQLite row.
@@ -341,6 +340,23 @@ unmounted normally and the vnode and softraid inventories matched their
 pretest state. No repair ran. The normal CLI writable-reopen failure remains
 open. See `raid1c-copied-ffs-readonly-dispatch.log` in the OpenBSD fault
 directory.
+
+### OpenBSD softraid CRYPTO repeat and copied-image recovery
+
+The coordinated package with the VeraCrypt barrier at `4189679` also ran
+a fresh native softraid CRYPTO/AES cut on OpenBSD 8.0. The cut began 2.13
+seconds after the worker acknowledged the file fsync and committed
+SQLite FULL/WAL transaction. The normal CLI reached inner FFS. Writable
+mount was refused with the same filesystem-check diagnostic as at
+`76f05fb`.
+
+A separate native attachment of a SHA-256-matched copy allowed a read-only
+FFS mount without repair. The fsynced file and committed SQLite row matched,
+integrity passed, and the uncommitted row was absent. Native assembly
+modified the writable copy and preserved the original ciphertext hash.
+Normal dismount restored both the vnode and softraid inventories. See
+`result-obcrypto20261120.json`, `obcrypto-reopen.log` and
+`crypto-copied-ffs-readonly-dispatch.log` in the OpenBSD fault directory.
 
 ### DragonFly with separate fixture storage
 
