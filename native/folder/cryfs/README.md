@@ -59,6 +59,20 @@ unqualified. Detailed retained native fixtures are in
 
 ## Native verification
 
+The Linux local-state patch at `0b412d2081606aac4c08480a4a031d6d8ce84a0f`
+was built and verified on `debian-core-01`, kernel
+`6.12.117+deb13-cloud-amd64`, in run `20261119T182303Z-98a23ad5`. The
+engine SHA-256 is
+`a3dbead4d863a6f474c310bd1e2b20a7dea3a090ab321f7261f2ccad802c00c9`.
+The standalone native regression passed nine checks, including preserving
+the client ID and valid metadata after a short write, and rejecting malformed
+state and a different key. The staged package passed 13 CLI lifecycle checks
+and 10 owned-daemon SIGKILL checks, with the file and SQLite FULL/WAL
+transaction recovered. Read-only reopen of an exact `2ebae8f` fixture
+preserved both its plaintext and existing local client metadata.
+
+### Original block durability patch evidence
+
 All runtime encryption/storage tests ran as the ordinary `adjutant` user on
 `archlinux-core-01`, kernel `7.2.15-arch1-1`, on private `/tmp` fixtures. Endeavour
 only compiled code. The final patch SHA-256 is
