@@ -174,3 +174,30 @@ removed the package and restored the mount and loop-device inventories.
 The package SHA-256 is
 `843800e0d61d24436e8e27c57216e01479bee467e789ea1f8196277cd3aaa289`.
 Evidence is under `target/goal-validation/arch-offline-a60e4bc/`.
+
+### Offline login-user replay on the other Linux guests
+
+Debian, Ubuntu, Fedora, openSUSE and Gentoo each passed all 78 login-user
+checks with the same `a60e4bc` native package digests listed above. Each
+run installed the verified local package with native dependency checks,
+then ran the ordinary user as UID 1300 in a network namespace containing
+only loopback and loopback routes. The harness used an owned mode-0700
+runtime directory. The five passes cover 390 checks across userspace
+VeraCrypt with AES, Serpent and Twofish, and the fixed gocryptfs, CryFS and
+Cryptomator profiles. Together with Arch, the offline login-user matrix
+has 468 passes and zero failures or skips in the completed runs.
+
+Ubuntu's first attempt used a runtime path outside the distribution's
+AppArmor FUSE mount policy. The retry used a fresh private directory
+under `/tmp`, which the policy permits. Gentoo's first install needed
+its temporary Portage build directory created. The retry installed the
+verified GPKG from the local package cache with invocation-scoped Portage
+settings. The prepared Gentoo guest had Go on PATH. All five guests
+reported an empty inventory for separate VeraCrypt, gocryptfs, CryFS,
+Cryptomator and Java programs on the standard path.
+
+The post-run audits verified the test packages and runtime directories
+were removed, mount and loop inventories were restored, and no processes
+remained in the qualification namespaces. Exact package receipts, per-case
+reports, early failures and post-run audits are indexed in
+`target/goal-validation/linux-offline-a60e4bc/offline-user-matrix.json`.
