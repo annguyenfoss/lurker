@@ -196,6 +196,11 @@ Their declarations remain visible in the inventory for source review.
 Both builder and staging suites passed, for 58 tests total. Evidence is
 under `target/goal-validation/rust-notices/`.
 
+Compared with `8bb689c`, the `14197ef` native Linux installers grew by
+74,656 to 207,002 bytes. The separate Gentoo portable archive grew by
+423,836 bytes. The exact artifact sizes and hashes are in
+`target/goal-validation/rust-notices/linux-native-size-comparison.json`.
+
 The exact upstream commits supplied candidate license files for 12 of
 those 15 crates. Three had no matching license file in the checked paths.
 The review preserves the upstream commit, package source comparison
