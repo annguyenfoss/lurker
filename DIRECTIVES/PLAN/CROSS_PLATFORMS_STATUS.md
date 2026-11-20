@@ -370,6 +370,19 @@ in `target/goal-validation/frozen-14ede46/matrix.json`, with package notes
 in `docs/linux-native-packaging.md` and `docs/bsd-packaging.md`. Power-loss
 and publisher release requirements are tracked in the sections below.
 
+The same six Linux artifacts passed the installed Wayland probe on stock
+guests. The original OpenBSD package omitted the Rust notice catalog.
+The corrected package preserved its product binaries and repeated all
+160 storage checks, X11 and three desktop helper lifecycles. The shared
+native wrapper now requires build-bound Rust notices.
+
+The exact vendored Rust source passed an offline workspace build and a
+portable LUKS2 rebuild with 13 stock Arch lifecycle checks. Arch verified
+a signature fixture covering that source archive and all ten native
+installer candidates, including the corrected OpenBSD package. The
+current receipts are indexed in
+`target/goal-validation/release-provenance-14ede46/qualification-index.json`.
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from

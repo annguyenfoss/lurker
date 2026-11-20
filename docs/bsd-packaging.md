@@ -87,9 +87,24 @@ window as UID 1000. Three Slint callback tests created, mounted, closed
 and reopened vaults as the same login user through the installed helper.
 Both mounts were synchronous FFS for each backend. The test restored
 the authorization, package and native resource inventories, and retired
-the isolated guest, overlay and network. The package SHA-256 was
+the isolated guest, overlay and network. The initial package SHA-256 was
 `26eac1549d13fbc2622afa0117b7a77023d2338390db0ab0b6a7ed84e6664323`.
 The build and runtime receipts are under `target/openbsd-matrix-14ede46/`.
+
+The initial archive omitted the Rust notice catalog. Run
+`20261120T052010Z-6eafe5ba` rebuilt the same source with the actual Cargo
+build log. The corrected package kept the three Rust binaries byte for
+byte and bound 369 Cargo entries to the verified lockfile. Its package
+and installed inventories verified the catalog and all 638 notice files.
+Fifteen crates had license declarations and no separate notice file in
+the registry archive.
+
+The corrected stock package repeated all 160 storage checks, the X11
+probe and all three installed-helper callbacks. The tests restored the
+inventories and retired the guest. The corrected native SHA-256 is
+`858588d9d664d7f10e62bf62f846117564306e2073b0798de63ad5d2324ec13b`.
+The two package identities and the corrected runtime evidence are under
+`target/openbsd-notices-14ede46/`.
 
 The NetBSD 11.1 amd64 package from run `20261120T042227Z-dc85c5ea` passed
 26 installed CGD checks in a stock KVM guest without a network interface.
