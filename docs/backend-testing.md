@@ -426,6 +426,39 @@ The portable archive SHA-256 is
 The packages and receipts are under `target/freebsd-ca3c8456/`. Guest
 workload logs are under `/tmp/lurker-freebsd-ca3c8456-gdkpbq_m/`.
 
+### FreeBSD descriptor-backed staging package
+
+FreeBSD 15.1-RELEASE-p6 amd64 built the native CLI and helper from
+`e607cc73edcfdec78055dc02b26e077474bb3b8c` in run
+`20261120T014916Z-d3fe0ce7`. The package selected GELI and VeraCrypt
+and installed offline in an isolated KVM guest without additional
+packages. It reused the verified VeraCrypt executable and private
+libfuse and libiconv bytes. The staging inventory includes both
+wxWidgets notices from the pinned source archive.
+
+All 143 installed CLI checks passed, with no failures or skips. GELI
+passed 39 checks across explicit, Auto and binary-keyfile routes.
+VeraCrypt passed 104 across explicit AES, Serpent and Twofish and AES
+Auto, each with password and binary-keyfile credentials. The suites
+created new images, checked overwrite protection, fsynced file and
+directory changes, committed SQLite FULL/WAL transactions, and verified
+data after close and reopen. They also exercised busy close, incorrect
+credentials, hard-link aliases and read-only mounts. Each fixture's
+staging directory was gone after its lifecycle.
+
+The guest removed the package and restored its package, mount, md,
+GELI, VeraCrypt process, session and kernel-module inventories. The
+isolated guest, network and scratch disk were removed after log
+collection. The original FreeBSD domain kept its running state,
+configuration and disk attachment.
+
+The native package SHA-256 is
+`bebd8aa8bc53fafb7cfe7cc49e1be25717858db26fb5d1c0e06a8339d5f27bdf`.
+The staging archive SHA-256 is
+`fdfdc941aad85a72b37a117f8946ccf8d9c12bc677c9d9f87e2aa4a97f428353`.
+The build, package, test and cleanup receipts and command logs are
+under `target/freebsd-descriptor-staging/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
