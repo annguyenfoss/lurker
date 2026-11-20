@@ -312,6 +312,28 @@ https://github.com/DragonFlyBSD/DragonFlyBSD/commit/f9c79d28d9ec0c95b4e78c6374f7
 
 https://github.com/DragonFlyBSD/DragonFlyBSD/blob/4ab67026e6d18a4be2a7ea459c919705bee786af/sys/dev/disk/dm/crypt/dm_target_crypt.c
 
+### DragonFly guarded unlock source review
+
+A separate static review compared the `da62173` adapter with the exact
+DragonFly 6.4.2 sources. Native cryptsetup reads a padded header and keyslot
+sectors through its mapping. Lurker validates that geometry and supplies
+those reads from the root-private prefix. The adapter checks the composite
+layout, native device identities and prefix bytes before unlock. The
+original file still backs payload I/O. The review covers the approved
+AES, Serpent and Twofish XTS/plain64 profiles with PBKDF2/SHA-256.
+
+The installed tests verify read-only behavior through UFS. The native
+mapper receives a read-only flag, and enforcement at the raw device
+remains unqualified. The review also identified outstanding work on
+bounding native password derivation, handling an interrupted native
+keyslot mapping, and preserving the journal on ambiguous vnode queries.
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/contrib/cryptsetup/luks/keymanage.c
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/contrib/cryptsetup/luks/keyencryption.c
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/dev/disk/dm/device-mapper.c
+
 ### DragonFly interrupted creation
 
 On the original 6.4.2 guest, the CLI from the verified `a60e4bc` package

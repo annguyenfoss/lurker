@@ -21,8 +21,8 @@ a committed SQLite FULL/WAL row, and an uncommitted row.
 | FreeBSD | GELI | The matched `ca3c845` sparse fixture lost acknowledged data. The fully allocated control and a newly created `ae53afb` image with native preallocation each passed all five checks. |
 | FreeBSD | VeraCrypt, PEFS, gocryptfs | All three recovered the file and committed row. VeraCrypt needed the ciphertext flush fix. gocryptfs required explicit stale-session reconciliation. |
 | OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | All three needed native FFS preen on separate ciphertext copies before writable reopen. With synchronous FFS, each copy then recovered the file and committed row. |
-| NetBSD | CGD | The journaled `sync,log` control recovered the file and lost the committed SQLite row. Its paired `sync,nolog` diagnostic recovered both under write-through storage. The supported profile requires WAPBL. |
-| DragonFly BSD | LUKS1 | The guarded `dfc7fdc` package lost acknowledged writes on both sparse and fully allocated images with synchronous inner and outer UFS. Both vaults reopened. |
+| NetBSD | CGD | Ordinary application sync under WAPBL lost the committed SQLite row. An operator-assisted diagnostic retained WAPBL and recovered the file and row after explicit WAL and backing-file range flushes and a fixture-disk cache flush. |
+| DragonFly BSD | LUKS1 | Ordinary application sync lost acknowledged writes on sparse and fully allocated images. With additional explicit sync calls, a verified ciphertext copy recovered the file and row through read-only UFS. The normal writable reopen refused the unclean filesystem. |
 | macOS | Apple encrypted disk images, VeraCrypt, gocryptfs, CryFS, Cryptomator | Historical package results only. This round excluded macOS. |
 
 ## DragonFly guarded LUKS1 activation
@@ -46,8 +46,11 @@ The full native CLI and desktop package at `dfc7fdc` matched 645 payload
 entries and passed installed checksums on a stock-image KVM clone. The
 installed desktop rendered a native X11 window and passed the login-user
 storage lifecycle through its helper. The installed CLI passed all 13
-AES checks. Independent review and a remedy for observed write loss
-remain open. See `docs/backend-testing.md` and `docs/vm-powerloss-testing.md`.
+AES checks. A separate static source review confirmed the metadata
+isolation for the approved profiles and identified further read-only and
+interruption checks. Ordinary application durability remains open.
+See `docs/backend-testing.md`, `docs/bsd-packaging.md` and
+`docs/vm-powerloss-testing.md`.
 
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
