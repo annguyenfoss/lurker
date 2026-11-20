@@ -227,6 +227,16 @@ impl FileStage {
 
     #[cfg(target_os = "netbsd")]
     pub(super) fn publish_cgd(&self, target: &Path, params: &Path) -> AppResult<()> {
+        self.publish_cgd_pair(target, params, || self.parent.sync_all())
+    }
+
+    #[cfg(target_os = "netbsd")]
+    fn publish_cgd_pair(
+        &self,
+        target: &Path,
+        params: &Path,
+        sync_parameters: impl FnOnce() -> io::Result<()>,
+    ) -> AppResult<()> {
         self.verify_path()?;
         let file = open_at(&self.directory, PARAMS, libc::O_RDONLY | libc::O_NONBLOCK)
             .map_err(|e| AppError::io("Open staged CGD recovery parameters", e))?;
@@ -238,9 +248,15 @@ impl FileStage {
                 .ok_or_else(|| AppError::new("CGD recovery parameters need a filename."))?,
         )?;
         self.publish_entry(PARAMS, self.params.as_ref(), params, false)?;
-        if let Err(error) = self.publish_entry(IMAGE, self.image.as_ref(), target, false) {
+        // The second link exposes the image. Persist its required sidecar's
+        // directory entry first so the image never depends on an unsynced link.
+        let published = sync_parameters()
+            .map_err(|e| AppError::io("Sync published CGD recovery parameters", e))
+            .and_then(|()| self.publish_entry(IMAGE, self.image.as_ref(), target, false));
+        if let Err(error) = published {
             if matches_file(&self.parent, &name, self.params.as_ref()) {
                 remove_at(&self.parent, &name, 0);
+                let _ = self.parent.sync_all();
             }
             return Err(error);
         }
@@ -344,6 +360,37 @@ mod tests {
         fs::write(&image, "existing data").unwrap();
         assert!(stage.finish(stage.publish_cgd(&image, &params)).is_err());
         assert_eq!(fs::read_to_string(&image).unwrap(), "existing data");
+        assert!(!params.exists());
+        assert!(!stage.path().exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "netbsd")]
+    #[test]
+    fn cgd_does_not_publish_the_image_if_syncing_the_sidecar_name_fails() {
+        let root = std::env::temp_dir().join(format!("lurker-cgd-sync-{}", unique_id()));
+        fs::create_dir(&root).unwrap();
+        let mut stage = FileStage::create(&root).unwrap();
+        stage
+            .create_image()
+            .unwrap()
+            .write_all(b"new data")
+            .unwrap();
+        fs::write(stage.path().join("image.cgdparams"), "new parameters").unwrap();
+        stage.capture_params().unwrap();
+        let image = root.join("target");
+        let params = root.join("target.cgdparams");
+
+        let publication = stage.publish_cgd_pair(&image, &params, || {
+            assert_eq!(fs::read_to_string(&params).unwrap(), "new parameters");
+            assert!(!image.exists());
+            Err(io::Error::other("injected directory sync failure"))
+        });
+        let error = stage.finish(publication).unwrap_err();
+        assert!(error
+            .message
+            .contains("Sync published CGD recovery parameters"));
+        assert!(!image.exists());
         assert!(!params.exists());
         assert!(!stage.path().exists());
         fs::remove_dir_all(root).unwrap();
