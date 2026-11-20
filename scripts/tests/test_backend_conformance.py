@@ -67,6 +67,27 @@ class HarnessTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.options("--skip-readonly", "  ")
 
+    def test_full_storage_requires_a_bounded_file_container(self):
+        with self.assertRaises(SystemExit):
+            self.options("--full-storage")
+        args = ["--binary", str(self.binary), "--backend", "luks", "--full-storage"]
+        with mock.patch.object(harness.os, "geteuid", return_value=0), \
+             mock.patch.object(harness.platform, "system", return_value="Linux"):
+            for size in ("nan", "2", "0", "-0.125"):
+                with self.subTest(size=size), self.assertRaises(SystemExit):
+                    harness.parse_args([*args, "--size-gb", size])
+            self.assertTrue(harness.parse_args([*args, "--size-gb", "0.125"]).full_storage)
+
+    def test_full_storage_never_fills_the_fixture_parent_filesystem(self):
+        suite = harness.Suite(self.options())
+        with mock.patch.object(harness.os.path, "ismount", return_value=True), \
+             mock.patch.object(harness, "space_bytes", return_value={"total": harness.MIB}), \
+             mock.patch.object(harness, "fill_to_enospc") as fill:
+            with self.assertRaisesRegex(AssertionError, "separate, bounded owned mount"):
+                suite.exhaust_storage()
+        fill.assert_not_called()
+        self.assertEqual(list(suite.mountpoint.iterdir()), [])
+
     def test_allocates_private_child_and_never_reuses_supplied_parent(self):
         sentinel = self.root / "user-data"
         sentinel.write_text("preserve")

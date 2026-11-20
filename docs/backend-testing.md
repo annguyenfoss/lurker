@@ -37,6 +37,24 @@ installation and test parent for native backends. Linux native file cases
 also reject a replacement source while the original mount is still live.
 Directory cases reject closing a vault by passing its plaintext mountpoint.
 
+`--full-storage` runs a dedicated exhaustion workload on a fresh Linux or
+BSD file container of at most 0.5 GiB. It checks that the mounted
+filesystem is separate from the fixture parent before beginning bounded
+writes. Use this option with `test-openbsd-raid1c.py` for mirrors. The
+workload records `ENOSPC`, checks committed file and SQLite data, and
+attempts a new 16 MiB SQLite transaction in a separate process. It then
+frees the filler, writes and commits again, closes, and verifies the data
+after reopen. The final check requires `SQLITE_FULL` from the writer.
+
+The reusable harness passed nine checks on the OpenBSD RAID1C CLI from
+`e607cc7`. On Debian's `14197ef` LUKS1 package, Btrfs reached `ENOSPC`
+and SQLite 3.46.1 exited with `SIGBUS` during the new transaction.
+The first two runs lost the in-process harness. With the writer in a
+separate process, the eight lifecycle checks passed, including recovery
+of the committed file and rows after reopen. The check for
+`SQLITE_FULL` failed and the signal remains recorded. Evidence is under
+`target/goal-validation/file-container-enospc/`.
+
 The suite checks create, protection of an existing destination, unlock, Unicode
 and spaces, fsync, atomic rename/truncation, SQLite WAL and integrity, duplicate and aliased-source
 attachment refusal, busy close refusal, close, wrong credentials, reopen and

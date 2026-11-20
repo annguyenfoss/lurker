@@ -506,6 +506,7 @@ def parse_args(argv=None):
     parser.add_argument("--owner-user", help="Use a separate fresh synthetic-sudo invoking-user proof instead of the root matrix")
     parser.add_argument("--firefox", type=Path, help="Exercise a fresh Firefox profile as the invoking user")
     parser.add_argument("--preserve-failure", action="store_true", help="Stop before cleanup on failure; preserve owned storage/journal for diagnosis")
+    parser.add_argument("--full-storage", action="store_true", help="Run the bounded ENOSPC and recovery workload on a new mirror")
     options = parser.parse_args(argv)
     if platform.system() != "OpenBSD" or os.geteuid() != 0:
         parser.error("Run as root on the disposable OpenBSD guest; no storage tests on endeavour")
@@ -524,6 +525,7 @@ def parse_args(argv=None):
     private_binary(options.binary)
     options.backend = "raid1c"; options.cipher = "aes"; options.auto_detect = True
     options.expect_readonly_unsupported = True; options.skip_readonly = None; options.unprivileged = False
+    BASE.validate_full_storage(parser, options)
     return options
 
 
@@ -533,7 +535,7 @@ def main(argv=None):
         for name in ["LURKER_BACKEND_DIR", "LURKER_USERSPACE_DIR", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "SUDO_UID", "SUDO_GID", "PKEXEC_UID", "DOAS_USER"]:
             os.environ.pop(name, None)
         suite = InvokingOwnerSuite(options) if options.owner_user else MirrorSuite(options)
-        result = suite.run()
+        result = suite.run_full_storage() if options.full_storage else suite.run()
         print(json.dumps({"schema": 1, "suite": result["suite"], "status": result["status"],
                           "source_commit": result["source_commit"], "counts": result["counts"],
                           "duration_seconds": result["duration_seconds"], "result": str(suite.root / "result.json"),

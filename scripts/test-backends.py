@@ -5,7 +5,10 @@ No storage operation runs until --binary and --backend are explicitly supplied.
 The runner never force-unmounts, detaches devices itself, or repairs storage.
 """
 import argparse
+from contextlib import closing
+from decimal import Decimal, InvalidOperation
 import errno
+import faulthandler
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -39,6 +42,24 @@ PROMPT = re.compile(rb"(?i)(?:passphrase|password)[^\r\n:]{0,400}:[ \t]*")
 MAX_TRANSCRIPT = 2 * 1024 * 1024
 ECHO_WAIT_TIMEOUT = 5.0
 ECHO_STABLE_SECONDS = 0.02
+MIB = 1024 * 1024
+MAX_FULL_STORAGE_BYTES = 512 * MIB
+SQLITE_CAPACITY_WRITE = """\
+from contextlib import closing
+import json
+import sqlite3
+import sys
+
+with closing(sqlite3.connect(sys.argv[1])) as db:
+    db.execute("PRAGMA synchronous=FULL")
+    db.execute("PRAGMA wal_autocheckpoint=0")
+    try:
+        db.execute("INSERT INTO profile VALUES (?, zeroblob(?))", ("aborted", 16 * 1024 * 1024))
+        db.commit()
+    except sqlite3.Error as error:
+        print(json.dumps({"sqlite_error": error.sqlite_errorname}))
+        sys.exit(0 if error.sqlite_errorcode == sqlite3.SQLITE_FULL else 1)
+"""
 
 
 def stop_owned_child(pid):
@@ -69,6 +90,49 @@ def file_hash(path):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def validate_full_storage(parser, options):
+    if not options.full_storage:
+        return
+    if platform.system() == "Darwin" or options.backend in DIRECTORIES:
+        parser.error("--full-storage requires a file container on Linux or BSD")
+    if getattr(options, "owner_user", None) or options.firefox:
+        parser.error("--full-storage runs a separate workload without Firefox or --owner-user")
+    try:
+        size = Decimal(options.size_gb)
+    except InvalidOperation:
+        size = Decimal(0)
+    if not size.is_finite() or not Decimal(0) < size <= Decimal("0.5"):
+        parser.error("--full-storage requires --size-gb greater than zero and at most 0.5")
+
+
+def space_bytes(path):
+    stats = os.statvfs(path)
+    return {"total": stats.f_blocks * stats.f_frsize,
+            "free": stats.f_bfree * stats.f_frsize,
+            "available": stats.f_bavail * stats.f_frsize}
+
+
+def fill_to_enospc(stream, limit, attempts):
+    block = os.urandom(MIB)
+    for chunk_size in (MIB, 16 * 1024, 4096):
+        stage = "write"
+        try:
+            while stream.tell() < limit:
+                stage = "write"
+                chunk = min(chunk_size, limit - stream.tell())
+                if not stream.write(memoryview(block)[:chunk]):
+                    raise RuntimeError("Zero-byte write before ENOSPC")
+                stage = "fsync"
+                os.fsync(stream.fileno())
+        except OSError as error:
+            attempts.append({"bytes": stream.tell(), "chunk_size": chunk_size,
+                             "stage": stage, "errno": error.errno})
+            if error.errno != errno.ENOSPC:
+                raise
+        else:
+            raise AssertionError("Bounded writes did not reach ENOSPC")
 
 
 class BrowserProfile:
@@ -586,6 +650,109 @@ class Suite:
             raise AssertionError("Read-only storage accepted a write")
         self.close()
 
+    def exhaust_storage(self):
+        capacity = space_bytes(self.mountpoint)
+        if (not os.path.ismount(self.mountpoint)
+                or self.mountpoint.stat().st_dev == self.root.stat().st_dev
+                or not 0 < capacity["total"] <= MAX_FULL_STORAGE_BYTES):
+            raise AssertionError("Full-storage writes require a separate, bounded owned mount")
+        evidence = self.result["full_storage"] = {"before": capacity, "attempts": []}
+        filler = self.mountpoint / "owned-enospc-filler"
+        database = self.mountpoint / "browser-profile.sqlite"
+        with closing(sqlite3.connect(database)) as db:
+            assert db.execute("PRAGMA journal_mode").fetchone() == ("wal",)
+            db.execute("PRAGMA synchronous=FULL")
+            db.execute("PRAGMA wal_autocheckpoint=0")
+            # Establish the active WAL reader before the filesystem is full.
+            self.check_storage_rows(db, recovered=False)
+            with filler.open("xb", buffering=0) as stream:
+                try:
+                    fill_to_enospc(stream, capacity["total"] + 16 * MIB, evidence["attempts"])
+                    evidence["at_enospc"] = space_bytes(self.mountpoint)
+                    self.save()
+                    self.check_storage_rows(db, recovered=False)
+                    if (self.mountpoint / "profile 密碼.bin").read_bytes() != self.payload:
+                        raise AssertionError("Previously synced file changed at ENOSPC")
+                    evidence["committed_data_read_at_enospc"] = True
+                    self.save()
+                    # Run the normal writer in its own process so a failure
+                    # cannot prevent the harness from freeing the filler.
+                    writer = subprocess.run(
+                        [sys.executable, "-c", SQLITE_CAPACITY_WRITE, str(database)],
+                        stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                        timeout=self.options.timeout,
+                    )
+                    evidence["sqlite_writer_exit"] = writer.returncode
+                    if writer.stdout:
+                        evidence.update(json.loads(writer.stdout))
+                    if writer.stderr:
+                        evidence["sqlite_diagnostic"] = writer.stderr[-4096:]
+                    self.save()
+                finally:
+                    filler.unlink()
+            self.sync_dir(self.mountpoint)
+            evidence["after_freeing"] = space_bytes(self.mountpoint)
+            with (self.mountpoint / "written-after-freeing.bin").open("xb") as stream:
+                stream.write(self.payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            db.execute("INSERT INTO profile VALUES (?, ?)", ("recovered", self.payload))
+            db.commit()
+            self.check_storage_rows(db, recovered=True)
+        self.sync_dir(self.mountpoint)
+
+    def check_storage_rows(self, db, recovered):
+        rows = dict(db.execute("SELECT key, value FROM profile WHERE key IN (?, ?, ?)",
+                               ("密碼", "aborted", "recovered")))
+        expected = {"密碼": self.payload}
+        if recovered:
+            expected["recovered"] = self.payload
+        if rows != expected:
+            raise AssertionError("SQLite contents differ after storage exhaustion")
+
+    def verify_storage_recovery(self):
+        self.verify()
+        if (self.mountpoint / "written-after-freeing.bin").read_bytes() != self.payload:
+            raise AssertionError("File written after freeing space differs after reopen")
+        with closing(sqlite3.connect(self.mountpoint / "browser-profile.sqlite")) as db:
+            self.check_storage_rows(db, recovered=True)
+        if (self.mountpoint / "owned-enospc-filler").exists():
+            raise AssertionError("The removed filler reappeared after reopen")
+
+    def verify_sqlite_full(self):
+        evidence = self.result["full_storage"]
+        if evidence["sqlite_writer_exit"] != 0 or evidence.get("sqlite_error") != "SQLITE_FULL":
+            raise AssertionError("SQLite writer did not report SQLITE_FULL; see full_storage evidence")
+
+    def run_full_storage(self):
+        self.result["suite"] = "file-container-full-storage"
+        faulthandler.enable()
+        try:
+            for name, function in [
+                ("create", self.create), ("unlock", self.mount),
+                ("baseline-file-and-wal", self.write_workload),
+                ("enospc-and-resumed-writes", self.exhaust_storage),
+                ("close", self.close), ("reopen", self.mount),
+                ("persisted-files-and-sqlite", self.verify_storage_recovery), ("reclose", self.close),
+                ("sqlite-full", self.verify_sqlite_full),
+            ]:
+                self.case(name, function)
+            self.result["status"] = "passed"
+        except Exception as error:
+            self.result.update(status="failed", diagnostic=str(error))
+        finally:
+            self.finish()
+        return self.result
+
+    def finish(self):
+        self.result["finished"] = time.time()
+        self.result["duration_seconds"] = round(self.result["finished"] - self.result["started"], 3)
+        self.result["counts"] = {name: sum(c["status"] == name for c in self.result["cases"])
+                                 for name in ("passed", "failed", "skipped")}
+        self.result["retained"] = True
+        self.result["mount_present"] = os.path.ismount(self.mountpoint)
+        self.save()
+
     def run(self):
         browser = None
         try:
@@ -620,13 +787,7 @@ class Suite:
         finally:
             if browser:
                 browser.close()
-            self.result["finished"] = time.time()
-            self.result["duration_seconds"] = round(self.result["finished"] - self.result["started"], 3)
-            self.result["counts"] = {name: sum(c["status"] == name for c in self.result["cases"])
-                                     for name in ("passed", "failed", "skipped")}
-            self.result["retained"] = True
-            self.result["mount_present"] = os.path.ismount(self.mountpoint)
-            self.save()
+            self.finish()
         return self.result
 
 
@@ -645,11 +806,14 @@ def parse_args(argv=None):
                         help="Use --type auto for mount/unmount while creating the explicitly selected format")
     parser.add_argument("--session-close", action="store_true",
                         help="Use the opt-in bounded close hook for this owned fixture")
+    parser.add_argument("--full-storage", action="store_true",
+                        help="Run the bounded ENOSPC and recovery workload on a new file container")
     readonly = parser.add_mutually_exclusive_group()
     readonly.add_argument("--skip-readonly", metavar="REASON", help="Record an explicit unsupported-readonly exception")
     readonly.add_argument("--expect-readonly-unsupported", action="store_true",
                           help="Execute read-only mount and require rejection without any attached storage")
     options = parser.parse_args(argv)
+    validate_full_storage(parser, options)
     if options.session_close and platform.system() == "Darwin":
         parser.error("--session-close is available on Linux and BSD")
     options.binary = options.binary.resolve()
@@ -682,7 +846,7 @@ def parse_args(argv=None):
 def main(argv=None):
     try:
         suite = Suite(parse_args(argv))
-        result = suite.run()
+        result = suite.run_full_storage() if suite.options.full_storage else suite.run()
         print(json.dumps({"schema": SCHEMA, "status": result["status"], "backend": result["backend"],
                           "counts": result["counts"], "duration_seconds": result["duration_seconds"],
                           "result": str(suite.root / "result.json"), "diagnostic": result.get("diagnostic")}))
