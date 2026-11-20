@@ -588,6 +588,38 @@ The native package SHA-256 is
 The installer, build and runtime receipts, and command logs are under
 `target/freebsd-geli-detach/`.
 
+### FreeBSD optimized native release qualification
+
+A stock FreeBSD 15.1-RELEASE-p6 amd64 KVM guest built the optimized
+native CLI, helper and desktop at
+`14ede46fb401578f0e8a4ee9b51e72ce17c0ad04` in
+`run-20261120T042454Z-1299`. It built offline from the frozen source
+and reused the verified private VeraCrypt and gocryptfs executables,
+libfuse and libiconv. The package verifies both wxWidgets notices and
+records Rust and private-engine provenance. It depends on PEFS kmod
+`g20260829.1501000,1`, sudo and five system X11 libraries.
+
+The installed package passed all 208 ordinary CLI checks (39 GELI,
+39 PEFS, 104 VeraCrypt and 26 gocryptfs). The suites covered explicit
+and Auto routes, supported binary keyfiles, fsync, SQLite FULL/WAL,
+and readback after close and reopen. Four VeraCrypt password suites
+were repeated with neutral fixture paths after the prompt matcher
+misread their original paths. The installer digest stayed the same.
+
+All four Slint storage callback lifecycles passed as UID 1300 through
+the exact installed helper. The packaged desktop rendered a 1280×860
+X11 window as that user. This replay leaves Wayland, browser profiles,
+full storage and abrupt interruption outside its scope. The guest
+restored its package, module, FUSE, mount, device and session
+inventories. The isolated guest, network and scratch disk were removed.
+
+The native package SHA-256 is
+`c785048d4161cf1372cda85dec2052f2f30b99e11a265a94957a89ec292301e7`.
+The staged archive SHA-256 is
+`c4d2609e74c5377d38542099f544505cedd41f0a7b6cf92ddfe5dbd6a584e04f`.
+The installer, receipts, command logs and X11 frame are under
+`target/freebsd-release-14ede46/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
