@@ -159,6 +159,12 @@ ordinary close. NetBSD workspace checks passed with 98 tests and five
 ignored. Core checks also passed on FreeBSD, OpenBSD, and DragonFly BSD.
 Evidence is under `target/goal-validation/netbsd-native-detach-retry/`.
 
+The exact installed `de4345c` package passed 26 CGD checks on stock
+NetBSD 11.1. With `.cgdparams` absent, mount failed with the native
+inventories unchanged. Restoring a byte-identical backup recovered the
+file and SQLite data on reopen. The package and test guest were removed.
+Evidence is under `target/netbsd-cgd-detach-intent/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
