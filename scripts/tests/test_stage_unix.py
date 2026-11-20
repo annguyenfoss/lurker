@@ -573,6 +573,14 @@ Version needs section '.gnu.version_r' contains 2 entries:
         with self.assertRaisesRegex(ValueError, "unsafe relative path"):
             source.files("../outside/")
 
+    def test_cryptomator_requires_entry_sources_even_if_source_inventory_omits_them(self):
+        (self.root / "source").mkdir()
+        (self.root / "source/pom.xml").write_bytes(b"pom.xml")
+        source = mock.Mock()
+        source.files.return_value = []
+        with self.assertRaisesRegex(ValueError, "source inventory differs"):
+            stager.verify_cryptomator_sources(self.root, source)
+
     def _stage_fixture(self):
         binaries = self.root / "binaries"
         binaries.mkdir()

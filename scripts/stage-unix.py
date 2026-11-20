@@ -260,6 +260,7 @@ def verify_cryptomator_sources(root, source):
     # runtime behavior. Documentation changes do not require rebuilding Java.
     prefix = "native/folder/cryptomator/"
     names = {name.removeprefix(prefix) for name in source.files(prefix + "src/main/")}
+    names.update({"src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java"})
     actual = {str(path.relative_to(root / "source")) for path in (root / "source/src/main").rglob("*")
               if path.is_file() or path.is_symlink()}
     if names != actual:
