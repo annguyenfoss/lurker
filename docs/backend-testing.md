@@ -112,14 +112,16 @@ inventories. The isolated guest, network and scratch disk were removed.
 Raw receipts, hashes and command logs are under
 `target/freebsd-browser-profile/`.
 
-The NetBSD 11.1 CGD browser-profile check at `e607cc7` is blocked on a
-vendor-signed Firefox package. The official `firefox153-153.7.0.tgz`
-matched the repository SHA-512 and its archive lacked a package signature.
-Stock NetBSD 11.1 `pkg_admin check-signature` exited 1 in a fresh KVM guest
-with only loopback. The current Firefox archive header also lacked a
-signature wrapper, and the checked detached signature URLs returned HTTP
-404. The guest shut down before package installation and profile testing.
-Evidence is under `target/netbsd-firefox-e607cc7/`.
+On a fresh stock NetBSD 11.1 amd64 KVM guest, CGD passed all 15 cases with
+the installed `e607cc7` package and harness `b9117eb`. Firefox ESR 153.7.0
+ran as UID 1300 with DejaVu fonts and only loopback. A second Firefox
+process recovered the recorded page value after ordinary close and reopen.
+The host and guest verified 81 official archives against NetBSD's
+published SHA-512 catalogue, including the Firefox and Python packages.
+Stock `pkg_add` installed them offline. The native storage inventory matched
+its baseline, Lurker and the temporary sudo rule were removed, and the
+guest shut down. Results, captured frames, and the initial signature probe
+are under `target/netbsd-firefox-e607cc7/`.
 
 https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/x86_64/11.0_2026Q3/
 
