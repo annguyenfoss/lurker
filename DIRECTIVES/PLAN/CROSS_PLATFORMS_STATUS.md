@@ -470,6 +470,13 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 ## Remaining qualification work and limits
 
+- On OpenBSD, the installed `e607cc7` package passed 24 full-storage
+  checks across CRYPTO, RAID1C, and VeraCrypt. All three preserved
+  committed data at `ENOSPC` and accepted new writes after freeing
+  space. On Debian `14197ef` LUKS1, a 16 MiB transaction exited with
+  `SIGBUS` in SQLite 3.46.1 after Btrfs returned `ENOSPC`. The isolated
+  writer check records the signal separately. File and database recovery
+  after freeing space and reopening passed. See `docs/backend-testing.md`.
 - FreeBSD's sparse GELI trial lost acknowledged writes. The fully
   allocated control and the `ae53afb` production UFS create recovered
   them. NetBSD CGD still lost acknowledged writes after abrupt cuts
