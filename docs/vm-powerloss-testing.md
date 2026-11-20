@@ -744,6 +744,35 @@ application durability failure remains reproducible. Receipts are under
 `/mnt/virt/lurker-fault-dfordread26/`, and
 `target/dragonfly-noextra-fsync/`.
 
+The DragonFly 6.4.2 source review found no stock control in this UFS and
+vnode-disk path that makes ordinary application fsync wait for the
+ciphertext backing file. Inner UFS fsync drains vnode buffers and
+updates the inode. The soft-updates callback orders filesystem metadata
+dependencies. Neither emits `BUF_CMD_FLUSH` to the mapper. The vnode
+disk handles that request when it receives one, but ordinary writes
+call `VOP_WRITE(..., IO_RECURSE)` directly. Outer UFS `noclusterw`
+uses asynchronous writes for buffers eligible for clustering. The vnode driver's
+stock attachment and option parser offer no synchronous write mode.
+The kernel syncer settings schedule background writeback.
+
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/ufs/ffs_vnops.c#L102
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/ufs/ffs_softdep.c#L3998
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/ufs/ufs_readwrite.c#L363
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/usr.sbin/vnconfig/vnconfig.c#L244
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/kern/vfs_sync.c#L83
+
+Writable reopen is a separate gate. UFS marks the superblock dirty
+when it mounts writable. On restart it allows a read-only mount or
+requires a clean superblock for an ordinary writable mount. The
+documented `force` option bypasses the check. Stock soft updates use
+the same check. Read-only reopen is an evidence-preserving way to
+retrieve data that reached the backing file, as the matched cut
+demonstrated. Normal writable reopen still needs a clean superblock.
+
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/ufs/ffs_vfsops.c#L649
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/ufs/ffs_vfsops.c#L759
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sbin/mount_ufs/mount_ufs.8#L129
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
