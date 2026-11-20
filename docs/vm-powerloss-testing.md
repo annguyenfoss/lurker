@@ -684,6 +684,26 @@ Receipts are under `/mnt/virt/lurker-fault-dfbackfsync26/`,
 `/mnt/virt/lurker-fault-dfbackread26/`, and
 `target/dragonfly-backing-fsync/`.
 
+A timing-matched control used the same package, worker, initial digest,
+allocation, and mount modes. It issued only the ordinary application
+file and directory fsyncs and the SQLite FULL/WAL workload. Libvirt
+completed the cut 1.316463 seconds after the host acknowledgement.
+The backing-file fsync control completed at 1.315560 seconds. The
+ordinary control reported a changed ciphertext digest while mounted
+before the cut.
+
+The independent read-only outer UFS copy instead contained the initial
+ciphertext digest
+`f164a4c81f7a2b47cd448ef6a697db1084d24f74cf51a8309c9255ff11123669`.
+Both normal guarded writable reopen and a fresh read-only reopen found
+the earlier empty inner UFS. The acknowledged file, database, WAL and
+SHM were missing. At the matched timing, the added backing-file fsync
+preserved the acknowledged data in this pair of runs. The ordinary
+application durability failure remains reproducible. Receipts are under
+`/mnt/virt/lurker-fault-dfordinary26/`,
+`/mnt/virt/lurker-fault-dfordread26/`, and
+`target/dragonfly-noextra-fsync/`.
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
