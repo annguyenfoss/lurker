@@ -22,7 +22,7 @@ a committed SQLite FULL/WAL row, and an uncommitted row.
 | FreeBSD | VeraCrypt, PEFS, gocryptfs | All three recovered the file and committed row. VeraCrypt needed the ciphertext flush fix. gocryptfs required explicit stale-session reconciliation. |
 | OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | All three needed native FFS preen on separate ciphertext copies before writable reopen. With synchronous FFS, each copy then recovered the file and committed row. |
 | NetBSD | CGD | The journaled `sync,log` control recovered the file and lost the committed SQLite row. Its paired `sync,nolog` diagnostic recovered both under write-through storage. The supported profile requires WAPBL. |
-| DragonFly BSD | LUKS1 | Previously published fixtures unlocked after repeat cuts on two backing filesystems. Both lost the acknowledged file and transaction. |
+| DragonFly BSD | LUKS1 | Previously published fixtures unlocked after repeat cuts and lost the acknowledged file and transaction. The guarded `dfc7fdc` package repeated the loss with both inner and outer UFS mounted synchronously. |
 | macOS | Apple encrypted disk images, VeraCrypt, gocryptfs, CryFS, Cryptomator | Historical package results only. This round excluded macOS. |
 
 ## DragonFly guarded LUKS1 activation
@@ -37,9 +37,12 @@ It also reopened an earlier AES vault through Auto in read-only mode.
 
 The native CLI package at `dfc7fdc` verified all 49 installed payload files,
 passed 13 installed AES lifecycle checks, and restored the prior package
-inventory on removal. The hardened desktop package, independent review
-and abrupt-power-loss recovery for the guarded path remain open. See
-`docs/backend-testing.md` and `target/dragonfly-metadata-v1/`.
+inventory on removal. The guarded package reopened an established AES
+vault after a cut with synchronous inner and outer UFS. Its recovered
+ciphertext matched the pre-workload digest and its inner filesystem
+was empty. The guarded desktop package, independent review and a remedy
+for the observed write loss remain open. See `docs/backend-testing.md`,
+`docs/vm-powerloss-testing.md` and `target/dragonfly-metadata-v1/`.
 
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
