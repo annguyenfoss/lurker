@@ -688,3 +688,20 @@ helper, restored the prior package inventory, and left no owned mounts,
 mapper devices, vnodes or session files. Package SHA-256
 `c01c47cb9ae126bf6f132776b5b22b28baf66c085bbe596cc05d11e2bcdd6b33`.
 Evidence is in `target/dragonfly-metadata-v1/native-final/`.
+
+The full native CLI and desktop package at the same commit was wrapped and
+installed on a separate KVM copy of the stock DragonFly 6.4.2 test image.
+The wrapper matched all 645 payload entries. Native installed checksum
+verification passed, and the installed desktop rendered a 1280 × 860 X11
+window. Its login-user callbacks created, mounted, wrote and reopened a
+guarded LUKS1 vault through the installed administrator-owned helper.
+The installed CLI separately passed all 13 AES lifecycle checks.
+
+The original build guest's X11 tools could not execute. The stock-image
+copy provided working native tools. The first installed CLI attempt used a
+fixture path longer than DragonFly's native mount identity allows. The
+shorter path passed with the same package. The sudo policy, package
+inventory, mounts, vnodes, mappers and sessions returned to baseline.
+The native package SHA-256 is
+`640f39cabbaa89a2caf8e6883c4390d4f792c0d436f6733f01a97c6aea0c0ff7`.
+Evidence is under `target/goal-validation/dragonfly-native-maintenance/`.

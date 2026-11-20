@@ -40,10 +40,14 @@ passed 13 installed AES lifecycle checks, and restored the prior package
 inventory on removal. The guarded package reopened an established AES
 vault after a cut with synchronous inner and outer UFS. Its recovered
 ciphertext matched the pre-workload digest and its inner filesystem
-was empty. The fully allocated control produced the same result. The
-guarded desktop package, independent review and a remedy
-for the observed write loss remain open. See `docs/backend-testing.md`,
-`docs/vm-powerloss-testing.md` and `target/dragonfly-metadata-v1/`.
+was empty. The fully allocated control produced the same result.
+
+The full native CLI and desktop package at `dfc7fdc` matched 645 payload
+entries and passed installed checksums on a stock-image KVM clone. The
+installed desktop rendered a native X11 window and passed the login-user
+storage lifecycle through its helper. The installed CLI passed all 13
+AES checks. Independent review and a remedy for observed write loss
+remain open. See `docs/backend-testing.md` and `docs/vm-powerloss-testing.md`.
 
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
