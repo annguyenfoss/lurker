@@ -553,6 +553,25 @@ The staging archive SHA-256 is
 The build, package, test and cleanup receipts and command logs are
 under `target/freebsd-descriptor-staging/`.
 
+### FreeBSD GELI metadata backup and restore
+
+FreeBSD 15.1-RELEASE-p6 passed 16 checks with the installed `e607cc7`
+package and the lifecycle harness from `4554a0d`. Native GELI backed up
+metadata from a read-only provider for a closed 128 MiB fixture. Clearing
+the final sector of a separate, initially byte-identical copy preserved
+the encrypted payload and caused Lurker to refuse the correct passphrase
+because the metadata was missing. Restoring the backup made the copy
+byte-identical to the closed original before reopen. The restored copy
+also refused an incorrect passphrase.
+
+The correct passphrase reopened the restored copy. The suite read the
+original fsynced file and SQLite WAL row, synced a new file and committed
+a new row, and verified both after another clean close and reopen. The
+original fixture's hash stayed the same after backup. The guest restored
+its package, module, mount, md and session inventories before retirement.
+The backup was private (mode 0600), and the evidence contains hashes and
+operation statuses. Receipts are under `target/freebsd-geli-metadata/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
