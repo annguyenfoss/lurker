@@ -68,6 +68,27 @@ unit numbers cannot authorize detach of a later attachment. The exact
 native CLI package passed 91 installed lifecycle checks across all
 three LUKS1 ciphers, passwords and binary keyfiles, including Auto.
 
+## Native BSD container staging
+
+`e607cc7` creates the staging directory privately and anchors image
+creation, publication, and cleanup to opened directory descriptors.
+Native tools still receive the staged filename after identity checks.
+The regression verifies that a moved stage cannot redirect publication
+or cleanup into the directory now at its former pathname. NetBSD's
+regression also verifies sidecar rollback when the image name is taken.
+
+| KVM target | Workspace tests passed | Ignored |
+| --- | ---: | ---: |
+| FreeBSD | 113 | 10 |
+| NetBSD | 97 | 4 |
+| OpenBSD | 112 | 17 |
+| DragonFly BSD | 94 | 4 |
+
+All four locked workspace checks passed. The OpenBSD run used the
+previously qualified no-debug workspace cache and data limit after
+retiring the cold-cache attempt. Logs and source digests are under
+`target/goal-validation/bsd-pinned-staging/`.
+
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
 All ten non-macOS KVM guests ran locked workspace checks and tests from
@@ -194,6 +215,11 @@ All six Linux guests ran the 117 privileged and 78 login-user cases in
 isolated network namespaces across the normal and follow-up replays. Arch
 also installed the exact package in a loopback-only namespace. The
 replays used prepared guests and their existing native runtime prerequisites.
+
+The verified Debian `14197ef` package separately passed 45 installed
+checks across AES LUKS2, LUKS1, and privileged VeraCrypt. Firefox ESR
+ran as the login user in a loopback-only namespace and verified its
+profile after each vault was closed and reopened.
 
 Exact artifacts and run receipts are recorded in `docs/linux-native-packaging.md`
 and `docs/bsd-packaging.md`. Power-cut evidence has its own revision and fixture
