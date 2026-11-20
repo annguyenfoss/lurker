@@ -176,6 +176,12 @@ The final workspace passed 112 tests with 19 ignored. Results are under
 `target/goal-validation/openbsd-native-detach-retry/` and
 `target/goal-validation/openbsd-raid1c-detach-retry/`.
 
+The exact installed `6fe1f26` package passed 13 CRYPTO, 13 Auto VeraCrypt,
+and seven normal RAID1C lifecycle checks on stock OpenBSD 8.0. Each route
+verified file and SQLite persistence after close and reopen. Package
+removal restored the original mount, device, session, and package
+inventories. Evidence is under `target/openbsd-crypto-detach-26/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
