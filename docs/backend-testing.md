@@ -48,14 +48,19 @@ suites outside macOS require running the suite with administrator privileges;
 userspace directory engines must run as the login user.
 
 Add `--firefox /absolute/path/to/firefox` to verify a real browser profile
-on the encrypted mount. For the Linux privileged container backends, run the
-suite through sudo from the login account. The fixture uses the package's
+on the encrypted mount. For supported privileged Linux and BSD routes, run
+the suite through sudo or doas from the login account. The fixture uses the package's
 invoking-user filesystem ownership and launches Firefox as that user with a
 private process environment. The suite launches headless
 Firefox with a new profile, stores a generated value through a loopback page,
 and checks that a second Firefox process reads it after the vault has closed
 and reopened. The standard 13 cases still run and the report includes the two
 Firefox cases separately.
+
+For OpenBSD RAID1C, pass `--owner-user` and `--firefox` to
+`test-openbsd-raid1c.py`. The owner suite exercises the same profile write
+and read around its normal close and reopen. Use an isolated guest with
+loopback access for these tests.
 
 On the Debian KVM guest, Firefox ESR 153.7.0 passed both browser-profile
 checks for gocryptfs, CryFS, Cryptomator, and AES VeraCrypt in the
@@ -74,6 +79,11 @@ test package, mounts, loop devices and disposable encrypted images were
 retired. Harness `9a6a897` also passed its 23 unit checks on Debian. The
 package, CLI, manifest, harness and Firefox SHA-256 values and raw receipts
 are in `target/browser-profile-qualification/debian-privileged-14197ef/`.
+
+Harness `b9117eb` reran the LUKS2 profile with its restricted Firefox
+environment. All 15 checks passed again on the exact Debian package,
+and both the test package and native fixture inventory were restored.
+Receipts are in `target/browser-profile-qualification/debian-luks2-b9117eb/`.
 
 For a native API that cannot attach read-only, use
 `--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
