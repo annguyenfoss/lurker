@@ -100,6 +100,27 @@ the native inventories after removal.
 | OpenBSD | 13 CRYPTO and 30 RAID1C cases, including invoking-user checks. VeraCrypt also passed login-user writes, SQLite reopen and safe read-only refusal. |
 | DragonFly BSD | 26 AES Auto cases across a root-owned and a login-owned destination. The login-owned fixture published the image as UID 1300 with mode 0600. |
 
+`21337f5` cleans up its staging files after publication is refused. The
+KVM regressions preserved the existing destination and removed the
+owned stage, including after CGD sidecar rollback. All four locked BSD
+workspace checks passed again. The exact DragonFly package passed 13
+installed AES Auto checks and left no staging directory behind. Logs
+and the package receipt are under `target/goal-validation/bsd-publish-cleanup/`.
+
+## Browser profiles on native mounts
+
+OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
+153.4.0 running offline as UID 1000. CRYPTO, AES VeraCrypt and RAID1C
+each stored and recovered profile data across normal vault close and
+reopen. Harness revisions were `b9117eb` and `5ea6e3f`. Evidence is
+under `target/openbsd-firefox-bed2448/`.
+
+The same isolated browser environment at `b9117eb` passed 15 checks
+on the installed Debian `14197ef` LUKS2 package. Firefox ESR 153.7.0
+ran as UID 1300 in a loopback-only namespace and recovered the profile
+in a fresh browser process. Evidence is under
+`target/browser-profile-qualification/debian-luks2-b9117eb/`.
+
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
 All ten non-macOS KVM guests ran locked workspace checks and tests from
