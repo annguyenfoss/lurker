@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -271,10 +272,22 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             run(conan + ["profile", "detect", "--exist-ok"], src, log, env)
             lock = ROOT / "native/folder/cryfs/conan.lock"
             build_options = []
-            if platform.system() == "Linux":
+            if build_system == "Linux":
                 # Conan's build-tree paths must never become runtime search
                 # paths in a distributed executable (including empty entries).
-                build_options = ["-c", 'tools.cmake.cmaketoolchain:extra_variables={"CMAKE_SKIP_RPATH":True}']
+                source_prefix = f"/usr/src/cryfs-{version}"
+                epoch = capture(["git", "show", "-s", "--format=%ct", revision], src)
+                env["SOURCE_DATE_EPOCH"] = epoch
+                # Conan joins these flags into a CMake compiler command string.
+                source_map = shlex.quote(f"-ffile-prefix-map={src}={source_prefix}")
+                build_options = [
+                    "-c", 'tools.cmake.cmaketoolchain:extra_variables={"CMAKE_SKIP_RPATH":True}',
+                    "-c", "tools.build:cxxflags=" + json.dumps([source_map]),
+                ]
+                native_manifest["reproducibility"] = {
+                    "source_prefix": source_prefix,
+                    "source_date_epoch": int(epoch),
+                }
             run(conan + ["build", ".", "-s", "build_type=Release", "--build=missing",
                          "-c", f"tools.build:jobs={jobs}",
                          "-o", "&:build_tests=False", "-o", "&:update_checks=False",

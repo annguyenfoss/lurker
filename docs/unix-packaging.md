@@ -316,6 +316,21 @@ Build and runtime evidence is under
 `target/goal-validation/cryfs-offline-rebuild-8bb689c/`. The dependency
 archive hashes remain under `target/goal-validation/cryfs-conan-sources-8bb689c/`.
 
+The Linux builder now uses the pinned CryFS commit timestamp for
+`SOURCE_DATE_EPOCH` and maps the patched source directory to
+`/usr/src/cryfs-1.0.3`. With the same compiler and Conan cache, two
+Debian KVM builds in different source directories produced the same
+SHA-256. The remapped engine passed all 13 login-user lifecycle checks.
+The tested binaries still contain paths from the shared Conan cache.
+The build comparison and runtime receipts are under
+`target/goal-validation/cryfs-path-repro-8bb689c/`.
+
+The normal Linux builder also passed a Debian KVM build and 13
+package-relative lifecycle checks with these settings. Its binary
+contained the fixed source prefix and the relocated Conan cache path.
+The builder manifest and runtime evidence are under
+`target/goal-validation/cryfs-source-prefix-builder/`.
+
 The four relocated Arch libraries are libfuse3, libnuma, liburing and zlib.
 Their upstream archives matched the checksums in the exact Arch package
 recipes. The receipt retains those recipes and the signed producer package
