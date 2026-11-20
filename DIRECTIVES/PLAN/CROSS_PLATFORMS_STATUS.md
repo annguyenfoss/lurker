@@ -67,6 +67,15 @@ with the same no-debug build profile used 1,938 MiB. Per-guest stages and
 log digests are in
 `target/goal-validation/secure-synchronous-ca3c845/workspace-summary.json`.
 
+After the DragonFly changes, NetBSD passed workspace check and reported
+95 passed and four ignored at `dfc7fdc`. OpenBSD passed its locked
+workspace checks with 111 passed and 17 ignored. Its initial desktop test
+build aborted in the default debug profile. The confirmation used the
+existing no-debug, single-job OpenBSD profile and exited successfully.
+FreeBSD's `ae53afb` allocation work passed with 112 tests and ten ignored.
+The receipts are under `target/goal-validation/current-bsd-workspace/` and
+`target/goal-validation/freebsd-geli-allocation/`.
+
 The native installers from the same `ca3c845` revision passed 1,642 real
 CLI lifecycle checks. Each target also rendered an installed X11 window.
 
