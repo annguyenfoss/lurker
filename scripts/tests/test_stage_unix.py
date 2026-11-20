@@ -532,12 +532,14 @@ Version needs section '.gnu.version_r' contains 2 entries:
         self.assertEqual(stager.digest(args.output / name), manifest["files"][name]["sha256"])
 
     def test_cryptomator_helper_runtime_sources_match_selected_commit(self):
-        names = ("src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java", "pom.xml")
+        names = ("src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java",
+                 "src/main/java/org/lurker/cryptomator/Storage.java", "src/main/resources/storage.properties", "pom.xml")
         for name in names:
             path = self.root / "source" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(name.encode())
         source = mock.Mock()
+        source.files.return_value = ["native/folder/cryptomator/" + name for name in names if name.startswith("src/main/")]
         source.read.side_effect = lambda name: name.removeprefix("native/folder/cryptomator/").encode()
         stager.verify_cryptomator_sources(self.root, source)
         for name in names:
@@ -547,6 +549,29 @@ Version needs section '.gnu.version_r' contains 2 entries:
             with self.assertRaisesRegex(ValueError, "helper source differs"):
                 stager.verify_cryptomator_sources(self.root, source)
             path.write_bytes(original)
+        extra = self.root / "source/src/main/java/Untracked.java"
+        extra.write_text("untracked helper")
+        with self.assertRaisesRegex(ValueError, "source inventory differs"):
+            stager.verify_cryptomator_sources(self.root, source)
+        extra.unlink()
+        (self.root / "source" / names[2]).unlink()
+        with self.assertRaisesRegex(ValueError, "source inventory differs"):
+            stager.verify_cryptomator_sources(self.root, source)
+
+    def test_source_inventory_uses_selected_git_revision_or_export_manifest(self):
+        source = object.__new__(stager.Source)
+        source.root = self.root
+        source.commit = "a" * 40
+        source.manifest = None
+        prefix = "native/folder/cryptomator/src/main/"
+        names = [prefix + "java/Main.java", prefix + "resources/storage.properties"]
+        with mock.patch.object(stager.subprocess, "check_output", return_value=("\0".join(names) + "\0").encode()) as command:
+            self.assertEqual(names, source.files(prefix))
+            self.assertEqual(source.commit, command.call_args.args[0][-3])
+        source.manifest = {"files": {name: {} for name in [*names, "Cargo.toml"]}}
+        self.assertEqual(names, source.files(prefix))
+        with self.assertRaisesRegex(ValueError, "unsafe relative path"):
+            source.files("../outside/")
 
     def _stage_fixture(self):
         binaries = self.root / "binaries"

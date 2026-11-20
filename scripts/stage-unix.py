@@ -155,6 +155,18 @@ class Source:
             return path.read_bytes()
         return subprocess.check_output(["git", "-C", str(self.root), "show", self.commit + ":" + name])
 
+    def files(self, prefix):
+        relative(prefix)
+        if self.manifest:
+            names = self.manifest["files"]
+        else:
+            output = subprocess.check_output([
+                "git", "-C", str(self.root), "ls-tree", "-r", "-z", "--name-only",
+                self.commit, "--", prefix,
+            ])
+            names = output.decode().rstrip("\0").split("\0")
+        return sorted(name for name in names if name.startswith(prefix))
+
     def constant(self, name, variable):
         tree = ast.parse(self.read(name))
         for node in tree.body:
@@ -246,9 +258,15 @@ def verify_folder_patches(kind, manifest, source):
 def verify_cryptomator_sources(root, source):
     # The helper is Lurker code, so a dependency lock alone cannot identify its
     # runtime behavior. Documentation changes do not require rebuilding Java.
-    for name in ("src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java", "pom.xml"):
+    prefix = "native/folder/cryptomator/"
+    names = {name.removeprefix(prefix) for name in source.files(prefix + "src/main/")}
+    actual = {str(path.relative_to(root / "source")) for path in (root / "source/src/main").rglob("*")
+              if path.is_file() or path.is_symlink()}
+    if names != actual:
+        fail("Cryptomator helper source inventory differs from exact Lurker commit")
+    for name in sorted(names | {"pom.xml"}):
         packaged = root / "source" / name
-        expected = hashlib.sha256(source.read("native/folder/cryptomator/" + name)).hexdigest()
+        expected = hashlib.sha256(source.read(prefix + name)).hexdigest()
         if not packaged.is_file() or packaged.is_symlink() or digest(packaged) != expected:
             fail("Cryptomator helper source differs from exact Lurker commit: " + name)
 
