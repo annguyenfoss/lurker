@@ -863,6 +863,24 @@ The guest reused its verified dependencies, shut down normally and was
 retired along with its isolated network, overlay and credentials. Build
 and runtime receipts are in `target/openbsd-crypto-detach-26/`.
 
+### OpenBSD RAID1C membership descriptor recovery
+
+The retained native `6fe1f26` package passed nine recovery checks on a
+stock OpenBSD 8.0 amd64 KVM copy. The test wrote a synced file and a SQLite
+FULL/WAL row to a fresh two-member vault, closed it and moved its
+`.raid1c.json` descriptor to a private backup. With the descriptor absent,
+Auto refused the mount and identified the explicit membership syntax. Both
+member hashes and the mount, vnode, array and receipt inventories stayed
+unchanged.
+
+The explicit two-member mount reopened the vault and read back both the
+file and the SQLite row. After ordinary close, restoring the byte-identical
+mode-`0600` descriptor let Auto reopen the same vault and read back both
+again. The final close and package removal restored all inventories. The
+guest shut down normally and its isolated resources were removed. The
+private descriptor backup, member digests, exact package provenance and
+runtime receipts are under `target/openbsd-raid1c-descriptor-recovery-26/`.
+
 ### OpenBSD CRYPTO, RAID1C and VeraCrypt storage exhaustion
 
 A stock OpenBSD 8.0 amd64 KVM copy installed the exact `e607cc7` native
