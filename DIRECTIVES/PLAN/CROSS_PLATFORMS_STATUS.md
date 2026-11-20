@@ -410,6 +410,16 @@ freeing space and checked the data after clean close and reopen.
 | NetBSD | 9 for CGD | `target/netbsd-cgd-full-storage-14ede46/qualification-summary.json` |
 | DragonFly BSD | 9 for AES LUKS1, also reported above | `target/goal-validation/frozen-14ede46/dragonfly/` |
 
+The exact DragonFly package also passed orderly shutdown on a fresh stock
+guest. Native `rc.shutdown` stopped the SQLite writer and closed the vault.
+After reboot, the same vault recovered the synced file and committed SQLite
+row. See `target/dragonfly-shutdown-14ede46/receipt.json`.
+
+Cryptomator on Debian could acknowledge a short ciphertext append at `fsync`
+and then fail to read the previously committed prefix. An isolated CryptoFS
+2.12.0 comparison surfaced the write failure at `fsync` but still lost the
+readable prefix. The candidate was held back. See `docs/folder-supervision.md`.
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from

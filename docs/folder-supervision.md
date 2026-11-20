@@ -131,6 +131,31 @@ that mutation reached disk. Safe close recovery needs an explicit commit or
 rollback path for those writes before reporting success. Keep the supervised
 failure in the meantime.
 
+## Cryptomator append with a full backing store
+
+The exact Debian `14ede46` package mounted a Cryptomator vault on a
+dedicated 12 MiB tmpfs. A 2 KiB file was written and synced before the
+fixture filled the backing store. The test then appended 11 KiB with
+zero or one free 4 KiB page. Both runs acknowledged `fsync` even though
+the encrypted file grew by only 1,952 or 6,048 bytes. Reading the original
+2 KiB returned `EIO` after clean close and reopen in both runs. An 80 KiB
+append returned `EIO` at `fsync` and also left the original prefix unreadable.
+After space was freed and the vault reopened, a separate new file synced
+successfully in all three cases.
+
+A comparison on the same guest reused the installed helper and launcher in
+an isolated copy with CryptoFS 2.12.0 and its resolved runtime dependencies.
+The official CryptoFS JAR matched the release checksum. The candidate returned
+`EIO` at `fsync` for all three appends, including the two short writes that
+previously reported success. The original file prefix still returned `EIO`
+after reopen. The upgrade alone does not meet the preservation requirement
+and was not promoted. The existing adapter also leaves `ENOSPC` propagation
+unresolved. See the CryptoFS short-write fix at
+https://github.com/cryptomator/cryptofs/pull/370
+
+The fixtures closed normally and the guest mount inventory was restored.
+Per-case data is in `target/goal-validation/cryptomator-short-write-candidate/`.
+
 ## Linux process exit during close
 
 An installed Gentoo `c21e0cc` run detached a read-only CryFS mount and
