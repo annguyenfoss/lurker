@@ -97,6 +97,40 @@ Arbitrary power-loss safety and complete full-storage recovery remain
 unqualified. See `native/folder/cryfs/README.md` for the persistence patch and its
 other native regressions.
 
+### Linux close with exhausted backing storage
+
+The Arch KVM guest repeated four ordinary finite-storage cases with native
+package source `14ede46fb401578f0e8a4ee9b51e72ce17c0ad04` and package SHA-256
+`3e8782b5cc1da4f242039dfb185962fef8510414ac74a98d0c04fbdad1bd9436`.
+The engine SHA-256 was
+`45e4b770b8cd4eb0a5c46cf15f5db9b6daf19372127bcd8c165a25d696713bbc`.
+
+| Condition | Write test followed by space recovery | Close while an unsynced rename was pending |
+| --- | --- | --- |
+| 8 MiB tmpfs full | File write or fsync returned `ENOSPC`. Removing the test filler allowed a clean close and reopen. | CLI close returned 1 and retained the backend's SIGABRT and `ENOSPC` diagnostic. |
+| 4 MiB user quota on 8 MiB tmpfs | File write or fsync returned `EDQUOT` with 4 MiB still free. Removing the filler allowed a clean close and reopen. | CLI close returned 1 and retained the backend's SIGABRT and `EDQUOT` diagnostic. |
+
+Every reopen recovered the previously committed file and SQLite WAL-backed
+record and passed SQLite integrity checking. Separate read-only mounts of the
+two failed-close fixtures found the original file name and bytes intact and
+the uncommitted new name absent. These cases leave the filesystem detached
+after the failed close. Restoring backing space before a new unlock permits
+normal inspection. A second unmount of the detached session cannot flush its
+lost changes. The fixture results, redacted exit records and ciphertext copies
+remain under `/tmp/lurker-folder-fault-14ede46.*` on the Arch guest. All owned
+mounts were closed.
+
+In pinned CryFS, the FUSE destroy callback releases cached directory blobs
+after the native mount detaches. The directory destructor serializes dirty
+entries through a data tree that can resize and write several encrypted blocks.
+The Linux patch makes each individual block replacement atomic. A cross-directory
+rename can still update two directory blobs and a parent pointer and delete an
+overwritten blob. Those changes have no shared transaction or rollback record.
+A destructor catch would avoid the abort without establishing which parts of
+that mutation reached disk. Safe close recovery needs an explicit commit or
+rollback path for those writes before reporting success. Keep the supervised
+failure in the meantime.
+
 ## Linux process exit during close
 
 An installed Gentoo `c21e0cc` run detached a read-only CryFS mount and
