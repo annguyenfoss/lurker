@@ -597,6 +597,55 @@ loss with fully allocated backing storage. Receipts are under
 `/mnt/virt/lurker-fault-dfallocread26/`, and
 `target/dragonfly-inner-allocated/`.
 
+#### DragonFly guarded ciphertext write boundary
+
+A live control used the same guarded `dfc7fdc` CLI, fully allocated AES
+fixture, and synchronous inner and outer UFS mounts. The backing-file
+SHA-256 observed inside the guest changed after opening the vault, after
+the application file fsync, after the rename and directory fsync, and
+after the SQLite FULL/WAL commit. It changed again by the first device
+descriptor fsync and remained stable through the remaining device and
+backing-file fsync calls. Closing the SQLite connection and cleanly
+closing the vault each changed the digest. Clean reopen recovered the
+exact file and committed row, and SQLite reported integrity `ok`.
+
+DragonFly 6.4.2 source at `54d7118` shows that the device mapper forwards
+`BUF_CMD_FLUSH` through the active targets. The vnode disk handles
+ordinary writes with `VOP_WRITE(..., IO_RECURSE)` and a flush request
+with `VOP_FSYNC(..., MNT_WAIT, 0)`. Device descriptor fsync runs
+`vfsync` for a disk vnode. The tested installed headers did not expose
+`DIOCGFLUSH`. The effect of each individual fsync and physical media
+durability remain unverified.
+
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/dev/disk/dm/device-mapper.c#L380
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/dev/disk/dm/crypt/dm_target_crypt.c#L869
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/dev/disk/dm/linear/dm_target_linear.c#L108
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/dev/disk/vn/vn.c#L348
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/devfs/devfs_vnops.c#L1617
+
+A second fixture started from byte-identical, fully allocated ciphertext.
+After the workload acknowledgement, the crypt mapper, linear mapper,
+source vnode device, backing file, and outer fixture device each returned
+success from fsync. Libvirt cut the owned guest 1.20 seconds after the host
+observed the acknowledgement while the SQLite connection remained open.
+The independently copied outer UFS mounted read-only without repair.
+Its ciphertext matched the last digest measured after the fsync sequence
+and the host acknowledgement matched the receipt on disk.
+
+The normal guarded writable reopen failed with `mount_ufs` EPERM. The
+kernel log identified an unclean inner UFS. A guarded read-only reopen
+on a fresh copy recovered the exact 65,536-byte acknowledged file and the
+82,432-byte WAL. SQLite recovered the exact committed row from a separate
+writable database and WAL copy, reported integrity `ok`, and exposed no
+uncommitted row. The read-only close left no mapper, vnode attachment,
+or session. Both fixture images retained their original cut SHA-256.
+The normal writable durability gate remains open. Receipts are under
+`/mnt/virt/lurker-fault-dfbound26/`,
+`/mnt/virt/lurker-fault-dfboundread26/`, and
+`target/dragonfly-write-boundary/`.
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/ufs/ffs_vfsops.c#L648
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
