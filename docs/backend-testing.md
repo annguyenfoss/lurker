@@ -751,3 +751,26 @@ installation. Package removal restored the mount, vnode, mapper, and
 session inventories. The package SHA-256 is
 `18ad430a0bd62516cff531fe1256952073c0fce87e28de538102862604b4515c`.
 Receipts are under `target/goal-validation/dragonfly-graceful-timeout/`.
+
+### DragonFly payload vnode reservation
+
+In `8143d6c`, both create and mount save the native payload vnode's
+unit and devfs identity before attaching the encrypted file. Native
+attach uses the same descriptor. A root KVM regression left a real
+attachment with only the reservation in the journal and then recovered
+it. The regression also proved that cleanup preserves a later attachment
+of the same file on the reused unit. Workspace checks again passed with
+93 tests passing and four ignored. Core checks also passed on FreeBSD,
+NetBSD, and OpenBSD. FreeBSD's first compiler-cache preflight needed a
+retry with the measured warm-cache requirement.
+
+The exact native CLI package passed 91 installed checks across the three
+ciphers and both credential types, including Auto AES. Deinstallation
+restored all mount, mapper, vnode, and session inventories. Package
+SHA-256 is `09f2389e558367704c435965476f7a880c8836ff9bb4bdeb4891785c26ca0341`.
+
+A separate native control observed that an empty clone remains after its
+descriptor is closed and returns `ENXIO` on direct detach. In the same
+control, an owned empty clone provisioned with one anonymous page could
+be detached and removed. Both tests restored the native inventories.
+Evidence is under `target/goal-validation/dragonfly-vnode-reservation/`.
