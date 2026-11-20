@@ -452,7 +452,14 @@ class InvokingOwnerSuite(MirrorSuite):
         self.result["limitations"].append("Returning secondary stays offline; newest invoking-user WAL/data must come from surviving primary. No rebuild attempted.")
 
     def run(self):
+        browser = None
         try:
+            if getattr(self.options, "firefox", None):
+                self.options.firefox_account = self.owner
+                browser = BASE.BrowserProfile(self)
+                self.result["firefox"] = {"path": str(self.options.firefox),
+                                          "sha256": BASE.file_hash(self.options.firefox),
+                                          "uid": browser.uid}
             for name, function in [
                 ("quiet-native-window", lambda: require_idle(self.footprint())),
                 ("synthetic-sudo-create", self.create), ("published-uid-gid-and-0600", self.file_owners),
@@ -462,11 +469,18 @@ class InvokingOwnerSuite(MirrorSuite):
                 ("normal-user-read-reopened-wal", lambda: self.user("read", "initial")),
                 ("normal-reclose", self.close),
                 ("primary-survives-user-writes-secondary-return-offline", self.degraded_primary),
-            ]: self.case(name, function)
+            ]:
+                self.case(name, function)
+                if browser and name == "normal-user-write-fsync-and-wal":
+                    self.case("firefox-profile-write", lambda: browser.exercise("write"))
+                if browser and name == "normal-user-read-reopened-wal":
+                    self.case("firefox-profile-read", lambda: browser.exercise("read"))
             self.result["status"] = "passed"
         except Exception as error:
             self.result.update(status="failed", diagnostic=str(error))
         finally:
+            if browser:
+                browser.close()
             if self.options.preserve_failure and self.result["status"] == "failed":
                 self.result["cleanup_policy"] = "preserved-on-failure"
             else:
@@ -490,12 +504,19 @@ def parse_args(argv=None):
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--long-parent", action="store_true", help="Put encrypted members and descriptor beneath a120-character directory; keep native mountpoints short")
     parser.add_argument("--owner-user", help="Use a separate fresh synthetic-sudo invoking-user proof instead of the root matrix")
+    parser.add_argument("--firefox", type=Path, help="Exercise a fresh Firefox profile as the invoking user")
     parser.add_argument("--preserve-failure", action="store_true", help="Stop before cleanup on failure; preserve owned storage/journal for diagnosis")
     options = parser.parse_args(argv)
     if platform.system() != "OpenBSD" or os.geteuid() != 0:
         parser.error("Run as root on the disposable OpenBSD guest; no storage tests on endeavour")
     if not re.fullmatch(r"[0-9a-f]{40}", options.commit) or options.timeout <= 0:
         parser.error("Use a full lowercase source SHA and positive timeout")
+    if options.firefox:
+        if not options.owner_user:
+            parser.error("--firefox requires --owner-user")
+        options.firefox = options.firefox.resolve()
+        if not options.firefox.is_file() or not os.access(options.firefox, os.X_OK):
+            parser.error("--firefox requires an executable Firefox")
     options.root = options.root.resolve(strict=True)
     if not options.root.is_dir() or not options.root.is_relative_to(Path("/tmp")):
         parser.error("--root must be an existing directory beneath /tmp")

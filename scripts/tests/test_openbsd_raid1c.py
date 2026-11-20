@@ -87,6 +87,20 @@ class Raid1cHarnessTests(unittest.TestCase):
         self.assertFalse(any("SUDO_UID" in argument for argument in mount))
         compile(SUITE.USER_WORKLOAD, "normal-user-workload.py", "exec")
 
+    def test_firefox_requires_the_invoking_owner_fixture(self):
+        with tempfile.TemporaryDirectory(prefix="lurker-raid1c-browser-", dir="/tmp") as directory:
+            binary = Path(directory) / "executable"
+            binary.write_text("#!/bin/sh\nexit 0\n")
+            binary.chmod(0o700)
+            args = ["--binary", str(binary), "--commit", "a" * 40, "--firefox", str(binary)]
+            with mock.patch.object(SUITE.platform, "system", return_value="OpenBSD"), \
+                 mock.patch.object(SUITE.os, "geteuid", return_value=0), \
+                 mock.patch.object(SUITE, "private_binary"):
+                with self.assertRaises(SystemExit):
+                    SUITE.parse_args(args)
+                options = SUITE.parse_args([*args, "--owner-user", "fixture"])
+                self.assertEqual(options.firefox, binary)
+
     def test_retained_header_capture_is_bounded_and_preserves_conflicting_roles(self):
         with tempfile.TemporaryDirectory(prefix="lurker-raid1c-header-", dir="/tmp") as directory:
             path = Path(directory) / "member.img"
