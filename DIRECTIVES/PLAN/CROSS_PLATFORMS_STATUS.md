@@ -485,6 +485,11 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   `SIGBUS` in SQLite 3.46.1 after Btrfs returned `ENOSPC`. The isolated
   writer check records the signal separately. File and database recovery
   after freeing space and reopening passed. See `docs/backend-testing.md`.
+- FreeBSD's installed `e607cc7` AES VeraCrypt package passed nine
+  full-storage checks. UFS returned `ENOSPC`, SQLite returned
+  `SQLITE_FULL`, and file and SQLite data written before and after
+  freeing space survived reopen. Evidence is under
+  `target/freebsd-veracrypt-full-storage/`.
 - FreeBSD's sparse GELI trial lost acknowledged writes. The fully
   allocated control and the `ae53afb` production UFS create recovered
   them. NetBSD CGD still lost acknowledged writes after abrupt cuts
