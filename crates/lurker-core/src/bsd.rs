@@ -127,6 +127,9 @@ struct Session {
     veracrypt_proof: Option<veracrypt::RecoveryProof>,
     identity: Identity,
     backing: Option<String>,
+    #[cfg(target_os = "netbsd")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    netbsd_detach: Option<netbsd::DetachIntent>,
     #[cfg(target_os = "dragonfly")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     dragonfly_backing_reservation: Option<dragonfly::BackingReservation>,
@@ -562,6 +565,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         create_target: Some(target.clone()),
         identity,
         backing: None,
+        #[cfg(target_os = "netbsd")]
+        netbsd_detach: None,
         #[cfg(target_os = "dragonfly")]
         dragonfly_backing_reservation: None,
         #[cfg(target_os = "dragonfly")]
@@ -875,6 +880,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         create_target: None,
         identity,
         backing: None,
+        #[cfg(target_os = "netbsd")]
+        netbsd_detach: None,
         #[cfg(target_os = "dragonfly")]
         dragonfly_backing_reservation: None,
         #[cfg(target_os = "dragonfly")]
@@ -1297,6 +1304,8 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     if s.backend == VolumeType::Raid1c {
         return raid1c::cleanup(registry, s);
     }
+    #[cfg(target_os = "netbsd")]
+    netbsd::reconcile_detach(registry, s)?;
     #[cfg(target_os = "dragonfly")]
     {
         dragonfly::reconcile_backing_reservation(registry, s)?;
@@ -1335,8 +1344,17 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
                 "The crypto device still has a mounted filesystem; leave session recoverable.",
             ));
         }
+        #[cfg(target_os = "netbsd")]
+        {
+            s.netbsd_detach = Some(netbsd::DetachIntent::Cgd);
+            registry.save(s)?;
+        }
         close_mapping(s, mapped)?;
         s.mapped = None;
+        #[cfg(target_os = "netbsd")]
+        {
+            s.netbsd_detach = None;
+        }
         registry.save(s)?;
     }
     #[cfg(target_os = "dragonfly")]
@@ -1348,8 +1366,17 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
             s.dragonfly_backing_detach_requested = true;
             registry.save(s)?;
         }
+        #[cfg(target_os = "netbsd")]
+        {
+            s.netbsd_detach = Some(netbsd::DetachIntent::Vnd);
+            registry.save(s)?;
+        }
         native::detach_file(backing)?;
         s.backing = None;
+        #[cfg(target_os = "netbsd")]
+        {
+            s.netbsd_detach = None;
+        }
         registry.save(s)?;
     }
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
@@ -1721,6 +1748,8 @@ mod tests {
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            #[cfg(target_os = "netbsd")]
+            netbsd_detach: None,
             #[cfg(target_os = "dragonfly")]
             dragonfly_backing_reservation: None,
             #[cfg(target_os = "dragonfly")]
@@ -1848,6 +1877,8 @@ mod tests {
             create_target: Some(target.clone()),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            #[cfg(target_os = "netbsd")]
+            netbsd_detach: None,
             #[cfg(target_os = "dragonfly")]
             dragonfly_backing_reservation: None,
             #[cfg(target_os = "dragonfly")]

@@ -4,8 +4,9 @@
 //! arbitrary cgdconfig file may contain shell_cmd and must never be passed to an
 //! elevated cgdconfig. Device allocation uses the kernel's exclusive configure
 //! operation and never clears a device it did not successfully configure.
-use super::{args, exec, Credential};
+use super::{args, exec, Credential, Registry, Session};
 use crate::{AppError, AppResult, CreateCipher};
+use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
@@ -14,6 +15,13 @@ use std::path::{Path, PathBuf};
 
 const CGDCONFIG: &str = "/sbin/cgdconfig";
 const VNDCONFIG: &str = "/usr/sbin/vndconfig";
+
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum DetachIntent {
+    Cgd,
+    Vnd,
+}
 
 pub(super) fn attach_file(path: &Path, readonly: bool) -> AppResult<String> {
     let mut last_error = None;
@@ -208,6 +216,48 @@ pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
     Ok(())
 }
 
+pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    let Some(intent) = session.netbsd_detach else {
+        return Ok(());
+    };
+    let conflict = || {
+        AppError::new("NetBSD detach intent conflicts with its session; preserving the journal.")
+    };
+    if session.mounted.is_some() || !session.identity.matches(&session.source) {
+        return Err(conflict());
+    }
+    let backing = session.backing.as_deref().ok_or_else(conflict)?;
+    match intent {
+        DetachIntent::Cgd => {
+            let mapped = session.mapped.as_deref().ok_or_else(conflict)?;
+            verify_backing(backing, &session.source)?;
+            let n = device_number(mapped, "cgd")?;
+            let raw = format!("/dev/rcgd{n}d");
+            let listing = exec(CGDCONFIG, &args(&["-lv", &raw]), None)?;
+            if listing.trim() != format!("{raw}: not in use") {
+                return Ok(());
+            }
+            if super::mounts()?.iter().any(|mount| mount.source == Path::new(mapped)) {
+                return Err(conflict());
+            }
+            session.mapped = None;
+        }
+        DetachIntent::Vnd => {
+            if session.mapped.is_some() {
+                return Err(conflict());
+            }
+            let n = device_number(backing, "vnd")?;
+            let listing = exec(VNDCONFIG, &args(&["-l", &format!("/dev/rvnd{n}d")]), None)?;
+            if listing.trim() != format!("vnd{n}: not in use") {
+                return Ok(());
+            }
+            session.backing = None;
+        }
+    }
+    session.netbsd_detach = None;
+    registry.save(session)
+}
+
 struct ParametersSnapshot {
     directory: PathBuf,
     path: PathBuf,
@@ -380,6 +430,73 @@ fn validate_params(value: &str) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires root and real disposable NetBSD CGD and vnode attachments"]
+    fn cleanup_reconciles_completed_native_detaches_with_saved_intent() {
+        use super::super::{cleanup, require_root, unique_id, Identity};
+
+        require_root().unwrap();
+        let work = std::env::temp_dir().join(format!("lurker-netbsd-detach-{}", unique_id()));
+        fs::DirBuilder::new().mode(0o700).create(&work).unwrap();
+        let source = work.join("owned.img");
+        let file = File::create(&source).unwrap();
+        file.set_len(128 * 1024 * 1024).unwrap();
+        let registry = Registry {
+            directory: work.clone(),
+            _lock: File::create(work.join("lock")).unwrap(),
+        };
+        let backing = attach_file(&source, false).unwrap();
+        let params = work.join("owned.img.cgdparams");
+        let credential = Credential::Password(b"disposable NetBSD detach fixture".to_vec());
+        format(&backing, CreateCipher::Aes, &credential, &params).unwrap();
+        let mapped = unlock_initial(&backing, &credential, &params).unwrap();
+        let mut session = Session {
+            version: 1,
+            id: unique_id(),
+            backend: crate::VolumeType::Cgd,
+            identity: Identity::read(&source).unwrap(),
+            source: source.clone(),
+            create_target: None,
+            peer_sources: Vec::new(),
+            backing: Some(backing.clone()),
+            netbsd_detach: Some(DetachIntent::Cgd),
+            mapped: Some(mapped.clone()),
+            mounted: None,
+            intended_mountpoint: None,
+            initialization_directory: None,
+            readonly: false,
+        };
+        registry.save(&session).unwrap();
+        reconcile_detach(&registry, &mut session).unwrap();
+        assert_eq!(session.mapped.as_deref(), Some(mapped.as_str()));
+        verify_mapping(&mapped, &backing).unwrap();
+        close(&mapped).unwrap();
+
+        let mut saved = registry.records().unwrap().pop().unwrap();
+        let mut without_intent = saved.clone();
+        without_intent.netbsd_detach = None;
+        assert!(cleanup(&registry, &mut without_intent).is_err());
+        reconcile_detach(&registry, &mut saved).unwrap();
+        assert!(saved.mapped.is_none() && saved.netbsd_detach.is_none());
+        verify_backing(&backing, &source).unwrap();
+
+        saved.netbsd_detach = Some(DetachIntent::Vnd);
+        registry.save(&saved).unwrap();
+        reconcile_detach(&registry, &mut saved).unwrap();
+        assert_eq!(saved.backing.as_deref(), Some(backing.as_str()));
+        detach_file(&backing).unwrap();
+
+        let mut saved = registry.records().unwrap().pop().unwrap();
+        let mut without_intent = saved.clone();
+        without_intent.netbsd_detach = None;
+        assert!(cleanup(&registry, &mut without_intent).is_err());
+        cleanup(&registry, &mut saved).unwrap();
+        assert!(registry.records().unwrap().is_empty());
+        assert!(saved.identity.matches(&source));
+        assert!(params.is_file());
+        fs::remove_dir_all(work).unwrap();
+    }
     const PARAMS: &str = "algorithm aes-xts;\niv-method encblkno1;\nkeylength 512;\nverify_method ffs;\nkeygen argon2id {iterations 64; memory 42943; parallelism 2; version 19; salt AAAAgOI5SzGcFVKg64hWP3CRq2E=;};";
     #[test]
     fn native_output_is_normalized_and_executable_keygens_rejected() {
