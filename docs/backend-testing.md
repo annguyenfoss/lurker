@@ -47,8 +47,11 @@ fails the suite. The script never supplies sudo/administrator passwords. Native 
 suites outside macOS require running the suite with administrator privileges;
 userspace directory engines must run as the login user.
 
-For a login-user run, add `--firefox /absolute/path/to/firefox` to verify a
-real browser profile on the encrypted mount. The suite launches headless
+Add `--firefox /absolute/path/to/firefox` to verify a real browser profile
+on the encrypted mount. For the Linux privileged container backends, run the
+suite through sudo from the login account. The fixture uses the package's
+invoking-user filesystem ownership and launches Firefox as that user with a
+private process environment. The suite launches headless
 Firefox with a new profile, stores a generated value through a loopback page,
 and checks that a second Firefox process reads it after the vault has closed
 and reopened. The standard 13 cases still run and the report includes the two
@@ -61,6 +64,16 @@ closed. The packaged CLI source was
 `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1` and the harness was
 `ed94676`. Collected results and hashes are under
 `target/browser-profile-qualification/`.
+
+The Debian KVM guest also passed 15 checks each for AES LUKS2, LUKS1 and
+privileged VeraCrypt on the installed `14197ef167f8f40b4393b0c77dfd0672757c102e`
+DEB. Firefox ESR 153.7.0 ran as UID 1300 in a loopback-only network namespace.
+Each profile stored a value and a separate browser process retrieved it
+after close and reopen. All 45 checks passed with zero skips, and the
+test package, mounts, loop devices and disposable encrypted images were
+retired. Harness `9a6a897` also passed its 23 unit checks on Debian. The
+package, CLI, manifest, harness and Firefox SHA-256 values and raw receipts
+are in `target/browser-profile-qualification/debian-privileged-14197ef/`.
 
 For a native API that cannot attach read-only, use
 `--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
