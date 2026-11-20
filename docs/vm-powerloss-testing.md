@@ -539,6 +539,41 @@ inventory was idle after close, and the clone was stopped after package
 removal. Source disk hashes matched. Receipts and consoles are under
 `target/netbsd-cgd-ordinary-synclog-636f6a9/`.
 
+### NetBSD WAPBL inode enrollment in ordinary fsync
+
+The NetBSD 11.1 release kernel source set passed the vendor SHA-512
+check. A networkless NetBSD 11.1 clone ran the native `dbe2ce0` package
+with the ordinary sparse CGD, plain outer FFS and journaled inner FFS
+profile. Native DTrace observed the WAL inode's fsync, inode update,
+WAPBL buffer enrollment and journal flush. The application held open two
+separate SQLite workloads in turn. The comparator changed the explicit
+post-commit WAL call to a nonempty `fsync_range` with `FFILESYNC` alone.
+Both calls entered FFS with the same `FSYNC_WAIT` flag and returned zero.
+
+| WAL call | Native observation | Raw home and active journal inode |
+| --- | --- | ---: |
+| Ordinary whole-file fsync | `ffs_update` enrolled sector 65,712 on the device vnode. The WAL vnode stayed clear of dirty buffers, the device vnode stayed dirty, and no journal flush ran. | 32 bytes each, with 82,432 bytes visible in the mounted WAL |
+| Nonempty `FFILESYNC` range | The WAL vnode again had no dirty buffers. The range call flushed the journal once and drained the device vnode's then-dirty list. | 82,432 bytes each |
+
+The checked source explains the split. `ffs_update` obtains the inode
+block through the device vnode. On WAPBL, the buffer write enrolls it
+through `bdwrite`. The whole-file path then tests the file vnode's dirty
+list before flushing the log. The nonempty range path flushes with the
+same flags even when the file vnode's list is empty. The stock WAPBL
+settings control cache flushes, FUA and journal I/O, and the source has
+no per-mount switch for that whole-file branch. An upstream kernel fix
+would need to account for enrolled inode metadata even on a later
+fsync where `ffs_update` has nothing further to enroll.
+
+This was a live kernel trace with normal SQLite close and CGD detach.
+The installed package was removed, the owned clone stopped, and both
+source disk hashes matched. Source checksums, native trace rows and
+artifact receipts are under `target/netbsd-wapbl-boundary-dbe2ce0/`.
+
+https://cdn.netbsd.org/pub/NetBSD/NetBSD-11.1/source/sets/SHA512
+
+https://cdn.netbsd.org/pub/NetBSD/NetBSD-11.1/source/sets/syssrc.tgz
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
