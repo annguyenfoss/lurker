@@ -7,6 +7,7 @@ use crate::{
     PrivilegeMode, SourceKind, SystemProbe, ToolStatus, UnmountCommand, VolumeType,
 };
 use serde::{Deserialize, Serialize};
+use staging::FileStage;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -17,6 +18,8 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+mod staging;
 
 #[cfg(target_os = "freebsd")]
 mod freebsd;
@@ -67,6 +70,15 @@ struct Identity {
 impl Identity {
     fn read(path: &Path) -> AppResult<Self> {
         let m = fs::metadata(path).map_err(|e| AppError::io("Inspect container identity", e))?;
+        Self::from_metadata(&m)
+    }
+
+    fn from_file(file: &File) -> AppResult<Self> {
+        let m = file.metadata().map_err(|e| AppError::io("Inspect open BSD file identity", e))?;
+        Self::from_metadata(&m)
+    }
+
+    fn from_metadata(m: &fs::Metadata) -> AppResult<Self> {
         if !m.is_file() && !m.is_dir() {
             return Err(AppError::new(
                 "BSD container sources must be regular files or directories.",
@@ -522,37 +534,29 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     let parent = target
         .parent()
         .ok_or_else(|| AppError::new("Container needs a parent directory."))?;
-    let stage = parent.join(format!(".lurker-bsd-{}", unique_id()));
-    fs::create_dir(&stage).map_err(|e| AppError::io("Create staging directory", e))?;
-    fs::set_permissions(&stage, fs::Permissions::from_mode(0o700))
-        .map_err(|e| AppError::io("Protect staging directory", e))?;
-    let source = stage.join("image");
-    let file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .mode(0o600)
-        .open(&source)
-        .map_err(|e| AppError::io("Create staged container", e))?;
-    #[cfg(not(target_os = "dragonfly"))]
-    crate::new_filesystem::assign_file(&file, owner)?;
-    file.set_len(size)
-        .map_err(|e| AppError::io("Size staged container", e))?;
-    #[cfg(target_os = "dragonfly")]
-    let staged = file
-        .metadata()
-        .map_err(|e| AppError::io("Identify staged LUKS1 image", e))?;
+    let mut stage = FileStage::create(parent)?;
+    let source = stage.source();
+    let prepared = (|| -> AppResult<(File, Identity)> {
+        let file = stage.create_image()?;
+        #[cfg(not(target_os = "dragonfly"))]
+        crate::new_filesystem::assign_file(&file, owner)?;
+        file.set_len(size).map_err(|e| AppError::io("Size staged container", e))?;
+        let identity = Identity::from_file(&file)?;
+        Ok((file, identity))
+    })();
+    let (file, identity) = match prepared {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            stage.discard();
+            return Err(error);
+        }
+    };
     let mut session = Session {
         version: 1,
         id: unique_id(),
         backend,
         source: source.clone(),
-        #[cfg(not(target_os = "dragonfly"))]
-        identity: Identity::read(&source)?,
-        #[cfg(target_os = "dragonfly")]
-        identity: Identity {
-            dev: staged.dev(),
-            ino: staged.ino(),
-        },
+        identity,
         backing: None,
         #[cfg(target_os = "dragonfly")]
         dragonfly_backing_reservation: None,
@@ -573,6 +577,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     };
     registry.save(&session)?;
     let initialized = (|| {
+        stage.verify_path()?;
+        verify_session(&session)?;
         #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         if backend == VolumeType::Veracrypt {
             veracrypt::format_with_managed(
@@ -596,10 +602,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         #[cfg(target_os = "freebsd")]
         native::allocate_image(&file, size)?;
         #[cfg(target_os = "dragonfly")]
-        {
-            private_owned(&source, false)?;
-            verify_session(&session)?;
-        }
+        private_owned(&source, false)?;
         #[cfg(target_os = "dragonfly")]
         native::attach_backing(&registry, &mut session)?;
         #[cfg(not(target_os = "dragonfly"))]
@@ -610,14 +613,18 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         verify_session(&session)?;
         let backing = session.backing.as_deref().unwrap();
         #[cfg(target_os = "netbsd")]
-        {
-            native::format(backing, c.cipher, &credential, &params_path(&source))?;
+        let params = {
+            let formatted = native::format(backing, c.cipher, &credential, &params_path(&source));
+            let params = stage.capture_params();
+            formatted?;
+            let params = params?;
             session.mapped = Some(native::unlock_initial(
                 backing,
                 &credential,
                 &params_path(&source),
             )?);
-        }
+            params
+        };
         #[cfg(target_os = "openbsd")]
         {
             session.mapped = Some(native::format(backing, c.cipher, &credential)?);
@@ -638,15 +645,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         // or interrupted newfs must leave an explicitly recoverable mapping.
         initialize_acquired_mapping(&registry, &session, native::make_filesystem)?;
         #[cfg(target_os = "netbsd")]
-        {
-            let params = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .custom_flags(libc::O_NOFOLLOW)
-                .open(params_path(&source))
-                .map_err(|e| AppError::io("Open new CGD recovery parameters", e))?;
-            crate::new_filesystem::assign_file(&params, owner)?;
-        }
+        crate::new_filesystem::assign_file(&params, owner)?;
         initialize_new_filesystem_owner(&registry, &mut session, owner)?;
         Ok(())
     })();
@@ -658,11 +657,11 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
                 .err()
                 .map(|e: AppError| e.message)
                 .unwrap_or_else(|| "Container initialized".into()),
-            stage.display()
+            stage.path().display()
         )));
     }
     if let Err(error) = initialized {
-        let _ = fs::remove_dir_all(&stage);
+        stage.discard();
         return Err(error);
     }
     #[cfg(target_os = "dragonfly")]
@@ -673,11 +672,11 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     file.sync_all()
         .map_err(|e| AppError::io("Sync initialized container", e))?;
     #[cfg(target_os = "netbsd")]
-    publish_cgd(&source, &target)?;
+    stage.publish_cgd(&target, &params_path(&target))?;
     #[cfg(not(target_os = "netbsd"))]
-    publish(&source, &target, c.force)?;
-    sync_directory(parent)?;
-    let _ = fs::remove_dir_all(&stage);
+    stage.publish(&target, c.force)?;
+    stage.sync_destination()?;
+    stage.discard();
     output.success(&format!(
         "Created {backend} file container: {}",
         target.display()
@@ -807,30 +806,6 @@ fn initialize_acquired_mapping(
     registry.save(session)?;
     verify_session(session)?;
     initialize(mapped)
-}
-
-fn publish(source: &Path, target: &Path, force: bool) -> AppResult<()> {
-    if force {
-        fs::rename(source, target).map_err(|e| AppError::io("Publish container", e))
-    } else {
-        fs::hard_link(source, target)
-            .map_err(|e| AppError::io("Publish container without overwriting", e))
-    }
-}
-
-#[cfg(target_os = "netbsd")]
-fn publish_cgd(source: &Path, target: &Path) -> AppResult<()> {
-    let from = params_path(source);
-    let to = params_path(target);
-    File::open(&from)
-        .and_then(|f| f.sync_all())
-        .map_err(|e| AppError::io("Sync CGD parameters", e))?;
-    fs::hard_link(&from, &to).map_err(|e| AppError::io("Publish required CGD parameters", e))?;
-    if let Err(e) = publish(source, target, false) {
-        let _ = fs::remove_file(to);
-        return Err(e);
-    }
-    Ok(())
 }
 
 fn mount(c: MountCommand, output: Output) -> AppResult<()> {
@@ -1801,13 +1776,13 @@ mod tests {
     fn no_clobber_publication_preserves_existing_file() {
         let root = std::env::temp_dir().join(format!("lurker-publish-{}", unique_id()));
         fs::create_dir(&root).unwrap();
-        let source = root.join("source");
+        let mut stage = FileStage::create(&root).unwrap();
         let target = root.join("target");
-        fs::write(&source, "new").unwrap();
+        stage.create_image().unwrap().write_all(b"new").unwrap();
         fs::write(&target, "old").unwrap();
-        assert!(publish(&source, &target, false).is_err());
+        assert!(stage.publish(&target, false).is_err());
         assert_eq!(fs::read_to_string(&target).unwrap(), "old");
-        publish(&source, &target, true).unwrap();
+        stage.publish(&target, true).unwrap();
         assert_eq!(fs::read_to_string(&target).unwrap(), "new");
         fs::remove_dir_all(root).unwrap();
     }
