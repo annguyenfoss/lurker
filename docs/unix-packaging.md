@@ -264,6 +264,21 @@ report 1.98.1 with native port builds. Those ports have separate build
 recipes. The upstream archives, signatures and verification logs are
 under `target/goal-validation/rust-toolchain-sources/`.
 
+Arch KVM assembled the exact stock installer revision `14ede46` with
+230 tracked project files and all 588 locked registry crates. Extract
+verification checked 27,858 vendored files. With empty Cargo homes and
+offline locking, metadata resolved 592 packages, the workspace check
+passed, and tests reported 136 passed, zero failed and 13 ignored.
+The archive SHA-256 is
+`ae165f0028c0fe7c386db468c55b8e03c2bce462d2f7c88f5d0bfb86c5671cf2`.
+
+The same source archive rebuilt a normal portable LUKS2 package. On a
+stock, isolated Arch guest the package passed all 13 lifecycle checks,
+including synced file and SQLite read-back after close and reopen.
+Package, mount, loop and mapper inventories were restored and the
+guest was retired. The source, package bindings and runtime receipts
+are under `target/goal-validation/rust-corresponding-source/exact-stock-14ede46/`.
+
 Native and JVM engines and their dependencies have separate source inputs.
 
 https://doc.rust-lang.org/cargo/commands/cargo-vendor.html
