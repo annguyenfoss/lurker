@@ -107,6 +107,24 @@ workspace checks passed again. The exact DragonFly package passed 13
 installed AES Auto checks and left no staging directory behind. Logs
 and the package receipt are under `target/goal-validation/bsd-publish-cleanup/`.
 
+`b68c8b1` records the requested destination of interrupted BSD file
+creates. Explicit unmount can find the session by that path while it
+is still absent, verify the staged image and native devices, and close
+the session. The command reports where the unpublished image remains.
+The native NetBSD and OpenBSD tests used disposable mapped images,
+injected a filesystem initialization failure, and verified close by
+the requested path and restoration of the prior device inventories.
+Locked workspace checks on all four BSDs passed with 416 tests and 35
+ignored. Logs are under `target/goal-validation/bsd-create-recovery/`.
+
+`69299a9` syncs the destination directory after publishing the CGD
+parameter name and before linking the image. A failed barrier or image
+link rolls back the owned sidecar. The NetBSD workspace passed 98 tests
+with four ignored, including an injected barrier failure and an image
+name collision. A cut between the two name publications can leave only
+the sidecar. Evidence is under
+`target/goal-validation/netbsd-cgd-publication-barrier/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
