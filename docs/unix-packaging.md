@@ -300,10 +300,21 @@ are under `target/goal-validation/maven-source-8bb689c/`.
 
 The CryFS bundle contains all four locked dependency archives, the six
 matching Conan recipe exports and the locked B2 and CMake build inputs.
-The CMake executable matched the qualified producer. A cold offline
-rebuild still needs Conan's Python dependencies and the native compiler
-and FUSE development tools. See
-`target/goal-validation/cryfs-conan-sources-8bb689c/`.
+The retained CMake executable matched the qualified producer. On an
+isolated Debian KVM guest, a build starting with an empty Conan cache
+rebuilt the `8bb689c` package's CryFS 1.0.3 engine with only loopback
+available. The build used the retained Conan Python dependencies and
+verified Debian compiler, FUSE, CMake 3.31.6, and libcurl development
+packages. The build log retains the missing CMake and libcurl
+prerequisite failures and their offline retries.
+
+The rebuilt engine passed all 13 login-user lifecycle checks through
+the package's normal backend lookup, including file and SQLite
+persistence after reopen. The rebuilt and shipped executables have
+different SHA-256 hashes and embed different absolute build paths.
+Build and runtime evidence is under
+`target/goal-validation/cryfs-offline-rebuild-8bb689c/`. The dependency
+archive hashes remain under `target/goal-validation/cryfs-conan-sources-8bb689c/`.
 
 The four relocated Arch libraries are libfuse3, libnuma, liburing and zlib.
 Their upstream archives matched the checksums in the exact Arch package
