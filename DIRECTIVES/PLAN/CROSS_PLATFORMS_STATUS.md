@@ -68,6 +68,13 @@ unit numbers cannot authorize detach of a later attachment. The exact
 native CLI package passed 91 installed lifecycle checks across all
 three LUKS1 ciphers, passwords and binary keyfiles, including Auto.
 
+`685f428` extends the same DragonFly reservation to the private LUKS1
+metadata vnode. Recovery checks the recorded devfs generation and backing
+inode. The native regression recovered the reserved attachment while
+preserving another vnode attached to the same file, including on retry.
+Older journals retain their validated inode discovery. The DragonFly
+workspace passed 94 tests with four ignored.
+
 ## Native BSD container staging
 
 `e607cc7` creates the staging directory privately and anchors image
