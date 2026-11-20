@@ -122,6 +122,14 @@ browser launch crashed with no available fonts. The replay passed with
 signed native DejaVu font packages installed in the disposable guest.
 Evidence is under `target/freebsd-browser-profile/`.
 
+The exact `e607cc7` package also passed 15 checks each on stock NetBSD
+11.1 CGD and DragonFly 6.4.2 AES LUKS1. Firefox ran as UID 1300 with
+loopback-only access and both vaults preserved their profile data across
+close and reopen. NetBSD used official SHA-512-verified package inputs.
+DragonFly used matching official DPorts catalogs and checksum-verified
+archives. Receipts are under `target/netbsd-firefox-e607cc7/replay/` and
+`target/dragonfly-firefox-e607cc7/`.
+
 The same isolated browser environment at `b9117eb` passed 15 checks
 on the installed Debian `14197ef` LUKS2 package. Firefox ESR 153.7.0
 ran as UID 1300 in a loopback-only namespace and recovered the profile
