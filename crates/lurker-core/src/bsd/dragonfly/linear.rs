@@ -452,8 +452,21 @@ mod tests {
         assert!(live.is_err(), "an unrelated live vnode must be preserved");
 
         // Model a native detach that completed just before its journal write.
-        let device = attach_file(&private, false).unwrap();
+        let earlier = attach_file(&source, false).unwrap();
+        let device = match attach_file(&private, false) {
+            Ok(device) => device,
+            Err(error) => {
+                detach_file(&earlier).unwrap();
+                panic!("{error}");
+            }
+        };
+        let discovered =
+            detach_file(&earlier).and_then(|()| super::super::attached_private_copy(&private));
+        let gap = !Path::new(&earlier).exists()
+            && earlier[7..].parse::<u32>().unwrap() < device[7..].parse::<u32>().unwrap();
         detach_file(&device).unwrap();
+        assert!(gap, "the fixture must leave a gap before the private vnode");
+        assert_eq!(discovered.unwrap().as_deref(), Some(device.as_str()));
         session.dragonfly_layer.as_mut().unwrap().backing = Some(device);
         session.dragonfly_layer.as_mut().unwrap().detach_requested = false;
         registry.save(&session).unwrap();

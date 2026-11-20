@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::os::raw::{c_int, c_ulong};
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::path::Path;
 
 pub(super) mod linear;
@@ -38,7 +38,7 @@ fn mapping_name(device: &str) -> AppResult<&str> {
 pub(super) fn attach_file(path: &Path, _readonly: bool) -> AppResult<String> {
     // Autocloning reserves a new unit in-kernel. Never choose an apparently
     // unused unit using a racy list-then-attach sequence. vnconfig has no
-    // read-only backing option; the crypto mapping enforces read-only access.
+    // read-only backing option; the mapper and filesystem request read-only access.
     let output = exec(VNCONFIG, &["vn".into(), path.as_os_str().into()], None)?;
     let name = vnode_name(output.trim())?;
     Ok(format!("/dev/{name}"))
@@ -57,10 +57,7 @@ fn backing_inactive(device: &str) -> AppResult<bool> {
     match std::fs::symlink_metadata(format!("/dev/{name}")) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
         Err(error) => Err(AppError::io("Inspect recorded DragonFly vnode", error)),
-        Ok(_) => {
-            let status = exec(VNCONFIG, &args(&["-l", name]), None)?;
-            Ok(status.trim() == format!("{name}: not in use"))
-        }
+        Ok(_) => Ok(matches!(vnode_state(name)?, VnodeState::Idle)),
     }
 }
 
@@ -199,13 +196,31 @@ unsafe extern "C" {
     fn vnode_ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
 }
 
-fn vnode_identity(device: &str) -> AppResult<(u64, u64)> {
+#[derive(PartialEq, Eq)]
+enum VnodeState {
+    Idle,
+    Swap,
+    File(u64, u64),
+}
+
+fn vnode_state(device: &str) -> AppResult<VnodeState> {
     let name = vnode_name(device)?;
     let expected_unit = name[2..]
         .parse::<c_int>()
         .map_err(|_| AppError::new("DragonFly vnode unit is out of range."))?;
-    let descriptor = File::open(format!("/dev/{name}"))
+    let descriptor = File::options()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(format!("/dev/{name}"))
         .map_err(|e| AppError::io("Failed to open DragonFly vnode identity", e))?;
+    if !descriptor
+        .metadata()
+        .map_err(|e| AppError::io("Inspect DragonFly vnode descriptor", e))?
+        .file_type()
+        .is_char_device()
+    {
+        return Err(AppError::new("DragonFly vnode is not a character device."));
+    }
     // All members are integer or byte-array values; zero initializes the unions
     // as well as padding before the kernel copies the complete structure back.
     let mut info: VnodeUser = unsafe { std::mem::zeroed() };
@@ -219,14 +234,20 @@ fn vnode_identity(device: &str) -> AppResult<(u64, u64)> {
             std::io::Error::last_os_error(),
         ));
     }
-    if info.unit != expected_unit || info.file[0] == 0 || info.file.starts_with(b"swap\0") {
+    if info.unit != expected_unit {
         return Err(AppError::new(
-            "DragonFly vnode is not this attached file; preserving the session.",
+            "DragonFly vnode unit changed; preserving the session.",
         ));
+    }
+    if info.file[0] == 0 {
+        return Ok(VnodeState::Idle);
+    }
+    if info.file.starts_with(b"swap\0") {
+        return Ok(VnodeState::Swap);
     }
     // SAFETY: VNIOCGET succeeded for a file-backed vnode; sys/vnioctl.h
     // specifies the dev/ino arms for this configuration (not size/secsize).
-    Ok(unsafe { (u64::from(info.device.dev), info.inode.ino) })
+    Ok(unsafe { VnodeState::File(u64::from(info.device.dev), info.inode.ino) })
 }
 
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
@@ -234,8 +255,9 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
         .map_err(|e| AppError::io("Failed to inspect DragonFly backing file", e))?;
     // Kernel device/inode identity is independent of reconstructed pathnames
     // and does not require the backing filesystem to have a /dev entry.
-    let (dev, inode) = vnode_identity(device)?;
-    if !metadata.is_file() || dev != metadata.dev() || inode != metadata.ino() {
+    if !metadata.is_file()
+        || vnode_state(device)? != VnodeState::File(metadata.dev(), metadata.ino())
+    {
         return Err(AppError::new(
             "DragonFly vnode no longer identifies this container; preserving the session.",
         ));
@@ -246,16 +268,20 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
 fn attached_private_copy(path: &Path) -> AppResult<Option<String>> {
     let metadata = std::fs::metadata(path)
         .map_err(|e| AppError::io("Inspect private DragonFly vnode backing", e))?;
-    let expected = (metadata.dev(), metadata.ino());
-    let listing = exec(VNCONFIG, &args(&["-l"]), None)?;
+    let expected = VnodeState::File(metadata.dev(), metadata.ino());
+    // vnconfig's bulk listing stops at the first missing unit and continues
+    // past failed kernel queries. Inspect every existing device by descriptor.
+    let devices = std::fs::read_dir("/dev")
+        .map_err(|e| AppError::io("List DragonFly vnode devices", e))?;
     let mut found = None;
-    for line in listing.lines() {
-        let Some((name, _)) = line.split_once(':') else {
+    for device in devices {
+        let name = device
+            .map_err(|e| AppError::io("Read DragonFly device entry", e))?
+            .file_name();
+        let Some(name) = name.to_str() else {
             continue;
         };
-        if vnode_name(name).is_ok()
-            && vnode_identity(name).is_ok_and(|identity| identity == expected)
-        {
+        if vnode_name(name).is_ok() && vnode_state(name)? == expected {
             if found.is_some() {
                 return Err(AppError::new(
                     "Multiple vnodes cover the private LUKS1 metadata.",
