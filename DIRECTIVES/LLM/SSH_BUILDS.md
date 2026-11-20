@@ -11,6 +11,45 @@ Read `CODEBASE.md`, `../PLAN/CROSS_PLATFORMS.md` and
 `../../docs/remote-testing.md`. The latter documents the runner's actual
 capabilities and historical results; this file explains operating discipline.
 
+## Batch failure investigation, fixes and validation
+
+Earlier qualification cycled through rebuilds and broad retests as individual
+issues surfaced. Once the clean-install baseline passed, many follow-up checks
+could run against that existing build. For example, the six stock Linux guests
+ran all 54 loop-device profiles against the existing `14ede46` installers.
+Use the following workflow to reduce the number of expensive build cycles.
+
+1. **Freeze a baseline and collect failures together.** Record the source
+   revision, artifact hashes, and relevant guest and fixture details. Run the
+   relevant lifecycle and failure cases against the same artifacts, using
+   separate fixtures for cases that change storage or guest state. Run
+   independent cases in parallel on separate KVM guests or disposable clones
+   within the storage and concurrency limits below. Preserve each case's
+   expected result, observed result, and logs. Continue independent checks
+   after an isolated failure. If a shared prerequisite fails, record the cases
+   it blocks and continue the other jobs.
+2. **Batch compatible fixes.** Identify whether each finding needs a product,
+   backend, package, or harness change. Group fixes that share build inputs or
+   validation coverage. Keep commits atomic and run the checks required for
+   each change. Schedule expensive builds and native regression checks for the
+   batch when possible. An early targeted build is appropriate when a case
+   needs a changed binary to diagnose the fault or unblock other checks.
+3. **Build one candidate for the batch.** Freeze one source commit containing
+   the batch and build each affected artifact once per required target and
+   toolchain. Reuse verified build outputs whose inputs still match. A
+   harness-only change can test the same installer. A packaging-only change
+   can restage or repackage verified binaries when their inputs and provenance
+   still match. Record the artifact hashes and use those exact outputs for
+   every applicable test stage.
+4. **Validate the batch and report the milestone.** Run the targeted
+   regressions together, then qualify the affected platforms and workflows
+   with that candidate. Scope a follow-up rerun to the inputs and behavior that
+   changed. Run the broader matrix when shared changes affect it and the full
+   required matrix for a final candidate. Report fixes, per-platform results,
+   blockers, and evidence as each milestone lands. Queue new findings for the
+   next batch unless they invalidate the current results or block a required
+   check.
+
 ## One scripted job, bounded results
 
 1. Inspect the working tree/index and relevant directives. Preserve unrelated
