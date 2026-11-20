@@ -672,6 +672,26 @@ console logs, package inventory and window capture are under
 
 https://cdn.netbsd.org/pub/NetBSD/images/11.1/SHA512
 
+### NetBSD CGD create recovery and publication
+
+KVM run `20261120T024124Z-0c2c4071` produced the exact `69299a9` native
+package. Installed on a fresh stock NetBSD 11.1 amd64 guest, it passed
+13 explicit and 13 Auto CGD cases, including file and SQLite persistence.
+Both routes published private parameter files. A pre-existing orphan
+sidecar remained intact, and a late image collision preserved the foreign
+inode and rolled back the parameter link created by Lurker.
+
+The test killed its helper after it journaled both device identities.
+Ordinary Auto `unmount` found the interrupted create by its unpublished
+destination. It refused a replaced staging inode, then detached CGD and
+vnd and reported the retained staged image after the test restored the
+original inode. Seven retry cases at the same destination passed. NetBSD
+`ktrace` recorded the parameter link, a successful `fsync` on the
+destination directory descriptor, and then the image link. Package removal,
+shutdown, and disk retirement completed. The installer, syscall trace,
+and lifecycle receipts are under
+`target/netbsd-cgd-destination/`.
+
 ## Coordinated OpenBSD native package
 
 OpenBSD 8.0 amd64 built and checked workspace source
