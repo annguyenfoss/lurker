@@ -722,3 +722,32 @@ restored the native mount, mapper, vnode, and session inventories.
 The package SHA-256 is
 `4826e6be6f4adcc2ca29dd850d769a25c2c5ff6fa35608f2e5425d37d63fe948`.
 Evidence is under `target/goal-validation/dragonfly-source-detach/`.
+
+### DragonFly vnode discovery and native timeout
+
+On DragonFly 6.4.2 KVM, the root-only regression attached two vnodes,
+detached the lower unit, and found the private metadata file on the
+remaining higher unit by its kernel device and inode. It also exercised
+close with a stale journal entry and verified that an unrelated live
+vnode was preserved. The change is in `8f07cae`.
+
+The `dc458b6` regression exercised SIGINT cleanup and the SIGKILL
+fallback against native shell children. The production path gives
+`luksFormat` and `luksOpen` up to five seconds for native cleanup after
+the usual timeout. DragonFly workspace checks passed with 93 tests
+passing and four ignored. The two focused checks also passed on the
+root-run test binary. The same source passed core checks and tests on
+FreeBSD, NetBSD, and OpenBSD in run `20261120T005444Z-4603539b`.
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/contrib/cryptsetup/luks/keyencryption.c
+
+The exact `dc458b6` CLI package passed all 91 installed lifecycle checks
+across AES, Serpent, and Twofish with passwords and binary keyfiles,
+including an Auto AES run. Each suite created a vault, wrote application
+data, and reopened it to verify the data. The first keyfile invocation
+stopped at a missing harness import. The remaining suites ran after
+adding the harness module and reverifying native checksums on the same
+installation. Package removal restored the mount, vnode, mapper, and
+session inventories. The package SHA-256 is
+`18ad430a0bd62516cff531fe1256952073c0fce87e28de538102862604b4515c`.
+Receipts are under `target/goal-validation/dragonfly-graceful-timeout/`.
