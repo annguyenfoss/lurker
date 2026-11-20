@@ -50,6 +50,20 @@ pub(super) fn detach_file(device: &str) -> AppResult<()> {
     Ok(())
 }
 
+fn backing_inactive(device: &str) -> AppResult<bool> {
+    let name = vnode_name(device)?;
+    // The kernel removes autoclones when their last descriptor closes.
+    // Preallocated units still have a device node when they are idle.
+    match std::fs::symlink_metadata(format!("/dev/{name}")) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(AppError::io("Inspect recorded DragonFly vnode", error)),
+        Ok(_) => {
+            let status = exec(VNCONFIG, &args(&["-l", name]), None)?;
+            Ok(status.trim() == format!("{name}: not in use"))
+        }
+    }
+}
+
 fn credential_args(credential: &Credential) -> (Vec<OsString>, Option<Vec<u8>>) {
     match credential {
         Credential::Password(password) => {

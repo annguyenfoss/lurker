@@ -16,6 +16,8 @@ const DMSETUP: &str = "/sbin/dmsetup";
 pub(in crate::bsd) struct Layer {
     identity: Option<Identity>,
     backing: Option<String>,
+    #[serde(default)]
+    detach_requested: bool,
     composite_requested: bool,
     activation_requested: bool,
     metadata_sectors: u64,
@@ -106,6 +108,7 @@ pub(in crate::bsd) fn bind(registry: &Registry, session: &mut Session) -> AppRes
     session.dragonfly_layer = Some(Layer {
         identity: None,
         backing: None,
+        detach_requested: false,
         composite_requested: false,
         activation_requested: false,
         metadata_sectors: geometry.metadata,
@@ -206,18 +209,7 @@ pub(in crate::bsd) fn reconcile_activation(
     registry: &Registry,
     session: &mut Session,
 ) -> AppResult<()> {
-    if let Some(layer) = &session.dragonfly_layer {
-        if let Some(identity) = &layer.identity {
-            let path = metadata_path(&registry.directory, session)?;
-            if layer.backing.is_none() && identity.matches(&path) {
-                private_owned(&path, false)?;
-                if let Some(backing) = super::attached_private_copy(&path)? {
-                    session.dragonfly_layer.as_mut().unwrap().backing = Some(backing);
-                    registry.save(session)?;
-                }
-            }
-        }
-    }
+    reconcile_private_backing(registry, session)?;
     if !session
         .dragonfly_layer
         .as_ref()
@@ -243,6 +235,40 @@ pub(in crate::bsd) fn reconcile_activation(
         registry.save(session)?;
     }
     Ok(())
+}
+
+fn reconcile_private_backing(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    let Some(layer) = &session.dragonfly_layer else {
+        return Ok(());
+    };
+    let Some(identity) = &layer.identity else {
+        return Ok(());
+    };
+    let path = metadata_path(&registry.directory, session)?;
+    if !identity.matches(&path) {
+        return Ok(());
+    }
+    private_owned(&path, false)?;
+    let next = match &layer.backing {
+        Some(backing)
+            if layer.detach_requested
+                && !layer.composite_requested
+                && session.mapped.is_none()
+                && session.mounted.is_none()
+                && super::backing_inactive(backing)? =>
+        {
+            None
+        }
+        None if !layer.detach_requested => {
+            let Some(backing) = super::attached_private_copy(&path)? else {
+                return Ok(());
+            };
+            Some(backing)
+        }
+        _ => return Ok(()),
+    };
+    session.dragonfly_layer.as_mut().unwrap().backing = next;
+    registry.save(session)
 }
 
 pub(in crate::bsd) fn crypto_backing<'a>(
@@ -349,8 +375,10 @@ pub(in crate::bsd) fn release(registry: &Registry, session: &mut Session) -> App
             .composite_requested = false;
         registry.save(session)?;
     }
-    if let Some(backing) = &session.dragonfly_layer.as_ref().unwrap().backing {
-        detach_file(backing)?;
+    if let Some(backing) = session.dragonfly_layer.as_ref().unwrap().backing.clone() {
+        session.dragonfly_layer.as_mut().unwrap().detach_requested = true;
+        registry.save(session)?;
+        detach_file(&backing)?;
         session.dragonfly_layer.as_mut().unwrap().backing = None;
         registry.save(session)?;
     }
@@ -362,4 +390,83 @@ pub(in crate::bsd) fn release(registry: &Registry, session: &mut Session) -> App
     }
     session.dragonfly_layer = None;
     registry.save(session)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::DirBuilderExt;
+
+    #[test]
+    #[ignore = "requires root on DragonFly; allocates a disposable vnode and journal"]
+    fn native_metadata_detach_retry_requires_intent_and_inactive_unit() {
+        crate::bsd::require_root().unwrap();
+        let id = crate::bsd::unique_id();
+        let directory = std::env::temp_dir().join(format!("lurker-metadata-close-{id}"));
+        fs::DirBuilder::new().mode(0o700).create(&directory).unwrap();
+        let source = directory.join("image");
+        File::create(&source).unwrap().set_len(4096).unwrap();
+        let registry = Registry {
+            directory: directory.clone(),
+            _lock: File::create(directory.join("lock")).unwrap(),
+        };
+        let mut session = Session {
+            version: 1,
+            id,
+            backend: crate::VolumeType::Luks1,
+            source: source.clone(),
+            peer_sources: Vec::new(),
+            identity: Identity::read(&source).unwrap(),
+            backing: None,
+            dragonfly_layer: None,
+            mapped: None,
+            mounted: None,
+            intended_mountpoint: None,
+            initialization_directory: None,
+            readonly: false,
+        };
+        let private = metadata_path(&directory, &session).unwrap();
+        OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&private)
+            .unwrap()
+            .set_len(1024)
+            .unwrap();
+        let identity = Identity::read(&private).unwrap();
+        let device = attach_file(&source, false).unwrap();
+        session.dragonfly_layer = Some(Layer {
+            identity: Some(identity),
+            backing: Some(device.clone()),
+            detach_requested: true,
+            composite_requested: false,
+            activation_requested: false,
+            metadata_sectors: 2,
+            total_sectors: 8,
+        });
+        let live = reconcile_activation(&registry, &mut session)
+            .and_then(|()| verify(&directory, &session));
+        detach_file(&device).unwrap();
+        assert!(live.is_err(), "an unrelated live vnode must be preserved");
+
+        // Model a native detach that completed just before its journal write.
+        let device = attach_file(&private, false).unwrap();
+        detach_file(&device).unwrap();
+        session.dragonfly_layer.as_mut().unwrap().backing = Some(device);
+        session.dragonfly_layer.as_mut().unwrap().detach_requested = false;
+        registry.save(&session).unwrap();
+        reconcile_activation(&registry, &mut session).unwrap();
+        assert!(verify(&directory, &session).is_err());
+        assert!(private.exists());
+        session.dragonfly_layer.as_mut().unwrap().detach_requested = true;
+        registry.save(&session).unwrap();
+        let mut restarted = registry.records().unwrap().pop().unwrap();
+        reconcile_activation(&registry, &mut restarted).unwrap();
+        release(&registry, &mut restarted).unwrap();
+        assert!(restarted.dragonfly_layer.is_none());
+        assert!(!private.exists());
+        drop(registry);
+        fs::remove_dir_all(directory).unwrap();
+    }
 }
