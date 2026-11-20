@@ -466,6 +466,52 @@ All clones were stopped after their owned mappings and packages were
 removed. The source disk hashes matched their starting values. Receipts
 and consoles are under `target/netbsd-cgd-plain-0105a83/`.
 
+### NetBSD CGD journal contents and native replay paths
+
+The installed native package from
+`636f6a986ce8621eb71b6e8f12dc9b944605a0d7`
+(`0e5cb22be1ab6518bf7b8e226d291cc06c89565ab9d56f57d311030d74e06b67`)
+used new networkless NetBSD 11.1 clones with sparse CGD on plain outer
+FFSv2 and WAPBL active inside. The native probe decoded the newest
+WAPBL header's active record range on the raw read-only CGD device.
+It tracked the WAL inode's home sector through block records and
+revocations using the NetBSD 11 replay format.
+
+| Phase | Raw WAL home inode | WAL inode copy in the active journal |
+| --- | ---: | ---: |
+| Ordinary application fsync with 82,432 live WAL bytes | 32 bytes | 32 bytes, generation 6 |
+| After a nonempty WAL range fsync | 82,432 bytes | 82,432 bytes, generation 7 |
+| After KVM cutoff, before FFS replay | 32 bytes | 82,432 bytes, generation 7 |
+| After a separate cut with a backing-file range flush and leaf disk flush | 82,432 bytes | 82,432 bytes, generation 7 |
+
+For the range-only cut, generation 7 retained a block record at
+offset 59,392 that covered the WAL inode at sector 176. The journal copy
+contained the 82,432-byte length and first fragment 2,128, with no later
+revocation. Read-only FFS replay still exposed a 32-byte WAL and omitted
+the committed SQLite table. The file digest and SQLite integrity check
+passed. The backing-file range and disk flush control also preserved the
+current home inode, and read-only reopen recovered the committed BLOB.
+
+On another range-only cut, the native read-only mount reproduced that
+result. The harness copied the ciphertext and parameter sidecar from the
+read-only source disk to a dedicated writable plain FFS disk. The
+ciphertext copies were byte-identical and each occupied 1,248 sectors.
+The normal writable CGD mount on the duplicate reported journal replay
+to disk and recovered an 82,432-byte WAL. The payload matched its digest,
+the committed BLOB matched the payload, SQLite integrity passed, and
+the uncommitted row stayed absent. This distinguishes persistence of the
+committed record from its visibility through read-only replay. The
+ordinary app fsync observation still has the old inode in both locations,
+so writable replay alone does not qualify that durability gate.
+
+All mounts and native mappings closed normally, packages were removed,
+and the three owned clones shut down. Source disk hashes matched their
+pretest values. Evidence is in `target/netbsd-cgd-journal-636f6a9/`.
+
+https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/kern/vfs_wapbl.c
+
+https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/ufs/ffs/ffs_vfsops.c
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
