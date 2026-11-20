@@ -572,6 +572,22 @@ its package, module, mount, md and session inventories before retirement.
 The backup was private (mode 0600), and the evidence contains hashes and
 operation statuses. Receipts are under `target/freebsd-geli-metadata/`.
 
+### FreeBSD package after GELI detach journaling
+
+FreeBSD 15.1-RELEASE-p6 built the native GELI CLI and helper from
+`0dd174c68ae29de41c3fef5d82b04eeb204babec` in run
+`20261120T041724Z-3a163234`. The package installed offline in a
+disposable KVM guest using FreeBSD base tools. Both explicit GELI and
+Auto passed 13 checks each. They created a 128 MiB vault, synced files
+and committed SQLite FULL/WAL data, and verified readback after a clean
+close and reopen. The guest restored its package, kernel module, mount,
+md, GELI and session inventories before retirement.
+
+The native package SHA-256 is
+`749a0a0384347a0d10b2ffa4cb4bece97dd7224014b041392da2a917d4ba00ad`.
+The installer, build and runtime receipts, and command logs are under
+`target/freebsd-geli-detach/`.
+
 ## Resumed NetBSD package qualification
 
 NetBSD 11.1 amd64 passed 26 packaged CGD checks with no failures or skips at
