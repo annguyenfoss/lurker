@@ -394,7 +394,7 @@ pub(in crate::bsd) fn release(registry: &Registry, session: &mut Session) -> App
 
 #[cfg(test)]
 mod tests {
-    use super::super::{BackingReservation, change_attachment};
+    use super::super::{BackingReservation, VnodeChange, change_attachment};
     use super::*;
     use std::os::unix::fs::DirBuilderExt;
 
@@ -502,7 +502,7 @@ mod tests {
         restarted.dragonfly_backing_reservation = Some(reservation);
         registry.save(&restarted).unwrap();
         let native_path = std::ffi::CString::new(source.as_os_str().as_encoded_bytes()).unwrap();
-        change_attachment(&descriptor, Some(&native_path)).unwrap();
+        change_attachment(&descriptor, VnodeChange::AttachFile(&native_path)).unwrap();
         drop(descriptor);
         let mut recording = registry.records().unwrap().pop().unwrap();
         crate::bsd::cleanup(&registry, &mut recording).unwrap();
@@ -521,6 +521,42 @@ mod tests {
         assert!(refused);
         retained.unwrap();
         assert_eq!(registry.records().unwrap().len(), 1);
+        crate::bsd::cleanup(&registry, &mut stale).unwrap();
+        assert!(registry.records().unwrap().is_empty());
+
+        // A still-open descriptor makes native detach busy after the empty
+        // clone has been activated. Retry from the saved one-page intent.
+        let (reservation, held) = BackingReservation::reserve().unwrap();
+        let empty = reservation.device();
+        restarted.dragonfly_backing_reservation = Some(reservation);
+        registry.save(&restarted).unwrap();
+        let mut active = registry.records().unwrap().pop().unwrap();
+        let busy = crate::bsd::cleanup(&registry, &mut active);
+        drop(held);
+        assert!(busy.is_err(), "an open descriptor must hold the native clone");
+        let mut retry = registry.records().unwrap().pop().unwrap();
+        assert!(
+            retry
+                .dragonfly_backing_reservation
+                .as_ref()
+                .unwrap()
+                .empty_release_started
+        );
+        crate::bsd::cleanup(&registry, &mut retry).unwrap();
+        assert!(!Path::new(&empty).exists());
+        assert!(registry.records().unwrap().is_empty());
+
+        // A native anonymous vnode without our cleanup intent stays attached.
+        let (reservation, descriptor) = BackingReservation::reserve().unwrap();
+        let unrelated = reservation.device();
+        restarted.dragonfly_backing_reservation = Some(reservation);
+        registry.save(&restarted).unwrap();
+        change_attachment(&descriptor, VnodeChange::AttachPage).unwrap();
+        drop(descriptor);
+        let mut stale = registry.records().unwrap().pop().unwrap();
+        let refused = crate::bsd::cleanup(&registry, &mut stale).is_err();
+        detach_file(&unrelated).unwrap();
+        assert!(refused);
         crate::bsd::cleanup(&registry, &mut stale).unwrap();
         assert!(registry.records().unwrap().is_empty());
         assert!(source.exists());

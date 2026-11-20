@@ -52,6 +52,8 @@ pub(super) struct BackingReservation {
     unit: c_int,
     node: Identity,
     changed_at: (i64, i64),
+    #[serde(default)]
+    empty_release_started: bool,
 }
 
 impl BackingReservation {
@@ -71,6 +73,7 @@ impl BackingReservation {
                     ino: node.ino(),
                 },
                 changed_at: (node.ctime(), node.ctime_nsec()),
+                empty_release_started: false,
             },
             descriptor,
         ))
@@ -96,7 +99,7 @@ pub(super) fn attach_backing(registry: &Registry, session: &mut Session) -> AppR
     // Save the exact clone before attaching to it on the same descriptor.
     session.dragonfly_backing_reservation = Some(reservation);
     registry.save(session)?;
-    change_attachment(&descriptor, Some(&path))?;
+    change_attachment(&descriptor, VnodeChange::AttachFile(&path))?;
     let expected = VnodeState::File(session.identity.dev, session.identity.ino);
     if descriptor_state(&descriptor)? != (unit, expected) {
         return Err(AppError::new("DragonFly attached a different backing file."));
@@ -110,7 +113,7 @@ pub(super) fn reconcile_backing_reservation(
     registry: &Registry,
     session: &mut Session,
 ) -> AppResult<()> {
-    let Some(reservation) = &session.dragonfly_backing_reservation else {
+    let Some(reservation) = session.dragonfly_backing_reservation.as_mut() else {
         return Ok(());
     };
     if reservation.unit < 0
@@ -133,16 +136,23 @@ pub(super) fn reconcile_backing_reservation(
                 ));
             }
             match state {
-                VnodeState::Idle => (),
-                VnodeState::File(dev, ino)
-                    if dev == session.identity.dev && ino == session.identity.ino =>
-                {
-                    change_attachment(&descriptor, None)?;
+                VnodeState::Idle => {
+                    // The native driver requires an active attachment before
+                    // it will destroy a clone. Journal the one-page anonymous
+                    // object before creating it so a retry can finish release.
+                    reservation.empty_release_started = true;
+                    registry.save(session)?;
+                    change_attachment(&descriptor, VnodeChange::AttachPage)?;
                 }
+                VnodeState::Swap(1) if reservation.empty_release_started => (),
+                VnodeState::File(dev, ino)
+                    if !reservation.empty_release_started
+                        && dev == session.identity.dev && ino == session.identity.ino => (),
                 _ => return Err(AppError::new(
                     "DragonFly vnode reservation has a different backing; preserving the journal.",
                 )),
             }
+            change_attachment(&descriptor, VnodeChange::Detach)?;
         }
         Err(e) if e.kind() == io::ErrorKind::NotFound => (),
         Err(e) => return Err(AppError::io("Open recorded DragonFly vnode reservation", e)),
@@ -316,8 +326,14 @@ unsafe extern "C" {
 #[derive(PartialEq, Eq)]
 enum VnodeState {
     Idle,
-    Swap,
+    Swap(u64),
     File(u64, u64),
+}
+
+enum VnodeChange<'a> {
+    AttachFile(&'a CStr),
+    AttachPage,
+    Detach,
 }
 
 fn open_vnode(path: &str) -> io::Result<File> {
@@ -337,12 +353,13 @@ fn device_metadata(descriptor: &File) -> AppResult<Metadata> {
     Ok(metadata)
 }
 
-fn change_attachment(descriptor: &File, path: Option<&CStr>) -> AppResult<()> {
-    let (operation, path) = match path {
-        Some(path) => (VNIOCATTACH, path.as_ptr()),
-        None => (VNIOCDETACH, std::ptr::null()),
+fn change_attachment(descriptor: &File, change: VnodeChange<'_>) -> AppResult<()> {
+    let (operation, path, size) = match change {
+        VnodeChange::AttachFile(path) => (VNIOCATTACH, path.as_ptr(), 0),
+        VnodeChange::AttachPage => (VNIOCATTACH, std::ptr::null(), 1),
+        VnodeChange::Detach => (VNIOCDETACH, std::ptr::null(), 0),
     };
-    let mut request = VnodeAttachment { path, size: 0 };
+    let mut request = VnodeAttachment { path, size };
     // SAFETY: the request matches the kernel ABI. The live descriptor and
     // optional NUL-terminated pathname remain valid for the synchronous ioctl.
     if unsafe { vnode_ioctl(descriptor.as_raw_fd(), operation, &mut request as *mut VnodeAttachment) }
@@ -373,7 +390,8 @@ fn descriptor_state(descriptor: &File) -> AppResult<(c_int, VnodeState)> {
     let state = if info.file[0] == 0 {
         VnodeState::Idle
     } else if info.file.starts_with(b"swap\0") {
-        VnodeState::Swap
+        // SAFETY: VNIOCGET marks anonymous backing and returns its page count.
+        unsafe { VnodeState::Swap(info.device.size) }
     } else {
         // SAFETY: VNIOCGET succeeded for a file-backed vnode; sys/vnioctl.h
         // specifies the dev/ino arms for this configuration (not size/secsize).
