@@ -342,6 +342,25 @@ Central checksum and has a recorded SHA-256. The shipped Guava
 and embedded POMs are retained. The bundle and per-coordinate receipt
 are under `target/goal-validation/maven-source-8bb689c/`.
 
+Two Debian KVM builds used the exact `14ede46` Cryptomator helper source
+and independently restored copies of a hash-verified Maven cache. Each
+build ran with only loopback, verified all 27 runtime dependency JARs
+against the lock, and linked the reduced Java runtime from the verified
+Temurin 25.0.5+8 JDK. Both builds produced identical output across 119
+entries. The shipped helper JAR, `runtime/lib/modules`, and all other
+runtime entries matched byte for byte, with matching relative symlinks.
+The package includes two Java test reports and a manifest that records
+those tests.
+
+All seven Java tests also passed in the offline namespace. A stock Debian
+guest installed the exact `14ede46` DEB, then ran the rebuilt backend from
+a separate copy of its installed layout. The 13 tests passed as UID 1300
+with only loopback, including file and SQLite read-back after close and
+reopen. The live Java executable matched the rebuilt private runtime
+digest. The package and test artifacts were removed and the guest was
+retired. Both build receipts, toolchain hashes and the Maven cache
+inventory are under `target/goal-validation/debian-cryptomator-14ede46/`.
+
 The CryFS bundle contains all four locked dependency archives, the six
 matching Conan recipe exports and the locked B2 and CMake build inputs.
 The retained CMake executable matched the qualified producer. On an

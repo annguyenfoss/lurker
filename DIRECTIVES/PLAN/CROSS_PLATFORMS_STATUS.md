@@ -383,6 +383,12 @@ installer candidates, including the corrected OpenBSD package. The
 current receipts are indexed in
 `target/goal-validation/release-provenance-14ede46/qualification-index.json`.
 
+Two offline builds on each platform reproduced the shipped Cryptomator
+runtime on Debian and the shipped gocryptfs executable on FreeBSD. The
+rebuilt Cryptomator runtime passed 13 stock Debian checks. The FreeBSD engine
+passed 26 stock explicit and Auto checks. Source and runtime receipts are
+listed in `docs/unix-packaging.md`.
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from
@@ -559,6 +565,11 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
 
 ## Remaining qualification work and limits
 
+- On Arch, the exact `14ede46` CryFS package returned `ENOSPC` and
+  `EDQUOT` to the application. Freeing space allowed clean close and
+  reopen. Closing while storage remained exhausted reported an unclean
+  exit for pending directory metadata. Reopen recovered the committed file
+  and SQLite row. See `docs/folder-supervision.md`.
 - On OpenBSD, the installed `e607cc7` package passed 24 full-storage
   checks across CRYPTO, RAID1C, and VeraCrypt. All three preserved
   committed data at `ENOSPC` and accepted new writes after freeing
