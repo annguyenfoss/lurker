@@ -389,6 +389,27 @@ rebuilt Cryptomator runtime passed 13 stock Debian checks. The FreeBSD engine
 passed 26 stock explicit and Auto checks. Source and runtime receipts are
 listed in `docs/unix-packaging.md`.
 
+### Device creation and full storage
+
+The six stock Linux guests passed all 54 device-create profiles using
+the same native installers. Each guest tested AES, Serpent, and Twofish
+with LUKS2, LUKS1, and VeraCrypt on fixture-owned file-backed loop devices.
+Each profile synced a file, verified it after a read-only reopen, rejected
+a write, and detached cleanly. The original guests and disks matched their
+baselines. See `target/goal-validation/linux-stock-block-14ede46-matrix.json`.
+
+The BSD full-storage batches also used the existing `14ede46` installers.
+The tested filesystems returned `ENOSPC`, and SQLite returned `SQLITE_FULL`.
+The suites verified committed data at capacity, then made new commits after
+freeing space and checked the data after clean close and reopen.
+
+| Stock guest | Full-storage checks | Evidence |
+| --- | ---: | --- |
+| FreeBSD | 36 across GELI, AES VeraCrypt, PEFS, and gocryptfs | `target/freebsd-file-full-storage-14ede46/receipt.json` and `target/freebsd-directory-full-storage-14ede46/receipt.json` |
+| OpenBSD | 27 across CRYPTO, RAID1C, and AES VeraCrypt | `target/openbsd-enospc-14ede46/summary.json` |
+| NetBSD | 9 for CGD | `target/netbsd-cgd-full-storage-14ede46/qualification-summary.json` |
+| DragonFly BSD | 9 for AES LUKS1, also reported above | `target/goal-validation/frozen-14ede46/dragonfly/` |
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from
