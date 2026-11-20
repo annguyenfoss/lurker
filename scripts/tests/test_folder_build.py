@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import subprocess
@@ -9,6 +10,32 @@ from unittest.mock import patch
 SPEC = importlib.util.spec_from_file_location("folder_build", Path(__file__).parents[1] / "build-folder-backends.py")
 BUILD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BUILD)
+
+
+class ConanTests(unittest.TestCase):
+    def test_cryfs_uses_boost_headers_from_the_locked_host_graph(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "host-package"
+            header = package / "include/boost/version.hpp"
+            header.parent.mkdir(parents=True)
+            header.touch()
+            options = ["--lockfile", "test.lock"]
+
+            def write_graph(args, cwd, log, env):
+                self.assertEqual(args[-2:], options)
+                target = Path(args[args.index("--out-file") + 1])
+                target.write_text(json.dumps({"graph": {"nodes": {
+                    "1": {"context": "host", "ref": "boost/1.84.0#fixture",
+                          "package_folder": str(package)},
+                    "2": {"context": "build", "ref": "boost/1.84.0#fixture",
+                          "package_folder": str(root / "build-package")},
+                }}}))
+
+            with patch.object(BUILD, "run", side_effect=write_graph):
+                path, prefix = BUILD.conan_boost_include(["conan"], options, root, root, None, {})
+            self.assertEqual(path, header.parent.parent)
+            self.assertEqual(prefix, "/usr/src/boost-1.84.0/include")
 
 
 class NoticeTests(unittest.TestCase):

@@ -316,20 +316,25 @@ Build and runtime evidence is under
 `target/goal-validation/cryfs-offline-rebuild-8bb689c/`. The dependency
 archive hashes remain under `target/goal-validation/cryfs-conan-sources-8bb689c/`.
 
-The Linux builder now uses the pinned CryFS commit timestamp for
+The Linux builder uses the pinned CryFS commit timestamp for
 `SOURCE_DATE_EPOCH` and maps the patched source directory to
-`/usr/src/cryfs-1.0.3`. With the same compiler and Conan cache, two
-Debian KVM builds in different source directories produced the same
-SHA-256. The remapped engine passed all 13 login-user lifecycle checks.
-The tested binaries still contain paths from the shared Conan cache.
-The build comparison and runtime receipts are under
-`target/goal-validation/cryfs-path-repro-8bb689c/`.
+`/usr/src/cryfs-1.0.3`. It resolves the host Boost package from the locked
+Conan graph and maps its include directory to
+`/usr/src/boost-1.84.0/include`.
 
-The normal Linux builder also passed a Debian KVM build and 13
-package-relative lifecycle checks with these settings. Its binary
-contained the fixed source prefix and the relocated Conan cache path.
-The builder manifest and runtime evidence are under
-`target/goal-validation/cryfs-source-prefix-builder/`.
+On Debian KVM, the source map alone left 14 absolute locations from
+Boost headers. With both maps, two offline builds in different source
+and Conan cache directories produced the same SHA-256. Both caches
+came from the same verified cold-built dependency archive. The remapped
+engine passed all 13 login-user lifecycle checks. The trace and
+comparison receipts are under
+`target/goal-validation/cryfs-cache-repro-8bb689c/`.
+
+The normal Linux builder produced the same SHA-256 from a separate
+Debian KVM build using its resolved Boost include directory. Its
+output passed all 13 package-relative lifecycle checks. The builder
+manifest and runtime evidence are under
+`target/goal-validation/cryfs-conan-prefix-builder/`.
 
 The four relocated Arch libraries are libfuse3, libnuma, liburing and zlib.
 Their upstream archives matched the checksums in the exact Arch package

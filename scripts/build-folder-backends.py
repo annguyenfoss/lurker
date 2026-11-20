@@ -232,6 +232,29 @@ def macos_private_notices(binary: Path, libraries: dict[str, str], destination: 
         copy_notice(license, target / license.name)
 
 
+def conan_boost_include(conan: list[str], options: list[str], src: Path,
+                        cache: Path, log, env: dict) -> tuple[Path, str]:
+    """Resolve the host Boost headers from the same locked graph as the build."""
+    with tempfile.TemporaryDirectory(prefix=".cryfs-conan-install-", dir=cache) as directory:
+        graph = Path(directory) / "graph.json"
+        run(conan + ["install", ".", "--format=json", "--out-file", str(graph),
+                     "--output-folder", directory] + options, src, log, env)
+        try:
+            nodes = json.loads(graph.read_text())["graph"]["nodes"].values()
+        except (KeyError, ValueError) as error:
+            raise RuntimeError("Cannot read the locked CryFS Conan package graph") from error
+    candidates = [node for node in nodes if node.get("context") == "host"
+                  and (node.get("ref") or "").startswith("boost/")]
+    if len(candidates) != 1 or not candidates[0].get("package_folder"):
+        raise RuntimeError("Cannot identify the locked CryFS host Boost package in Conan's graph")
+    boost = candidates[0]
+    include = Path(boost["package_folder"]).resolve() / "include"
+    if not (include / "boost/version.hpp").is_file():
+        raise RuntimeError("Resolved CryFS Boost package has no headers: " + str(include))
+    version = boost["ref"].split("#", 1)[0].split("/", 1)[1]
+    return include, f"/usr/src/boost-{version}/include"
+
+
 def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
     url, revision, version = PINS[name]
     logpath = cache / f"{name}.log"
@@ -271,27 +294,28 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             conan = ["uv", "tool", "run", "--from", "conan==2.32.0", "conan"]
             run(conan + ["profile", "detect", "--exist-ok"], src, log, env)
             lock = ROOT / "native/folder/cryfs/conan.lock"
-            build_options = []
+            build_options = ["-s", "build_type=Release", "--build=missing",
+                             "-c", f"tools.build:jobs={jobs}",
+                             "-o", "&:build_tests=False", "-o", "&:update_checks=False",
+                             "--lockfile", str(lock)]
             if build_system == "Linux":
                 # Conan's build-tree paths must never become runtime search
                 # paths in a distributed executable (including empty entries).
+                build_options += ["-c", 'tools.cmake.cmaketoolchain:extra_variables={"CMAKE_SKIP_RPATH":True}']
                 source_prefix = f"/usr/src/cryfs-{version}"
                 epoch = capture(["git", "show", "-s", "--format=%ct", revision], src)
                 env["SOURCE_DATE_EPOCH"] = epoch
+                boost_include, boost_prefix = conan_boost_include(conan, build_options, src, cache, log, env)
                 # Conan joins these flags into a CMake compiler command string.
-                source_map = shlex.quote(f"-ffile-prefix-map={src}={source_prefix}")
-                build_options = [
-                    "-c", 'tools.cmake.cmaketoolchain:extra_variables={"CMAKE_SKIP_RPATH":True}',
-                    "-c", "tools.build:cxxflags=" + json.dumps([source_map]),
-                ]
+                maps = [shlex.quote(f"-ffile-prefix-map={path}={prefix}")
+                        for path, prefix in [(src, source_prefix), (boost_include, boost_prefix)]]
+                build_options += ["-c", "tools.build:cxxflags=" + json.dumps(maps)]
                 native_manifest["reproducibility"] = {
                     "source_prefix": source_prefix,
+                    "boost_include_prefix": boost_prefix,
                     "source_date_epoch": int(epoch),
                 }
-            run(conan + ["build", ".", "-s", "build_type=Release", "--build=missing",
-                         "-c", f"tools.build:jobs={jobs}",
-                         "-o", "&:build_tests=False", "-o", "&:update_checks=False",
-                         "--lockfile", str(lock)] + build_options, src, log, env)
+            run(conan + ["build", "."] + build_options, src, log, env)
             binary = src / "build/Release/src/cryfs-cli/cryfs"
             if platform.system() == "Darwin":
                 native_manifest = stage_macos_cryfs(binary, output)
