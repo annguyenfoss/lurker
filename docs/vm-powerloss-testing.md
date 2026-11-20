@@ -426,6 +426,46 @@ console logs are under `target/netbsd-cgd-range-da62173/`,
 
 https://man.netbsd.org/NetBSD-11.1/fsync.2
 
+### NetBSD CGD on a plain outer FFS disk
+
+The native `0105a83cf6a9bbf59a3ddb37058e725843b6f2b9` package
+(`f82c36ade514c69467f83f6f37ce66e8d810e6ecc5d533f9425acdc9efe0a1b5`)
+repeated the controls on new networkless NetBSD 11.1 clones. The sparse
+ciphertext image lived on a dedicated plain FFSv2 fixture disk with
+QEMU `cache=none`. The mounted CGD filesystem retained WAPBL.
+
+- Ordinary application `fsync` left the live 82,432-byte WAL with a
+  32-byte raw home inode and journal generation 6 before the cut.
+  Read-only reopen found a zero-byte database, a 512-byte WAL, and a
+  missing SHM inode. The failed SHM lookup stopped verification before
+  the file-digest check, so that attempt has no file recovery result.
+- A nonempty WAL range flush advanced the inner generation to 7 and
+  showed the full 82,432 bytes in the live raw home inode. The read-only
+  reopen recovered the file digest, but the WAL returned to 32 bytes
+  and the committed table was absent.
+- The raw-reopen control added DTrace, QMP, and a read-only native
+  CGD attachment before FFS replay. DTrace observed two
+  `DIOCCACHESYNC` ioctl entries at each of CGD, vnd, and the leaf
+  disk driver. The fixture's QMP block node recorded two additional
+  completed flushes and zero failed flushes. On reboot, before any
+  inner FFS replay, the raw home inode and its first block pointer had
+  returned to their pre-range values, although journal generation 7
+  and its new head offset survived. Read-only FFS replay still exposed
+  a 32-byte WAL. The file digest and SQLite integrity check passed,
+  and the committed table was absent.
+
+The measurements distinguish the surviving journal header from the
+stale WAL inode and show that the observed lower-device flush requests
+completed. They do not identify which journal record or filesystem
+writeback path lost the current inode state. Plain outer FFS did not
+qualify ordinary application fsync with mandatory WAPBL. No product
+settings changed. The first pre-replay attachment attempt used the
+incorrect stdin mode for the native prompt and was retired. A fresh
+clone with the interactive native prompt supplied the raw result.
+All clones were stopped after their owned mappings and packages were
+removed. The source disk hashes matched their starting values. Receipts
+and consoles are under `target/netbsd-cgd-plain-0105a83/`.
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
