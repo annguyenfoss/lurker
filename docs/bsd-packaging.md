@@ -67,7 +67,7 @@ source and logs are retained under `target/bsd-native-wrapper/`.
 | --- | --- | --- |
 | FreeBSD 15.1, full CLI and desktop | `a60e4bc` | Installed with 22 official dependency artifacts. All 208 GELI, PEFS, VeraCrypt, and gocryptfs CLI checks passed, along with four desktop lifecycles and an X11 window. The isolated package was removed and the original package database matched its baseline. Earlier `029cf99` and `2ebae8f` native packages each passed 13 GELI checks. |
 | NetBSD 11.1, full CLI and desktop | `24dcc6e` | Installed with sudo and xkbcommon. CGD passed 13 lifecycle checks before removal. |
-| OpenBSD 8.0, full CLI and desktop | `264cd6e` | Installed with signed dependencies and native shared-library checks. CRYPTO passed 13 lifecycle checks. The installed VeraCrypt helper supported login-user writes and SQLite WAL persistence after close and reopen, kept its raw FUSE data private, and safely refused read-only attach. The package was then removed. |
+| OpenBSD 8.0, full CLI and desktop | `e607cc7` | Installed with signed dependencies and native shared-library checks. CRYPTO passed 13 lifecycle checks, and RAID1C passed 19 lifecycle and 11 invoking-user checks. The installed VeraCrypt helper passed login-user writes and SQLite WAL persistence after close and reopen, kept its raw FUSE data private, and safely refused read-only attach. The package was then removed. |
 | DragonFly 6.4.2, full CLI and desktop | `a60e4bc` | Installed with native dependency checks on an offline archive clone. The installed CLI passed 91 LUKS1 lifecycle checks, including three binary-keyfile suites, and eight UFS exhaustion checks. The installed desktop opened an X11 window and its helper completed the login-user lifecycle. Package removal passed. |
 | DragonFly 6.4.2, full CLI and desktop | `ca3c845` | Rebuilt and installed on a separate offline archive clone. All 91 LUKS1 lifecycle checks, eight UFS exhaustion checks, two core native regressions, the desktop callback lifecycle and the X11 window passed. Package removal restored the native package inventory. |
 
@@ -75,6 +75,14 @@ The lifecycle cases create encrypted storage, write and fsync data, close,
 reopen and verify the contents. They also cover rejected credentials and busy,
 aliased and read-only operations. Backend and desktop qualifications outside
 these native installer checks retain their individual package provenance.
+
+The OpenBSD `e607cc7` descriptor-staging replay used build
+`20261120T014923Z-4517db5c` and native package SHA-256
+`7f066d6f1cf7f62eeb61afd5a1d885e445ed9a44f1859827b19d29895fa2c0ad`.
+The isolated install, writable lifecycles and removal left the original
+package inventory, mounts, native devices and receipt hashes unchanged.
+The build receipt and runtime evidence are under
+`target/openbsd-descriptor-stage/`.
 
 DragonFly's full native install used a fresh verified archive copy because
 the original guest's package database was damaged. The original KVM guest
