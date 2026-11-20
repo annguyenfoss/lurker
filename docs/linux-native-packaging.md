@@ -558,3 +558,17 @@ the scoped package and native resource inventories.
 Full artifact digests, per-suite checks, window results, dependency
 notices and cleanup receipts are indexed in
 `target/linux-coordinated-14ede46/matrix.json`.
+
+### Stock-image replay at the same revision
+
+Fresh KVM guests replayed the same six package hashes from vendor stock
+images using verified offline dependencies. Each install verified 899
+payload entries and passed 117 privileged checks, 78 login-user checks
+and a 1280×860 X11 probe. Fedora ran with SELinux enforcing.
+
+The receipts record setup retries for Arch's keyring, Debian's probe
+output directory, Ubuntu's package inventory check and Gentoo's console
+access. All six guests and their isolated networks were retired, and the
+vendor image digests matched their baselines. The stock media, native
+package and runtime digests are indexed in
+`target/goal-validation/linux-stock-14ede46-matrix.json`.
