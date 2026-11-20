@@ -76,6 +76,30 @@ reopen and verify the contents. They also cover rejected credentials and busy,
 aliased and read-only operations. Backend and desktop qualifications outside
 these native installer checks retain their individual package provenance.
 
+### Native installer refresh at `14ede46`
+
+The OpenBSD 8.0 amd64 package from run `20261120T042218Z-88688721` passed
+160 installed checks in an isolated stock KVM guest. CRYPTO passed 26
+explicit and Auto checks. VeraCrypt passed 104 across AES, Serpent and
+Twofish with passwords and binary keyfiles. RAID1C passed 19 CLI checks
+and 11 invoking-user checks. The installed desktop rendered an X11
+window as UID 1000. Package removal restored the package and native
+resource inventories. The package SHA-256 was
+`26eac1549d13fbc2622afa0117b7a77023d2338390db0ab0b6a7ed84e6664323`.
+The build and runtime receipts are under `target/openbsd-matrix-14ede46/`.
+
+The NetBSD 11.1 amd64 package from run `20261120T042227Z-dc85c5ea` passed
+26 installed CGD checks in a stock KVM guest without a network interface.
+The explicit and Auto routes each verified files and SQLite data after
+close and reopen. The installed desktop rendered a 1280×860 X11 window
+as UID 1300. Package, mount, device and session inventories returned to
+their baselines, and the guest and its disposable disks were retired.
+The package SHA-256 was
+`d58bfdd9f2d7bf7141d061acdd9539c389cb26facb7b022a262d1c8d5eb7d3b7`.
+The build and runtime receipts are under `target/netbsd-14ede46-native/`.
+
+### OpenBSD staging and detach recovery
+
 The OpenBSD `e607cc7` descriptor-staging replay used build
 `20261120T014923Z-4517db5c` and native package SHA-256
 `7f066d6f1cf7f62eeb61afd5a1d885e445ed9a44f1859827b19d29895fa2c0ad`.
