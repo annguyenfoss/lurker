@@ -1,6 +1,26 @@
-# SSH build and test runbook
+# Development, build, test, and validation runbook
 
-## Execution boundary
+## Development cycle
+
+1. Read the relevant project directives and inspect the working tree and
+   index. Define the intended behavior, the affected platforms and entry
+   points, and the evidence needed to verify the change. For encryption
+   changes, include the real create, unlock, write, close, and reopen
+   lifecycle for the affected route.
+2. Start from the latest verified baseline for the affected workflow. Use
+   the batch process below to collect failures, implement compatible fixes,
+   and verify them together. Keep logical changes in atomic commits and
+   preserve unrelated work.
+3. Choose the validation scope based on what changed. Workspace checks
+   cover compilation and unit tests. Native functional tests cover real
+   encryption and storage behavior. Installed-artifact tests cover package
+   contents, dependencies, and the shipped CLI or desktop entry points.
+   Include fault or recovery scenarios when the change affects them.
+4. Deliver a verified candidate with its source revision, build artifacts,
+   test results, and any outstanding issues. Report milestones as they
+   pass so follow-up investigation can proceed from a known baseline.
+
+## Remote execution boundary
 
 The user's workstation is the editor/coordinator. Run **all tests on remote
 VMs**, including Rust/Python unit tests, desktop probes and storage suites.
@@ -50,7 +70,7 @@ Use the following workflow to reduce the number of expensive build cycles.
    next batch unless they invalidate the current results or block a required
    check.
 
-## One scripted job, bounded results
+## Remote job setup and evidence
 
 1. Inspect the working tree/index and relevant directives. Preserve unrelated
    edits. Commit each ready atomic change; the runner deploys committed code only.

@@ -15,7 +15,9 @@ Before implementing another platform or bundled backend, read `DIRECTIVES/PLAN/C
 
 Use one shared core and reusable backend integrations with small OS-specific adapters. Share upstream encryption code and backend policy; isolate native mounts, devices, authorization and discovery. All six Linux distributions use the same Linux integration code, with differences handled through packaging and demonstrated tool capabilities. Do not copy entire workflows per OS or reimplement encryption primitives. The plan defines five primary KVM OS development targets and ten build/functional-test guests; macOS is tested separately on a Mac.
 
-Bundled third-party engines replace a separately installed VeraCrypt requirement as their native package is qualified. System facilities remain responsible for kernel crypto, filesystems and native Apple/BSD formats. Elevated code must execute only administrator-controlled backend paths; development backend overrides are unprivileged. macOS FUSE is installed separately. Build/test jobs use isolated `/tmp/lurker-*` directories on the named remote hosts. The workstation is the editor/coordinator: run all tests, including unit tests, on VMs (macOS on Buran), and build remotely by default. Read `DIRECTIVES/LLM/SSH_BUILDS.md` before SSH build/test work; it covers job control, storage, concise evidence and the stopped-work checkpoint. Never touch installed Lurker sessions on the workstation.
+Bundled third-party engines replace a separately installed VeraCrypt requirement as their native package is qualified. System facilities remain responsible for kernel crypto, filesystems and native Apple/BSD formats. Elevated code must execute only administrator-controlled backend paths; development backend overrides are unprivileged. macOS FUSE is installed separately.
+
+Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and tests, and validation. The workstation is the editor and coordinator. Use isolated `/tmp/lurker-*` directories on the named remote hosts, build remotely by default, and run all tests remotely (macOS on Buran). Never touch installed Lurker sessions on the workstation.
 
 ## Workspace Map
 

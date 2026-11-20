@@ -3,8 +3,9 @@
 Read these before editing:
 
 1. `DIRECTIVES/LLM/CODEBASE.md`
-2. `DIRECTIVES/LLM/CIPHER.md` if the task touches create defaults, ciphers, crypto flags, or related docs
-3. `README.md` only for current user-facing build/install wording
+2. `DIRECTIVES/LLM/DEVELOPMENT.md` for the development, build, test, and validation process
+3. `DIRECTIVES/LLM/CIPHER.md` if the task touches create defaults, ciphers, crypto flags, or related docs
+4. `README.md` only for current user-facing build/install wording
 
 Non-negotiables:
 
