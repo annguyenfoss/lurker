@@ -127,6 +127,9 @@ struct Session {
     veracrypt_proof: Option<veracrypt::RecoveryProof>,
     identity: Identity,
     backing: Option<String>,
+    #[cfg(target_os = "freebsd")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    freebsd_detach: Option<freebsd::DetachIntent>,
     #[cfg(target_os = "netbsd")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     netbsd_detach: Option<netbsd::DetachIntent>,
@@ -568,6 +571,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         create_target: Some(target.clone()),
         identity,
         backing: None,
+        #[cfg(target_os = "freebsd")]
+        freebsd_detach: None,
         #[cfg(target_os = "netbsd")]
         netbsd_detach: None,
         #[cfg(target_os = "openbsd")]
@@ -885,6 +890,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         create_target: None,
         identity,
         backing: None,
+        #[cfg(target_os = "freebsd")]
+        freebsd_detach: None,
         #[cfg(target_os = "netbsd")]
         netbsd_detach: None,
         #[cfg(target_os = "openbsd")]
@@ -1107,6 +1114,7 @@ fn mount_pefs(c: MountCommand, output: Output) -> AppResult<()> {
         create_target: None,
         identity,
         backing: None,
+        freebsd_detach: None,
         mapped: None,
         mounted: None,
         peer_sources: Vec::new(),
@@ -1309,6 +1317,8 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     if s.backend == VolumeType::Raid1c {
         return raid1c::cleanup(registry, s);
     }
+    #[cfg(target_os = "freebsd")]
+    freebsd::reconcile_detach(registry, s)?;
     #[cfg(target_os = "openbsd")]
     openbsd::reconcile_detach(registry, s)?;
     #[cfg(target_os = "netbsd")]
@@ -1361,8 +1371,17 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
             s.openbsd_detach = Some(openbsd::DetachIntent::Volume);
             registry.save(s)?;
         }
+        #[cfg(target_os = "freebsd")]
+        if s.backend == VolumeType::Geli {
+            s.freebsd_detach = Some(freebsd::DetachIntent::Geli);
+            registry.save(s)?;
+        }
         close_mapping(s, mapped)?;
         s.mapped = None;
+        #[cfg(target_os = "freebsd")]
+        {
+            s.freebsd_detach = None;
+        }
         #[cfg(target_os = "netbsd")]
         {
             s.netbsd_detach = None;
@@ -1391,8 +1410,17 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
             s.netbsd_detach = Some(netbsd::DetachIntent::Vnd);
             registry.save(s)?;
         }
+        #[cfg(target_os = "freebsd")]
+        if s.backend == VolumeType::Geli {
+            s.freebsd_detach = Some(freebsd::DetachIntent::Md);
+            registry.save(s)?;
+        }
         native::detach_file(backing)?;
         s.backing = None;
+        #[cfg(target_os = "freebsd")]
+        {
+            s.freebsd_detach = None;
+        }
         #[cfg(target_os = "netbsd")]
         {
             s.netbsd_detach = None;
@@ -1768,6 +1796,8 @@ mod tests {
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            #[cfg(target_os = "freebsd")]
+            freebsd_detach: None,
             #[cfg(target_os = "netbsd")]
             netbsd_detach: None,
             #[cfg(target_os = "openbsd")]
@@ -1899,6 +1929,8 @@ mod tests {
             create_target: Some(target.clone()),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            #[cfg(target_os = "freebsd")]
+            freebsd_detach: None,
             #[cfg(target_os = "netbsd")]
             netbsd_detach: None,
             #[cfg(target_os = "openbsd")]

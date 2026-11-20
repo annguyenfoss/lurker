@@ -3,8 +3,9 @@
 //! The shared BSD lifecycle owns staging, publication, mount identity and
 //! recovery. This module only operates on md devices returned by mdconfig;
 //! it deliberately has no physical-device, forced-detach or boot integration.
-use super::{Credential, args, exec};
-use crate::{AppError, AppResult, CreateCipher};
+use super::{Credential, Registry, Session, args, exec};
+use crate::{AppError, AppResult, CreateCipher, VolumeType};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::fd::AsRawFd;
@@ -22,6 +23,13 @@ const FORMAT_ARGS: &[&str] = &[
 ];
 const PASSPHRASE_ITERATIONS: &str = "600000";
 const BACKING_SECTORS: &[u32] = &[512, 1024, 2048, 4096, 8192, 16384, 32768, 65536];
+
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum DetachIntent {
+    Geli,
+    Md,
+}
 
 /// Reserve storage before the kernel creates a new GELI provider.
 pub(super) fn allocate_image(file: &fs::File, size: u64) -> AppResult<()> {
@@ -287,17 +295,79 @@ fn backing_matches(listing: &str, unit: &str, device: u64, inode: u64) -> bool {
 }
 
 pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
+    let unit = mapping_unit(mapped, backing)?;
+    let listing = exec(GELI, &args(&["list", &format!("{unit}.eli")]), None)?;
+    if !mapping_matches(&listing, unit) {
+        return Err(AppError::new("The GELI mapping changed; refusing cleanup."));
+    }
+    Ok(())
+}
+
+fn mapping_unit<'a>(mapped: &str, backing: &'a str) -> AppResult<&'a str> {
     let unit = md_unit(backing)?;
     if mapped != format!("/dev/{unit}.eli") {
         return Err(AppError::new(
             "The GELI provider does not match the recorded md device.",
         ));
     }
-    let listing = exec(GELI, &args(&["list", &format!("{unit}.eli")]), None)?;
-    if !mapping_matches(&listing, unit) {
-        return Err(AppError::new("The GELI mapping changed; refusing cleanup."));
+    Ok(unit)
+}
+
+fn mapping_is_absent(mapped: &str, backing: &str) -> AppResult<bool> {
+    let provider = format!("{}.eli", mapping_unit(mapped, backing)?);
+    let listing = exec("/sbin/geom", &args(&["eli", "status", "-s"]), None)?;
+    // A capped subprocess transcript cannot prove a provider absent.
+    if listing.len() >= 1024 * 1024 {
+        return Err(AppError::new("FreeBSD GELI inventory is too large; preserving the journal."));
     }
-    Ok(())
+    let mut found = false;
+    for line in listing.trim().lines() {
+        let row = line.split_whitespace().collect::<Vec<_>>();
+        if row.len() != 3 || !row[0].ends_with(".eli") {
+            return Err(AppError::new("Unrecognized FreeBSD GELI inventory; preserving the journal."));
+        }
+        found |= row[0] == provider;
+    }
+    Ok(!found)
+}
+
+pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    let Some(intent) = session.freebsd_detach else {
+        return Ok(());
+    };
+    let conflict = || {
+        AppError::new("FreeBSD detach intent conflicts with its session; preserving the journal.")
+    };
+    if session.backend != VolumeType::Geli || session.mounted.is_some()
+        || !session.identity.matches(&session.source)
+    {
+        return Err(conflict());
+    }
+    let backing = session.backing.as_deref().ok_or_else(conflict)?;
+    match intent {
+        DetachIntent::Geli => {
+            let mapped = session.mapped.as_deref().ok_or_else(conflict)?;
+            verify_backing(backing, &session.source)?;
+            if !mapping_is_absent(mapped, backing)? {
+                return Ok(());
+            }
+            if super::mounts()?.iter().any(|mount| mount.source == Path::new(mapped)) {
+                return Err(conflict());
+            }
+            session.mapped = None;
+        }
+        DetachIntent::Md => {
+            if session.mapped.is_some() {
+                return Err(conflict());
+            }
+            if backing_identity(backing)?.is_some() {
+                return Ok(());
+            }
+            session.backing = None;
+        }
+    }
+    session.freebsd_detach = None;
+    registry.save(session)
 }
 
 fn mapping_matches(listing: &str, unit: &str) -> bool {
@@ -400,6 +470,85 @@ fn password_line(password: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires root and real disposable FreeBSD GELI and md attachments"]
+    fn cleanup_reconciles_completed_native_detaches_with_saved_intent() {
+        use super::super::{Identity, cleanup, require_root, unique_id};
+        use std::os::unix::fs::DirBuilderExt;
+
+        require_root().unwrap();
+        let work = std::env::temp_dir().join(format!("lurker-freebsd-detach-{}", unique_id()));
+        fs::DirBuilder::new().mode(0o700).create(&work).unwrap();
+        let source = work.join("owned.img");
+        fs::File::create(&source).unwrap().set_len(128 * 1024 * 1024).unwrap();
+        let keyfile = work.join("owned.key");
+        fs::write(&keyfile, [0xa3; 64]).unwrap();
+        let credential = Credential::Keyfile(keyfile);
+        let registry = Registry {
+            directory: work.clone(),
+            _lock: fs::File::create(work.join("lock")).unwrap(),
+        };
+        let backing = attach_file(&source, false).unwrap();
+        format(&backing, CreateCipher::Aes, &credential).unwrap();
+        let mapped = unlock(&backing, false, &credential).unwrap();
+        let mut session = Session {
+            version: 1,
+            id: unique_id(),
+            backend: VolumeType::Geli,
+            identity: Identity::read(&source).unwrap(),
+            source: source.clone(),
+            create_target: None,
+            peer_sources: Vec::new(),
+            backing: Some(backing.clone()),
+            freebsd_detach: Some(DetachIntent::Geli),
+            mapped: Some(mapped.clone()),
+            mounted: None,
+            intended_mountpoint: None,
+            initialization_directory: None,
+            readonly: false,
+            veracrypt_proof: None,
+        };
+        registry.save(&session).unwrap();
+        reconcile_detach(&registry, &mut session).unwrap();
+        assert_eq!(session.mapped.as_deref(), Some(mapped.as_str()));
+        verify_mapping(&mapped, &backing).unwrap();
+        close(&mapped).unwrap();
+
+        let mut saved = registry.records().unwrap().pop().unwrap();
+        let mut without_intent = saved.clone();
+        without_intent.freebsd_detach = None;
+        assert!(cleanup(&registry, &mut without_intent).is_err());
+        reconcile_detach(&registry, &mut saved).unwrap();
+        assert!(saved.mapped.is_none() && saved.freebsd_detach.is_none());
+        verify_backing(&backing, &source).unwrap();
+
+        saved.freebsd_detach = Some(DetachIntent::Md);
+        registry.save(&saved).unwrap();
+        reconcile_detach(&registry, &mut saved).unwrap();
+        assert_eq!(saved.backing.as_deref(), Some(backing.as_str()));
+        detach_file(&backing).unwrap();
+
+        let mut saved = registry.records().unwrap().pop().unwrap();
+        let mut without_intent = saved.clone();
+        without_intent.freebsd_detach = None;
+        assert!(cleanup(&registry, &mut without_intent).is_err());
+
+        let replacement = work.join("replacement.img");
+        fs::File::create(&replacement).unwrap().set_len(128 * 1024 * 1024).unwrap();
+        let mut argv = args(&["-a", "-t", "vnode", "-u", md_unit(&backing).unwrap(), "-f"]);
+        argv.push(replacement.as_os_str().to_owned());
+        exec(MDCONFIG, &argv, None).unwrap();
+        let refused = cleanup(&registry, &mut saved).is_err();
+        verify_backing(&backing, &replacement).unwrap();
+        detach_file(&backing).unwrap();
+        assert!(refused);
+
+        cleanup(&registry, &mut saved).unwrap();
+        assert!(registry.records().unwrap().is_empty());
+        assert!(saved.identity.matches(&source) && replacement.is_file());
+        fs::remove_dir_all(work).unwrap();
+    }
 
     fn metadata_tail(backing_sector: u32, logical_sector: u32, length: u64) -> Vec<u8> {
         let mut tail = vec![0; 65536];
