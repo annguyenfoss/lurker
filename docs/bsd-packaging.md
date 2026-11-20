@@ -106,6 +106,27 @@ authorization rule and restored the package, mount, device and session
 inventories before powering off. The callback evidence is under
 `target/netbsd-14ede46-callbacks/`.
 
+DragonFly 6.4.2 used optimized binaries from run
+`20261120T042450Z-421aa4be`. The build guest lacked the stager's desktop
+authorization prerequisite. A stock offline KVM guest staged the same
+verified binaries and Rust notices with its installed sudo. The native
+package SHA-256 was
+`c34cb4a80a54492fa659055acf7e075fc6fa8424c7f895fea623b747758ea3be`.
+The workspace check and 94 tests passed with four ignored in run
+`20261120T044927Z-1d39e1e1`.
+
+The installed CLI passed 91 LUKS1 checks across AES, Serpent and Twofish,
+including binary keyfiles and AES Auto. The installed desktop rendered
+a 1280×860 X11 window. Retained closed fixtures left only 74 MiB free
+on the guest's `/tmp` tmpfs and prevented two further image creates.
+After reclaiming those closed fixtures, the same package passed the
+desktop callback lifecycle as UID 1300 and all nine UFS full-storage
+checks. SQLite reported `SQLITE_FULL` and recovered its committed data
+after space was freed and the vault reopened. Package, mount, mapper,
+vnode, session and authorization inventories were restored. The clone
+was retired with its stock source disk unchanged. Evidence is under
+`target/goal-validation/frozen-14ede46/dragonfly/`.
+
 ### Earlier OpenBSD and DragonFly package runs
 
 The OpenBSD `e607cc7` descriptor-staging replay used build

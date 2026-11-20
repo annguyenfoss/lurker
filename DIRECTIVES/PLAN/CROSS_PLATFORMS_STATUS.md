@@ -345,6 +345,31 @@ lifecycle checks, including SQLite writes and reopen. The alternate
 installation was removed and the original guest inventory matched.
 Evidence is in `target/netbsd-rust-notices-14197ef/qualification-summary.json`.
 
+## Stock non-macOS installer refresh at `14ede46`
+
+Disposable stock KVM guests for all ten targets installed native packages
+from `14ede46fb401578f0e8a4ee9b51e72ce17c0ad04`. The suites created and
+unlocked encrypted storage, wrote files and SQLite data, closed the vaults,
+then reopened them to verify read-back.
+
+| Target | Installed storage checks | Desktop |
+| --- | ---: | --- |
+| Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo | 195 each, 1,170 total | Six X11 passes |
+| FreeBSD | 208 across GELI, VeraCrypt, PEFS and gocryptfs | X11 and four helper callback lifecycles |
+| OpenBSD | 160 across CRYPTO, RAID1C and VeraCrypt | X11 and three helper callback lifecycles |
+| NetBSD | 26 explicit and Auto CGD | X11 and CGD helper callback |
+| DragonFly BSD | 91 LUKS1, plus nine UFS full-storage checks | X11 and LUKS1 helper callback |
+
+The six prepared Linux guests also passed 1,170 installed checks using the
+same package hashes. Every Linux installer verified 899 payload entries.
+The disposable guests and networks were retired. The original ten guest
+definitions and backing disks matched their baselines.
+
+Sources, artifact hashes, per-guest receipts and retry details are indexed
+in `target/goal-validation/frozen-14ede46/matrix.json`, with package notes
+in `docs/linux-native-packaging.md` and `docs/bsd-packaging.md`. Power-loss
+and publisher release requirements are tracked in the sections below.
+
 ## Coordinated non-macOS native qualification, 2026-11-20
 
 All ten KVM targets built and exercised native packages from
