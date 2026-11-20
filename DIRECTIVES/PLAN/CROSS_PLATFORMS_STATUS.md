@@ -122,6 +122,12 @@ browser launch crashed with no available fonts. The replay passed with
 signed native DejaVu font packages installed in the disposable guest.
 Evidence is under `target/freebsd-browser-profile/`.
 
+FreeBSD 15.1 also passed 30 checks across PEFS and gocryptfs using the
+full native `ca3c845` package and harness `b9117eb`. Firefox ESR 153.7.0
+ran as UID 1300 on a loopback-only guest. Fresh browser processes
+recovered both profiles after vault close and reopen. Evidence is under
+`target/freebsd-directory-browser/`.
+
 The exact `e607cc7` package also passed 15 checks each on stock NetBSD
 11.1 CGD and DragonFly 6.4.2 AES LUKS1. Firefox ran as UID 1300 with
 loopback-only access and both vaults preserved their profile data across
