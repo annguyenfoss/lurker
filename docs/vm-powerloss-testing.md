@@ -517,6 +517,31 @@ as the backing filesystem. Evidence is under
 `/mnt/virt/lurker-fault-dfouterufs20261120/` and
 `/mnt/virt/lurker-fault-dfreadufs20261120/`.
 
+### DragonFly guarded LUKS1 with synchronous inner UFS
+
+The exact guarded CLI from native package
+`dfc7fdc33bde59682c9719823da5d934e52d27bf` opened an established AES vault
+from a previous closed recovery copy. The native mount table confirmed
+that the same inner UFS provider changed from ordinary writable UFS to
+synchronous writable UFS before the workload. The outer fixture UFS was
+also synchronous. Libvirt cut the owned KVM guest 0.68 seconds after the host
+observed the file/directory fsync and SQLite FULL/WAL acknowledgement
+while the worker remained active.
+
+An independent, hash-verified copy of the cut fixture disk mounted
+read-only without repair. Its stored acknowledgement matched the host
+receipt. The ciphertext was copied and hash-verified before writable
+inner recovery. It matched the pre-workload digest. The guarded CLI
+reopened the vault but the inner UFS contained no files. The acknowledged
+file and all SQLite files were absent. Normal close left no active mapper,
+vnode or session. The original cut disk retained its SHA-256.
+
+This run reproduces the durability failure with synchronized inner and
+outer UFS. It leaves the cause unproven. Receipts are under
+`/mnt/virt/lurker-fault-dfinnersync26/`,
+`/mnt/virt/lurker-fault-dfinnerread26/`, and
+`target/dragonfly-inner-sync/`.
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
