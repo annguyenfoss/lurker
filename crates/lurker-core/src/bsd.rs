@@ -115,6 +115,9 @@ struct Session {
     backing: Option<String>,
     #[cfg(target_os = "dragonfly")]
     #[serde(default)]
+    dragonfly_backing_detach_requested: bool,
+    #[cfg(target_os = "dragonfly")]
+    #[serde(default)]
     dragonfly_layer: Option<dragonfly::linear::Layer>,
     mapped: Option<String>,
     mounted: Option<Mounted>,
@@ -548,6 +551,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         },
         backing: None,
         #[cfg(target_os = "dragonfly")]
+        dragonfly_backing_detach_requested: false,
+        #[cfg(target_os = "dragonfly")]
         dragonfly_layer: None,
         mapped: None,
         mounted: None,
@@ -880,6 +885,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         source: source.clone(),
         identity,
         backing: None,
+        #[cfg(target_os = "dragonfly")]
+        dragonfly_backing_detach_requested: false,
         #[cfg(target_os = "dragonfly")]
         dragonfly_layer: None,
         mapped: None,
@@ -1285,7 +1292,10 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
         return raid1c::cleanup(registry, s);
     }
     #[cfg(target_os = "dragonfly")]
-    dragonfly::linear::reconcile_activation(registry, s)?;
+    {
+        dragonfly::linear::reconcile_activation(registry, s)?;
+        dragonfly::reconcile_backing_detach(registry, s)?;
+    }
     verify_session(s)?;
     if s.mounted.is_none() {
         if let Some(target) = &s.intended_mountpoint {
@@ -1326,6 +1336,11 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     dragonfly::linear::release(registry, s)?;
     if let Some(backing) = &s.backing {
         native::verify_backing(backing, &s.source)?;
+        #[cfg(target_os = "dragonfly")]
+        {
+            s.dragonfly_backing_detach_requested = true;
+            registry.save(s)?;
+        }
         native::detach_file(backing)?;
         s.backing = None;
         registry.save(s)?;
@@ -1640,6 +1655,8 @@ mod tests {
             identity: Identity::read(&source).unwrap(),
             backing: None,
             #[cfg(target_os = "dragonfly")]
+            dragonfly_backing_detach_requested: false,
+            #[cfg(target_os = "dragonfly")]
             dragonfly_layer: None,
             mapped: None,
             mounted: None,
@@ -1754,6 +1771,8 @@ mod tests {
             source: source.clone(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            #[cfg(target_os = "dragonfly")]
+            dragonfly_backing_detach_requested: false,
             #[cfg(target_os = "dragonfly")]
             dragonfly_layer: None,
             mapped: None,

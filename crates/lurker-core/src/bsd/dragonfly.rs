@@ -64,6 +64,26 @@ fn backing_inactive(device: &str) -> AppResult<bool> {
     }
 }
 
+pub(super) fn reconcile_backing_detach(
+    registry: &super::Registry,
+    session: &mut super::Session,
+) -> AppResult<()> {
+    let Some(backing) = &session.backing else {
+        return Ok(());
+    };
+    if session.dragonfly_backing_detach_requested
+        && session.dragonfly_layer.is_none()
+        && session.mapped.is_none()
+        && session.mounted.is_none()
+        && session.identity.matches(&session.source)
+        && backing_inactive(backing)?
+    {
+        session.backing = None;
+        registry.save(session)?;
+    }
+    Ok(())
+}
+
 fn credential_args(credential: &Credential) -> (Vec<OsString>, Option<Vec<u8>>) {
     match credential {
         Credential::Password(password) => {

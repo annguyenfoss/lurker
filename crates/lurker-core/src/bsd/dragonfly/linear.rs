@@ -399,7 +399,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires root on DragonFly; allocates a disposable vnode and journal"]
-    fn native_metadata_detach_retry_requires_intent_and_inactive_unit() {
+    fn native_vnode_detach_retry_requires_intent_and_inactive_unit() {
         crate::bsd::require_root().unwrap();
         let id = crate::bsd::unique_id();
         let directory = std::env::temp_dir().join(format!("lurker-metadata-close-{id}"));
@@ -418,6 +418,7 @@ mod tests {
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            dragonfly_backing_detach_requested: false,
             dragonfly_layer: None,
             mapped: None,
             mounted: None,
@@ -466,6 +467,18 @@ mod tests {
         release(&registry, &mut restarted).unwrap();
         assert!(restarted.dragonfly_layer.is_none());
         assert!(!private.exists());
+
+        let backing = attach_file(&source, false).unwrap();
+        restarted.backing = Some(backing.clone());
+        registry.save(&restarted).unwrap();
+        detach_file(&backing).unwrap();
+        assert!(crate::bsd::cleanup(&registry, &mut restarted).is_err());
+        restarted.dragonfly_backing_detach_requested = true;
+        registry.save(&restarted).unwrap();
+        let mut restarted = registry.records().unwrap().pop().unwrap();
+        crate::bsd::cleanup(&registry, &mut restarted).unwrap();
+        assert!(registry.records().unwrap().is_empty());
+        assert!(source.exists());
         drop(registry);
         fs::remove_dir_all(directory).unwrap();
     }
