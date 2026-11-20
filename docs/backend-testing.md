@@ -721,6 +721,16 @@ shutdown, and disk retirement completed. The installer, syscall trace,
 and lifecycle receipts are under
 `target/netbsd-cgd-destination/`.
 
+KVM run `20261120T034255Z-9cd330d7` built the `de4345c` native installer.
+The installed package passed 13 explicit and 13 Auto CGD cases on a
+fresh stock NetBSD 11.1 amd64 guest, including synced file and SQLite
+write and readback across close and reopen. After backing up and removing
+the closed fixture's `.cgdparams`, ordinary mount refused to open it and
+left all mount, device, and session inventories at baseline. Restoring the
+byte-identical sidecar recovered both the file and SQLite data. Package
+removal, guest shutdown, and disk retirement passed. The installer and
+receipts are under `target/netbsd-cgd-detach-intent/`.
+
 ## Coordinated OpenBSD native package
 
 OpenBSD 8.0 amd64 built and checked workspace source
