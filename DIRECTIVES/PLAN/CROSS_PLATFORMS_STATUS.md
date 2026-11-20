@@ -182,6 +182,13 @@ verified file and SQLite persistence after close and reopen. Package
 removal restored the original mount, device, session, and package
 inventories. Evidence is under `target/openbsd-crypto-detach-26/`.
 
+The same installer passed nine RAID1C descriptor recovery checks. Auto
+refused an owned vault with the descriptor absent and preserved both
+member digests. Explicit selection of both members recovered the synced
+file and SQLite row. A byte-identical descriptor restore enabled Auto
+to recover both again. Evidence is under
+`target/openbsd-raid1c-descriptor-recovery-26/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
