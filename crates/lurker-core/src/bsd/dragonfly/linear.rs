@@ -1,7 +1,7 @@
 //! Bind native activation to a private copy of its LUKS1 metadata.
 use super::metadata::{self, HEADER_BYTES, SECTOR_BYTES};
 use super::{
-    AppError, AppResult, args, attach_file, detach_file, exec, mapping_name, verify_backing,
+    AppError, AppResult, BackingReservation, args, detach_file, exec, mapping_name, verify_backing,
 };
 use crate::bsd::{Identity, Registry, Session, private_owned, sync_directory};
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,10 @@ const DMSETUP: &str = "/sbin/dmsetup";
 pub(in crate::bsd) struct Layer {
     identity: Option<Identity>,
     backing: Option<String>,
+    #[serde(default)]
+    uses_backing_reservations: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    backing_reservation: Option<BackingReservation>,
     #[serde(default)]
     detach_requested: bool,
     composite_requested: bool,
@@ -108,6 +112,8 @@ pub(in crate::bsd) fn bind(registry: &Registry, session: &mut Session) -> AppRes
     session.dragonfly_layer = Some(Layer {
         identity: None,
         backing: None,
+        uses_backing_reservations: true,
+        backing_reservation: None,
         detach_requested: false,
         composite_requested: false,
         activation_requested: false,
@@ -122,17 +128,28 @@ pub(in crate::bsd) fn bind(registry: &Registry, session: &mut Session) -> AppRes
         .custom_flags(libc::O_NOFOLLOW)
         .open(&path)
         .map_err(|e| AppError::io("Create private LUKS1 metadata copy", e))?;
-    session.dragonfly_layer.as_mut().unwrap().identity = Some(Identity::read(&path)?);
+    let identity = Identity::from_file(&file)?;
+    session.dragonfly_layer.as_mut().unwrap().identity = Some(identity.clone());
     registry.save(session)?;
     file.write_all(&prefix)
         .and_then(|()| file.sync_all())
         .map_err(|e| AppError::io("Sync private LUKS1 metadata copy", e))?;
     drop(file);
     private_owned(&path, false)?;
-    let backing = attach_file(&path, false)?;
-    session.dragonfly_layer.as_mut().unwrap().backing = Some(backing.clone());
+    let (reservation, descriptor) = BackingReservation::reserve()?;
+    session
+        .dragonfly_layer
+        .as_mut()
+        .unwrap()
+        .backing_reservation = Some(reservation.clone());
     registry.save(session)?;
-    verify_backing(&backing, &path)?;
+    reservation.attach(&descriptor, &path, &identity)?;
+    let backing = reservation.device();
+    let layer = session.dragonfly_layer.as_mut().unwrap();
+    layer.backing = Some(backing.clone());
+    layer.backing_reservation = None;
+    registry.save(session)?;
+    drop(descriptor);
     verify_backing(&source, &session.source)?;
 
     let composite = device(session);
@@ -241,10 +258,51 @@ fn reconcile_private_backing(registry: &Registry, session: &mut Session) -> AppR
     let Some(layer) = &session.dragonfly_layer else {
         return Ok(());
     };
+    let path = metadata_path(&registry.directory, session)?;
+    if let Some(reservation) = layer.backing_reservation.clone() {
+        let Some((identity, source)) = layer.identity.clone().zip(session.backing.as_deref())
+        else {
+            return Err(AppError::new(
+                "Missing DragonFly vnode reservation identities.",
+            ));
+        };
+        if reservation.unit < 0
+            || layer.backing.is_some()
+            || layer.detach_requested
+            || layer.composite_requested
+            || layer.activation_requested
+            || session.mapped.is_some()
+            || session.mounted.is_some()
+            || !session.identity.matches(&session.source)
+            || !identity.matches(&path)
+        {
+            return Err(AppError::new(
+                "Private LUKS1 vnode reservation conflicts with its session; preserving the journal.",
+            ));
+        }
+        private_owned(&path, false)?;
+        verify_backing(source, &session.source)?;
+        reservation.release(&identity, || {
+            session
+                .dragonfly_layer
+                .as_mut()
+                .unwrap()
+                .backing_reservation
+                .as_mut()
+                .unwrap()
+                .empty_release_started = true;
+            registry.save(session)
+        })?;
+        session
+            .dragonfly_layer
+            .as_mut()
+            .unwrap()
+            .backing_reservation = None;
+        return registry.save(session);
+    }
     let Some(identity) = &layer.identity else {
         return Ok(());
     };
-    let path = metadata_path(&registry.directory, session)?;
     if !identity.matches(&path) {
         return Ok(());
     }
@@ -259,7 +317,9 @@ fn reconcile_private_backing(registry: &Registry, session: &mut Session) -> AppR
         {
             None
         }
-        None if !layer.detach_requested => {
+        None if !layer.detach_requested && !layer.uses_backing_reservations => {
+            // Older journals could have stopped between vnconfig and saving
+            // its returned unit. Recover those attachments by the private inode.
             let Some(backing) = super::attached_private_copy(&path)? else {
                 return Ok(());
             };
@@ -394,7 +454,7 @@ pub(in crate::bsd) fn release(registry: &Registry, session: &mut Session) -> App
 
 #[cfg(test)]
 mod tests {
-    use super::super::{BackingReservation, VnodeChange, change_attachment};
+    use super::super::{attach_file, change_attachment, VnodeChange};
     use super::*;
     use std::os::unix::fs::DirBuilderExt;
 
@@ -443,6 +503,8 @@ mod tests {
         session.dragonfly_layer = Some(Layer {
             identity: Some(identity),
             backing: Some(device.clone()),
+            uses_backing_reservations: false,
+            backing_reservation: None,
             detach_requested: true,
             composite_requested: false,
             activation_requested: false,
@@ -486,6 +548,54 @@ mod tests {
 
         let backing = attach_file(&source, false).unwrap();
         restarted.backing = Some(backing.clone());
+
+        let private_file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&private)
+            .unwrap();
+        private_file.set_len(1024).unwrap();
+        let identity = Identity::from_file(&private_file).unwrap();
+        drop(private_file);
+        let (reservation, descriptor) = BackingReservation::reserve().unwrap();
+        let reserved_device = reservation.device();
+        restarted.dragonfly_layer = Some(Layer {
+            identity: Some(identity.clone()),
+            backing: None,
+            uses_backing_reservations: true,
+            backing_reservation: Some(reservation.clone()),
+            detach_requested: false,
+            composite_requested: false,
+            activation_requested: false,
+            metadata_sectors: 2,
+            total_sectors: 8,
+        });
+        registry.save(&restarted).unwrap();
+        reservation
+            .attach(&descriptor, &private, &identity)
+            .unwrap();
+        drop(descriptor);
+        let other = attach_file(&private, false).unwrap();
+
+        let mut recovered = registry.records().unwrap().pop().unwrap();
+        reconcile_activation(&registry, &mut recovered).unwrap();
+        assert!(!Path::new(&reserved_device).exists());
+        verify_backing(&other, &private).unwrap();
+        // A retry after the reservation was cleared must leave the other
+        // attachment alone, even though it covers the same private inode.
+        let mut recovered = registry.records().unwrap().pop().unwrap();
+        reconcile_activation(&registry, &mut recovered).unwrap();
+        assert!(recovered
+            .dragonfly_layer
+            .as_ref()
+            .unwrap()
+            .backing
+            .is_none());
+        detach_file(&other).unwrap();
+        release(&registry, &mut recovered).unwrap();
+        let mut restarted = recovered;
+
         registry.save(&restarted).unwrap();
         detach_file(&backing).unwrap();
         assert!(crate::bsd::cleanup(&registry, &mut restarted).is_err());

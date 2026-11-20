@@ -38,6 +38,7 @@ fn mapping_name(device: &str) -> AppResult<&str> {
     Ok(name)
 }
 
+#[cfg(test)]
 pub(super) fn attach_file(path: &Path, _readonly: bool) -> AppResult<String> {
     // Autocloning reserves a new unit in-kernel. Never choose an apparently
     // unused unit using a racy list-then-attach sequence. vnconfig has no
@@ -88,23 +89,66 @@ impl BackingReservation {
             && self.node.ino == node.ino()
             && self.changed_at == (node.ctime(), node.ctime_nsec())
     }
+
+    fn attach(&self, descriptor: &File, source: &Path, identity: &Identity) -> AppResult<()> {
+        let path = CString::new(source.as_os_str().as_bytes())
+            .map_err(|_| AppError::new("DragonFly backing path contains a NUL byte."))?;
+        change_attachment(descriptor, VnodeChange::AttachFile(&path))?;
+        let expected = VnodeState::File(identity.dev, identity.ino);
+        if descriptor_state(descriptor)? != (self.unit, expected) {
+            return Err(AppError::new(
+                "DragonFly attached a different backing file.",
+            ));
+        }
+        Ok(())
+    }
+
+    fn release(
+        &self,
+        identity: &Identity,
+        record_empty_release: impl FnOnce() -> AppResult<()>,
+    ) -> AppResult<()> {
+        let descriptor = match open_vnode(&self.device()) {
+            Ok(descriptor) => descriptor,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(AppError::io("Open recorded DragonFly vnode reservation", e)),
+        };
+        let (unit, state) = descriptor_state(&descriptor)?;
+        if unit != self.unit || !self.matches(&device_metadata(&descriptor)?) {
+            return Err(AppError::new(
+                "DragonFly vnode reservation changed; preserving the journal.",
+            ));
+        }
+        match state {
+            VnodeState::Idle => {
+                // Native detach expects an active clone. Journal the one-page
+                // anonymous object so a retry can finish releasing it.
+                record_empty_release()?;
+                change_attachment(&descriptor, VnodeChange::AttachPage)?;
+            }
+            VnodeState::Swap(1) if self.empty_release_started => (),
+            VnodeState::File(dev, ino)
+                if !self.empty_release_started && dev == identity.dev && ino == identity.ino =>
+            {
+                ()
+            }
+            _ => {
+                return Err(AppError::new(
+                    "DragonFly vnode reservation has a different backing; preserving the journal.",
+                ))
+            }
+        }
+        change_attachment(&descriptor, VnodeChange::Detach)
+    }
 }
 
 pub(super) fn attach_backing(registry: &Registry, session: &mut Session) -> AppResult<()> {
-    let path = CString::new(session.source.as_os_str().as_bytes())
-        .map_err(|_| AppError::new("DragonFly backing path contains a NUL byte."))?;
     let (reservation, descriptor) = BackingReservation::reserve()?;
-    let device = reservation.device();
-    let unit = reservation.unit;
     // Save the exact clone before attaching to it on the same descriptor.
-    session.dragonfly_backing_reservation = Some(reservation);
+    session.dragonfly_backing_reservation = Some(reservation.clone());
     registry.save(session)?;
-    change_attachment(&descriptor, VnodeChange::AttachFile(&path))?;
-    let expected = VnodeState::File(session.identity.dev, session.identity.ino);
-    if descriptor_state(&descriptor)? != (unit, expected) {
-        return Err(AppError::new("DragonFly attached a different backing file."));
-    }
-    session.backing = Some(device);
+    reservation.attach(&descriptor, &session.source, &session.identity)?;
+    session.backing = Some(reservation.device());
     session.dragonfly_backing_reservation = None;
     registry.save(session)
 }
@@ -113,7 +157,7 @@ pub(super) fn reconcile_backing_reservation(
     registry: &Registry,
     session: &mut Session,
 ) -> AppResult<()> {
-    let Some(reservation) = session.dragonfly_backing_reservation.as_mut() else {
+    let Some(reservation) = session.dragonfly_backing_reservation.clone() else {
         return Ok(());
     };
     if reservation.unit < 0
@@ -127,36 +171,15 @@ pub(super) fn reconcile_backing_reservation(
             "DragonFly vnode reservation conflicts with its session; preserving the journal.",
         ));
     }
-    match open_vnode(&reservation.device()) {
-        Ok(descriptor) => {
-            let (unit, state) = descriptor_state(&descriptor)?;
-            if unit != reservation.unit || !reservation.matches(&device_metadata(&descriptor)?) {
-                return Err(AppError::new(
-                    "DragonFly vnode reservation changed; preserving the journal.",
-                ));
-            }
-            match state {
-                VnodeState::Idle => {
-                    // The native driver requires an active attachment before
-                    // it will destroy a clone. Journal the one-page anonymous
-                    // object before creating it so a retry can finish release.
-                    reservation.empty_release_started = true;
-                    registry.save(session)?;
-                    change_attachment(&descriptor, VnodeChange::AttachPage)?;
-                }
-                VnodeState::Swap(1) if reservation.empty_release_started => (),
-                VnodeState::File(dev, ino)
-                    if !reservation.empty_release_started
-                        && dev == session.identity.dev && ino == session.identity.ino => (),
-                _ => return Err(AppError::new(
-                    "DragonFly vnode reservation has a different backing; preserving the journal.",
-                )),
-            }
-            change_attachment(&descriptor, VnodeChange::Detach)?;
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => (),
-        Err(e) => return Err(AppError::io("Open recorded DragonFly vnode reservation", e)),
-    }
+    let identity = session.identity.clone();
+    reservation.release(&identity, || {
+        session
+            .dragonfly_backing_reservation
+            .as_mut()
+            .unwrap()
+            .empty_release_started = true;
+        registry.save(session)
+    })?;
     session.dragonfly_backing_reservation = None;
     registry.save(session)
 }
