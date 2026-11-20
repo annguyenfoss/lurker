@@ -156,6 +156,33 @@ https://github.com/cryptomator/cryptofs/pull/370
 The fixtures closed normally and the guest mount inventory was restored.
 Per-case data is in `target/goal-validation/cryptomator-short-write-candidate/`.
 
+The installed CLI regression is available through `scripts/test-folder-fault.py`.
+Prepare a fresh private `/tmp/lurker-folder-fault-*` fixture with an empty
+`backing` tmpfs of at most 16 MiB, owned by the ordinary test user. Run the
+script on the dedicated Linux KVM guest as that user, with the installed CLI,
+fixture, `--commit` matching the installed source, `--type` selecting the
+backend, `--fault append`, and `--runtime-tests`. Add `--leave-one-block`
+to exercise a partial write with one filesystem block still available.
+Each condition requires a separate fresh fixture.
+
+This regression commits a 2 KiB prefix, appends 11 KiB under storage pressure,
+checks the prefix immediately, closes while full, frees the fixture's filler,
+and verifies the prefix after reopening. Independent synced files and SQLite
+commits are also checked after restoring space. The result records bytes
+accepted, the failing operation, `fsync` acknowledgment, and both prefix reads.
+Validation failures are reported after the normal close and reopen checks.
+
+One six-case Debian batch reused the exact `14ede46` installer. gocryptfs
+passed both conditions with `ENOSPC` and readable prefixes. Cryptomator
+acknowledged both writes and `fsync` calls but returned `EIO` when reading
+the prefix, including after reopening. CryFS reported `ENOSPC` during the
+append and immediate prefix read, then an explicit failed close. Its original
+prefix was readable after space was freed and the vault reopened. Both CryFS
+cases failed the requirement for readable committed data at capacity and
+clean close. The guest's mounts and loops returned to baseline and the
+package was removed. Receipts are in
+`target/goal-validation/debian-folder-append-harness-14ede46/`.
+
 ## Linux process exit during close
 
 An installed Gentoo `c21e0cc` run detached a read-only CryFS mount and
