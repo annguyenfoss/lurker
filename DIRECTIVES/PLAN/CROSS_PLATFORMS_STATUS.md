@@ -5,6 +5,42 @@ results and remaining release gates apply to this round. Earlier checkpoints
 retain their original dates and source revisions. The approved profiles are
 in `DIRECTIVES/LLM/CIPHER.md`.
 
+## Measurable completion criteria for the active implementation round
+
+The target is one verified final candidate covering the 16 approved non-macOS
+storage routes across Linux and the four BSDs. The Linux kernel and login-user
+VeraCrypt routes have separate qualification. The following gates define the
+finish line. Record each gate as passed, failed, blocked, or unverified with its
+artifact hash and native KVM receipt. Counts describe the existing suites.
+Additional regressions required by a fix join the affected gate.
+
+| Gate | Required evidence |
+| --- | --- |
+| Native installers | Ten installable packages, matching source and dependency manifests, offline runtime, and verified removal |
+| Installed storage lifecycle | At least 1,655 existing checks passed, zero failures, across the ten stock guests |
+| Linux device creation | All 54 format/cipher profiles passed on fixture-owned loop devices |
+| BSD capacity handling | All 81 existing full-storage checks passed, including SQLite full responses and old/new committed data after reopen |
+| Directory append preservation | All six full-store and one-free-block cases passed across gocryptfs, CryFS, and Cryptomator, including readable prior bytes, reported storage failure, and clean close |
+| Desktop | Ten X11 windows, six Linux Wayland windows, and nine BSD storage callbacks passed through the installed helper |
+| Recovery and application behavior | Every applicable case in the plan's Required checks has a receipt, with zero unresolved data-preservation or lifecycle failures across the 16 routes |
+| Implementation and packaging regressions | Required workspace checks and targeted native/module/packaging tests passed for changed components, with skipped cases explained |
+| Handoff | Committed source, artifact/test index, explicit remaining issues, and restored original guest and storage inventories |
+
+Use the verified `14ede46` artifacts as the starting baseline. Build each
+affected component once for a batch of compatible fixes, then reuse those
+outputs for the targeted regressions and affected installer matrix. Carry
+forward an existing receipt when the relevant implementation, dependencies,
+build inputs, and installed artifact are unchanged. Investigate failures
+against a named gate. Repeat a build or test only for a changed input, failed
+case, or unresolved concern affecting that gate. New optional qualification
+work belongs in a later round unless it is required by the approved plan.
+
+The round is complete when every gate passes. An upstream or host defect that
+prevents a gate from passing remains an explicit blocker with a reproducer and
+the affected route. Reporting that blocker does not establish completion.
+Publisher-controlled signing and public release need their own authorized
+release operation and are tracked separately from implementation completion.
+
 ## Supported routes and power-cut results
 
 The packaged-vault lifecycles in the following sections verify creation,
