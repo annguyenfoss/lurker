@@ -3,13 +3,21 @@
 //! Only Lurker-owned vnode files are accepted. This adapter uses one CRYPTO
 //! chunk; `raid1c_native` composes the same identity and filesystem helpers for
 //! explicitly identified two-member native RAID1C arrays.
-use super::{args, exec, Credential};
-use crate::{AppError, AppResult, CreateCipher};
+use super::{args, exec, Credential, Registry, Session};
+use crate::{AppError, AppResult, CreateCipher, VolumeType};
+use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
+
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum DetachIntent {
+    Volume,
+    Backing,
+}
 
 fn device_name<'a>(value: &'a str, prefix: &str) -> AppResult<&'a str> {
     let value = value.strip_prefix("/dev/").unwrap_or(value);
@@ -136,6 +144,19 @@ pub(super) fn detach_file(device: &str) -> AppResult<()> {
     let name = device_name(device, "vnd")?;
     exec("/sbin/vnconfig", &args(&["-u", name]), None)?;
     Ok(())
+}
+
+pub(super) fn detach_backing(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    let backing = session.backing.as_deref().ok_or_else(|| {
+        AppError::new("OpenBSD native backing is missing from the detach journal.")
+    })?;
+    verify_backing(backing, &session.source)?;
+    session.openbsd_detach = Some(DetachIntent::Backing);
+    registry.save(session)?;
+    detach_file(backing)?;
+    session.backing = None;
+    session.openbsd_detach = None;
+    registry.save(session)
 }
 
 pub(super) fn format(
@@ -288,6 +309,67 @@ pub(super) fn close(device: &str) -> AppResult<()> {
     Ok(())
 }
 
+pub(super) fn disk_is_absent(mapped: &str) -> AppResult<bool> {
+    let recorded = device_name(mapped, "sd")?;
+    let listing = exec("/sbin/sysctl", &args(&["-n", "hw.disknames"]), None)?;
+    let listing = listing.trim();
+    if listing.is_empty() {
+        return Ok(true);
+    }
+    let mut found = false;
+    for item in listing.split(',') {
+        let Some((name, duid)) = item.split_once(':') else {
+            return Err(AppError::new("Unexpected OpenBSD disk inventory; preserving the journal."));
+        };
+        if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric())
+            || (!duid.is_empty() && (duid.len() != 16 || !duid.bytes().all(|b| b.is_ascii_hexdigit())))
+        {
+            return Err(AppError::new("Unexpected OpenBSD disk inventory; preserving the journal."));
+        }
+        found |= name == recorded;
+    }
+    Ok(!found)
+}
+
+pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    let Some(intent) = session.openbsd_detach else {
+        return Ok(());
+    };
+    let conflict = || {
+        AppError::new("OpenBSD detach intent conflicts with its session; preserving the journal.")
+    };
+    if session.backend != VolumeType::Softraid || session.mounted.is_some()
+        || !session.identity.matches(&session.source)
+    {
+        return Err(conflict());
+    }
+    let backing = session.backing.as_deref().ok_or_else(conflict)?;
+    match intent {
+        DetachIntent::Volume => {
+            let mapped = session.mapped.as_deref().ok_or_else(conflict)?;
+            verify_backing(backing, &session.source)?;
+            if !disk_is_absent(mapped)? {
+                return Ok(());
+            }
+            if super::mounts()?.iter().any(|mount| mount.source == Path::new(mapped)) {
+                return Err(conflict());
+            }
+            session.mapped = None;
+        }
+        DetachIntent::Backing => {
+            if session.mapped.is_some() {
+                return Err(conflict());
+            }
+            if vnode_identity(backing)?.is_some() {
+                return Ok(());
+            }
+            session.backing = None;
+        }
+    }
+    session.openbsd_detach = None;
+    registry.save(session)
+}
+
 pub(super) fn make_filesystem(device: &str) -> AppResult<()> {
     let name = device_name(device, "sd")?;
     // Freshly decrypted random data can spoof disk labels. Initialize only the
@@ -313,6 +395,72 @@ pub(super) fn make_filesystem(device: &str) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires root and real disposable OpenBSD CRYPTO and vnode attachments"]
+    fn cleanup_reconciles_completed_native_detaches_with_saved_intent() {
+        use super::super::{cleanup, require_root, unique_id, Identity};
+        use std::os::unix::fs::DirBuilderExt;
+
+        require_root().unwrap();
+        let work = std::env::temp_dir().join(format!("lurker-openbsd-detach-{}", unique_id()));
+        fs::DirBuilder::new().mode(0o700).create(&work).unwrap();
+        let source = work.join("owned.img");
+        File::create(&source).unwrap().set_len(128 * 1024 * 1024).unwrap();
+        let registry = Registry {
+            directory: work.clone(),
+            _lock: File::create(work.join("lock")).unwrap(),
+        };
+        let backing = attach_file(&source, false).unwrap();
+        let credential = Credential::Password(b"disposable OpenBSD detach fixture".to_vec());
+        let mapped = format(&backing, CreateCipher::Aes, &credential).unwrap();
+        let mut session = Session {
+            version: 1,
+            id: unique_id(),
+            backend: VolumeType::Softraid,
+            identity: Identity::read(&source).unwrap(),
+            source: source.clone(),
+            create_target: None,
+            peer_sources: Vec::new(),
+            backing: Some(backing.clone()),
+            openbsd_detach: Some(DetachIntent::Volume),
+            mapped: Some(mapped.clone()),
+            mounted: None,
+            intended_mountpoint: None,
+            initialization_directory: None,
+            readonly: false,
+            veracrypt_proof: None,
+            mirror: None,
+        };
+        registry.save(&session).unwrap();
+        reconcile_detach(&registry, &mut session).unwrap();
+        assert_eq!(session.mapped.as_deref(), Some(mapped.as_str()));
+        verify_mapping(&mapped, &backing).unwrap();
+        close(&mapped).unwrap();
+
+        let mut saved = registry.records().unwrap().pop().unwrap();
+        let mut without_intent = saved.clone();
+        without_intent.openbsd_detach = None;
+        assert!(cleanup(&registry, &mut without_intent).is_err());
+        reconcile_detach(&registry, &mut saved).unwrap();
+        assert!(saved.mapped.is_none() && saved.openbsd_detach.is_none());
+        verify_backing(&backing, &source).unwrap();
+
+        saved.openbsd_detach = Some(DetachIntent::Backing);
+        registry.save(&saved).unwrap();
+        reconcile_detach(&registry, &mut saved).unwrap();
+        assert_eq!(saved.backing.as_deref(), Some(backing.as_str()));
+        detach_file(&backing).unwrap();
+
+        let mut saved = registry.records().unwrap().pop().unwrap();
+        let mut without_intent = saved.clone();
+        without_intent.openbsd_detach = None;
+        assert!(cleanup(&registry, &mut without_intent).is_err());
+        cleanup(&registry, &mut saved).unwrap();
+        assert!(registry.records().unwrap().is_empty());
+        assert!(saved.identity.matches(&source));
+        fs::remove_dir_all(work).unwrap();
+    }
     #[test]
     fn device_names_cannot_escape_the_native_device_namespace() {
         assert_eq!(device_name("/dev/rvnd3c", "vnd").unwrap(), "vnd3");

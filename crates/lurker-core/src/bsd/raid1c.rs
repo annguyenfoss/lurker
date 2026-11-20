@@ -122,6 +122,7 @@ fn empty_session(
         create_target: None,
         identity,
         backing: None,
+        openbsd_detach: None,
         mapped: None,
         mounted: None,
         intended_mountpoint: None,

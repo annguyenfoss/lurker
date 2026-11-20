@@ -130,6 +130,9 @@ struct Session {
     #[cfg(target_os = "netbsd")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     netbsd_detach: Option<netbsd::DetachIntent>,
+    #[cfg(target_os = "openbsd")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    openbsd_detach: Option<openbsd::DetachIntent>,
     #[cfg(target_os = "dragonfly")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     dragonfly_backing_reservation: Option<dragonfly::BackingReservation>,
@@ -567,6 +570,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         backing: None,
         #[cfg(target_os = "netbsd")]
         netbsd_detach: None,
+        #[cfg(target_os = "openbsd")]
+        openbsd_detach: None,
         #[cfg(target_os = "dragonfly")]
         dragonfly_backing_reservation: None,
         #[cfg(target_os = "dragonfly")]
@@ -882,6 +887,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         backing: None,
         #[cfg(target_os = "netbsd")]
         netbsd_detach: None,
+        #[cfg(target_os = "openbsd")]
+        openbsd_detach: None,
         #[cfg(target_os = "dragonfly")]
         dragonfly_backing_reservation: None,
         #[cfg(target_os = "dragonfly")]
@@ -927,9 +934,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                 // Inspect the existing native partition through its kernel
                 // layout, without invoking bioctl on an unknown format. Release
                 // that owned vnode before the authenticated VeraCrypt route.
-                native::detach_file(session.backing.as_deref().unwrap())?;
-                session.backing = None;
-                registry.save(&session)?;
+                openbsd::detach_backing(&registry, &mut session)?;
                 veracrypt::ensure_source_available_with_managed(
                     &source,
                     &managed_veracrypt(&registry)?,
@@ -1304,6 +1309,8 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     if s.backend == VolumeType::Raid1c {
         return raid1c::cleanup(registry, s);
     }
+    #[cfg(target_os = "openbsd")]
+    openbsd::reconcile_detach(registry, s)?;
     #[cfg(target_os = "netbsd")]
     netbsd::reconcile_detach(registry, s)?;
     #[cfg(target_os = "dragonfly")]
@@ -1349,16 +1356,29 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
             s.netbsd_detach = Some(netbsd::DetachIntent::Cgd);
             registry.save(s)?;
         }
+        #[cfg(target_os = "openbsd")]
+        if s.backend == VolumeType::Softraid {
+            s.openbsd_detach = Some(openbsd::DetachIntent::Volume);
+            registry.save(s)?;
+        }
         close_mapping(s, mapped)?;
         s.mapped = None;
         #[cfg(target_os = "netbsd")]
         {
             s.netbsd_detach = None;
         }
+        #[cfg(target_os = "openbsd")]
+        {
+            s.openbsd_detach = None;
+        }
         registry.save(s)?;
     }
     #[cfg(target_os = "dragonfly")]
     dragonfly::linear::release(registry, s)?;
+    #[cfg(target_os = "openbsd")]
+    if s.backend == VolumeType::Softraid && s.backing.is_some() {
+        openbsd::detach_backing(registry, s)?;
+    }
     if let Some(backing) = &s.backing {
         native::verify_backing(backing, &s.source)?;
         #[cfg(target_os = "dragonfly")]
@@ -1750,6 +1770,8 @@ mod tests {
             backing: None,
             #[cfg(target_os = "netbsd")]
             netbsd_detach: None,
+            #[cfg(target_os = "openbsd")]
+            openbsd_detach: None,
             #[cfg(target_os = "dragonfly")]
             dragonfly_backing_reservation: None,
             #[cfg(target_os = "dragonfly")]
@@ -1879,6 +1901,8 @@ mod tests {
             backing: None,
             #[cfg(target_os = "netbsd")]
             netbsd_detach: None,
+            #[cfg(target_os = "openbsd")]
+            openbsd_detach: None,
             #[cfg(target_os = "dragonfly")]
             dragonfly_backing_reservation: None,
             #[cfg(target_os = "dragonfly")]
