@@ -196,6 +196,12 @@ verified that cleanup preserves a different file attached to a reused md
 unit. The FreeBSD workspace passed 113 tests with 11 ignored. Evidence
 is under `target/goal-validation/freebsd-native-detach-retry/`.
 
+The exact installed `0dd174c` package passed 26 GELI checks on stock
+FreeBSD 15.1, split between explicit and Auto operation. Both routes
+verified file fsync and SQLite FULL/WAL data after reopen. Package
+removal restored the native and package inventories. Evidence is under
+`target/freebsd-geli-detach/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
