@@ -512,6 +512,33 @@ https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/
 
 https://github.com/NetBSD/src/blob/9c8db5d51941ff57f90f49dff82ce0edf15b3f0f/sys/ufs/ffs/ffs_vfsops.c
 
+### NetBSD synchronous WAPBL with ordinary fsync
+
+One fresh clone ran the same native `636f6a9` package and stock SQLite
+workload with the inner FFS remounted `sync,log` before writes. The
+outer ciphertext remained sparse on plain FFS with QEMU `cache=none`.
+The worker acknowledged an 82,432-byte WAL and a file fsync. The
+controller confirmed both synchronous and journaled flags, left the
+consumer open, and requested a KVM cutoff roughly 24 ms after its last
+readiness check. The workload used ordinary application fsync without
+additional range, backing-file, device or global flushes after writes.
+
+Before the cut, generation 6 contained only the 32-byte WAL inode,
+which matched the raw home inode. On reboot, pre-replay raw inspection
+found a 512-byte home inode and the same 32-byte journal copy. Read-only
+reopen exposed a zero-byte database, a 512-byte WAL and a missing SHM.
+The missing SHM ended that branch before the file digest check.
+
+The normal writable mount on a byte-identical sparse copy reported
+native journal replay to disk. The file digest and SQLite integrity
+check passed. The replayed WAL was 32 bytes and the committed table
+was absent. Thus synchronous WAPBL also failed ordinary application
+fsync qualification with the writable native replay path. Both
+images and sidecars were verified before writable replay, the native
+inventory was idle after close, and the clone was stopped after package
+removal. Source disk hashes matched. Receipts and consoles are under
+`target/netbsd-cgd-ordinary-synclog-636f6a9/`.
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
