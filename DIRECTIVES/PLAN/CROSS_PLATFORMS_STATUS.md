@@ -21,8 +21,8 @@ a committed SQLite FULL/WAL row, and an uncommitted row.
 | FreeBSD | GELI | The matched `ca3c845` sparse fixture lost acknowledged data. The fully allocated control and a newly created `ae53afb` image with native preallocation each passed all five checks. |
 | FreeBSD | VeraCrypt, PEFS, gocryptfs | All three recovered the file and committed row. VeraCrypt needed the ciphertext flush fix. gocryptfs required explicit stale-session reconciliation. |
 | OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | All three needed native FFS preen on separate ciphertext copies before writable reopen. With synchronous FFS, each copy then recovered the file and committed row. |
-| NetBSD | CGD | Ordinary application sync under WAPBL left the WAL inode stale in both the journal and its home location and lost the committed SQLite row. An explicit WAL range flush persisted the new inode in the journal. Native writable replay on a ciphertext copy recovered the file and row, while read-only reopen exposed the stale inode. |
-| DragonFly BSD | LUKS1 | Ordinary application sync lost acknowledged writes on sparse and fully allocated images. A single backing-file fsync preserved the file and committed row through read-only UFS in a timing-matched control. Inner UFS fsync does not send the required mapper flush, and normal writable reopen refused the unclean filesystem. |
+| NetBSD | CGD | Ordinary application sync left the journal's WAL inode stale and lost the committed SQLite row, including with synchronous WAPBL and writable replay. An explicit WAL range flush persisted the new inode in the journal. Writable replay recovered the file and row on a ciphertext copy. Read-only reopen exposed the stale inode. |
+| DragonFly BSD | LUKS1 | Ordinary application sync lost acknowledged writes on sparse and fully allocated images. A single backing-file fsync preserved the file and committed row through read-only UFS in a timing-matched control. Inner UFS fsync ends before issuing a mapper flush. Normal writable reopen refused the unclean filesystem. |
 | macOS | Apple encrypted disk images, VeraCrypt, gocryptfs, CryFS, Cryptomator | Historical package results only. This round excluded macOS. |
 
 ## DragonFly guarded LUKS1 activation
@@ -61,6 +61,12 @@ verified the signal handler and the forced-stop fallback. DragonFly
 workspace check passed, with 93 tests passing and four ignored. At the
 same revision, core checks and tests passed on FreeBSD, NetBSD and
 OpenBSD.
+
+`8143d6c` journals the payload vnode's devfs identity before native
+attach. The active-attachment recovery test also verified that reused
+unit numbers cannot authorize detach of a later attachment. The exact
+native CLI package passed 91 installed lifecycle checks across all
+three LUKS1 ciphers, passwords and binary keyfiles, including Auto.
 
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
