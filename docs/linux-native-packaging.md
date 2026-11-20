@@ -537,3 +537,24 @@ mounts closing on Debian and Fedora.
 
 Exact artifacts, per-case logs and runtime reports, and cleanup receipts
 are indexed in `target/linux-coordinated-8bb689c/matrix.json`.
+
+## Prepared KVM installer replay at `14ede46`
+
+Run `20261120T042301Z-45152472` built the six native installers at
+`14ede46fb401578f0e8a4ee9b51e72ce17c0ad04`. Arch, Debian, Ubuntu, Fedora,
+openSUSE Leap, and Gentoo each passed 117 privileged and 78 login-user
+storage checks offline. The 1,170 checks covered LUKS2, LUKS1, VeraCrypt
+in both modes, gocryptfs, CryFS, and Cryptomator. They included file and
+SQLite read-back after close and reopen. All six installed desktops
+rendered a 1280×860 X11 window as UID 1300.
+
+Each guest verified all 899 installed entries. The live CryFS processes
+used the reproducible engine with SHA-256
+`45e4b770b8cd4eb0a5c46cf15f5db9b6daf19372127bcd8c165a25d696713bbc`,
+with its `8d8a501` build provenance and 15 notices. The other 130
+private backend entries matched the `14197ef` inputs. Cleanup restored
+the scoped package and native resource inventories.
+
+Full artifact digests, per-suite checks, window results, dependency
+notices and cleanup receipts are indexed in
+`target/linux-coordinated-14ede46/matrix.json`.
