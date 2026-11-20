@@ -247,10 +247,15 @@ impl FileStage {
         Ok(())
     }
 
-    pub(super) fn sync_destination(&self) -> AppResult<()> {
-        self.parent
-            .sync_all()
-            .map_err(|e| AppError::io("Sync BSD destination directory", e))
+    pub(super) fn finish(&self, published: AppResult<()>) -> AppResult<()> {
+        if published.is_ok() {
+            // Keep staged data if the kernel cannot confirm publication.
+            self.parent
+                .sync_all()
+                .map_err(|e| AppError::io("Sync BSD destination directory", e))?;
+        }
+        self.discard();
+        published
     }
 
     pub(super) fn discard(&self) {
@@ -337,10 +342,9 @@ mod tests {
         let image = root.join("target");
         let params = root.join("target.cgdparams");
         fs::write(&image, "existing data").unwrap();
-        assert!(stage.publish_cgd(&image, &params).is_err());
+        assert!(stage.finish(stage.publish_cgd(&image, &params)).is_err());
         assert_eq!(fs::read_to_string(&image).unwrap(), "existing data");
         assert!(!params.exists());
-        stage.discard();
         assert!(!stage.path().exists());
         fs::remove_dir_all(root).unwrap();
     }

@@ -672,11 +672,10 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     file.sync_all()
         .map_err(|e| AppError::io("Sync initialized container", e))?;
     #[cfg(target_os = "netbsd")]
-    stage.publish_cgd(&target, &params_path(&target))?;
+    let published = stage.publish_cgd(&target, &params_path(&target));
     #[cfg(not(target_os = "netbsd"))]
-    stage.publish(&target, c.force)?;
-    stage.sync_destination()?;
-    stage.discard();
+    let published = stage.publish(&target, c.force);
+    stage.finish(published)?;
     output.success(&format!(
         "Created {backend} file container: {}",
         target.display()
@@ -1780,10 +1779,15 @@ mod tests {
         let target = root.join("target");
         stage.create_image().unwrap().write_all(b"new").unwrap();
         fs::write(&target, "old").unwrap();
-        assert!(stage.publish(&target, false).is_err());
+        assert!(stage.finish(stage.publish(&target, false)).is_err());
         assert_eq!(fs::read_to_string(&target).unwrap(), "old");
-        stage.publish(&target, true).unwrap();
+        assert!(!stage.path().exists());
+
+        let mut stage = FileStage::create(&root).unwrap();
+        stage.create_image().unwrap().write_all(b"new").unwrap();
+        stage.finish(stage.publish(&target, true)).unwrap();
         assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        assert!(!stage.path().exists());
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
