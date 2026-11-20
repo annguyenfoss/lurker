@@ -26,6 +26,13 @@ pub(super) struct Member {
     published: bool,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum DetachIntent {
+    Array,
+    Member(usize),
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct Mirror {
     uuid: Option<String>,
@@ -39,6 +46,8 @@ pub(super) struct Mirror {
     #[serde(default)]
     rolled_back: bool,
     allow_degraded: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    detach: Option<DetachIntent>,
 }
 
 impl Mirror {
@@ -139,6 +148,7 @@ fn empty_session(
             committed: false,
             rolled_back: false,
             allow_degraded: degraded,
+            detach: None,
         }),
     }
 }
@@ -325,7 +335,7 @@ fn attach_members(registry: &Registry, session: &mut Session) -> AppResult<()> {
         let backing = native::attach_file(&path, false)?;
         state_mut(session)?.members[index].backing = Some(backing);
         registry.save(session)?;
-        verify_members(session)?;
+        verify_members(session, None)?;
     }
     Ok(())
 }
@@ -650,8 +660,8 @@ fn mountpoint(path: &Path, members: &[Member]) -> AppResult<PathBuf> {
     Ok(target)
 }
 
-fn verify_members(session: &Session) -> AppResult<()> {
-    for member in &state(session)?.members {
+fn verify_members(session: &Session, inactive_vnode: Option<usize>) -> AppResult<()> {
+    for (index, member) in state(session)?.members.iter().enumerate() {
         if let Some(identity) = &member.identity {
             let finalized = state(session)?.committed
                 && member.backing.is_none()
@@ -667,8 +677,10 @@ fn verify_members(session: &Session) -> AppResult<()> {
                     "Mirror member identity changed; refusing cleanup.",
                 ));
             }
-            if let Some(backing) = &member.backing {
-                native::verify_backing(backing, &member.path)?;
+            if Some(index) != inactive_vnode {
+                if let Some(backing) = &member.backing {
+                    native::verify_backing(backing, &member.path)?;
+                }
             }
         } else if member.backing.is_some() {
             return Err(AppError::new(
@@ -680,7 +692,7 @@ fn verify_members(session: &Session) -> AppResult<()> {
 }
 
 pub(super) fn verify(session: &Session) -> AppResult<()> {
-    verify_members(session)?;
+    verify_members(session, None)?;
     if let Some(mapped) = &session.mapped {
         let mirror = state(session)?;
         driver::verify_mapping(
@@ -695,7 +707,48 @@ pub(super) fn verify(session: &Session) -> AppResult<()> {
     Ok(())
 }
 
+fn reconcile_detach(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    let Some(intent) = state(session)?.detach else {
+        return Ok(());
+    };
+    let conflict = || AppError::new("RAID1C detach intent conflicts with its session; preserving the journal.");
+    if session.mounted.is_some() {
+        return Err(conflict());
+    }
+    match intent {
+        DetachIntent::Array => {
+            let mapped = session.mapped.as_deref().ok_or_else(conflict)?;
+            if state(session)?.uuid.is_none() {
+                return Err(conflict());
+            }
+            if !native::disk_is_absent(mapped)? {
+                return Ok(());
+            }
+            verify_members(session, None)?;
+            if mounts()?.iter().any(|m| m.source == Path::new(mapped)) {
+                return Err(conflict());
+            }
+            session.mapped = None;
+        }
+        DetachIntent::Member(index) => {
+            if session.mapped.is_some() {
+                return Err(conflict());
+            }
+            let member = state(session)?.members.get(index).ok_or_else(conflict)?;
+            let backing = member.backing.as_deref().ok_or_else(conflict)?;
+            if native::vnode_identity(backing)?.is_some() {
+                return Ok(());
+            }
+            verify_members(session, Some(index))?;
+            state_mut(session)?.members[index].backing = None;
+        }
+    }
+    state_mut(session)?.detach = None;
+    registry.save(session)
+}
+
 fn close_resources(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    reconcile_detach(registry, session)?;
     verify(session)?;
     if session.mounted.is_none()
         && session.intended_mountpoint.is_some()
@@ -724,22 +777,28 @@ fn close_resources(registry: &Registry, session: &mut Session) -> AppResult<()> 
         session.intended_mountpoint = None;
         registry.save(session)?;
     }
-    if let Some(mapped) = &session.mapped {
-        if mounts()?.iter().any(|m| m.source == Path::new(mapped)) {
+    if let Some(mapped) = session.mapped.clone() {
+        if mounts()?.iter().any(|m| m.source == Path::new(&mapped)) {
             return Err(AppError::new(
                 "Mirror still has a mounted filesystem; leave it recoverable.",
             ));
         }
-        driver::close(mapped)?;
+        state_mut(session)?.detach = Some(DetachIntent::Array);
+        registry.save(session)?;
+        driver::close(&mapped)?;
         session.mapped = None;
+        state_mut(session)?.detach = None;
         registry.save(session)?;
     }
     for index in (0..state(session)?.members.len()).rev() {
         if let Some(backing) = state(session)?.members[index].backing.clone() {
             let member = &state(session)?.members[index];
             native::verify_backing(&backing, &member.path)?;
+            state_mut(session)?.detach = Some(DetachIntent::Member(index));
+            registry.save(session)?;
             native::detach_file(&backing)?;
             state_mut(session)?.members[index].backing = None;
+            state_mut(session)?.detach = None;
             registry.save(session)?;
         }
     }
@@ -857,6 +916,78 @@ fn remove_staging(session: &Session) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires root and real disposable OpenBSD RAID1C and vnode attachments"]
+    fn cleanup_reconciles_completed_array_and_member_detaches() {
+        require_root().unwrap();
+        let work = std::env::temp_dir().join(format!("lurker-raid1c-detach-{}", unique_id()));
+        fs::DirBuilder::new().mode(0o700).create(&work).unwrap();
+        let registry = Registry {
+            directory: work.clone(),
+            _lock: File::create(work.join("lock")).unwrap(),
+        };
+        let mut members = Vec::new();
+        for index in 0..2 {
+            let path = work.join(format!("member-{index}.img"));
+            File::create(&path).unwrap().set_len(128 * 1024 * 1024).unwrap();
+            members.push(Member {
+                identity: Some(Identity::read(&path).unwrap()),
+                target: path.clone(),
+                path,
+                backing: None,
+                stage_dir: None,
+                stage_identity: None,
+                published: true,
+            });
+        }
+        let mut session = empty_session(
+            members[0].path.clone(),
+            members[0].identity.clone().unwrap(),
+            members,
+            work.join("members.raid1c.json"),
+            false,
+            false,
+        );
+        attach_members(&registry, &mut session).unwrap();
+        let backings = state(&session).unwrap().backings();
+        let credential = super::super::Credential::Password(b"disposable RAID1C detach fixture".to_vec());
+        let mapped = driver::format(&backings, &credential).unwrap();
+        set_uuid_from_members(&mut session, None).unwrap();
+        session.mapped = Some(mapped.clone());
+        state_mut(&mut session).unwrap().detach = Some(DetachIntent::Array);
+        registry.save(&session).unwrap();
+        reconcile_detach(&registry, &mut session).unwrap();
+        verify(&session).unwrap();
+        driver::close(&mapped).unwrap();
+
+        let mut saved = registry.records().unwrap().pop().unwrap();
+        let mut without_intent = saved.clone();
+        state_mut(&mut without_intent).unwrap().detach = None;
+        assert!(cleanup(&registry, &mut without_intent).is_err());
+        reconcile_detach(&registry, &mut saved).unwrap();
+        assert!(saved.mapped.is_none() && state(&saved).unwrap().detach.is_none());
+        verify_members(&saved, None).unwrap();
+
+        state_mut(&mut saved).unwrap().detach = Some(DetachIntent::Member(1));
+        registry.save(&saved).unwrap();
+        reconcile_detach(&registry, &mut saved).unwrap();
+        assert_eq!(state(&saved).unwrap().backings(), backings);
+        native::detach_file(&backings[1]).unwrap();
+
+        let mut saved = registry.records().unwrap().pop().unwrap();
+        let mut without_intent = saved.clone();
+        state_mut(&mut without_intent).unwrap().detach = None;
+        assert!(cleanup(&registry, &mut without_intent).is_err());
+        cleanup(&registry, &mut saved).unwrap();
+        assert!(registry.records().unwrap().is_empty());
+        for member in &state(&saved).unwrap().members {
+            assert!(member.identity.as_ref().unwrap().matches(&member.path));
+        }
+        assert!(backings.iter().all(|path| native::vnode_identity(path).unwrap().is_none()));
+        fs::remove_dir_all(work).unwrap();
+    }
+
     #[test]
     fn relative_membership_paths_survive_directory_moves() {
         assert_eq!(
