@@ -646,6 +646,44 @@ The normal writable durability gate remains open. Receipts are under
 
 https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/ufs/ffs_vfsops.c#L648
 
+#### DragonFly guarded ciphertext backing-file fsync
+
+The same `dfc7fdc` package and frozen worker repeated the synchronous
+UFS test with byte-identical, fully allocated initial ciphertext.
+After the workload acknowledgement, the diagnostic called fsync once
+on a read-only descriptor for the regular ciphertext backing file.
+The other device descriptor fsync calls from the preceding cut were
+omitted. Libvirt completed the cut 1.316 seconds after the host observed
+the acknowledgement, compared with 1.198 seconds in the preceding run.
+
+The independent read-only outer UFS copy contained the final guest
+ciphertext digest `28fc0172f1bc1a0d6d37dfc0a61c1308f43a10b93f83edf6855d325d86cdcad6`.
+DragonFly denied a normal guarded writable reopen because the inner UFS
+was unclean. On a byte-identical copy, the same CLI mounted the inner
+UFS read-only. The acknowledged file matched its recorded digest. The
+WAL retained its recorded size. SQLite verified integrity and the exact
+committed row from an independent database and WAL copy. The test recovered the
+acknowledged data with the single backing-file fsync. Ordinary
+application fsync and normal writable reopen remain open.
+
+The native file-descriptor write path adds `IO_SYNC` for a synchronous
+mount. The vnode disk enters `VOP_WRITE` directly with `IO_RECURSE`.
+That distinction leaves outer UFS free to delay the vnode disk's
+ordinary writes. The regular-file fsync syscall waits for the backing
+vnode and invokes any registered mount bioops.
+
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/kern/vfs_vnops.c#L777
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/dev/disk/vn/vn.c#L348
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/vfs/ufs/ufs_readwrite.c#L363
+- https://github.com/DragonFlyBSD/DragonFlyBSD/blob/54d7118100cb99b741fe92cfd8d542c623b6f8d0/sys/kern/vfs_syscalls.c#L4146
+
+Both transient guests and networks were retired. The original and
+read-only recovery fixture images retained cut SHA-256
+`a710be9f7349adb52a5ebaac5e0e903164cf96366fba3bc1062a34c7d7266c1b`.
+Receipts are under `/mnt/virt/lurker-fault-dfbackfsync26/`,
+`/mnt/virt/lurker-fault-dfbackread26/`, and
+`target/dragonfly-backing-fsync/`.
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
