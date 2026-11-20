@@ -89,6 +89,17 @@ previously qualified no-debug workspace cache and data limit after
 retiring the cold-cache attempt. Logs and source digests are under
 `target/goal-validation/bsd-pinned-staging/`.
 
+All four installed native packages at the same revision verified create,
+write, close, and reopen. These checks used owned fixtures and restored
+the native inventories after removal.
+
+| KVM target | Installed staging qualification |
+| --- | --- |
+| FreeBSD | 143 GELI and VeraCrypt cases across explicit, Auto and binary-keyfile routes. Each fixture removed its staging directory. |
+| NetBSD | 26 explicit and Auto CGD cases. A sidecar-only collision preserved the existing file and left no staged image. Both successful publishes produced mode 0600 images and sidecars. |
+| OpenBSD | 13 CRYPTO and 30 RAID1C cases, including invoking-user checks. VeraCrypt also passed login-user writes, SQLite reopen and safe read-only refusal. |
+| DragonFly BSD | 26 AES Auto cases across a root-owned and a login-owned destination. The login-owned fixture published the image as UID 1300 with mode 0600. |
+
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
 All ten non-macOS KVM guests ran locked workspace checks and tests from
