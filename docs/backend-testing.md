@@ -85,6 +85,18 @@ environment. All 15 checks passed again on the exact Debian package,
 and both the test package and native fixture inventory were restored.
 Receipts are in `target/browser-profile-qualification/debian-luks2-b9117eb/`.
 
+On an isolated OpenBSD 8.0 KVM guest, Firefox ESR 153.4.0 ran as UID 1000
+against the native-installed `e607cc7` package. CRYPTO and AES VeraCrypt
+each passed 15 checks with harness `b9117eb`. RAID1C passed 13 invoking-user
+checks with harness `5ea6e3f`. All three profiles stored and retrieved a
+loopback page value in separate browser processes across close and reopen.
+The guest verified 73 official package archives against the OpenBSD 8.0
+package signing key and disabled its only non-loopback interface for the
+workload. Native mounts, devices and receipts matched their baselines.
+The test package was removed and the guest shut down normally. The transient
+domain, isolated bridge, overlay and control credentials were removed.
+Evidence is in `target/openbsd-firefox-bed2448/`.
+
 For a native API that cannot attach read-only, use
 `--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
 the read-only CLI request and requires both a nonzero exit and no mount at the
