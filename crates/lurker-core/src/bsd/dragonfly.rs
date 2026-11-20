@@ -1,6 +1,6 @@
 //! DragonFly's native LUKS1/dm-crypt adapter. The base cryptsetup 1.1.2
 //! interface deliberately receives neither LUKS2 nor Argon2 arguments.
-use super::{Credential, args, exec};
+use super::{Credential, args, exec, exec_interruptible};
 use crate::{AppError, AppResult, CreateCipher};
 use std::ffi::OsString;
 use std::fs::File;
@@ -113,7 +113,8 @@ pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential
     let (auth, input) = credential_args(credential);
     command.extend(auth);
     command.extend(args(&["luksFormat", device]));
-    exec(CRYPTSETUP, &command, input.as_deref())?;
+    // The native LUKS1 keyslot code handles SIGINT to remove its temporary map.
+    exec_interruptible(CRYPTSETUP, &command, input.as_deref())?;
     Ok(())
 }
 
@@ -144,7 +145,7 @@ fn unlock_named(
     let (auth, input) = credential_args(credential);
     command.extend(auth);
     command.extend(args(&["luksOpen", device, name]));
-    exec(CRYPTSETUP, &command, input.as_deref())?;
+    exec_interruptible(CRYPTSETUP, &command, input.as_deref())?;
     Ok(())
 }
 

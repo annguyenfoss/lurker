@@ -15,7 +15,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::DirBuilderExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[cfg(target_os = "freebsd")]
@@ -1438,7 +1438,16 @@ pub(super) fn args(values: &[&str]) -> Vec<OsString> {
 
 /// Tool output is bounded and secrets are never interpolated into diagnostics.
 pub(super) fn exec(program: &str, argv: &[OsString], input: Option<&[u8]>) -> AppResult<String> {
-    exec_in_locale(program, argv, input, "C")
+    exec_in_locale(program, argv, input, "C", None)
+}
+
+#[cfg(target_os = "dragonfly")]
+pub(super) fn exec_interruptible(
+    program: &str,
+    argv: &[OsString],
+    input: Option<&[u8]>,
+) -> AppResult<String> {
+    exec_in_locale(program, argv, input, "C", Some(Duration::from_secs(5)))
 }
 
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
@@ -1447,7 +1456,29 @@ pub(super) fn exec_utf8(
     argv: &[OsString],
     input: Option<&[u8]>,
 ) -> AppResult<String> {
-    exec_in_locale(program, argv, input, "C.UTF-8")
+    exec_in_locale(program, argv, input, "C.UTF-8", None)
+}
+
+fn stop_timed_out_child(
+    child: &mut Child,
+    interrupt_grace: Option<Duration>,
+) -> std::io::Result<ExitStatus> {
+    if let Some(grace) = interrupt_grace {
+        // SAFETY: the caller owns this child and has not reaped it, so this PID
+        // cannot be reused before we send the signal. No process group is signaled.
+        if unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT) } == 0 {
+            let start = Instant::now();
+            while start.elapsed() < grace {
+                match child.try_wait() {
+                    Ok(Some(status)) => return Ok(status),
+                    Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+                    Err(_) => break,
+                }
+            }
+        }
+    }
+    let _ = child.kill();
+    child.wait()
 }
 
 fn exec_in_locale(
@@ -1455,6 +1486,7 @@ fn exec_in_locale(
     argv: &[OsString],
     input: Option<&[u8]>,
     locale: &str,
+    interrupt_grace: Option<Duration>,
 ) -> AppResult<String> {
     let executable = crate::trusted_privileged_executable(Path::new(program))?;
     let mut child = Command::new(&executable)
@@ -1500,8 +1532,7 @@ fn exec_in_locale(
             break status;
         }
         if start.elapsed() > Duration::from_secs(300) {
-            let _ = child.kill();
-            let _ = child.wait();
+            let _ = stop_timed_out_child(&mut child, interrupt_grace);
             return Err(AppError::new(format!(
                 "{program} timed out; inspect retained BSD session before retrying."
             )));
@@ -1613,6 +1644,34 @@ fn mounts() -> AppResult<Vec<Mounted>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "dragonfly")]
+    #[test]
+    fn tool_timeout_allows_interrupt_cleanup_and_bounds_the_wait() {
+        use std::io::{BufRead, BufReader};
+        use std::os::unix::process::ExitStatusExt;
+
+        for (trap, grace, code, signal) in [
+            ("'exit 17'", Duration::from_secs(2), Some(17), None),
+            ("''", Duration::from_millis(75), None, Some(libc::SIGKILL)),
+        ] {
+            let mut child = Command::new("/bin/sh")
+                .args([
+                    "-c",
+                    &format!("trap {trap} INT; echo ready; while :; do :; done"),
+                ])
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut ready = String::new();
+            let handshake = BufReader::new(child.stdout.take().unwrap()).read_line(&mut ready);
+            let status = stop_timed_out_child(&mut child, Some(grace)).unwrap();
+            handshake.unwrap();
+            assert_eq!(ready, "ready\n");
+            assert_eq!(status.code(), code);
+            assert_eq!(status.signal(), signal);
+        }
+    }
+
     #[cfg(target_os = "netbsd")]
     #[test]
     fn netbsd_requests_and_requires_journaling_only_for_writable_mounts() {
