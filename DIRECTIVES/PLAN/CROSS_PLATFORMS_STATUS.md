@@ -165,6 +165,17 @@ inventories unchanged. Restoring a byte-identical backup recovered the
 file and SQLite data on reopen. The package and test guest were removed.
 Evidence is under `target/netbsd-cgd-detach-intent/`.
 
+OpenBSD `db993eb` records CRYPTO detach intent before closing the
+softraid disk or vnode. It also records the vnode release before Auto
+falls back to VeraCrypt. `6fe1f26` records the RAID1C array detach and
+each member detach separately. Retry checks the recorded source
+identities and native disk or vnode state. Native regressions on
+OpenBSD 8.0 recovered completed detaches, required a saved intent,
+and restored the device, mount, and registry inventories.
+The final workspace passed 112 tests with 19 ignored. Results are under
+`target/goal-validation/openbsd-native-detach-retry/` and
+`target/goal-validation/openbsd-raid1c-detach-retry/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
