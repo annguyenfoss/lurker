@@ -388,6 +388,44 @@ down with idle CGD and vnode inventories. The source overlay and fixture
 disk hashes matched their pretest values. Receipts and console logs are
 in `target/netbsd-cgd-nolog/` and `target/netbsd-cgd-log-paired/`.
 
+### NetBSD raw journal and range-flush controls
+
+Three fresh, networkless NetBSD 11.1 KVM clones used native package
+`da621733a93bdbc49dc9d7021834affaaa5882c0`
+(`95812e31e5b81fccd3e804f1a2e001082131122140b8509b78ec0f0f27b05b4a`).
+They used the normal sparse CGD profile, active WAPBL on the inner and
+outer FFS filesystems, and the default `cache=none` on the virtual fixture
+disk. A stock SQLite 3.45.1 consumer fsynced a 65,536-byte file, committed
+the same bytes in FULL/WAL mode, and held a second transaction open.
+
+The live WAL reported 82,432 bytes after ordinary application `fsync`.
+Read-only raw CGD probes saw a 32-byte FFS home inode and WAPBL generation
+6. A successful `dkctl cgd0 synccache force` left both unchanged. A
+nonempty `fsync_range(FFILESYNC | FDISKSYNC)` on the live WAL advanced
+the inner generation to 7 and updated the raw inode to 82,432 bytes.
+The first data sector then contained the SQLite WAL magic.
+
+| Intervention after the ordinary application fsync | Result after KVM cutoff |
+| --- | --- |
+| CGD device flush and live WAL range flush | Native WAPBL replay refused an unrecognized journal record type. |
+| The same sequence plus a successful fixture VirtIO disk cache flush | Native replay again refused an unrecognized journal record type. |
+| The same sequence with a range flush on the outer ciphertext backing file before the VirtIO flush | The outer journal advanced from generation 8 to 9. Read-only reopen recovered the 82,432-byte WAL and the exact file digest. SQLite integrity passed, the committed BLOB matched, and the uncommitted row was absent. |
+
+The successful path required explicit app-file and backing-file
+operations plus access to the test disk. It establishes a diagnostic
+control with WAPBL active. Ordinary application fsync remains unqualified
+for abrupt cuts on the packaged CGD profile. The package cannot make
+these additional native calls on behalf of arbitrary application fsync
+operations through the current mount interface. No production settings
+changed. Both refusals were preserved without a repair, and each clone
+ended stopped with its package removed and idle native mappings.
+The source disk hashes matched their pretest values. Raw receipts and
+console logs are under `target/netbsd-cgd-range-da62173/`,
+`target/netbsd-cgd-range-leaf-da62173/`, and
+`target/netbsd-cgd-range-backing-da62173/`.
+
+https://man.netbsd.org/NetBSD-11.1/fsync.2
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
