@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import platform
 import pty
+import pwd
 import re
 import select
 import signal
@@ -68,6 +69,22 @@ class BrowserProfile:
 
     def __init__(self, suite):
         self.suite = suite
+        self.credentials = {}
+        self.uid = os.geteuid()
+        if account := getattr(suite.options, "firefox_account", None):
+            self.uid = account.pw_uid
+            self.credentials = dict(user=account.pw_uid, group=account.pw_gid, extra_groups=[])
+            # Allow traversal to the mount while enclosing all CLI fixture logs.
+            suite.root.chmod(0o711)
+        self.scratch = suite.root / "firefox-process"
+        self.scratch.mkdir(mode=0o700)
+        if self.credentials:
+            os.chown(self.scratch, self.uid, self.credentials["group"])
+        self.environment = {**os.environ, "HOME": str(self.scratch),
+                            "XDG_CONFIG_HOME": str(self.scratch / "config"),
+                            "XDG_CACHE_HOME": str(self.scratch / "cache"),
+                            "XDG_DATA_HOME": str(self.scratch / "data"),
+                            "XDG_RUNTIME_DIR": str(self.scratch)}
         self.token = os.urandom(16).hex()
         received = self.received = []
         token = self.token
@@ -107,14 +124,21 @@ request.send();
             raise AssertionError("Firefox profile requires the owned encrypted mount")
         if phase == "write":
             profile.mkdir(mode=0o700)
+            if self.credentials:
+                if suite.mountpoint.stat().st_uid != self.uid:
+                    raise AssertionError("Encrypted filesystem belongs to a different user")
+                os.chown(profile, self.uid, self.credentials["group"], follow_symlinks=False)
+        if profile.stat().st_uid != self.uid:
+            raise AssertionError("Firefox profile belongs to a different user")
         before = len(self.received)
         url = f"http://127.0.0.1:{self.server.server_port}/{phase}"
         log = suite.logs / f"firefox-{phase}.log"
         with log.open("wb") as stream:
             subprocess.run(
                 [str(suite.options.firefox), "--headless", "--no-remote", "--profile", str(profile),
-                 "--screenshot", str(suite.root / f"firefox-{phase}.png"), url],
+                 "--screenshot", str(self.scratch / f"firefox-{phase}.png"), url],
                 stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,
+                cwd=self.scratch, env=self.environment, **self.credentials,
                 timeout=suite.options.timeout, check=True,
             )
         if self.received[before:] != [self.token]:
@@ -542,7 +566,8 @@ class Suite:
             if getattr(self.options, "firefox", None):
                 browser = BrowserProfile(self)
                 self.result["firefox"] = {"path": str(self.options.firefox),
-                                          "sha256": file_hash(self.options.firefox)}
+                                          "sha256": file_hash(self.options.firefox),
+                                          "uid": browser.uid}
             hook = getattr(self.options, "session_close", False)
             self.result["close_command"] = "session-close" if hook else "unmount"
             for name, function in [
@@ -606,8 +631,17 @@ def parse_args(argv=None):
         parser.error("--binary must name an existing executable artifact")
     if options.firefox:
         options.firefox = options.firefox.resolve()
-        if os.geteuid() == 0 or not options.firefox.is_file() or not os.access(options.firefox, os.X_OK):
-            parser.error("--firefox requires an executable Firefox and a login-user run")
+        if not options.firefox.is_file() or not os.access(options.firefox, os.X_OK):
+            parser.error("--firefox requires an executable Firefox")
+        if os.geteuid() == 0:
+            try:
+                uid = int(os.environ.get("SUDO_UID", "0"))
+                options.firefox_account = pwd.getpwuid(uid) if uid > 0 else None
+            except (ValueError, KeyError):
+                options.firefox_account = None
+            if (platform.system() != "Linux" or options.backend not in {"luks", "luks1", "veracrypt"}
+                    or options.unprivileged or not options.firefox_account):
+                parser.error("Privileged --firefox tests require sudo from a Linux login user and a native container backend")
     if options.backend in DIRECTORIES and options.cipher:
         parser.error("Directory backend profiles do not accept --cipher")
     if options.timeout <= 0:
