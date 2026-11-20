@@ -336,6 +336,17 @@ output passed all 13 package-relative lifecycle checks. The builder
 manifest and runtime evidence are under
 `target/goal-validation/cryfs-conan-prefix-builder/`.
 
+A separate Debian KVM build began with an empty Conan cache and rebuilt
+the linked dependencies from the verified source archives. Both prefix
+maps and the pinned timestamp produced the same 7,063,248-byte CryFS
+executable, with SHA-256
+`45e4b770b8cd4eb0a5c46cf15f5db9b6daf19372127bcd8c165a25d696713bbc`.
+The rebuilt dependency payloads matched, and the engine passed all 13
+login-user lifecycle checks. The build-only CMake 3.25.3 tool came from
+the verified upstream binary archive. Its generated environment
+scripts contained local paths. Evidence is under
+`target/goal-validation/cryfs-independent-cold-8bb689c/`.
+
 The four relocated Arch libraries are libfuse3, libnuma, liburing and zlib.
 Their upstream archives matched the checksums in the exact Arch package
 recipes. The receipt retains those recipes and the signed producer package
