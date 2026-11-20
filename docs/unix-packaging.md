@@ -435,6 +435,15 @@ All 255 script tests passed. The signing subkey was disposable, and its
 private staging directory was removed. Receipts are under
 `target/goal-validation/release-signatures-test/`.
 
+Arch KVM also signed a fixture inventory at `14ede46` containing all ten
+native installer candidates and the exact vendored Rust source archive.
+It used the corrected OpenBSD candidate with the Rust notice catalog.
+Full inventory verification and an independent single-package download
+both passed. The verifier rejected modified package and checksum-inventory
+copies. The signing subkey and staging directory were disposable. The
+public fixture key, signed inventory and receipts are retained under
+`target/goal-validation/release-provenance-14ede46/`.
+
 Public signatures require the publisher's real release key.
 
 https://www.gnupg.org/documentation/manuals/gnupg/Operational-GPG-Commands.html
