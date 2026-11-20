@@ -38,7 +38,11 @@ PRIVILEGED_FIREFOX_BACKENDS = {
     "OpenBSD": {"softraid", "veracrypt"},
     "DragonFly": {"luks1"},
 }
-PROMPT = re.compile(rb"(?i)(?:passphrase|password)[^\r\n:]{0,400}:[ \t]*")
+PROMPT = re.compile(
+    rb"(?im)(?:^|(?<=\r))[ \t]*(?:(?P<authorization>\[sudo\] |sudo )password"
+    rb"|(?:(?:enter|re-enter|confirm|verify|existing|new|confirm new) )?(?:passphrase|password))"
+    rb"(?: for [^\r\n]{1,400})?:[ \t]*(?=$|\r)"
+)
 MAX_TRANSCRIPT = 2 * 1024 * 1024
 ECHO_WAIT_TIMEOUT = 5.0
 ECHO_STABLE_SECONDS = 0.02
@@ -304,15 +308,14 @@ def terminal(args, password, timeout, log):
                     transcript.extend(chunk)
                     if len(transcript) > MAX_TRANSCRIPT:
                         raise RuntimeError("CLI exceeded bounded transcript limit")
-                    match = None if pending_prompt else PROMPT.search(transcript, consumed)
+                    match = None if pending_prompt else PROMPT.search(transcript[consumed:])
                     if match:
                         # This suite never supplies administrator credentials.
-                        context = bytes(transcript[max(consumed, match.start() - 120):match.end()]).lower()
-                        if b"[sudo]" in context or b"sudo password" in context:
+                        if match.group("authorization"):
                             raise RuntimeError("Unexpected authorization prompt; run with the explicit required privilege route")
                         if password is None:
                             raise RuntimeError("Unexpected credential prompt")
-                        consumed = match.end()
+                        consumed += match.end()
                         pending_prompt = time.monotonic()
                         echo_off_since = None
             child, status = os.waitpid(pid, os.WNOHANG)

@@ -134,13 +134,29 @@ class HarnessTests(unittest.TestCase):
                 suite.no_overwrite()
 
     def test_native_prompt_is_answered_without_echo_or_logged_secret(self):
-        self.binary.write_text("#!/usr/bin/env python3\nimport getpass, sys\na = getpass.getpass('Passphrase: ')\nb = getpass.getpass('Confirm passphrase: ')\nsys.exit(0 if a == b and a.startswith('  ') and a.endswith('  ') else 1)\n")
+        self.binary.write_text("""#!/usr/bin/env python3
+import getpass
+import sys
+
+a = getpass.getpass('Enter passphrase for /tmp/my vault:disk: ')
+b = getpass.getpass('Confirm passphrase: ')
+sys.exit(0 if a == b and a.startswith('  ') and a.endswith('  ') else 1)
+""")
         secret = "  密碼 secret  "
         log = self.root / "terminal.log"
         result = harness.terminal([str(self.binary)], secret, 5, log)
         self.assertEqual(result["exit_code"], 0)
         self.assertEqual(result["prompts"], 2)
         self.assertNotIn(secret, log.read_text())
+
+    def test_diagnostic_with_password_in_a_path_is_not_a_prompt(self):
+        diagnostic = "Error: mount /tmp/veracrypt-aes-password/mount: fixture unavailable"
+        self.binary.write_text(f"#!/usr/bin/env python3\nimport sys\nprint({diagnostic!r})\nsys.exit(1)\n")
+        log = self.root / "password-in-path.log"
+        result = harness.terminal([str(self.binary)], None, 5, log)
+        self.assertEqual(result["exit_code"], 1)
+        self.assertEqual(result["prompts"], 0)
+        self.assertIn(diagnostic, log.read_text())
 
     def test_prompt_before_delayed_noecho_and_flush_preserves_both_inputs(self):
         self.binary.write_text("""#!/usr/bin/env python3
