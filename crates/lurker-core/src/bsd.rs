@@ -582,6 +582,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
             initialize_new_filesystem_owner(&registry, &mut session, owner)?;
             return Ok(());
         }
+        #[cfg(target_os = "freebsd")]
+        native::allocate_image(&file, size)?;
         #[cfg(target_os = "dragonfly")]
         {
             private_owned(&source, false)?;

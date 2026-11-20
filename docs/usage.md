@@ -209,6 +209,11 @@ NetBSD `.cgdparams` and PEFS `.pefs.conf`/`.pefs.db` metadata with their encrypt
 data. OpenBSD CRYPTO and RAID1C refuse read-only attachment.
 See `docs/backend-testing.md` for the exact tested revisions and remaining gates.
 
+For a new FreeBSD GELI image, plan for the full requested size on the backing
+filesystem. Lurker reserves and syncs that space before formatting when the
+filesystem supports native preallocation. On filesystems that decline
+preallocation, new images use sparse files.
+
 DragonFly uses the stock `dm_target_linear` module. Unlock accepts the
 DragonFly LUKS1 cipher and keyslot profiles in
 `DIRECTIVES/LLM/CIPHER.md` and uses a private metadata copy during each

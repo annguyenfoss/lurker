@@ -7,6 +7,7 @@ use super::{Credential, args, exec};
 use crate::{AppError, AppResult, CreateCipher};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::Path;
 
@@ -21,6 +22,32 @@ const FORMAT_ARGS: &[&str] = &[
 ];
 const PASSPHRASE_ITERATIONS: &str = "600000";
 const BACKING_SECTORS: &[u32] = &[512, 1024, 2048, 4096, 8192, 16384, 32768, 65536];
+
+/// Reserve storage before the kernel creates a new GELI provider.
+pub(super) fn allocate_image(file: &fs::File, size: u64) -> AppResult<()> {
+    let length =
+        libc::off_t::try_from(size).map_err(|_| AppError::new("GELI container size is too large."))?;
+    loop {
+        // SAFETY: The staging descriptor remains open and writable throughout.
+        let error = unsafe { libc::posix_fallocate(file.as_raw_fd(), 0, length) };
+        match error {
+            0 => {
+                return file
+                    .sync_all()
+                    .map_err(|e| AppError::io("Sync allocated GELI backing storage", e));
+            }
+            libc::EINTR => continue,
+            // FreeBSD used EINVAL for unsupported file systems before 15.1.
+            libc::EINVAL | libc::EOPNOTSUPP | libc::ENODEV => return Ok(()),
+            _ => {
+                return Err(AppError::io(
+                    "Allocate GELI backing storage",
+                    std::io::Error::from_raw_os_error(error),
+                ));
+            }
+        }
+    }
+}
 
 /// Inspect at most 64 KiB without attaching a device. GELI metadata starts at
 /// the final *provider* sector, which differs from its encrypted sector size.
