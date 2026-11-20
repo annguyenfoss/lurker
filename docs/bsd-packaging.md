@@ -98,7 +98,7 @@ The package SHA-256 was
 `d58bfdd9f2d7bf7141d061acdd9539c389cb26facb7b022a262d1c8d5eb7d3b7`.
 The build and runtime receipts are under `target/netbsd-14ede46-native/`.
 
-### OpenBSD staging and detach recovery
+### Earlier OpenBSD and DragonFly package runs
 
 The OpenBSD `e607cc7` descriptor-staging replay used build
 `20261120T014923Z-4517db5c` and native package SHA-256
