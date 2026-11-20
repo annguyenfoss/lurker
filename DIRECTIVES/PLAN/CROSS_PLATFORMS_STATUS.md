@@ -115,6 +115,13 @@ each stored and recovered profile data across normal vault close and
 reopen. Harness revisions were `b9117eb` and `5ea6e3f`. Evidence is
 under `target/openbsd-firefox-bed2448/`.
 
+FreeBSD's exact `e607cc7` package passed 30 checks across GELI and AES
+VeraCrypt. Firefox ESR 153.7.0 ran as UID 1300 with loopback access.
+Both profiles recovered their data after close and reopen. The first
+browser launch crashed with no available fonts. The replay passed with
+signed native DejaVu font packages installed in the disposable guest.
+Evidence is under `target/freebsd-browser-profile/`.
+
 The same isolated browser environment at `b9117eb` passed 15 checks
 on the installed Debian `14197ef` LUKS2 package. Firefox ESR 153.7.0
 ran as UID 1300 in a loopback-only namespace and recovered the profile
