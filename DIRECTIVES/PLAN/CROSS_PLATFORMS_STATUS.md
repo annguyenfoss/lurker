@@ -189,6 +189,13 @@ file and SQLite row. A byte-identical descriptor restore enabled Auto
 to recover both again. Evidence is under
 `target/openbsd-raid1c-descriptor-recovery-26/`.
 
+FreeBSD `0dd174c` records the GELI and md detach steps before issuing
+their native commands. A retry validates the source identity and uses the
+GEOM and md inventories to clear a completed step. The native test also
+verified that cleanup preserves a different file attached to a reused md
+unit. The FreeBSD workspace passed 113 tests with 11 ignored. Evidence
+is under `target/goal-validation/freebsd-native-detach-retry/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
