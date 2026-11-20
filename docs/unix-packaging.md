@@ -303,6 +303,23 @@ signed Arch package manifest. Both builds matched the Debian
 all 13 login-user lifecycle checks through package-relative discovery.
 Evidence is under `target/goal-validation/gocryptfs-independent-756cd45/`.
 
+Two fresh FreeBSD 15.1-RELEASE-p6 amd64 builds used the same pinned
+gocryptfs 2.7.0 source, the frozen FreeBSD compatibility patch, and
+all nine verified linked module archives and declarations. Both ran
+with only loopback and empty module and compiler caches. The signed
+FreeBSD Ports Go 1.27.4 archive matched the original builder's Go command,
+compiler and linker hashes. The upstream Go 1.27.4 archive supplied a
+second set of toolchain executables with different hashes. Both builds
+matched the engine in the exact FreeBSD `14ede46` installer byte for byte.
+
+That installer passed 26 explicit and Auto gocryptfs checks as UID 1300,
+including synced file and SQLite readback after close and reopen.
+FreeBSD process observations confirmed that the running engine came from
+the package-relative directory under `/usr/local/libexec/lurker/backends`.
+The guest restored package, FUSE, mount and session inventories before
+retirement. Receipts and build inputs are under
+`target/freebsd-gocryptfs-rebuild/`.
+
 The FreeBSD `ca3c845` VeraCrypt payload includes FreeBSD Ports builds of
 libfuse 2.9.9 and libiconv 1.18. Both upstream tarballs matched `distinfo`
 at ports commit `9b1792b1d9fdc91f491da6648a888173b85bab04`. The exact port
