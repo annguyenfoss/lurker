@@ -151,6 +151,14 @@ readback after reopen. Package removal restored the native inventories
 and left no staged directories. Receipts are under
 `target/goal-validation/bsd-create-recovery/dragonfly-native/`.
 
+`de4345c` records intent before each native CGD or vnode detach on
+NetBSD. A retry can clear an old device record when stock NetBSD confirms
+that device is inactive. The native tests exercised both detach steps,
+required the recorded intent, and preserved live attachments until
+ordinary close. NetBSD workspace checks passed with 98 tests and five
+ignored. Core checks also passed on FreeBSD, OpenBSD, and DragonFly BSD.
+Evidence is under `target/goal-validation/netbsd-native-detach-retry/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
