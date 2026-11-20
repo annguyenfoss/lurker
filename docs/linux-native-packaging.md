@@ -572,3 +572,26 @@ access. All six guests and their isolated networks were retired, and the
 vendor image digests matched their baselines. The stock media, native
 package and runtime digests are indexed in
 `target/goal-validation/linux-stock-14ede46-matrix.json`.
+
+### Native Wayland on the stock images
+
+Six further disposable guests installed the same packages and ran
+probe `21b84c2` as UID 1300. In every session Lurker acknowledged its
+Wayland configure event and committed a 1340×860 shared-memory buffer.
+The compositor used software rendering, and each probe reaped its
+processes and removed its private socket.
+
+| Guest | Weston |
+| --- | --- |
+| Arch Linux | 15.0.1 |
+| Debian 13 | 14.0.2 |
+| Ubuntu 26.10 | 16.0.0 |
+| Fedora 45 | 15.0.1 |
+| openSUSE Leap 16.1 | 14.0.0 |
+| Gentoo | 14.0.2 |
+
+Fedora ran with SELinux enforcing. Gentoo built the headless compositor
+from verified Portage inputs. Package and storage inventories returned
+to baseline, and the disposable guests and networks were retired. The
+aggregate and exact executable digests are in
+`target/goal-validation/wayland-14ede46/matrix.json`.
