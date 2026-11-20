@@ -496,6 +496,11 @@ owned clones. Evidence: `docs/vm-powerloss-testing.md`,
   `SQLITE_FULL`, and file and SQLite data written before and after
   freeing space survived reopen. Evidence is under
   `target/freebsd-veracrypt-full-storage/`.
+- The same FreeBSD release passed 16 GELI metadata backup and restoration
+  checks. An owned copy refused to open with its metadata missing.
+  Native restore returned the copy to its original digest. File and
+  SQLite data survived reopen, including new writes made after restore.
+  Evidence is under `target/freebsd-geli-metadata/`.
 - FreeBSD's sparse GELI trial lost acknowledged writes. The fully
   allocated control and the `ae53afb` production UFS create recovered
   them. NetBSD CGD still lost acknowledged writes after abrupt cuts
