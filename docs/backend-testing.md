@@ -97,6 +97,21 @@ The test package was removed and the guest shut down normally. The transient
 domain, isolated bridge, overlay and control credentials were removed.
 Evidence is in `target/openbsd-firefox-bed2448/`.
 
+FreeBSD 15.1-RELEASE-p6 passed 15 checks each for GELI and AES
+VeraCrypt with the installed `e607cc7` package and harness `b9117eb`.
+Firefox ESR 153.7.0 ran as UID 1300 with a fresh profile in the encrypted
+mount. Only loopback was up during the replay. Both profiles stored a value,
+which a second Firefox process recovered after closing and reopening the vault.
+
+The first headless Firefox process exited with SIGSEGV on a guest where
+Fontconfig listed zero fonts. The rerun passed after installing DejaVu
+from the signed FreeBSD quarterly catalogue. The guest installed the
+verified browser prerequisites offline, removed them and Lurker after
+the replay, and restored its package, kernel module and native storage
+inventories. The isolated guest, network and scratch disk were removed.
+Raw receipts, hashes and command logs are under
+`target/freebsd-browser-profile/`.
+
 For a native API that cannot attach read-only, use
 `--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
 the read-only CLI request and requires both a nonzero exit and no mount at the
