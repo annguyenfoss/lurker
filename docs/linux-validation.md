@@ -24,6 +24,22 @@ The core runner requires cached or passwordless sudo credentials and compiles th
 
 The optional desktop smoke runner requires KWin, Xwayland and dbus-run-session, and uses private runtime/config/cache directories and a virtual framebuffer. Its X11 mode disables Xwayland hardware acceleration so the display stays entirely in software.
 
+For an installed-package Wayland probe, use the desktop executable digest
+from the verified package manifest. Run as the stated login user in the
+qualification guest with Weston available.
+
+```bash
+python3 scripts/test-desktop-wayland.py \
+  --binary /usr/bin/lurker-desktop --binary-sha256 "$INSTALLED_DESKTOP_SHA256" \
+  --commit "$PRODUCT_SOURCE_SHA" --expected-uid "$(id -u)" \
+  --weston /usr/bin/weston --output /tmp/lurker-wayland-receipt
+```
+
+The probe launches a private headless compositor with the Pixman renderer.
+It records the Wayland configure acknowledgement and shared-memory buffer
+commit for Lurker's own window, the compositor and executable hashes, and
+the result of process and socket cleanup.
+
 The frontend runner creates its own independent temporary files and uses a pseudoterminal for CLI prompts. It tests the release binaries, invokes the helper with sudo for JSON operations, and changes ownership only on its own newly created Btrfs root directory so the non-root CLI user can write test data.
 
 ## Coverage
