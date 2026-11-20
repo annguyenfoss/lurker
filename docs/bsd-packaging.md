@@ -324,7 +324,15 @@ AES, Serpent and Twofish XTS/plain64 profiles with PBKDF2/SHA-256.
 
 The installed tests verify read-only behavior through UFS. The native
 mapper receives a read-only flag, and enforcement at the raw device
-remains unqualified. The review also identified outstanding work on
+remains unqualified. A DragonFly 6.4.2 KVM control confirmed that a stock
+read-only null mount preserved the backing file's identity and that its
+vnode disk refused a writable open. The kernel's device mapper then
+refused to put a read-only linear mapping over that disk. Its underlying
+device lookup requests writable access. The probe attempted no writes
+and restored the native device and mount inventories. See
+`target/goal-validation/dragonfly-source-detach/readonly-attachment-control.json`.
+
+The review also identified outstanding work on
 bounding native password derivation, handling an interrupted native
 keyslot mapping, and preserving the journal on ambiguous vnode queries.
 
@@ -333,6 +341,8 @@ https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/contrib/cryptsetup/luks
 https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/contrib/cryptsetup/luks/keyencryption.c
 
 https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/dev/disk/dm/device-mapper.c
+
+https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/dev/disk/dm/dm_pdev.c
 
 ### DragonFly interrupted creation
 
