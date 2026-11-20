@@ -83,8 +83,11 @@ The OpenBSD 8.0 amd64 package from run `20261120T042218Z-88688721` passed
 explicit and Auto checks. VeraCrypt passed 104 across AES, Serpent and
 Twofish with passwords and binary keyfiles. RAID1C passed 19 CLI checks
 and 11 invoking-user checks. The installed desktop rendered an X11
-window as UID 1000. Package removal restored the package and native
-resource inventories. The package SHA-256 was
+window as UID 1000. Three Slint callback tests created, mounted, closed
+and reopened vaults as the same login user through the installed helper.
+Both mounts were synchronous FFS for each backend. The test restored
+the authorization, package and native resource inventories, and retired
+the isolated guest, overlay and network. The package SHA-256 was
 `26eac1549d13fbc2622afa0117b7a77023d2338390db0ab0b6a7ed84e6664323`.
 The build and runtime receipts are under `target/openbsd-matrix-14ede46/`.
 
@@ -97,6 +100,11 @@ their baselines, and the guest and its disposable disks were retired.
 The package SHA-256 was
 `d58bfdd9f2d7bf7141d061acdd9539c389cb26facb7b022a262d1c8d5eb7d3b7`.
 The build and runtime receipts are under `target/netbsd-14ede46-native/`.
+A second no-network stock guest ran the CGD Slint callback lifecycle as
+UID 1300 through the helper from the same package. The test removed its
+authorization rule and restored the package, mount, device and session
+inventories before powering off. The callback evidence is under
+`target/netbsd-14ede46-callbacks/`.
 
 ### Earlier OpenBSD and DragonFly package runs
 
