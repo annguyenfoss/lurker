@@ -276,6 +276,15 @@ stable patch, both wxWidgets builds, patchelf, CryFS and gocryptfs. It
 also holds source ZIPs and module declarations for all nine linked Go
 modules. See `target/goal-validation/collected-native-sources/receipt.json`.
 
+Two offline Debian KVM builds of gocryptfs 2.7.0 used separate source
+directories, module caches, and compiler caches. Both used the Linux
+builder flags and verified all nine linked modules against the pinned
+`go.sum`. The compiler was Go `1.27.4-X:nodwarf5`, verified against the
+signed Arch package manifest. Both builds matched the Debian
+`8bb689c` packaged executable byte for byte. A rebuilt engine passed
+all 13 login-user lifecycle checks through package-relative discovery.
+Evidence is under `target/goal-validation/gocryptfs-independent-756cd45/`.
+
 The FreeBSD `ca3c845` VeraCrypt payload includes FreeBSD Ports builds of
 libfuse 2.9.9 and libiconv 1.18. Both upstream tarballs matched `distinfo`
 at ports commit `9b1792b1d9fdc91f491da6648a888173b85bab04`. The exact port
