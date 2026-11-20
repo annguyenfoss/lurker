@@ -29,13 +29,29 @@ class PackageArchive(unittest.TestCase):
         self.program.write_bytes(b"immutable executable bytes")
         self.program.chmod(0o755)
         (self.prefix / "bin/alias").symlink_to("lurker")
+        share = self.prefix / "share/lurker"
+        self.notices = share / "licenses/rust"
+        self.notices.mkdir(parents=True)
+        (self.notices / "packages.json").write_text(json.dumps({
+            "source_commit": self.commit, "products": ["lurker"], "packages": [{"name": "a-crate"}],
+        }))
+        self.provenance = share / "provenance/rust-binaries.json"
+        self.provenance.parent.mkdir()
+        self.provenance.write_text(json.dumps({
+            "backend": "binaries", "source_commit": self.commit,
+            "files": {"lurker": {"sha256": STAGE.digest(self.program)}},
+            "rust_notices": {"cargo_log_sha256": "b" * 64, "files": STAGE.file_manifest(self.notices)},
+        }))
         self.manifest = {
             "schema": 1, "source_commit": self.commit, "architecture": platform.machine(),
-            "os": platform.system(), "files": STAGE.file_manifest(self.prefix),
+            "os": platform.system(),
         }
-        metadata = self.prefix / "share/lurker/manifest.json"
-        metadata.parent.mkdir(parents=True)
-        metadata.write_text(json.dumps(self.manifest))
+        self.write_manifest()
+
+    def write_manifest(self):
+        metadata = "share/lurker/manifest.json"
+        self.manifest["files"] = STAGE.file_manifest(self.prefix, exclude=(metadata,))
+        (self.prefix / metadata).write_text(json.dumps(self.manifest))
 
     def build(self, extra=None):
         with tarfile.open(self.archive, "w:gz") as source:
@@ -66,6 +82,24 @@ class PackageArchive(unittest.TestCase):
     def test_rejects_corrupt_payload(self):
         self.program.write_bytes(b"changed bytes")
         with self.assertRaisesRegex(ValueError, "file inventory differs"):
+            unpack_archive(self.archive, self.build(), self.commit, self.scratch)
+
+    def test_rejects_missing_notice_catalog_in_consistent_archive(self):
+        (self.notices / "packages.json").unlink()
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, "require Rust dependency notices"):
+            unpack_archive(self.archive, self.build(), self.commit, self.scratch)
+
+    def test_rejects_notices_detached_from_binary_provenance(self):
+        (self.notices / "packages.json").write_text("{}")
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, "Rust notices differ"):
+            unpack_archive(self.archive, self.build(), self.commit, self.scratch)
+
+    def test_rejects_detached_product_binary(self):
+        self.program.write_bytes(b"an unrelated build")
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, "Rust product differs"):
             unpack_archive(self.archive, self.build(), self.commit, self.scratch)
 
     def test_rejects_symlink_ancestor_before_extraction(self):

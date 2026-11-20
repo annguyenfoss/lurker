@@ -187,6 +187,9 @@ included. For a manually staged Cargo build, pass its JSON build log to
 `stage-unix.py record --kind binaries --cargo-log` and keep the resulting
 `rust-notices/` directory next to the binary manifest. Use Cargo's
 `--message-format=json-render-diagnostics` when making that log.
+The Linux and BSD native package builders require this catalog. They verify
+the notice files and packaged Rust binaries against the build provenance
+before wrapping the staged archive.
 
 On Arch KVM, the combined package build recorded 372 compiled dependency
 crates and 647 notice files. The CLI-only build recorded 22 crates and 46
