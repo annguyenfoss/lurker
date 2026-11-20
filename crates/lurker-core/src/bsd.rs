@@ -118,6 +118,8 @@ struct Session {
     id: String,
     backend: VolumeType,
     source: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    create_target: Option<PathBuf>,
     #[serde(default)]
     peer_sources: Vec<PathBuf>,
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
@@ -244,6 +246,7 @@ impl Registry {
         let identity = fs::metadata(path).ok();
         for s in self.records()? {
             if s.source == path
+                || s.create_target.as_deref() == Some(path)
                 || s.peer_sources.iter().any(|peer| peer == path)
                 || {
                     #[cfg(target_os = "openbsd")]
@@ -556,6 +559,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         id: unique_id(),
         backend,
         source: source.clone(),
+        create_target: Some(target.clone()),
         identity,
         backing: None,
         #[cfg(target_os = "dragonfly")]
@@ -868,6 +872,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         id: unique_id(),
         backend,
         source: source.clone(),
+        create_target: None,
         identity,
         backing: None,
         #[cfg(target_os = "dragonfly")]
@@ -1087,6 +1092,7 @@ fn mount_pefs(c: MountCommand, output: Output) -> AppResult<()> {
         id: unique_id(),
         backend: VolumeType::Pefs,
         source: source.clone(),
+        create_target: None,
         identity,
         backing: None,
         mapped: None,
@@ -1199,6 +1205,7 @@ fn unmount_matching(c: UnmountCommand, output: Output, source_only: bool) -> App
             return s.source == target;
         }
         s.source == target
+            || s.create_target.as_ref() == Some(&target)
             || s.peer_sources.iter().any(|peer| peer == &target)
             || {
                 #[cfg(target_os = "openbsd")]
@@ -1232,7 +1239,14 @@ fn unmount_matching(c: UnmountCommand, output: Output, source_only: bool) -> App
         ));
     }
     cleanup(&registry, &mut session)?;
-    output.success("Closed native BSD container.");
+    if session.create_target.is_some() {
+        output.success(&format!(
+            "Closed the interrupted BSD creation. Its staged image is at {}.",
+            session.source.display()
+        ));
+    } else {
+        output.success("Closed native BSD container.");
+    }
     Ok(())
 }
 
@@ -1703,6 +1717,7 @@ mod tests {
             id: unique_id(),
             backend: default_backend(),
             source: source.clone(),
+            create_target: None,
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
@@ -1814,6 +1829,8 @@ mod tests {
         let directory = std::env::temp_dir().join(format!("lurker-init-failure-{}", unique_id()));
         fs::create_dir(&directory).unwrap();
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let requested = directory.join("unpublished-vault");
+        let target = absolute_destination(&requested).unwrap();
         let source = directory.join("image");
         let file = OpenOptions::new()
             .write(true)
@@ -1828,6 +1845,7 @@ mod tests {
             id: unique_id(),
             backend: default_backend(),
             source: source.clone(),
+            create_target: Some(target.clone()),
             identity: Identity::read(&source).unwrap(),
             backing: None,
             #[cfg(target_os = "dragonfly")]
@@ -1883,7 +1901,7 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(error.message, "Injected filesystem initialization failure");
-        let mut saved = registry
+        let saved = registry
             .records()
             .unwrap()
             .into_iter()
@@ -1891,10 +1909,30 @@ mod tests {
             .unwrap();
         assert_eq!(saved.mapped.as_deref(), Some(mapped.as_str()));
         verify_session(&saved).unwrap();
-        cleanup(&registry, &mut saved).unwrap();
-        assert!(!registry.path(&saved).exists());
+        assert!(registry.ensure_unused(&target).is_err());
+        let record_path = registry.path(&saved);
+        drop(registry);
+        let (output, messages) = Output::buffered();
+        run(
+            CommandAction::Unmount(UnmountCommand {
+                privilege_mode: PrivilegeMode::Privileged,
+                target: requested,
+                tag: None,
+                volume_type: VolumeType::Auto,
+            }),
+            output,
+        )
+        .unwrap();
+        assert!(!record_path.exists());
+        let staged_path = source.to_string_lossy();
+        assert!(messages
+            .entries()
+            .iter()
+            .any(|entry| entry.message.contains(staged_path.as_ref())));
         assert!(native::verify_mapping(&mapped, session.backing.as_deref().unwrap()).is_err());
         assert!(native::verify_backing(session.backing.as_deref().unwrap(), &source).is_err());
+        assert!(session.identity.matches(&source));
+        assert!(!target.exists());
         fs::remove_dir_all(directory).unwrap();
     }
 

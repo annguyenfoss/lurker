@@ -119,6 +119,7 @@ fn empty_session(
         veracrypt_proof: None,
         peer_sources: members.iter().skip(1).map(|m| m.target.clone()).collect(),
         source: primary,
+        create_target: None,
         identity,
         backing: None,
         mapped: None,

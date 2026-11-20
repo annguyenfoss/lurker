@@ -416,6 +416,7 @@ mod tests {
             id,
             backend: crate::VolumeType::Luks1,
             source: source.clone(),
+            create_target: None,
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
