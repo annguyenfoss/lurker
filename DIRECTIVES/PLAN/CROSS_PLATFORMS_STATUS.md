@@ -21,8 +21,8 @@ a committed SQLite FULL/WAL row, and an uncommitted row.
 | FreeBSD | GELI | The matched `ca3c845` sparse fixture lost acknowledged data. The fully allocated control and a newly created `ae53afb` image with native preallocation each passed all five checks. |
 | FreeBSD | VeraCrypt, PEFS, gocryptfs | All three recovered the file and committed row. VeraCrypt needed the ciphertext flush fix. gocryptfs required explicit stale-session reconciliation. |
 | OpenBSD | softraid CRYPTO, RAID1C, VeraCrypt | All three needed native FFS preen on separate ciphertext copies before writable reopen. With synchronous FFS, each copy then recovered the file and committed row. |
-| NetBSD | CGD | Ordinary application sync under WAPBL lost the committed SQLite row. An operator-assisted diagnostic retained WAPBL and recovered the file and row after explicit WAL and backing-file range flushes and a fixture-disk cache flush. |
-| DragonFly BSD | LUKS1 | Ordinary application sync lost acknowledged writes on sparse and fully allocated images. With additional explicit sync calls, a verified ciphertext copy recovered the file and row through read-only UFS. The normal writable reopen refused the unclean filesystem. |
+| NetBSD | CGD | Ordinary application sync under WAPBL lost the committed SQLite row. A plain outer FFS control still found a stale WAL inode before replay after two completed fixture-disk flushes. A separate diagnostic recovered the file and row with explicit WAL and backing-file range flushes plus a fixture-disk cache flush. |
+| DragonFly BSD | LUKS1 | Ordinary application sync lost acknowledged writes on sparse and fully allocated images. Adding a single backing-file fsync preserved the file and committed row through read-only UFS in a timing-matched control. The normal writable reopen refused the unclean filesystem. |
 | macOS | Apple encrypted disk images, VeraCrypt, gocryptfs, CryFS, Cryptomator | Historical package results only. This round excluded macOS. |
 
 ## DragonFly guarded LUKS1 activation
@@ -51,6 +51,16 @@ isolation for the approved profiles and identified further read-only and
 interruption checks. Ordinary application durability remains open.
 See `docs/backend-testing.md`, `docs/bsd-packaging.md` and
 `docs/vm-powerloss-testing.md`.
+
+`8f07cae` checks each native vnode during interrupted activation recovery.
+The root-only KVM test found a private metadata vnode beyond a gap in
+the device units and confirmed that close preserved unrelated attachments.
+`dc458b6` gives DragonFly's `luksFormat` and `luksOpen` five seconds for
+cleanup after sending SIGINT on timeout. A native subprocess regression
+verified the signal handler and the forced-stop fallback. DragonFly
+workspace check passed, with 93 tests passing and four ignored. At the
+same revision, core checks and tests passed on FreeBSD, NetBSD and
+OpenBSD.
 
 ## Workspace verification after the OpenBSD and Rust dependency updates
 
