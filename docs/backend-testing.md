@@ -112,6 +112,17 @@ inventories. The isolated guest, network and scratch disk were removed.
 Raw receipts, hashes and command logs are under
 `target/freebsd-browser-profile/`.
 
+The NetBSD 11.1 CGD browser-profile check at `e607cc7` is blocked on a
+vendor-signed Firefox package. The official `firefox153-153.7.0.tgz`
+matched the repository SHA-512 and its archive lacked a package signature.
+Stock NetBSD 11.1 `pkg_admin check-signature` exited 1 in a fresh KVM guest
+with only loopback. The current Firefox archive header also lacked a
+signature wrapper, and the checked detached signature URLs returned HTTP
+404. The guest shut down before package installation and profile testing.
+Evidence is under `target/netbsd-firefox-e607cc7/`.
+
+https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/x86_64/11.0_2026Q3/
+
 For a native API that cannot attach read-only, use
 `--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
 the read-only CLI request and requires both a nonzero exit and no mount at the
