@@ -112,6 +112,21 @@ inventories. The isolated guest, network and scratch disk were removed.
 Raw receipts, hashes and command logs are under
 `target/freebsd-browser-profile/`.
 
+FreeBSD 15.1-RELEASE-p6 also passed 15 checks each for PEFS and
+gocryptfs with the retained full native package from
+`ca3c8456e507102a1c6e2b9194981afbd48df8db` and harness `b9117eb`.
+PEFS used the installed kernel module through sudo. gocryptfs used the
+package's private engine through the login-user FUSE route. In both
+cases Firefox ESR 153.7.0 ran as UID 1300 with only loopback. A second
+process recovered each profile's stored value after a clean close and
+reopen.
+
+The isolated guest reused 105 signed Firefox and font prerequisite
+archives offline. It restored its package, mount, module, session and
+FUSE settings before shutdown. The guest, network and scratch disk were
+removed. Receipts and per-case logs are under
+`target/freebsd-directory-browser/`.
+
 On a fresh stock NetBSD 11.1 amd64 KVM guest, CGD passed all 15 cases with
 the installed `e607cc7` package and harness `b9117eb`. Firefox ESR 153.7.0
 ran as UID 1300 with DejaVu fonts and only loopback. A second Firefox
