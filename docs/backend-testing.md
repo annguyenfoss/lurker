@@ -845,6 +845,24 @@ its backing storage and these workload sizes.
 
 The archives, wrapper receipt, lifecycle results and measurements are under
 `target/openbsd-ffs-sync/`.
+### OpenBSD native detach journal lifecycle
+
+The installed `6fe1f2620f77b79c8318680d6c6d8644dc36b979` package passed
+33 checks on a stock OpenBSD 8.0 amd64 KVM copy. Auto mount and close passed
+13 CRYPTO checks and 13 VeraCrypt checks. The RAID1C mirror passed seven
+checks covering create, file and SQLite WAL writes, close, reopen and
+read-back. All six observed mounts used synchronous FFS. The two successful
+Auto VeraCrypt opens each held one vnode and one ownership receipt, with
+the softraid controller idle. Rejected CRYPTO and VeraCrypt commands left
+the native inventory unchanged. Successful close and package removal
+restored the mount, vnode, softraid, receipt and package baselines.
+
+Run `20261120T040624Z-44786858` built native package SHA-256
+`02c5169b2ed48f097278412015beaf0a4f0e77a43cf925cda842374012048b0e`.
+The guest reused its verified dependencies, shut down normally and was
+retired along with its isolated network, overlay and credentials. Build
+and runtime receipts are in `target/openbsd-crypto-detach-26/`.
+
 ### OpenBSD CRYPTO, RAID1C and VeraCrypt storage exhaustion
 
 A stock OpenBSD 8.0 amd64 KVM copy installed the exact `e607cc7` native
