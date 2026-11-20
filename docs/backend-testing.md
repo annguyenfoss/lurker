@@ -49,9 +49,9 @@ userspace directory engines must run as the login user.
 
 Add `--firefox /absolute/path/to/firefox` to verify a real browser profile
 on the encrypted mount. For supported privileged Linux and BSD routes, run
-the suite through sudo or doas from the login account. The fixture uses the package's
-invoking-user filesystem ownership and launches Firefox as that user with a
-private process environment. The suite launches headless
+the suite through sudo or doas from the login account. The fixture uses
+the package's invoking-user filesystem ownership and launches Firefox as
+that user with a private process environment. The suite launches headless
 Firefox with a new profile, stores a generated value through a loopback page,
 and checks that a second Firefox process reads it after the vault has closed
 and reopened. The standard 13 cases still run and the report includes the two
@@ -82,7 +82,7 @@ are in `target/browser-profile-qualification/debian-privileged-14197ef/`.
 
 Harness `b9117eb` reran the LUKS2 profile with its restricted Firefox
 environment. All 15 checks passed again on the exact Debian package,
-and both the test package and native fixture inventory were restored.
+the test package was removed, and the native fixture inventory was restored.
 Receipts are in `target/browser-profile-qualification/debian-luks2-b9117eb/`.
 
 On an isolated OpenBSD 8.0 KVM guest, Firefox ESR 153.4.0 ran as UID 1000
