@@ -73,7 +73,12 @@ metadata vnode. Recovery checks the recorded devfs generation and backing
 inode. The native regression recovered the reserved attachment while
 preserving another vnode attached to the same file, including on retry.
 Older journals retain their validated inode discovery. The DragonFly
-workspace passed 94 tests with four ignored.
+workspace passed 94 tests with four ignored. The exact native CLI
+package passed all 39 installed AES Auto, Serpent, and Twofish lifecycle
+checks, including file and SQLite persistence after reopen. The
+alternate package was removed and the native inventories matched their
+baselines. Evidence is under
+`target/goal-validation/dragonfly-metadata-reservation/`.
 
 ## Native BSD container staging
 
