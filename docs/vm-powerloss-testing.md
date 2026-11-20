@@ -788,6 +788,26 @@ copies. Its damaged test package database prevented package removal.
 Both clones shut down and their isolated networks were removed.
 See `target/freebsd-geli-matched-ca3c845/aggregate.json`.
 
+The native CLI package at `ae53afb` created its own 128 MiB GELI image
+with 134,250,496 bytes allocated on the outer UFS. It reserved the space
+before opening the image. The coordinator initiated the cut 247 ms
+after observing readiness while the worker was still alive.
+
+The post-cut ciphertext was hashed and archived before writable reopen.
+The fsynced file and committed SQLite row matched, SQLite integrity
+passed, the uncommitted row stayed absent, and normal close succeeded.
+All five checks passed without filesystem repair. Package removal and
+shutdown restored the clone inventories. These results cover one UFS
+fixture with the normal VirtIO write-cache setting. The receipts are
+in `target/freebsd-geli-production/summary.json`.
+
+The earlier KVM source check also passed 112 workspace tests and 13
+native GELI lifecycle checks for the allocation change. A 64 MiB UFS test
+filesystem rejected a 128 MiB reservation with ENOSPC. The existing
+`--force` target kept its inode and bytes, and the test left no staging
+directory, mount, mapping, or session. See
+`target/goal-validation/freebsd-geli-allocation/`.
+
 FreeBSD gocryptfs at `a60e4bc` passed all five recovery checks after
 explicit session reconciliation. Direct reopen first refused the recorded
 session. Normal close quarantined the dead session and reported that its
