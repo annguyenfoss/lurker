@@ -394,6 +394,7 @@ pub(in crate::bsd) fn release(registry: &Registry, session: &mut Session) -> App
 
 #[cfg(test)]
 mod tests {
+    use super::super::{BackingReservation, change_attachment};
     use super::*;
     use std::os::unix::fs::DirBuilderExt;
 
@@ -418,6 +419,7 @@ mod tests {
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            dragonfly_backing_reservation: None,
             dragonfly_backing_detach_requested: false,
             dragonfly_layer: None,
             mapped: None,
@@ -490,6 +492,36 @@ mod tests {
         registry.save(&restarted).unwrap();
         let mut restarted = registry.records().unwrap().pop().unwrap();
         crate::bsd::cleanup(&registry, &mut restarted).unwrap();
+        assert!(registry.records().unwrap().is_empty());
+
+        // Leave a real kernel attachment with only its reservation saved,
+        // as if the process stopped immediately after the attach ioctl.
+        let (reservation, descriptor) = BackingReservation::reserve().unwrap();
+        let device = reservation.device();
+        restarted.dragonfly_backing_detach_requested = false;
+        restarted.dragonfly_backing_reservation = Some(reservation);
+        registry.save(&restarted).unwrap();
+        let native_path = std::ffi::CString::new(source.as_os_str().as_encoded_bytes()).unwrap();
+        change_attachment(&descriptor, Some(&native_path)).unwrap();
+        drop(descriptor);
+        let mut recording = registry.records().unwrap().pop().unwrap();
+        crate::bsd::cleanup(&registry, &mut recording).unwrap();
+        assert!(!Path::new(&device).exists());
+        assert!(registry.records().unwrap().is_empty());
+
+        // Native clone numbers can be reused even for the same backing inode.
+        // The old reservation must not authorize closing the new device.
+        registry.save(&restarted).unwrap();
+        let reused = attach_file(&source, false).unwrap();
+        let mut stale = registry.records().unwrap().pop().unwrap();
+        let refused = crate::bsd::cleanup(&registry, &mut stale).is_err();
+        let retained = verify_backing(&reused, &source);
+        detach_file(&reused).unwrap();
+        assert_eq!(reused, device);
+        assert!(refused);
+        retained.unwrap();
+        assert_eq!(registry.records().unwrap().len(), 1);
+        crate::bsd::cleanup(&registry, &mut stale).unwrap();
         assert!(registry.records().unwrap().is_empty());
         assert!(source.exists());
         drop(registry);

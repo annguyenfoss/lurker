@@ -1,11 +1,14 @@
 //! DragonFly's native LUKS1/dm-crypt adapter. The base cryptsetup 1.1.2
 //! interface deliberately receives neither LUKS2 nor Argon2 arguments.
-use super::{Credential, args, exec, exec_interruptible};
+use super::{Credential, Identity, Registry, Session, args, exec, exec_interruptible};
 use crate::{AppError, AppResult, CreateCipher};
-use std::ffi::OsString;
-use std::fs::File;
+use serde::{Deserialize, Serialize};
+use std::ffi::{CStr, CString, OsString};
+use std::fs::{File, Metadata};
+use std::io;
 use std::os::fd::AsRawFd;
 use std::os::raw::{c_int, c_ulong};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::path::Path;
 
@@ -42,6 +45,110 @@ pub(super) fn attach_file(path: &Path, _readonly: bool) -> AppResult<String> {
     let output = exec(VNCONFIG, &["vn".into(), path.as_os_str().into()], None)?;
     let name = vnode_name(output.trim())?;
     Ok(format!("/dev/{name}"))
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(super) struct BackingReservation {
+    unit: c_int,
+    node: Identity,
+    changed_at: (i64, i64),
+}
+
+impl BackingReservation {
+    fn reserve() -> AppResult<(Self, File)> {
+        let descriptor = open_vnode("/dev/vn")
+            .map_err(|e| AppError::io("Reserve DragonFly vnode clone", e))?;
+        let node = device_metadata(&descriptor)?;
+        let (unit, state) = descriptor_state(&descriptor)?;
+        if unit < 0 || state != VnodeState::Idle {
+            return Err(AppError::new("DragonFly vnode reservation was not idle."));
+        }
+        Ok((
+            Self {
+                unit,
+                node: Identity {
+                    dev: node.dev(),
+                    ino: node.ino(),
+                },
+                changed_at: (node.ctime(), node.ctime_nsec()),
+            },
+            descriptor,
+        ))
+    }
+
+    fn device(&self) -> String {
+        format!("/dev/vn{}", self.unit)
+    }
+
+    fn matches(&self, node: &Metadata) -> bool {
+        self.node.dev == node.dev()
+            && self.node.ino == node.ino()
+            && self.changed_at == (node.ctime(), node.ctime_nsec())
+    }
+}
+
+pub(super) fn attach_backing(registry: &Registry, session: &mut Session) -> AppResult<()> {
+    let path = CString::new(session.source.as_os_str().as_bytes())
+        .map_err(|_| AppError::new("DragonFly backing path contains a NUL byte."))?;
+    let (reservation, descriptor) = BackingReservation::reserve()?;
+    let device = reservation.device();
+    let unit = reservation.unit;
+    // Save the exact clone before attaching to it on the same descriptor.
+    session.dragonfly_backing_reservation = Some(reservation);
+    registry.save(session)?;
+    change_attachment(&descriptor, Some(&path))?;
+    let expected = VnodeState::File(session.identity.dev, session.identity.ino);
+    if descriptor_state(&descriptor)? != (unit, expected) {
+        return Err(AppError::new("DragonFly attached a different backing file."));
+    }
+    session.backing = Some(device);
+    session.dragonfly_backing_reservation = None;
+    registry.save(session)
+}
+
+pub(super) fn reconcile_backing_reservation(
+    registry: &Registry,
+    session: &mut Session,
+) -> AppResult<()> {
+    let Some(reservation) = &session.dragonfly_backing_reservation else {
+        return Ok(());
+    };
+    if reservation.unit < 0
+        || session.backing.is_some()
+        || session.mapped.is_some()
+        || session.mounted.is_some()
+        || session.dragonfly_layer.is_some()
+        || !session.identity.matches(&session.source)
+    {
+        return Err(AppError::new(
+            "DragonFly vnode reservation conflicts with its session; preserving the journal.",
+        ));
+    }
+    match open_vnode(&reservation.device()) {
+        Ok(descriptor) => {
+            let (unit, state) = descriptor_state(&descriptor)?;
+            if unit != reservation.unit || !reservation.matches(&device_metadata(&descriptor)?) {
+                return Err(AppError::new(
+                    "DragonFly vnode reservation changed; preserving the journal.",
+                ));
+            }
+            match state {
+                VnodeState::Idle => (),
+                VnodeState::File(dev, ino)
+                    if dev == session.identity.dev && ino == session.identity.ino =>
+                {
+                    change_attachment(&descriptor, None)?;
+                }
+                _ => return Err(AppError::new(
+                    "DragonFly vnode reservation has a different backing; preserving the journal.",
+                )),
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => (),
+        Err(e) => return Err(AppError::io("Open recorded DragonFly vnode reservation", e)),
+    }
+    session.dragonfly_backing_reservation = None;
+    registry.save(session)
 }
 
 pub(super) fn detach_file(device: &str) -> AppResult<()> {
@@ -184,13 +291,22 @@ struct VnodeUser {
     inode: VnodeInode,
 }
 
-// _IOWR('F', 6, struct vn_user), sys/ioccom.h. Layout and request were
-// qualified against the installed DragonFly headers; regression tests retain
-// those expected ABI values.
-const VNIOCGET: c_ulong = 0xc0000000
-    | (((std::mem::size_of::<VnodeUser>() as c_ulong) & 0x1fff) << 16)
-    | ((b'F' as c_ulong) << 8)
-    | 6;
+#[repr(C)]
+struct VnodeAttachment {
+    path: *const libc::c_char,
+    size: i64,
+}
+
+// _IOWR('F', number, type), from the installed sys/vnioctl.h and sys/ioccom.h.
+const fn vnode_request<T>(number: c_ulong) -> c_ulong {
+    0xc0000000
+        | (((std::mem::size_of::<T>() as c_ulong) & 0x1fff) << 16)
+        | ((b'F' as c_ulong) << 8)
+        | number
+}
+const VNIOCATTACH: c_ulong = vnode_request::<VnodeAttachment>(0);
+const VNIOCDETACH: c_ulong = vnode_request::<VnodeAttachment>(1);
+const VNIOCGET: c_ulong = vnode_request::<VnodeUser>(6);
 
 unsafe extern "C" {
     #[link_name = "ioctl"]
@@ -204,24 +320,43 @@ enum VnodeState {
     File(u64, u64),
 }
 
-fn vnode_state(device: &str) -> AppResult<VnodeState> {
-    let name = vnode_name(device)?;
-    let expected_unit = name[2..]
-        .parse::<c_int>()
-        .map_err(|_| AppError::new("DragonFly vnode unit is out of range."))?;
-    let descriptor = File::options()
+fn open_vnode(path: &str) -> io::Result<File> {
+    File::options()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW)
-        .open(format!("/dev/{name}"))
-        .map_err(|e| AppError::io("Failed to open DragonFly vnode identity", e))?;
-    if !descriptor
+        .open(path)
+}
+
+fn device_metadata(descriptor: &File) -> AppResult<Metadata> {
+    let metadata = descriptor
         .metadata()
-        .map_err(|e| AppError::io("Inspect DragonFly vnode descriptor", e))?
-        .file_type()
-        .is_char_device()
-    {
+        .map_err(|e| AppError::io("Inspect DragonFly vnode descriptor", e))?;
+    if !metadata.file_type().is_char_device() {
         return Err(AppError::new("DragonFly vnode is not a character device."));
     }
+    Ok(metadata)
+}
+
+fn change_attachment(descriptor: &File, path: Option<&CStr>) -> AppResult<()> {
+    let (operation, path) = match path {
+        Some(path) => (VNIOCATTACH, path.as_ptr()),
+        None => (VNIOCDETACH, std::ptr::null()),
+    };
+    let mut request = VnodeAttachment { path, size: 0 };
+    // SAFETY: the request matches the kernel ABI. The live descriptor and
+    // optional NUL-terminated pathname remain valid for the synchronous ioctl.
+    if unsafe { vnode_ioctl(descriptor.as_raw_fd(), operation, &mut request as *mut VnodeAttachment) }
+        != 0
+    {
+        return Err(AppError::io(
+            "Change DragonFly vnode attachment",
+            io::Error::last_os_error(),
+        ));
+    }
+    Ok(())
+}
+
+fn descriptor_state(descriptor: &File) -> AppResult<(c_int, VnodeState)> {
     // All members are integer or byte-array values; zero initializes the unions
     // as well as padding before the kernel copies the complete structure back.
     let mut info: VnodeUser = unsafe { std::mem::zeroed() };
@@ -235,20 +370,33 @@ fn vnode_state(device: &str) -> AppResult<VnodeState> {
             std::io::Error::last_os_error(),
         ));
     }
-    if info.unit != expected_unit {
+    let state = if info.file[0] == 0 {
+        VnodeState::Idle
+    } else if info.file.starts_with(b"swap\0") {
+        VnodeState::Swap
+    } else {
+        // SAFETY: VNIOCGET succeeded for a file-backed vnode; sys/vnioctl.h
+        // specifies the dev/ino arms for this configuration (not size/secsize).
+        unsafe { VnodeState::File(u64::from(info.device.dev), info.inode.ino) }
+    };
+    Ok((info.unit, state))
+}
+
+fn vnode_state(device: &str) -> AppResult<VnodeState> {
+    let name = vnode_name(device)?;
+    let expected_unit = name[2..]
+        .parse::<c_int>()
+        .map_err(|_| AppError::new("DragonFly vnode unit is out of range."))?;
+    let descriptor = open_vnode(&format!("/dev/{name}"))
+        .map_err(|e| AppError::io("Failed to open DragonFly vnode identity", e))?;
+    device_metadata(&descriptor)?;
+    let (unit, state) = descriptor_state(&descriptor)?;
+    if unit != expected_unit {
         return Err(AppError::new(
             "DragonFly vnode unit changed; preserving the session.",
         ));
     }
-    if info.file[0] == 0 {
-        return Ok(VnodeState::Idle);
-    }
-    if info.file.starts_with(b"swap\0") {
-        return Ok(VnodeState::Swap);
-    }
-    // SAFETY: VNIOCGET succeeded for a file-backed vnode; sys/vnioctl.h
-    // specifies the dev/ino arms for this configuration (not size/secsize).
-    Ok(unsafe { VnodeState::File(u64::from(info.device.dev), info.inode.ino) })
+    Ok(state)
 }
 
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
@@ -401,6 +549,9 @@ mod tests {
         assert_eq!(std::mem::offset_of!(VnodeUser, device), 1032);
         assert_eq!(std::mem::offset_of!(VnodeUser, inode), 1040);
         assert_eq!(VNIOCGET, 0xc4184606);
+        assert_eq!(std::mem::size_of::<VnodeAttachment>(), 16);
+        assert_eq!(VNIOCATTACH, 0xc0104600);
+        assert_eq!(VNIOCDETACH, 0xc0104601);
         assert!(dependency_matches(
             "1 dependencies\t: (0, 504430631)\n",
             &[504432679]

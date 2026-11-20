@@ -114,6 +114,9 @@ struct Session {
     identity: Identity,
     backing: Option<String>,
     #[cfg(target_os = "dragonfly")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dragonfly_backing_reservation: Option<dragonfly::BackingReservation>,
+    #[cfg(target_os = "dragonfly")]
     #[serde(default)]
     dragonfly_backing_detach_requested: bool,
     #[cfg(target_os = "dragonfly")]
@@ -334,6 +337,7 @@ fn mount_backend(kind: VolumeType, source: &Path) -> AppResult<VolumeType> {
     Ok(backend)
 }
 
+#[cfg(not(target_os = "dragonfly"))]
 fn attach_native_file(source: &Path, readonly: bool) -> AppResult<String> {
     #[cfg(target_os = "freebsd")]
     if let Some(sector_size) = native::probe_image(source)? {
@@ -551,6 +555,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         },
         backing: None,
         #[cfg(target_os = "dragonfly")]
+        dragonfly_backing_reservation: None,
+        #[cfg(target_os = "dragonfly")]
         dragonfly_backing_detach_requested: false,
         #[cfg(target_os = "dragonfly")]
         dragonfly_layer: None,
@@ -594,8 +600,13 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
             private_owned(&source, false)?;
             verify_session(&session)?;
         }
-        session.backing = Some(native::attach_file(&source, false)?);
-        registry.save(&session)?;
+        #[cfg(target_os = "dragonfly")]
+        native::attach_backing(&registry, &mut session)?;
+        #[cfg(not(target_os = "dragonfly"))]
+        {
+            session.backing = Some(native::attach_file(&source, false)?);
+            registry.save(&session)?;
+        }
         verify_session(&session)?;
         let backing = session.backing.as_deref().unwrap();
         #[cfg(target_os = "netbsd")]
@@ -886,6 +897,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         identity,
         backing: None,
         #[cfg(target_os = "dragonfly")]
+        dragonfly_backing_reservation: None,
+        #[cfg(target_os = "dragonfly")]
         dragonfly_backing_detach_requested: false,
         #[cfg(target_os = "dragonfly")]
         dragonfly_layer: None,
@@ -913,8 +926,13 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             capture_veracrypt_recovery(&registry, &mut session)?;
         }
         if session.mapped.is_none() {
-            session.backing = Some(attach_native_file(&source, c.readonly)?);
-            registry.save(&session)?;
+            #[cfg(target_os = "dragonfly")]
+            native::attach_backing(&registry, &mut session)?;
+            #[cfg(not(target_os = "dragonfly"))]
+            {
+                session.backing = Some(attach_native_file(&source, c.readonly)?);
+                registry.save(&session)?;
+            }
             verify_session(&session)?;
             #[cfg(target_os = "openbsd")]
             if c.volume_type == VolumeType::Auto
@@ -1293,6 +1311,7 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     }
     #[cfg(target_os = "dragonfly")]
     {
+        dragonfly::reconcile_backing_reservation(registry, s)?;
         dragonfly::linear::reconcile_activation(registry, s)?;
         dragonfly::reconcile_backing_detach(registry, s)?;
     }
@@ -1714,6 +1733,8 @@ mod tests {
             identity: Identity::read(&source).unwrap(),
             backing: None,
             #[cfg(target_os = "dragonfly")]
+            dragonfly_backing_reservation: None,
+            #[cfg(target_os = "dragonfly")]
             dragonfly_backing_detach_requested: false,
             #[cfg(target_os = "dragonfly")]
             dragonfly_layer: None,
@@ -1830,6 +1851,8 @@ mod tests {
             source: source.clone(),
             identity: Identity::read(&source).unwrap(),
             backing: None,
+            #[cfg(target_os = "dragonfly")]
+            dragonfly_backing_reservation: None,
             #[cfg(target_os = "dragonfly")]
             dragonfly_backing_detach_requested: false,
             #[cfg(target_os = "dragonfly")]
