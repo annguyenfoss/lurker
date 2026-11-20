@@ -542,6 +542,23 @@ outer UFS. It leaves the cause unproven. Receipts are under
 `/mnt/virt/lurker-fault-dfinnerread26/`, and
 `target/dragonfly-inner-sync/`.
 
+A matched allocation control started from the same 134,217,728-byte
+ciphertext, with 2,457,600 physical bytes on the outer UFS. Sequential copy
+produced identical ciphertext with 134,266,880 physical bytes. A clean
+outer UFS unmount and remount confirmed the full allocation, inode, and
+digest before the workload. Both UFS layers were synchronous. The guarded
+`dfc7fdc` run was cut 0.67 seconds after the host received the acknowledgement.
+
+The independent cut copy again mounted read-only without repair. The full
+allocation and unchanged pre-workload ciphertext digest survived. The
+guarded CLI reopened the copied vault, whose inner UFS had no files or WAL
+evidence. The original cut disk retained its SHA-256, and recovery left
+idle vnodes and no mapper or session records. The control reproduced the
+loss with fully allocated backing storage. Receipts are under
+`/mnt/virt/lurker-fault-dfinneralloc26/`,
+`/mnt/virt/lurker-fault-dfallocread26/`, and
+`target/dragonfly-inner-allocated/`.
+
 ### OpenBSD VeraCrypt on the coordinated package
 
 The `a60e4bc` OpenBSD VeraCrypt AES package successfully reopened the
