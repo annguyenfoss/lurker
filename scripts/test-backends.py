@@ -28,6 +28,13 @@ import time
 SCHEMA = 1
 DIRECTORIES = {"gocryptfs", "cryfs", "cryptomator", "pefs"}
 BACKENDS = {"luks", "luks1", "veracrypt", "apple", "geli", "cgd", "softraid", *DIRECTORIES}
+PRIVILEGED_FIREFOX_BACKENDS = {
+    "Linux": {"luks", "luks1", "veracrypt"},
+    "FreeBSD": {"geli", "pefs", "veracrypt"},
+    "NetBSD": {"cgd"},
+    "OpenBSD": {"softraid", "veracrypt"},
+    "DragonFly": {"luks1"},
+}
 PROMPT = re.compile(rb"(?i)(?:passphrase|password)[^\r\n:]{0,400}:[ \t]*")
 MAX_TRANSCRIPT = 2 * 1024 * 1024
 ECHO_WAIT_TIMEOUT = 5.0
@@ -80,7 +87,8 @@ class BrowserProfile:
         self.scratch.mkdir(mode=0o700)
         if self.credentials:
             os.chown(self.scratch, self.uid, self.credentials["group"])
-        self.environment = {**os.environ, "HOME": str(self.scratch),
+        self.environment = {"PATH": os.environ.get("PATH", os.defpath),
+                            "LANG": os.environ.get("LANG", "C"), "HOME": str(self.scratch),
                             "XDG_CONFIG_HOME": str(self.scratch / "config"),
                             "XDG_CACHE_HOME": str(self.scratch / "cache"),
                             "XDG_DATA_HOME": str(self.scratch / "data"),
@@ -148,6 +156,24 @@ request.send();
         self.server.shutdown()
         self.thread.join()
         self.server.server_close()
+
+
+def firefox_login_account():
+    sudo_uid = os.environ.get("SUDO_UID")
+    doas_user = os.environ.get("DOAS_USER")
+    try:
+        if sudo_uid is not None:
+            if not re.fullmatch(r"[0-9]+", sudo_uid):
+                return None
+            uid = int(sudo_uid)
+            account = pwd.getpwuid(uid) if uid > 0 else None
+        elif doas_user:
+            account = pwd.getpwnam(doas_user)
+        else:
+            return None
+    except (ValueError, OverflowError, KeyError):
+        return None
+    return account if account and account.pw_uid > 0 else None
 
 
 def snapshot(path):
@@ -634,14 +660,10 @@ def parse_args(argv=None):
         if not options.firefox.is_file() or not os.access(options.firefox, os.X_OK):
             parser.error("--firefox requires an executable Firefox")
         if os.geteuid() == 0:
-            try:
-                uid = int(os.environ.get("SUDO_UID", "0"))
-                options.firefox_account = pwd.getpwuid(uid) if uid > 0 else None
-            except (ValueError, KeyError):
-                options.firefox_account = None
-            if (platform.system() != "Linux" or options.backend not in {"luks", "luks1", "veracrypt"}
-                    or options.unprivileged or not options.firefox_account):
-                parser.error("Privileged --firefox tests require sudo from a Linux login user and a native container backend")
+            options.firefox_account = firefox_login_account()
+            supported = PRIVILEGED_FIREFOX_BACKENDS.get(platform.system(), ())
+            if options.backend not in supported or options.unprivileged or not options.firefox_account:
+                parser.error("Privileged --firefox tests require sudo or doas from a login user and a supported native backend")
     if options.backend in DIRECTORIES and options.cipher:
         parser.error("Directory backend profiles do not accept --cipher")
     if options.timeout <= 0:

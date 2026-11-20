@@ -29,19 +29,33 @@ class HarnessTests(unittest.TestCase):
         with mock.patch.object(harness.os, "geteuid", return_value=1000):
             return harness.parse_args(["--binary", str(self.binary), "--backend", "gocryptfs", "--root", str(self.root), *extras])
 
-    def test_root_firefox_requires_sudo_identity_and_native_linux_backend(self):
+    def test_root_firefox_requires_a_login_identity_and_native_backend(self):
         args = ["--binary", str(self.binary), "--firefox", str(self.binary), "--backend", "luks"]
         account = mock.Mock(pw_uid=1300, pw_gid=1400)
         with mock.patch.object(harness.os, "geteuid", return_value=0), \
              mock.patch.object(harness.platform, "system", return_value="Linux"), \
              mock.patch.object(harness.pwd, "getpwuid", return_value=account) as lookup:
-            with mock.patch.dict(os.environ, {"SUDO_UID": "0"}), self.assertRaises(SystemExit):
-                harness.parse_args(args)
-            with mock.patch.dict(os.environ, {"SUDO_UID": "1300"}):
+            for denied in ({}, {"SUDO_UID": "0"}, {"SUDO_UID": "+1300"}):
+                with mock.patch.dict(os.environ, denied, clear=True), self.assertRaises(SystemExit):
+                    harness.parse_args(args)
+            with mock.patch.dict(os.environ, {"SUDO_UID": "1300"}, clear=True):
                 self.assertIs(harness.parse_args(args).firefox_account, account)
                 lookup.assert_called_once_with(1300)
                 with self.assertRaises(SystemExit):
                     harness.parse_args([*args[:-1], "gocryptfs"])
+
+    def test_root_firefox_routes_native_bsd_backends_to_the_doas_user(self):
+        args = ["--binary", str(self.binary), "--firefox", str(self.binary), "--backend"]
+        account = mock.Mock(pw_uid=1300, pw_gid=1400)
+        routes = {"FreeBSD": "geli", "OpenBSD": "softraid", "NetBSD": "cgd", "DragonFly": "luks1"}
+        with mock.patch.object(harness.os, "geteuid", return_value=0), \
+             mock.patch.object(harness.pwd, "getpwnam", return_value=account), \
+             mock.patch.dict(os.environ, {"DOAS_USER": "fixture"}, clear=True):
+            for system, native in routes.items():
+                with self.subTest(system=system), mock.patch.object(harness.platform, "system", return_value=system):
+                    self.assertIs(harness.parse_args([*args, native]).firefox_account, account)
+                    with self.assertRaises(SystemExit):
+                        harness.parse_args([*args, "luks"])
 
     def test_explicit_artifact_and_backend_are_mandatory(self):
         with self.assertRaises(SystemExit):
