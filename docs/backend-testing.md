@@ -787,6 +787,34 @@ its backing storage and these workload sizes.
 
 The archives, wrapper receipt, lifecycle results and measurements are under
 `target/openbsd-ffs-sync/`.
+### OpenBSD CRYPTO, RAID1C and VeraCrypt storage exhaustion
+
+A stock OpenBSD 8.0 amd64 KVM copy installed the exact `e607cc7` native
+package (SHA-256
+`7f066d6f1cf7f62eeb61afd5a1d885e445ed9a44f1859827b19d29895fa2c0ad`).
+It reused the stock fixture's dependency inventory and verified all 16
+local dependency archives with the OpenBSD 8.0 package signing key.
+
+Each backend passed eight checks using a disposable 128 MiB encrypted
+container or pair of 128 MiB RAID1C members. The test wrote and fsynced a
+file and committed a SQLite FULL/WAL transaction, then filled the mounted,
+synchronous inner FFS with bounded writes.
+
+| Backend | Filler size at `ENOSPC` | SQLite write error |
+| --- | ---: | --- |
+| softraid CRYPTO | 128,155,648 bytes | `SQLITE_FULL` |
+| RAID1C | 128,155,648 bytes | `SQLITE_FULL` |
+| VeraCrypt AES | 129,253,376 bytes | `SQLITE_FULL` |
+
+Previously committed data remained readable at capacity. After deleting the
+filler, each filesystem accepted a new fsynced file and SQLite commit.
+Ordinary close, reopen, read-back, database integrity, and final close passed.
+The rejected transaction stayed absent. The guest recorded inner and outer
+capacity and restored the package, mount, vnode, softraid and session
+inventories. After normal shutdown, the transient domain, isolated network,
+overlay and temporary credentials were removed. Evidence is in
+`target/openbsd-enospc-e607cc7/`.
+
 ## DragonFly guarded LUKS1 metadata
 
 The DragonFly adapter in `e98bcc6b585a7e5bf481e8d3a6c6ef2caf5ab61a`
