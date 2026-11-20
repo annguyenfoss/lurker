@@ -705,3 +705,20 @@ inventory, mounts, vnodes, mappers and sessions returned to baseline.
 The native package SHA-256 is
 `640f39cabbaa89a2caf8e6883c4390d4f792c0d436f6733f01a97c6aea0c0ff7`.
 Evidence is under `target/goal-validation/dragonfly-native-maintenance/`.
+
+The DragonFly close path now records detach intent for both the private
+metadata vnode and the vnode holding the original payload. The
+`29d36e7` KVM regression retried close after a real detach with a stale
+journal entry. It verified that cleanup requires the recorded intent and
+preserves unrelated live attachments. Workspace check passed, with 92
+tests passing and four ignored. The root-only detach regression passed
+when selected explicitly.
+
+The exact native `29d36e7` CLI package passed checksum verification and
+all 13 installed AES Auto lifecycle checks in an alternate installation
+root. The harness used the guest's base libraries and a temporary SQLite
+module from checksum-verified DragonFly packages. Package removal
+restored the native mount, mapper, vnode, and session inventories.
+The package SHA-256 is
+`4826e6be6f4adcc2ca29dd850d769a25c2c5ff6fa35608f2e5425d37d63fe948`.
+Evidence is under `target/goal-validation/dragonfly-source-detach/`.
