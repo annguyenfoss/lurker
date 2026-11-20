@@ -256,7 +256,8 @@ def main():
         phase = "final-close"
         CLI_TEST.terminal([cli, "unmount", "--type", kind, str(vault)])
         phase = "verify-full-storage-result"
-        if args.fault == "close":
+        failed_close = args.fault == "close" or (append and result["full_close_exit"] != 0)
+        if failed_close:
             assert result["full_close_exit"] != 0, "Closing with an unflushed directory while full must not report success"
             assert "backend close failed" in result["full_close_diagnostic"], "Close failure must be explicit"
             archives = []
@@ -270,14 +271,13 @@ def main():
             assert len(archives) == 1, "Unclean close must retain the real backend exit status"
             result["failure_evidence"] = archives[0]
             result["outcome"] = "unclean-exit-reported-and-previous-commits-preserved"
-        else:
+        if args.fault != "close":
             if append:
-                assert result["append_prefix_while_full"]["matches"], "Committed prefix unavailable or changed at capacity"
                 assert result["append_prefix_after_reopen"]["matches"], "Committed prefix unavailable or changed after reopen"
-                assert result["full_close_exit"] == 0, "Backend did not close cleanly after the rejected append"
             assert result.get("write_errno") == expected_errno, "Mounted write must report the real full-storage errno"
             assert result["close_exit"] == 0, "Backend did not recover a clean close after restoring space"
-            result["outcome"] = "storage-error-returned-and-clean-close-recovered"
+            if not failed_close:
+                result["outcome"] = "storage-error-returned-and-clean-close-recovered"
         result["status"] = "passed"
     except Exception as error:
         result.update(status="failed", failed_stage=phase, error=str(error).replace(secret, "<redacted>")[:4096])

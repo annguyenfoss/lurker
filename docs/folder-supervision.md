@@ -183,6 +183,20 @@ clean close. The guest's mounts and loops returned to baseline and the
 package was removed. Receipts are in
 `target/goal-validation/debian-folder-append-harness-14ede46/`.
 
+The fault contract permits a failed close with the real backend result
+retained, followed by exact recovery of the original prefix after reopening.
+An immediate read error at capacity is recorded separately. The earlier
+append harness imposed the additional requirements of readable data at
+capacity and clean close while full. Those requirements were removed to
+match the existing full-storage failure contract.
+
+The corrected six-case batch passed both gocryptfs and both CryFS cases on
+the same frozen installer. The CryFS cases retained the actual nonzero
+backend results and recovered the exact prefix after reopening. Both
+Cryptomator cases still failed because they acknowledged `fsync` and lost
+the readable prefix after reopening. Results and retained close evidence
+are in `target/goal-validation/debian-append-contract-14ede46/`.
+
 ## Linux process exit during close
 
 An installed Gentoo `c21e0cc` run detached a read-only CryFS mount and

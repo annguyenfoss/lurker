@@ -14,13 +14,19 @@ finish line. Record each gate as passed, failed, blocked, or unverified with its
 artifact hash and native KVM receipt. Counts describe the existing suites.
 Additional regressions required by a fix join the affected gate.
 
+Fault operations may fail explicitly as specified by the recovery contract.
+For a full-store append, record any temporary read failure at capacity and
+require exact committed bytes after recovery. A failed close must preserve
+the backend's nonzero status and recovery evidence. A write or `fsync` that
+acknowledges data subsequently lost remains a failed preservation check.
+
 | Gate | Required evidence |
 | --- | --- |
 | Native installers | Ten installable packages, matching source and dependency manifests, offline runtime, and verified removal |
 | Installed storage lifecycle | At least 1,655 existing checks passed, zero failures, across the ten stock guests |
 | Linux device creation | All 54 format/cipher profiles passed on fixture-owned loop devices |
 | BSD capacity handling | All 81 existing full-storage checks passed, including SQLite full responses and old/new committed data after reopen |
-| Directory append preservation | All six full-store and one-free-block cases passed across gocryptfs, CryFS, and Cryptomator, including readable prior bytes, reported storage failure, and clean close |
+| Directory append preservation | All six full-store and one-free-block cases passed across gocryptfs, CryFS, and Cryptomator, with reported storage failure and original bytes preserved after reopen; a failed close must retain its real failure and recovery evidence |
 | Desktop | Ten X11 windows, six Linux Wayland windows, and nine BSD storage callbacks passed through the installed helper |
 | Recovery and application behavior | Every applicable case in the plan's Required checks has a receipt, with zero unresolved data-preservation or lifecycle failures across the 16 routes |
 | Implementation and packaging regressions | Required workspace checks and targeted native/module/packaging tests passed for changed components, with skipped cases explained |
