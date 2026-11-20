@@ -55,6 +55,17 @@ of the committed file and rows after reopen. The check for
 `SQLITE_FULL` failed and the signal remains recorded. Evidence is under
 `target/goal-validation/file-container-enospc/`.
 
+FreeBSD 15.1-RELEASE-p6 passed all nine checks for AES VeraCrypt on
+the installed `e607cc7` native package with harness `4554a0d`. The
+128 MiB container's inner UFS reached `ENOSPC` at 129,073,152 bytes
+of filler. SQLite 3.54.1 returned `SQLITE_FULL`, and the previously
+committed file and row were still readable while the filesystem was
+full. The suite removed the filler, synced a new file, committed a new
+row, and verified both old and new data after a clean close and reopen.
+Package, module, mount, md and session inventories returned to baseline
+before the isolated guest was retired. The package, command and
+filesystem receipts are under `target/freebsd-veracrypt-full-storage/`.
+
 The suite checks create, protection of an existing destination, unlock, Unicode
 and spaces, fsync, atomic rename/truncation, SQLite WAL and integrity, duplicate and aliased-source
 attachment refusal, busy close refusal, close, wrong credentials, reopen and
