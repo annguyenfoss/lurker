@@ -774,3 +774,17 @@ descriptor is closed and returns `ENXIO` on direct detach. In the same
 control, an owned empty clone provisioned with one anonymous page could
 be detached and removed. Both tests restored the native inventories.
 Evidence is under `target/goal-validation/dragonfly-vnode-reservation/`.
+
+`421314c` applies the one-page release only to the recorded devfs
+identity. A root test held the clone open long enough for native detach
+to report it busy, then retried from the saved release intent. A separate
+anonymous attachment without that intent stayed attached. An
+interruption before the first reservation save can still leave an empty
+clone. The kernel has yet to associate any ciphertext with that clone.
+
+DragonFly workspace checks passed with 93 tests passing and four
+ignored. The focused root test passed and restored the native inventory.
+The exact `421314c` installed package passed all 13 AES Auto checks and
+restored the prior inventory on removal. Its SHA-256 is
+`8dfb0c286d39b4b8d870faea6b637f82b8f7e0bcdb181325adc6122d4c22c768`.
+Receipts are under `target/goal-validation/dragonfly-idle-recovery/`.
