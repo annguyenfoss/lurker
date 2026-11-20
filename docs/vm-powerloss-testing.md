@@ -574,6 +574,21 @@ https://cdn.netbsd.org/pub/NetBSD/NetBSD-11.1/source/sets/SHA512
 
 https://cdn.netbsd.org/pub/NetBSD/NetBSD-11.1/source/sets/syssrc.tgz
 
+### Experimental NetBSD synchronous journal flush
+
+A candidate from the verified NetBSD 11.1 source set built natively on
+KVM. It lets synchronous whole-file fsync flush the journal after inode
+enrollment even when the file vnode has an empty dirty-buffer list.
+The GENERIC image SHA-256 is
+`f835ea94232dd009f9ff4c96a31064ccc93371ca395375754c721b99428665ea`.
+
+The disposable networkless guest failed its root-filesystem space
+check before candidate installation. There is no candidate boot,
+ordinary-fsync workload or power-cut result. The guest shut down,
+and the original stock kernel digest and version matched their
+pretest values. Build and pre-install receipts are under
+`target/netbsd-wapbl-kernel-bed2448/`.
+
 ## FreeBSD, OpenBSD and DragonFly repeat tests
 
 | KVM clone and source | Result after the confirmed power cut |
