@@ -378,12 +378,12 @@ be kept together with their `.cgdparams` recovery sidecars. NetBSD writable
 mounts require FFS journaling (WAPBL). The first writable mount of an older
 image may allocate a journal and requires free space inside the image.
 
-If a GELI, CGD, softraid CRYPTO, BSD VeraCrypt, or DragonFly LUKS1
-creation is interrupted before the requested file appears, run
-`lurker unmount --type auto <requested-path>` with administrator
-authority. Lurker verifies and closes the recorded native session and
-reports where the unpublished image remains for inspection. For CGD,
-keep any staged `.cgdparams` file with that image.
+If an interrupted GELI, CGD, softraid CRYPTO, BSD VeraCrypt, or
+DragonFly LUKS1 create leaves a native session open while the requested
+file is still absent, run `lurker unmount --type auto <requested-path>`
+with administrator authority. Lurker verifies and closes the recorded
+session and reports where the unpublished image remains for inspection.
+For CGD, keep any staged `.cgdparams` file with that image.
 
 OpenBSD mounts writable FFS synchronously for softraid CRYPTO, RAID1C and
 VeraCrypt. OpenBSD read-only crypto attachment is unsupported. After a crash,

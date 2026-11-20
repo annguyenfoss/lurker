@@ -125,6 +125,20 @@ name collision. A cut between the two name publications can leave only
 the sidecar. Evidence is under
 `target/goal-validation/netbsd-cgd-publication-barrier/`.
 
+The installed `69299a9` package on stock NetBSD 11.1 passed 26 explicit
+and Auto CGD lifecycle checks and seven checks on a vault created after
+recovering an interrupted create. Recovery rejected a replaced staged
+inode. Both sidecar-only and late image collisions preserved the
+preexisting file. A native trace recorded the sidecar link, a successful
+directory fsync, and the image link in that order. Evidence is under
+`target/netbsd-cgd-destination/`.
+
+The DragonFly BSD CLI package at the same revision passed 39 installed
+LUKS1 checks across AES Auto, Serpent and Twofish, including file and SQLite
+readback after reopen. Package removal restored the native inventories
+and left no staged directories. Receipts are under
+`target/goal-validation/bsd-create-recovery/dragonfly-native/`.
+
 ## Browser profiles on native mounts
 
 OpenBSD's exact `e607cc7` package passed 43 checks with Firefox ESR
