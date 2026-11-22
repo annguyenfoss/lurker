@@ -581,6 +581,22 @@ Version needs section '.gnu.version_r' contains 2 entries:
         with self.assertRaisesRegex(ValueError, "source inventory differs"):
             stager.verify_cryptomator_sources(self.root, source)
 
+    def test_cryptomator_module_path_matches_the_actual_locked_dependency_bytes(self):
+        modules = self.root / "mods"
+        modules.mkdir()
+        (modules / "lurker-cryptomator-1.0.0.jar").write_bytes(b"helper")
+        dependency = modules / "backend.jar"
+        dependency.write_bytes(b"locked dependency")
+        lock = {"sha256": {dependency.name: stager.digest(dependency)}}
+        stager.verify_cryptomator_dependencies(self.root, lock)
+        dependency.write_bytes(b"modified")
+        with self.assertRaisesRegex(ValueError, "runtime dependencies differ"):
+            stager.verify_cryptomator_dependencies(self.root, lock)
+        dependency.write_bytes(b"locked dependency")
+        (modules / "unreviewed.module").mkdir()
+        with self.assertRaisesRegex(ValueError, "unreviewed entries"):
+            stager.verify_cryptomator_dependencies(self.root, lock)
+
     def _stage_fixture(self):
         binaries = self.root / "binaries"
         binaries.mkdir()

@@ -272,6 +272,18 @@ def verify_cryptomator_sources(root, source):
             fail("Cryptomator helper source differs from exact Lurker commit: " + name)
 
 
+def verify_cryptomator_dependencies(root, lock):
+    modules = root / "mods"
+    helper = "lurker-cryptomator-1.0.0.jar"
+    if not (modules / helper).is_file():
+        fail("Cryptomator helper JAR is missing")
+    if any(path.is_symlink() or not path.is_file() or path.suffix != ".jar" for path in modules.iterdir()):
+        fail("Cryptomator module path contains unreviewed entries")
+    dependencies = {path.name: digest(path) for path in modules.iterdir() if path.name != helper}
+    if dependencies != lock["sha256"]:
+        fail("Cryptomator runtime dependencies differ from source lock")
+
+
 # These components belong to the host ABI and must never be shipped privately.
 LINUX_SYSTEM_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|resolv|util|anl|nss_[^/]+|BrokenLocale)\.so(?:\..*)?)$")
 LINUX_CXX_RUNTIME_ELF = re.compile(r"^lib(?:stdc\+\+|gcc_s)\.so(?:\..*)?$")
@@ -396,6 +408,7 @@ def validate_backend(kind, directory, source):
         lock = json.loads(source.read("native/folder/cryptomator/dependencies.lock.json"))
         if manifest.get("sources") != lock:
             fail("Cryptomator dependency provenance differs from source lock")
+        verify_cryptomator_dependencies(root, lock)
         if not list((root / "mods").glob("*.jar")) or not (root / "runtime/lib").is_dir():
             fail("Cryptomator private Java runtime/modules are incomplete")
     elif kind in {"veracrypt-create", "veracrypt-userspace"}:
