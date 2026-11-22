@@ -108,9 +108,38 @@ Every case wrote and synced three PDFs and a page of text, checked the four
 files after close and reopen, then appended to the text and synced a fifth
 file. All five SHA-256 digests matched after another close and reopen. Each
 case completed the CLI checks, including SQLite WAL and busy close, and both
-of its fixture mountpoints were clear afterward. Buran stayed online.
+of its fixture mountpoints were clear afterward.
 An owned Cryptomator JVM exit also passed all five fence and recovery checks.
+All five Firefox profiles passed 75 checks. All five desktop callback tests
+passed through the packaged helper. The VeraCrypt callback used a private
+bundle layout so the test executable could find the packaged engine when
+listing mounted volumes.
 Receipts are under `target/goal-validation/ssh-matrix-20261122/macos-evidence/b2da478/`.
+
+## Packaged FSKit close regression
+
+The earlier rapid-close suite encountered one Cryptomator busy refusal and
+then closed the same vault normally. A control using the native `/sbin/umount`
+returned `Resource busy` on four of 30 immediate calls. Each call preserved
+the mounted vault and the next ordinary close succeeded.
+
+The `c997d6a06973fcc61fc292c51c540d360ed75534` developer DMG passed 32
+Cryptomator CLI checks across the explicit and Auto payload lifecycles,
+35 rapid close cycles, five JVM crash and fence checks, 15 Firefox profile
+checks, and the desktop callback through the installed helper. The controlled
+transient case closed after its consumer exited and reopened with the synced
+file and SQLite data intact. A consumer that kept the volume open still
+received a busy refusal and preserved its mount. All test sessions closed.
+
+The DMG SHA-256 was
+`8e61e679620e8e6d91ef8efe329f92e3b3d15f9c4950076e6e404559067db2f9`.
+All four signed native backend executables matched the earlier DMG byte for
+byte. Workspace verification passed 103 tests with nine ignored. The 17
+packaging checks and the opt-in plaintext Apple image test also passed.
+The tests did not request a reboot. This package was validated after the
+operator's separately requested restart, with an unchanged boot identity
+throughout the storage tests. Receipts are under
+`target/goal-validation/ssh-matrix-20261122/macos-evidence/c997d6a/`.
 
 ## Earlier macOS 27.2.1 arm64 results
 
