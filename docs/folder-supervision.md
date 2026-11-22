@@ -212,6 +212,19 @@ Cryptomator cases still failed because they acknowledged `fsync` and lost
 the readable prefix after reopening. Results and retained close evidence
 are in `target/goal-validation/debian-append-contract-14ede46/`.
 
+A later Debian replay paired the verified `14ede46` CLI with an isolated
+Cryptomator journal prototype. On both the zero-block and one-block fixtures,
+the appending write returned `ENOSPC` before accepting bytes. The original
+prefix remained readable at capacity and after a clean close and reopen.
+New file and SQLite commits made after freeing space also survived reopen.
+Both fixtures were retired and the mount inventory matched baseline.
+
+The replay used an extracted CLI with an experimental component and a
+fixture-local manifest. The installed package remains affected. The journal
+prototype still needs source integration and packaged qualification.
+Exact CLI and patch-JAR hashes and result receipts are in
+`target/goal-validation/ssh-matrix-20261122/cryptomator/cli-draft-evidence/`.
+
 ## Linux process exit during close
 
 An installed Gentoo `c21e0cc` run detached a read-only CryFS mount and
