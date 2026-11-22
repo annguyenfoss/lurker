@@ -57,7 +57,7 @@ OS and are recorded with each receipt.
 
 | Target | Native payload result | Remaining limitation |
 | --- | --- | --- |
-| Linux, six distributions | 42 mounted reboot cases passed on `14ede46`, across the seven routes on each guest | Packaged Cryptomator still fails the full-backing-store append gate. The isolated draft passed both append cases. |
+| Linux, six distributions | 42 mounted reboot cases passed on `14ede46`. Debian `9ff2b5b` passed all 195 installed lifecycle checks, the six directory append cases, and a Cryptomator mounted reboot. | The adopted Cryptomator component passed on the other five guests with their verified stock CLIs. Those runs used extracted test prefixes. |
 | FreeBSD | Ten GELI, VeraCrypt and PEFS fixtures passed after reboot on `14ede46`. Packaged gocryptfs passed on `d1608f89`. | gocryptfs requires explicit journal reconciliation after a reboot with an active mount. Legacy journals with a changed device number require manual recovery. |
 | NetBSD | Two CGD fixtures passed on `14ede46` | The earlier abrupt power-loss WAL result remains open. |
 | DragonFly BSD | Six LUKS1 cipher and credential combinations passed on `14ede46` | Earlier abrupt power-loss durability remains open. |

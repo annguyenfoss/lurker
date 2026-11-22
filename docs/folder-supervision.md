@@ -249,10 +249,40 @@ New file and SQLite commits made after freeing space also survived reopen.
 Both fixtures were retired and the mount inventory matched baseline.
 
 The replay used an extracted CLI with an experimental component and a
-fixture-local manifest. The installed package remains affected. The journal
-prototype still needs source integration and packaged qualification.
-Exact CLI and patch-JAR hashes and result receipts are in
+fixture-local manifest. Exact CLI and patch-JAR hashes are in
 `target/goal-validation/ssh-matrix-20261122/cryptomator/cli-draft-evidence/`.
+
+### Installed Linux journal on Debian
+
+The Linux component now journals the old ciphertext before a write can
+change it and reports the native storage error through FUSE. It publishes
+journal records using an atomic Linux rename that refuses to replace an
+existing record. This also preserved ordinary write, sync, close and
+reopen on a disposable FAT-backed vault. A writable reopen is required
+when a pending journal needs rollback.
+
+The complete Debian installer at `9ff2b5b` passed 195 installed lifecycle
+checks and 15 Cryptomator Firefox profile checks. All six append cases
+passed across gocryptfs, CryFS and Cryptomator with zero or one free block.
+Cryptomator reported `ENOSPC`, closed cleanly, and recovered the exact
+committed prefix and later file and SQLite writes. CryFS retained both
+failed-close results and recovered its committed data after reopen.
+
+An orderly reboot started with the installed Cryptomator vault mounted.
+After the boot ID changed, ordinary reopen verified all five PDF and text
+digests and closed cleanly. The harness initially tried to inspect the
+login user's FUSE mount from root and repeated the check as the login user
+before requesting the reboot. Package removal restored the installed
+package inventory, and native checks found no scoped mounts or loops.
+
+Arch, Fedora, Ubuntu, openSUSE and Gentoo each passed 26 explicit and Auto
+lifecycle checks, the same mounted payload, and one full-backing append
+case using the adopted component with the guest's verified stock CLI.
+The Debian `.deb` SHA-256 was
+`73390ef451ab1aba4e851dc595cba3620eca1102f448152e458a4b14a9e7024d`.
+Exact installer and overlay receipts are under
+`target/goal-validation/ssh-matrix-20261122/` in
+`cryptomator/source-review/debian-release/` and `linux/cryptomator-adoption/`.
 
 ## Linux process exit during close
 
