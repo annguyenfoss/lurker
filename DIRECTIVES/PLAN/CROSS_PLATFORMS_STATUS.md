@@ -59,7 +59,7 @@ OS and are recorded with each receipt.
 | --- | --- | --- |
 | Linux, six distributions | 42 mounted reboot cases passed on `14ede46`. Debian `9ff2b5b` passed all 195 installed lifecycle checks, the six directory append cases, and a Cryptomator mounted reboot. | The adopted Cryptomator component passed on the other five guests with their verified stock CLIs. Those runs used extracted test prefixes. |
 | FreeBSD | The exact `16aa1f4` installer passed 260 checks across 20 variants, all 11 mounted reboot fixtures, four installed-helper callbacks, and X11. | gocryptfs requires explicit journal reconciliation after a reboot with an active mount. Legacy journals with a changed device number require manual recovery. |
-| NetBSD | Two CGD fixtures passed on `14ede46` | The earlier abrupt power-loss WAL result remains open. |
+| NetBSD | The exact `16aa1f4` TGZ passed 26 CGD lifecycle checks, nine capacity checks, two mounted reboot fixtures, the login-user desktop callback, and X11. | The package was installed under a private destination. The earlier abrupt power-loss WAL result remains open. |
 | DragonFly BSD | Six LUKS1 cipher and credential combinations passed on `14ede46` | Earlier abrupt power-loss durability remains open. |
 | OpenBSD | CRYPTO and RAID1C passed after stock reboot on `eca358d`. VeraCrypt passed with the native shutdown hook. | Stock VeraCrypt reboot without the hook required FFS preen on a separate copy. |
 | macOS | The exact `c997d6a` DMG passed 320 checks across all 20 CLI profiles, 35 Cryptomator rapid closes, busy refusal, JVM crash recovery, five desktop callbacks, and 75 Firefox checks. | The macOS tests issued no reboot. The final DMG was verified after Buran's separately requested restart. |
