@@ -92,6 +92,22 @@ Late shutdown scripts may run after consumers, runtime directories or mounts
 have already been torn down, and a failed stop job alone does not cancel an
 operating-system shutdown. Lurker installs no login or shutdown hooks.
 
+On OpenBSD, an administrator can close a configured VeraCrypt vault from
+`/etc/rc.shutdown` after its consumers have stopped. Substitute the absolute
+path of the encrypted container, using an administrator-controlled parent
+directory.
+
+```sh
+/usr/local/bin/lurker session-close --type veracrypt --timeout 30 \
+    '/srv/vaults/profile.hc' </dev/null
+```
+
+OpenBSD runs this script after stopping the configured package services
+and before terminating the remaining processes. The close must finish
+while VeraCrypt can still service FFS writes. If a close failure must
+prevent reboot, run the close before requesting shutdown and proceed only
+after it returns zero. https://man.openbsd.org/OpenBSD-8.0/rc.shutdown.8
+
 ### Desktop App
 
 The desktop app is intentionally simple for now:
