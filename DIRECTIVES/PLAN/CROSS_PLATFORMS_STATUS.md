@@ -47,6 +47,28 @@ the affected route. Reporting that blocker does not establish completion.
 Publisher-controlled signing and public release need their own authorized
 release operation and are tracked separately from implementation completion.
 
+## Native SSH lifecycle round, 2026-11-22
+
+Each OS exercised the same three PDFs and text page. Fixtures were closed
+and reopened before the append and second text file. Verification compared
+all five SHA-256 digests after another close and reopen, or after an orderly
+reboot with the test vaults still mounted. The package identities differ by
+OS and are recorded with each receipt.
+
+| Target | Native payload result | Remaining limitation |
+| --- | --- | --- |
+| Linux, six distributions | 42 mounted reboot cases passed on `14ede46`, across the seven routes on each guest | Packaged Cryptomator still fails the full-backing-store append gate. The isolated draft passed both append cases. |
+| FreeBSD | Ten GELI, VeraCrypt and PEFS fixtures passed after reboot on `14ede46` | gocryptfs needed previous-boot reconciliation. The boot-ID fix passed on a native development CLI. |
+| NetBSD | Two CGD fixtures passed on `14ede46` | The earlier abrupt power-loss WAL result remains open. |
+| DragonFly BSD | Six LUKS1 cipher and credential combinations passed on `14ede46` | Earlier abrupt power-loss durability remains open. |
+| OpenBSD | CRYPTO and RAID1C passed after stock reboot on `eca358d`. VeraCrypt passed with the native shutdown hook. | Stock VeraCrypt reboot without the hook required FFS preen on a separate copy. |
+| macOS | All 20 packaged CLI cases and five Cryptomator crash-recovery checks passed on `b2da478` | Buran stayed online. Rapid Cryptomator close once required a graceful retry. |
+
+Receipts and handoffs are in `target/goal-validation/ssh-matrix-20261122/`.
+See `docs/linux-validation.md`, `docs/backend-testing.md`,
+`docs/macos-backends.md` and `docs/folder-supervision.md` for exact artifacts,
+scope and recovery behavior. These results do not close the release gates above.
+
 ## Supported routes and power-cut results
 
 The packaged-vault lifecycles in the following sections verify creation,
