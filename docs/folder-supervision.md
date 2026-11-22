@@ -41,6 +41,30 @@ Journals written before boot IDs were recorded still use their original
 device, inode, and process checks. A legacy journal with a changed device
 number requires manual recovery.
 
+On FreeBSD 15.1-RELEASE-p6, the `14ede46` installer passed 260 lifecycle
+checks and four installed-helper callback routes. Eleven fixtures were
+left mounted for an orderly reboot. The GELI, VeraCrypt and PEFS fixtures
+reopened with all five file digests intact. The gocryptfs fixture retained
+its journal, but the legacy close command refused it after the device
+number changed from 64 to 70. A later boot restored device number 64,
+after which the same gocryptfs fixture reopened with all five digests intact.
+
+The integrated `d1608f897631` installer passed 26 explicit and Auto
+gocryptfs lifecycle checks plus all four installed-helper callback routes.
+The test wrote and synced three PDFs and a text page, closed and reopened
+the vault, then synced an append and a second text file. The guest
+rebooted with the vault still mounted and reported a new kernel boot ID.
+An occupied mountpoint preserved the replacement mount and old journal.
+After the mountpoint was clear, explicit unmount archived the journal and
+reported the unconfirmed close. The installed CLI reopened the vault,
+verified all five SHA-256 digests, and closed it normally. Package removal
+restored the original native resource and package inventories.
+
+The exact package SHA-256 was
+`48263178155db76bab4c360a9fb9f6709312e549ebe88739f29c8ae30d6db377`.
+The native run was `20261122T163738Z-408a7eb4`. The package and runtime
+receipts are under `target/goal-validation/ssh-matrix-20261122/freebsd/integrated-evidence/`.
+
 ## macOS Cryptomator underlay protection
 
 Before mounting, core opens the original empty directory without following
