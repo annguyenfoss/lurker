@@ -62,7 +62,11 @@ OS and are recorded with each receipt.
 | NetBSD | Two CGD fixtures passed on `14ede46` | The earlier abrupt power-loss WAL result remains open. |
 | DragonFly BSD | Six LUKS1 cipher and credential combinations passed on `14ede46` | Earlier abrupt power-loss durability remains open. |
 | OpenBSD | CRYPTO and RAID1C passed after stock reboot on `eca358d`. VeraCrypt passed with the native shutdown hook. | Stock VeraCrypt reboot without the hook required FFS preen on a separate copy. |
-| macOS | All 20 packaged CLI cases and five Cryptomator crash-recovery checks passed on `b2da478` | Buran stayed online. Rapid Cryptomator close once required a graceful retry. |
+| macOS | All 20 packaged CLI cases passed on `b2da478`. The `c997d6a` DMG verified the Cryptomator retry with two payload cases, 35 rapid closes, busy refusal and JVM crash recovery. | The macOS tests issued no reboot. The final DMG was verified after Buran's separately requested restart. |
+
+All ten KVM guests ran workspace checks and passed 1,234 Rust tests on
+`c997d6a`. Buran passed 103 workspace tests at the same revision. Packaged
+lifecycle receipts retain their exact source and artifact hashes.
 
 Receipts and handoffs are in `target/goal-validation/ssh-matrix-20261122/`.
 See `docs/linux-validation.md`, `docs/backend-testing.md`,
