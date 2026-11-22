@@ -10,9 +10,9 @@ Use this file as the source of truth for selected encryption backends and create
 | --- | --- | --- | --- | --- | --- | --- |
 | Apple encrypted disk images | ✅ | — | — | — | — | — |
 | LUKS2 | — | ✅ | — | — | — | — |
-| VeraCrypt | 🟦 | ✅ | ✅ | — | — | ✅ |
-| CryFS stable 1.x | 🟦 | ✅ | — | — | — | — |
-| gocryptfs | 🟦 | ✅ | ✅ | — | — | — |
+| VeraCrypt | ✅ | ✅ | ✅ | — | — | ✅ |
+| CryFS stable 1.x | ✅ | ✅ | — | — | — | — |
+| gocryptfs | ✅ | ✅ | ✅ | — | — | — |
 | GELI | — | — | ✅ | — | — | — |
 | CGD | — | — | — | — | ✅ | — |
 | softraid CRYPTO | — | — | — | — | — | ✅ |
@@ -24,7 +24,7 @@ Use this file as the source of truth for selected encryption backends and create
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, securefs, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, encrypted archives, backups and rclone crypt are excluded. LUKS still uses dm-crypt internally. Research availability is not approval to integrate.
 - age/rage is excluded: Lurker targets writable encrypted disks, filesystems and directories unlocked for use during a session. age/rage encrypts files/streams; rage-mount provides only read-only archive access, not writable directory encryption.
 - Apple disk images are the existing hdiutil backend, not FileVault/native APFS-encryption management. VeraCrypt on NetBSD/DragonFly remains an exploratory port outside approved integration scope.
-- macOS runtime policy: VeraCrypt uses FUSE-T only, without a macFUSE build or fallback. macFUSE is reserved for gocryptfs/CryFS. Cryptomator must use a qualified FUSE-T or native no-FUSE provider. Previous VeraCrypt creation timeouts and directory application-I/O failures remain unresolved until new native evidence passes; the four selected pairs remain incomplete.
+- macOS runtime policy: VeraCrypt uses FUSE-T 1.2.9 or later, without a macFUSE build or fallback. macFUSE is reserved for gocryptfs/CryFS. Cryptomator uses the FUSE-T FSKit provider in the tested package and passed the ordinary CLI lifecycle. Its rapid-close regression still needs qualification. Exact macOS package results are in `docs/macos-backends.md`.
 - Planned support requires native validation: gocryptfs macOS is beta and FreeBSD is basic; VeraCrypt targets FreeBSD x86-64 14+ and OpenBSD x86-64 7.8+, subject to inner-filesystem support. CryFS 2.0 alpha is excluded.
 - Prefer LUKS2 for new Linux volumes; LUKS1 adds compatibility and the DragonFly native path. Do not apply LUKS2/Argon2id format arguments to LUKS1. Qualify DragonFly cryptsetup versions, patches, profiles and disk/file-container behavior before release; selection is not security approval. PEFS needs a matching FreeBSD kernel module. Cryptomator requires create/mount/credential API and application-filesystem validation.
 - Existing profiles below remain authoritative. Select and document profiles for new backends during implementation; do not apply LUKS/VeraCrypt cipher options to folder backends automatically.
