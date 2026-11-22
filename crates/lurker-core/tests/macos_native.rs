@@ -345,15 +345,21 @@ fn invalid_commands_are_rejected_without_side_effects() {
 #[ignore = "creates an unencrypted disposable disk image to verify rejection"]
 fn plaintext_images_are_refused() {
     let f = Fixture::new();
-    let source = f.0.join("plain.dmg");
-    assert!(std::process::Command::new("/usr/bin/hdiutil")
-        .args(["create", "-size", "16m", "-fs", "APFS"])
+    // A blank read-write DMG can be reported as raw, like a VeraCrypt file.
+    // Use an Apple sparse image to exercise the recognized plaintext case.
+    let source = f.0.join("plain.sparseimage");
+    let output = std::process::Command::new("/usr/bin/hdiutil")
+        .args(["create", "-size", "64m", "-fs", "APFS", "-type", "SPARSE"])
         .arg(&source)
         .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(bad(f.mount(&source, PASS, false, VolumeType::Auto)).contains("unencrypted"));
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rejection = bad(f.mount(&source, PASS, false, VolumeType::Auto));
+    assert!(rejection.contains("unencrypted"), "{rejection}");
     assert!(!f.0.join("mounted vault").exists());
 }
 
