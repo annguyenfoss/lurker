@@ -139,3 +139,46 @@ cargo check -p lurker-core -p lurker-cli -p lurker-helper --tests --target aarch
 ```
 
 The installed userspace helpers matched the builder's pinned upstream revisions. After the native runs, a read-only inventory found zero remaining credential-test mounts or loop devices. Native macOS verification requires a Mac with VeraCrypt and its matching FUSE runtime; run the existing `macos_native` suite there, including `veracrypt_keyfile_only_round_trips`.
+
+## Packaged restart and credential qualification (2026-11-22)
+
+Arch, Debian, Ubuntu, Fedora, openSUSE, and Gentoo each installed the
+same native artifact used for their previous stock qualification, built
+from `14ede46fb401578f0e8a4ee9b51e72ce17c0ad04`. Each installer and all
+899 installed entries matched the recorded digests. The existing package
+bytes were reused for every test in this round.
+
+| Test | Result across six guests |
+| --- | ---: |
+| PDF and text lifecycle with an orderly restart while mounted | 42 routes passed |
+| Binary-keyfile create and Auto lifecycle for all three file ciphers | 72 profiles and 936 checks passed |
+| Guarded forced replacement on four file routes | 144 checks passed |
+| Retained password and directory lifecycle receipts | 1,170 checks passed |
+| Retained binary-keyfile block creation on fixture-owned loops | 54 profiles passed |
+| Retained native desktop window probes | Six X11 and six Wayland passes |
+
+The restart workload covered LUKS2, LUKS1, kernel and login-user VeraCrypt,
+gocryptfs, CryFS, and Cryptomator. The first mount wrote and synced three
+PDFs and a page of text. The next mount verified all four files, appended
+text, and synced another file. The preflight captured all seven active
+filesystems before each guest restarted. After the boot ID changed, all
+seven fixtures reopened with matching bytes and closed normally.
+
+For binary keyfiles, the installed CLI created each AES, Serpent, and
+Twofish file profile for LUKS2, LUKS1, and both VeraCrypt routes. The Auto
+cases checked incorrect keys, duplicate aliases, busy close, SQLite WAL
+and filesystem operations, persistence, and read-only reopen. Forced
+replacement covered the four file routes with disposable AES fixtures.
+
+The login-user VeraCrypt identity check requires traversal of active
+kernel loop backing paths. The fixture setup added traverse permission to
+its private parent directories and kept ciphertext and credentials at
+mode 0600. Ubuntu's AppArmor fusermount rules accepted the relocated
+fixtures under the login user's home. The kernel policies stayed enabled.
+
+The packages were removed and the package inventories restored. The cleanup
+receipts confirm zero owned mounts, loops, and backend processes before
+fixture removal. Package hashes, boot IDs, mounted payload digests, and
+per-case logs are indexed in
+`target/goal-validation/ssh-matrix-20261122/linux/matrix.json`. The abrupt
+power-cut results are recorded in `docs/vm-powerloss-testing.md`.
