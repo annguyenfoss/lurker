@@ -1125,7 +1125,7 @@ fn mount_inner(
     }
 }
 
-fn native_unmount(path: &Path) -> AppResult<()> {
+fn native_unmount(path: &Path, capture_busy: bool) -> AppResult<std::process::Output> {
     #[cfg(target_os = "linux")]
     let mut command = {
         let program = [
@@ -1144,20 +1144,28 @@ fn native_unmount(path: &Path) -> AppResult<()> {
     };
     #[cfg(not(target_os = "linux"))]
     let mut command = Command::new("/sbin/umount");
-    let status = command
+    if capture_busy {
+        command.env("LC_ALL", "C").stderr(Stdio::piped());
+    } else {
+        command.stderr(Stdio::null());
+    }
+    command
         .arg(path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|e| AppError::io("Cannot unmount directory", e))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(AppError::new(
-            "Directory is busy or native unmount failed; session preserved. Close consumers and retry.",
-        ))
-    }
+        .output()
+        .map_err(|e| AppError::io("Cannot unmount directory", e))
+}
+
+fn darwin_unmount_busy(stderr: &[u8]) -> bool {
+    let stderr = String::from_utf8_lossy(stderr);
+    let Some((_, detail)) = stderr.trim_end().rsplit_once("): ") else {
+        return false;
+    };
+    matches!(
+        detail,
+        "Resource busy" | "Resource busy -- try 'diskutil unmount'"
+    )
 }
 
 fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bool) -> AppResult<()> {
@@ -1188,14 +1196,19 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
             archive.display()
         )));
     }
-    if Identity::read(&session.source)? != session.source_identity {
-        return Err(AppError::new(
-            "Encrypted directory was replaced; refusing to close a stale session.",
-        ));
-    }
-    let current = mount_identity(&session.mountpoint)?;
-    if let Some(ref identity) = current {
-        let expected = confirmed_mount_directory(&session, identity)?;
+    let mut retry_busy = cfg!(target_os = "macos")
+        && session.backend == VolumeType::Cryptomator
+        && session.fence.is_some();
+    loop {
+        if Identity::read(&session.source)? != session.source_identity {
+            return Err(AppError::new(
+                "Encrypted directory was replaced; refusing to close a stale session.",
+            ));
+        }
+        let Some(identity) = mount_identity(&session.mountpoint)? else {
+            break;
+        };
+        let expected = confirmed_mount_directory(&session, &identity)?;
         // A confirmed kernel mount ID remains available after a FUSE daemon
         // dies, although stat of its root returns ENOTCONN/EIO. Recover only
         // this exact recorded mount after independently proving daemon exit.
@@ -1205,7 +1218,19 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
             })?;
             Ok(!alive(process)?)
         })?;
-        native_unmount(&session.mountpoint)?;
+        let result = native_unmount(&session.mountpoint, retry_busy)?;
+        if result.status.success() {
+            break;
+        }
+        if !retry_busy || !darwin_unmount_busy(&result.stderr) {
+            return Err(AppError::new(
+                "Directory is busy or native unmount failed; session preserved. Close consumers and retry.",
+            ));
+        }
+        // FSKit can briefly report a newly mounted volume as busy. Retry once
+        // with ordinary unmount after revalidating the exact source and mount.
+        retry_busy = false;
+        std::thread::sleep(Duration::from_millis(150));
     }
     if mount_identity(&session.mountpoint)?.is_some() {
         return Err(AppError::new(
@@ -1303,6 +1328,18 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn distinguishes_darwin_unmount_busy_from_other_failures() {
+        assert!(darwin_unmount_busy(b"umount(/tmp/vault): Resource busy\n"));
+        assert!(darwin_unmount_busy(
+            b"umount(/tmp/vault): Resource busy -- try 'diskutil unmount'\n"
+        ));
+        assert!(!darwin_unmount_busy(
+            b"umount(/tmp/Resource busy): Operation not permitted\n"
+        ));
+    }
     #[test]
     fn helper_fence_contract_is_conservative_for_mac_auto_and_unchanged_elsewhere() {
         assert!(requires_fence_protocol(VolumeType::Auto, true));

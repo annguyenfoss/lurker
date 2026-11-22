@@ -82,6 +82,11 @@ the backend's failed exit. A durable matching acknowledgement permits retry afte
 an interrupted frontend. Losing the guardian/descriptor leaves mode 000 and
 requires manual recovery; there is no path-based chmod fallback.
 
+If an ordinary unmount of a fenced FSKit volume briefly reports that the
+resource is busy, Lurker rechecks the recorded source and mount identities
+and tries once more after 150 milliseconds. A volume that remains busy
+keeps its mount and session so open consumers can finish.
+
 Native Buran evidence: source `2b56da973f` passes 26 explicit/Auto lifecycle
 checks; `6aeed62b69` passes five supervised crash/recovery checks using a test-only
 wrapper that SIGKILLs its own unreaped JVM child. Plaintext writes are denied,
