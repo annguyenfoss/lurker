@@ -418,6 +418,16 @@ The NetBSD and DragonFly package SHA-256 digests were
 Receipts are in `target/goal-validation/ssh-matrix-20261122/`, under
 `netbsd-evidence/` and `dragonfly-evidence/`.
 
+The coordinated `16aa1f4` DragonFly native package has SHA-256
+`65f014e79f637bf0bff3747578936f5853941110deb50ad322b6d7dcdf30a303`.
+The offline installation on a stock KVM clone verified all 645 package
+entries. The exact installed CLI replayed all six mounted LUKS1 cipher and
+credential profiles. The boot identity changed from `1795370321` to
+`1795372068`. All five PDF and text file hashes matched after normal
+reopen in each fixture. Reopening and closing the vaults restored the
+pre-test mount, vnode, mapper and journal state. The package and reboot
+receipts are in `target/goal-validation/ssh-matrix-20261122/dragonfly-final/`.
+
 ## Captured packaged CLI evidence
 
 The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected
