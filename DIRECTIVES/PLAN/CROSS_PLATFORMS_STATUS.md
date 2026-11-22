@@ -57,7 +57,7 @@ OS and are recorded with each receipt.
 
 | Target | Native payload result | Remaining limitation |
 | --- | --- | --- |
-| Linux, six distributions | 42 mounted reboot cases passed on `14ede46`. Debian `9ff2b5b` passed all 195 installed lifecycle checks, the six directory append cases, and a Cryptomator mounted reboot. | The adopted Cryptomator component passed on the other five guests with their verified stock CLIs. Those runs used extracted test prefixes. |
+| Linux, six distributions | The updated `9ff2b5b` Debian and `16aa1f4` Arch, Fedora, Ubuntu, openSUSE and Gentoo installers passed 1,170 lifecycle checks, 54 loop-device profiles, six Cryptomator mounted reboots, and all 12 X11 and Wayland probes. All six directory append cases passed on Debian. | The 42 mounted reboot cases across all seven routes retain their `14ede46` artifact identities. |
 | FreeBSD | The exact `16aa1f4` installer passed 260 checks across 20 variants, all 11 mounted reboot fixtures, four installed-helper callbacks, and X11. | gocryptfs requires explicit journal reconciliation after a reboot with an active mount. Legacy journals with a changed device number require manual recovery. |
 | NetBSD | The exact `16aa1f4` TGZ passed 26 CGD lifecycle checks, nine capacity checks, two mounted reboot fixtures, the login-user desktop callback, and X11. | The package was installed under a private destination. The earlier abrupt power-loss WAL result remains open. |
 | DragonFly BSD | Six LUKS1 cipher and credential combinations passed on `14ede46` | Earlier abrupt power-loss durability remains open. |

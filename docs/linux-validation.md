@@ -195,3 +195,28 @@ after the installer was removed.
 
 The installer, installed desktop and results are hash-bound in
 `target/goal-validation/ssh-matrix-20261122/cryptomator/source-review/debian-release/supplement/`.
+
+### Coordinated Linux installer qualification
+
+Arch, Fedora, Ubuntu, openSUSE and Gentoo each installed their native
+`16aa1f4` package offline, matched all 923 installed entries, and passed
+195 lifecycle checks and nine binary-keyfile loop-device profiles. On
+each guest the Cryptomator append returned `ENOSPC`, preserved committed
+data, and accepted new writes after freeing space. Each guest rebooted
+with the Cryptomator mount active, then reopened and matched all five
+payload digests. Package removal restored the original inventories and
+cleared the test scopes.
+
+All five exact installed desktop binaries passed X11 and Wayland. The
+display probes used archived compositor dependencies in private mount
+namespaces. Gentoo used the openSUSE Weston fixture. The openSUSE fixture
+used an Ubuntu `libxcb-render` library. These dependencies belonged to the
+test environment. The installed application hashes and fixture sources
+are recorded in the per-host receipts.
+
+Including the `9ff2b5b` Debian installer, the updated Linux packages
+passed 1,170 lifecycle checks, 54 loop-device profiles, six mounted
+Cryptomator reboots, and six each of the X11 and Wayland probes. The
+commits between the Debian and five-host builds changed documentation.
+See `target/goal-validation/ssh-matrix-20261122/linux/final-native/matrix.json`
+for native installers, manifests, artifact hashes, and runtime receipts.
