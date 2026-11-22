@@ -19,7 +19,7 @@ class HarnessTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="lurker-harness-unit-", dir="/tmp")
         self.root = Path(self.temp.name)
         self.binary = self.root / "fake-cli"
-        self.binary.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n")
+        self.binary.write_text("import sys\nsys.exit(0)\n")
         self.binary.chmod(0o700)
 
     def tearDown(self):
@@ -134,8 +134,7 @@ class HarnessTests(unittest.TestCase):
                 suite.no_overwrite()
 
     def test_native_prompt_is_answered_without_echo_or_logged_secret(self):
-        self.binary.write_text("""#!/usr/bin/env python3
-import getpass
+        self.binary.write_text("""import getpass
 import sys
 
 a = getpass.getpass('Enter passphrase for /tmp/my vault:disk: ')
@@ -144,23 +143,22 @@ sys.exit(0 if a == b and a.startswith('  ') and a.endswith('  ') else 1)
 """)
         secret = "  密碼 secret  "
         log = self.root / "terminal.log"
-        result = harness.terminal([str(self.binary)], secret, 5, log)
+        result = harness.terminal([sys.executable, str(self.binary)], secret, 5, log)
         self.assertEqual(result["exit_code"], 0)
         self.assertEqual(result["prompts"], 2)
         self.assertNotIn(secret, log.read_text())
 
     def test_diagnostic_with_password_in_a_path_is_not_a_prompt(self):
         diagnostic = "Error: mount /tmp/veracrypt-aes-password/mount: fixture unavailable"
-        self.binary.write_text(f"#!/usr/bin/env python3\nimport sys\nprint({diagnostic!r})\nsys.exit(1)\n")
+        self.binary.write_text(f"import sys\nprint({diagnostic!r})\nsys.exit(1)\n")
         log = self.root / "password-in-path.log"
-        result = harness.terminal([str(self.binary)], None, 5, log)
+        result = harness.terminal([sys.executable, str(self.binary)], None, 5, log)
         self.assertEqual(result["exit_code"], 1)
         self.assertEqual(result["prompts"], 0)
         self.assertIn(diagnostic, log.read_text())
 
     def test_prompt_before_delayed_noecho_and_flush_preserves_both_inputs(self):
-        self.binary.write_text("""#!/usr/bin/env python3
-import sys, termios, time
+        self.binary.write_text("""import sys, termios, time
 fd = sys.stdin.fileno()
 original = termios.tcgetattr(fd)
 answers = []
@@ -178,40 +176,40 @@ sys.exit(0 if answers == ['  密碼 delayed secret  '] * 2 else 1)
 """)
         secret = "  密碼 delayed secret  "
         log = self.root / "delayed-echo.log"
-        result = harness.terminal([str(self.binary)], secret, 3, log)
+        result = harness.terminal([sys.executable, str(self.binary)], secret, 3, log)
         self.assertEqual(result["exit_code"], 0)
         self.assertEqual(result["prompts"], 2)
         self.assertFalse(result["timed_out"])
         self.assertNotIn(secret, log.read_text())
 
     def test_prompt_that_never_disables_echo_fails_without_sending_secret(self):
-        self.binary.write_text("#!/usr/bin/env python3\nimport sys, time\nsys.stdout.write('Password: '); sys.stdout.flush()\ntime.sleep(10)\n")
+        self.binary.write_text("import sys, time\nsys.stdout.write('Password: '); sys.stdout.flush()\ntime.sleep(10)\n")
         log = self.root / "never-noecho.log"
         with mock.patch.object(harness, "ECHO_WAIT_TIMEOUT", 0.1):
             with self.assertRaisesRegex(RuntimeError, "never disabled terminal echo"):
-                harness.terminal([str(self.binary)], "must-not-be-sent", 2, log)
+                harness.terminal([sys.executable, str(self.binary)], "must-not-be-sent", 2, log)
         self.assertNotIn("must-not-be-sent", log.read_text())
 
     def test_echoed_credential_fails_and_is_redacted(self):
-        self.binary.write_text("#!/usr/bin/env python3\nimport getpass\nprint(getpass.getpass('Password: '))\n")
+        self.binary.write_text("import getpass\nprint(getpass.getpass('Password: '))\n")
         secret = "must-never-be-logged"
         log = self.root / "echo.log"
         with self.assertRaisesRegex(RuntimeError, "exposed a credential"):
-            harness.terminal([str(self.binary)], secret, 5, log)
+            harness.terminal([sys.executable, str(self.binary)], secret, 5, log)
         self.assertNotIn(secret, log.read_text())
         self.assertIn("[REDACTED]", log.read_text())
 
     def test_unexpected_sudo_prompt_never_receives_vault_secret(self):
-        self.binary.write_text("#!/usr/bin/env python3\nimport getpass\ngetpass.getpass('[sudo] password for user: ')\n")
+        self.binary.write_text("import getpass\ngetpass.getpass('[sudo] password for user: ')\n")
         log = self.root / "sudo.log"
         with self.assertRaisesRegex(RuntimeError, "Unexpected authorization"):
-            harness.terminal([str(self.binary)], "vault-secret", 5, log)
+            harness.terminal([sys.executable, str(self.binary)], "vault-secret", 5, log)
         self.assertNotIn("vault-secret", log.read_text())
 
     def test_timeout_is_recorded_and_only_owned_child_is_stopped(self):
-        self.binary.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(10)\n")
+        self.binary.write_text("import time\ntime.sleep(10)\n")
         log = self.root / "timeout.log"
-        result = harness.terminal([str(self.binary)], None, 0.1, log)
+        result = harness.terminal([sys.executable, str(self.binary)], None, 0.1, log)
         self.assertTrue(result["timed_out"])
         self.assertNotEqual(result["exit_code"], 0)
 
