@@ -12,10 +12,12 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "native/folder/cryptomator"
@@ -25,6 +27,128 @@ MOUNT_PROFILES = {
     "Darwin": {"provider": "org.cryptomator.frontend.fuse.mount.FuseTMountProvider",
                "runtime": "fuse-t", "transport": "fskit", "minimum_os": "26.0"},
 }
+LINUX_PATCH_MODULES = {
+    "org.cryptomator.cryptofs": ("org.cryptomator:cryptofs:2.8.0:jar:sources", "cryptofs-2.8.0.jar"),
+    "org.cryptomator.frontend.fuse": ("org.cryptomator:fuse-nio-adapter:5.1.0:jar:sources", "fuse-nio-adapter-5.1.0.jar"),
+}
+PATCH_DATE = "2026-11-14T00:00:00Z"
+
+
+def linux_patch_configuration(project: Path) -> list[dict]:
+    path = project / "linux-patches/manifest.json"
+    value = json.loads(path.read_text())
+    if value.get("schema") != 1 or not isinstance(value.get("modules"), list) or not value["modules"]:
+        raise SystemExit("Invalid Linux Cryptomator patch configuration")
+    seen = set()
+    outputs = set()
+    for entry in value["modules"]:
+        if not isinstance(entry, dict) or set(entry) != {"module", "artifact", "base_jar", "source_sha256", "patch", "jar"}:
+            raise SystemExit("Invalid Linux Cryptomator patch module fields")
+        module = entry.get("module")
+        if not isinstance(module, str) or module in seen or module not in LINUX_PATCH_MODULES:
+            raise SystemExit("Unreviewed or duplicate Linux Cryptomator patch module")
+        seen.add(module)
+        if (entry.get("artifact"), entry.get("base_jar")) != LINUX_PATCH_MODULES[module]:
+            raise SystemExit("Linux Cryptomator patch does not match its pinned module")
+        if not isinstance(entry["source_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", entry["source_sha256"]):
+            raise SystemExit("Linux Cryptomator source checksum is missing")
+        for field, suffix in (("patch", ".patch"), ("jar", ".jar")):
+            name = entry.get(field, "")
+            if not isinstance(name, str) or Path(name).name != name or not re.fullmatch(r"[a-zA-Z0-9_.-]+", name) or not name.endswith(suffix):
+                raise SystemExit("Unsafe Linux Cryptomator patch filename")
+        if entry["jar"] in outputs:
+            raise SystemExit("Duplicate Linux Cryptomator patch output")
+        outputs.add(entry["jar"])
+    if value["modules"][0]["module"] != "org.cryptomator.cryptofs":
+        raise SystemExit("Compile the CryptoFS patch before the FUSE patch")
+    return value["modules"]
+
+
+def patch_java_sources(archive: Path, patch: Path, destination: Path) -> list[str]:
+    originals = {}
+    with zipfile.ZipFile(archive) as source:
+        for name in source.namelist():
+            path = Path(name)
+            if path.is_absolute() or ".." in path.parts:
+                raise SystemExit("Unsafe Cryptomator source archive path")
+            if name.endswith(".java"):
+                originals[name] = source.read(name).decode("utf-8").replace("\r\n", "\n")
+                output = destination / name
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(originals[name])
+    for line in patch.read_text().splitlines():
+        if line.startswith(("--- ", "+++ ")):
+            name = line[4:]
+            if name == "/dev/null":
+                continue
+            path = Path(name)
+            if (path.is_absolute() or ".." in path.parts or len(path.parts) < 2
+                    or path.parts[0] not in {"a", "b"} or not name.endswith(".java")
+                    or path.name == "module-info.java"):
+                raise SystemExit("Unsafe Cryptomator source patch path")
+    subprocess.run(["patch", "--batch", "--forward", "--fuzz=0", "-p1", "-i", str(patch)], cwd=destination, check=True)
+    changed = sorted(str(path.relative_to(destination)) for path in destination.rglob("*.java")
+                     if path.read_text() != originals.get(str(path.relative_to(destination))))
+    if not changed:
+        raise SystemExit("Linux Cryptomator patch changes no Java sources")
+    return changed
+
+
+def build_linux_patches(project: Path, modules: Path, stage: Path, java_home: Path, maven: str, env: dict) -> list[dict]:
+    records = []
+    patch_root = project / "target/linux-patches"
+    patch_root.mkdir()
+    (stage / "patches").mkdir()
+    previous = []
+    for entry in linux_patch_configuration(project):
+        work = patch_root / entry["module"]
+        work.mkdir()
+        subprocess.run([
+            maven, "-B", "-q", "-f", str(project / "pom.xml"),
+            "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:copy",
+            "-Dartifact=" + entry["artifact"], "-DoutputDirectory=" + str(work),
+        ], env=env, check=True)
+        artifact = entry["artifact"].split(":")
+        archive = work / (artifact[1] + "-" + artifact[2] + "-sources.jar")
+        if digest(archive) != entry["source_sha256"]:
+            raise SystemExit("Linux Cryptomator source archive checksum mismatch")
+        patch = (project / "linux-patches" / entry["patch"]).resolve(strict=True)
+        full = work / "patched"
+        full.mkdir()
+        changed = patch_java_sources(archive, patch, full)
+        units = work / "units"
+        for name in changed:
+            output = units / name
+            output.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(full / name, output)
+        classes = work / "classes"
+        classes.mkdir()
+        module = entry["module"]
+        classpath = os.pathsep.join(str(path) for path in [*previous, *sorted(modules.glob("*.jar"))])
+        subprocess.run([
+            str(java_home / "bin/javac"), "--release", "25", "-proc:none",
+            "--class-path", classpath,
+            "-d", str(classes), *[str(units / name) for name in changed],
+        ], env=env, check=True)
+        output = stage / "patches" / entry["jar"]
+        subprocess.run([str(java_home / "bin/jar"), "--create", "--date=" + PATCH_DATE,
+                        "--file", str(output), "-C", str(classes), "."], env=env, check=True)
+        previous.append(output)
+        records.append({**entry, "base_sha256": digest(modules / entry["base_jar"]),
+                        "patch_sha256": digest(patch), "jar_sha256": digest(output),
+                        "source_files": {name: digest(units / name) for name in changed}})
+    return records
+
+
+def linux_patch_options(root: Path, patches: list[dict]) -> list[str]:
+    options = ["--enable-native-access=org.cryptomator.cryptofs,org.cryptomator.jfuse.linux.amd64,org.cryptomator.jfuse.linux.aarch64,org.cryptomator.jfuse.mac",
+               "--add-opens", "java.base/sun.nio.ch=org.cryptomator.cryptofs"]
+    for entry in patches:
+        options += ["--patch-module", entry["module"] + "=" + str(root / "patches" / entry["jar"])]
+    if any(entry["module"] == "org.cryptomator.frontend.fuse" for entry in patches):
+        options += ["--add-reads", "org.cryptomator.frontend.fuse=org.cryptomator.cryptofs",
+                    "--add-exports", "org.cryptomator.cryptofs/org.cryptomator.cryptofs.fh=org.cryptomator.frontend.fuse"]
+    return options
 
 
 def digest(path: Path) -> str:
@@ -91,6 +215,7 @@ def main() -> None:
         stage.mkdir(mode=0o755)
         shutil.copytree(modules, stage / "mods")
         shutil.copy2(project / "target/lurker-cryptomator-1.0.0.jar", stage / "mods")
+        linux_patches = build_linux_patches(project, modules, stage, java_home, maven, env) if platform.system() == "Linux" else []
         subprocess.run([
             str(java_home / "bin/jlink"), *link_options,
             "--add-modules", "java.base,java.compiler,java.naming,java.xml,jdk.unsupported",
@@ -98,7 +223,7 @@ def main() -> None:
             "--output", str(stage / "runtime"),
         ], env=env, check=True)
         launcher = stage / "lurker-cryptomator"
-        launcher.write_text('''#!/bin/sh
+        launcher_text = '''#!/bin/sh
 set -eu
 LURKER_CRYPTOMATOR_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 # Ignore inherited JVM injection variables; never accept a user classpath.
@@ -109,7 +234,12 @@ exec "$LURKER_CRYPTOMATOR_ROOT/runtime/bin/java" \\
   --module-path "$LURKER_CRYPTOMATOR_ROOT/mods" \\
   --add-modules ALL-MODULE-PATH \\
   -m org.lurker.cryptomator/org.lurker.cryptomator.Main "$@"
-''')
+'''
+        if linux_patches:
+            launcher_text = launcher_text.replace("  --enable-native-access=org.cryptomator.jfuse.linux.amd64,org.cryptomator.jfuse.linux.aarch64,org.cryptomator.jfuse.mac \\\n", "")
+            flags = ["  \"" + option + "\" \\\n" for option in linux_patch_options(Path("$LURKER_CRYPTOMATOR_ROOT"), linux_patches)]
+            launcher_text = launcher_text.replace('  --module-path ', "".join(flags) + '  --module-path ', 1)
+        launcher.write_text(launcher_text)
         launcher.chmod(0o755)
         licenses = stage / "licenses"
         licenses.mkdir()
@@ -118,6 +248,14 @@ exec "$LURKER_CRYPTOMATOR_ROOT/runtime/bin/java" \\
         # Corresponding helper sources are part of the package; transitive source URLs
         # and binary digests remain in the lock and manifest for release source bundles.
         shutil.copytree(project, stage / "source", ignore=shutil.ignore_patterns("target"))
+        for entry in linux_patches:
+            work = project / "target/linux-patches" / entry["module"]
+            shutil.copytree(work / "units", stage / "source/patched-modules" / entry["module"])
+            upstream = stage / "source/upstream"
+            upstream.mkdir(exist_ok=True)
+            archive = entry["artifact"].split(":")
+            filename = archive[1] + "-" + archive[2] + "-sources.jar"
+            shutil.copy2(work / filename, upstream / filename)
         test_summary = None
         if args.test:
             reports = project / "target/surefire-reports"
@@ -137,6 +275,17 @@ exec "$LURKER_CRYPTOMATOR_ROOT/runtime/bin/java" \\
             "tests": test_summary,
             "files": {str(path.relative_to(stage)): digest(path) for path in sorted(stage.rglob("*")) if path.is_file()},
         }
+        if linux_patches:
+            runtime_env = dict(env)
+            for name in ("JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "CLASSPATH"):
+                runtime_env.pop(name, None)
+            subprocess.run([
+                str(stage / "runtime/bin/java"), *linux_patch_options(stage, linux_patches),
+                "--module-path", str(stage / "mods"), "--add-modules", "ALL-MODULE-PATH",
+                "-m", "org.cryptomator.cryptofs/org.cryptomator.cryptofs.fh.LinuxCiphertextChannel", "--verify-runtime",
+            ], env=runtime_env, check=True)
+            manifest["linux_patches"] = {"configuration_sha256": digest(project / "linux-patches/manifest.json"),
+                                         "modules": linux_patches, "runtime_verified": True}
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         # Version discovery never initializes or mounts encrypted storage.
         subprocess.run([str(launcher), "--version"], env=env, check=True)

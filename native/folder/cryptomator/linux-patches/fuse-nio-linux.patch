@@ -1,0 +1,265 @@
+--- a/org/cryptomator/frontend/fuse/ReadOnlyAdapter.java
++++ b/org/cryptomator/frontend/fuse/ReadOnlyAdapter.java
+@@ -142,7 +142,7 @@
+ 			return 0;
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("statfs {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -154,7 +154,7 @@
+ 			return checkAccess(node, accessModes);
+ 		} catch (RuntimeException e) {
+ 			LOG.error("checkAccess failed.", e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -175,7 +175,7 @@
+ 			return -errno.eacces();
+ 		} catch (IOException e) {
+ 			LOG.error("checkAccess failed.", e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -190,7 +190,7 @@
+ 			return -errno.enoent();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("readlink failed.", e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -223,7 +223,7 @@
+ 			return getErrorCodeForGenericFileSystemException(e, "getattr " + path);
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("getattr failed.", e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -256,7 +256,7 @@
+ 		} catch (NoSuchFileException e) {
+ 			return -errno.enoent();
+ 		} catch (IOException e) {
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -287,7 +287,7 @@
+ 		} catch (NoSuchFileException e) {
+ 			return -errno.enoent();
+ 		} catch (IOException e) {
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -308,7 +308,7 @@
+ 			return -errno.enoent();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("readdir failed.", e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -333,7 +333,7 @@
+ 			return -errno.erofs();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("open {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -350,7 +350,7 @@
+ 			return -errno.ebadf();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("read {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -366,7 +366,7 @@
+ 			return -errno.ebadf();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("release {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -409,7 +409,7 @@
+ //			return -ErrorCodes.ENAMETOOLONG();
+ //		} else {
+ 		LOG.error(opDesc + " failed.", e);
+-		return -errno.eio();
++		return StorageErrors.code(e, -errno.eio());
+ //		}
+ 	}
+ }
+--- a/org/cryptomator/frontend/fuse/ReadWriteAdapter.java
++++ b/org/cryptomator/frontend/fuse/ReadWriteAdapter.java
+@@ -98,7 +98,7 @@
+ 			return getErrorCodeForGenericFileSystemException(e, "mkdir " + path);
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("mkdir {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -117,7 +117,7 @@
+ 		} catch (NoSuchFileException e) {
+ 			return -errno.enoent();
+ 		} catch (IOException e) {
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -136,7 +136,7 @@
+ 		} catch (NoSuchFileException e) {
+ 			return -errno.enoent();
+ 		} catch (IOException e) {
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -156,7 +156,7 @@
+ 			return getErrorCodeForGenericFileSystemException(e, "symlink " + targetPath + " -> " + linkPath);
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("symlink failed.", e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -181,7 +181,7 @@
+ 			return getErrorCodeForGenericFileSystemException(e, "create " + path);
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("create {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -209,7 +209,7 @@
+ 			return -errno.enosys();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("chmod {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -230,7 +230,7 @@
+ 			return -errno.enoent();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("unlink {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -258,7 +258,7 @@
+ 			return -errno.enotempty();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("rmdir {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -299,7 +299,7 @@
+ 			return getErrorCodeForGenericFileSystemException(e, "rename " + oldPath + " -> " + newPath);
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("rename " + oldPath + " to " + newPath + " failed.", e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -316,7 +316,7 @@
+ 			return -errno.enoent();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("utimens {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -333,7 +333,7 @@
+ 			return -errno.ebadf();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("write {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -354,7 +354,7 @@
+ 			return -errno.enoent();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("truncate {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+@@ -370,7 +370,7 @@
+ 			return -errno.ebadf();
+ 		} catch (IOException | RuntimeException e) {
+ 			LOG.error("fsync {} failed.", path, e);
+-			return -errno.eio();
++			return StorageErrors.code(e, -errno.eio());
+ 		}
+ 	}
+ 
+--- /dev/null
++++ b/org/cryptomator/frontend/fuse/StorageErrors.java
+@@ -0,0 +1,33 @@
++package org.cryptomator.frontend.fuse;
++
++import org.cryptomator.cryptofs.fh.LinuxCiphertextChannel.NativeIOException;
++import java.util.ArrayDeque;
++import java.util.Collections;
++import java.util.IdentityHashMap;
++import java.util.Set;
++
++/** Preserve storage failures supplied by the Linux native I/O boundary. */
++final class StorageErrors {
++    private StorageErrors() {}
++
++    static int code(Throwable error, int fallback) {
++        var pending = new ArrayDeque<Throwable>();
++        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
++        pending.add(error);
++        for (int examined = 0; examined < 64 && !pending.isEmpty(); examined++) {
++            Throwable current = pending.removeFirst();
++            if (!visited.add(current)) continue;
++            if (current instanceof NativeIOException nativeError) {
++                int value = nativeError.errno();
++                if (value == 28 || value == 122) return -value;
++            }
++            Throwable cause = current.getCause();
++            if (cause != null) pending.addLast(cause);
++            for (Throwable suppressed : current.getSuppressed()) {
++                if (pending.size() == 64) break;
++                pending.addLast(suppressed);
++            }
++        }
++        return fallback;
++    }
++}

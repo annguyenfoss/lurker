@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "modules": [
+    {
+      "module": "org.cryptomator.cryptofs",
+      "artifact": "org.cryptomator:cryptofs:2.8.0:jar:sources",
+      "base_jar": "cryptofs-2.8.0.jar",
+      "source_sha256": "c68c8105a522309eb96b3963ce173eb65d6b8b00ac917dd37b077987671437c9",
+      "patch": "cryptofs-linux.patch",
+      "jar": "cryptofs-linux.jar"
+    },
+    {
+      "module": "org.cryptomator.frontend.fuse",
+      "artifact": "org.cryptomator:fuse-nio-adapter:5.1.0:jar:sources",
+      "base_jar": "fuse-nio-adapter-5.1.0.jar",
+      "source_sha256": "479f1aa10f00f08b83c970d855daaf38da8c027213e3c4a9d280c02e30be3a3d",
+      "patch": "fuse-nio-linux.patch",
+      "jar": "fuse-nio-linux.jar"
+    }
+  ]
+}

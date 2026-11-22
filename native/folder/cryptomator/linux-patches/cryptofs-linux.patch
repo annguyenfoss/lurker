@@ -1,0 +1,1670 @@
+--- a/org/cryptomator/cryptofs/CryptoFileSystemImpl.java
++++ b/org/cryptomator/cryptofs/CryptoFileSystemImpl.java
+@@ -354,6 +354,12 @@
+ 	}
+ 
+ 	FileChannel newFileChannel(CryptoPath cleartextPath, Set<? extends OpenOption> optionsSet, FileAttribute<?>... attrs) throws IOException {
++		try (var namespace = openCryptoFiles.namespaceRead()) {
++			return newFileChannelWithoutNamespace(cleartextPath, optionsSet, attrs);
++		}
++	}
++
++	private FileChannel newFileChannelWithoutNamespace(CryptoPath cleartextPath, Set<? extends OpenOption> optionsSet, FileAttribute<?>... attrs) throws IOException {
+ 		EffectiveOpenOptions options = EffectiveOpenOptions.from(optionsSet, readonlyFlag);
+ 		if (options.writable()) {
+ 			readonlyFlag.assertWritable();
+@@ -420,6 +426,12 @@
+ 	}
+ 
+ 	void delete(CryptoPath cleartextPath) throws IOException {
++		try (var namespace = openCryptoFiles.namespaceWrite()) {
++			deleteWithoutNamespace(cleartextPath);
++		}
++	}
++
++	private void deleteWithoutNamespace(CryptoPath cleartextPath) throws IOException {
+ 		readonlyFlag.assertWritable();
+ 		if (rootPath.equals(cleartextPath)) {
+ 			throw new FileSystemException("The filesystem root cannot be deleted.");
+@@ -433,8 +445,10 @@
+ 	}
+ 
+ 	private void deleteFileOrSymlink(CiphertextFilePath ciphertextPath) throws IOException {
+-		openCryptoFiles.delete(ciphertextPath.getFilePath());
+-		Files.walkFileTree(ciphertextPath.getRawPath(), DeletingFileVisitor.INSTANCE);
++		try (var namespace = openCryptoFiles.prepareNamespace(ciphertextPath.getFilePath())) {
++			Files.walkFileTree(ciphertextPath.getRawPath(), DeletingFileVisitor.INSTANCE);
++			openCryptoFiles.delete(ciphertextPath.getFilePath());
++		}
+ 	}
+ 
+ 	private void deleteDirectory(CryptoPath cleartextPath, CiphertextFilePath ciphertextPath) throws IOException {
+@@ -455,6 +469,12 @@
+ 	}
+ 
+ 	void copy(CryptoPath cleartextSource, CryptoPath cleartextTarget, CopyOption... options) throws IOException {
++		try (var namespace = openCryptoFiles.namespaceWrite()) {
++			copyWithoutNamespace(cleartextSource, cleartextTarget, options);
++		}
++	}
++
++	private void copyWithoutNamespace(CryptoPath cleartextSource, CryptoPath cleartextTarget, CopyOption... options) throws IOException {
+ 		readonlyFlag.assertWritable();
+ 		assertCleartextNameLengthAllowed(cleartextTarget);
+ 		if (cleartextSource.equals(cleartextTarget)) {
+@@ -557,6 +577,12 @@
+ 	}
+ 
+ 	void move(CryptoPath cleartextSource, CryptoPath cleartextTarget, CopyOption... options) throws IOException {
++		try (var namespace = openCryptoFiles.namespaceWrite()) {
++			moveWithoutNamespace(cleartextSource, cleartextTarget, options);
++		}
++	}
++
++	private void moveWithoutNamespace(CryptoPath cleartextSource, CryptoPath cleartextTarget, CopyOption... options) throws IOException {
+ 		readonlyFlag.assertWritable();
+ 		assertCleartextNameLengthAllowed(cleartextTarget);
+ 
+@@ -604,7 +630,7 @@
+ 		// we need to re-map the OpenCryptoFile entry.
+ 		CiphertextFilePath ciphertextSource = cryptoPathMapper.getCiphertextFilePath(cleartextSource);
+ 		CiphertextFilePath ciphertextTarget = cryptoPathMapper.getCiphertextFilePath(cleartextTarget);
+-		try (OpenCryptoFiles.TwoPhaseMove twoPhaseMove = openCryptoFiles.prepareMove(ciphertextSource.getRawPath(), ciphertextTarget.getRawPath())) {
++		try (OpenCryptoFiles.TwoPhaseMove twoPhaseMove = openCryptoFiles.prepareMove(ciphertextSource.getFilePath(), ciphertextTarget.getFilePath())) {
+ 			if (ciphertextTarget.isShortened()) {
+ 				Files.createDirectories(ciphertextTarget.getRawPath());
+ 				ciphertextTarget.persistLongFileName();
+--- a/org/cryptomator/cryptofs/DaggerCryptoFileSystemProviderComponent.java
++++ b/org/cryptomator/cryptofs/DaggerCryptoFileSystemProviderComponent.java
+@@ -371,6 +371,11 @@
+     }
+ 
+     @Override
++    public ReadWriteLock fileLock() {
++      return provideReadWriteLockProvider.get();
++    }
++
++    @Override
+     public OpenCryptoFile openCryptoFile() {
+       return openCryptoFileProvider.get();
+     }
+--- a/org/cryptomator/cryptofs/EffectiveOpenOptions.java
++++ b/org/cryptomator/cryptofs/EffectiveOpenOptions.java
+@@ -50,6 +50,8 @@
+ 	/**
+ 	 * @see StandardOpenOption#WRITE
+ 	 */
++	public boolean readonlyVault() { return readonlyFlag.isSet(); }
++
+ 	public boolean writable() {
+ 		return options.contains(WRITE);
+ 	}
+--- a/org/cryptomator/cryptofs/ch/AbstractFileChannel.java
++++ b/org/cryptomator/cryptofs/ch/AbstractFileChannel.java
+@@ -1,6 +1,7 @@
+ package org.cryptomator.cryptofs.ch;
+ 
+ import com.google.common.base.Preconditions;
++import org.cryptomator.cryptofs.fh.CiphertextEpoch;
+ 
+ import java.io.IOException;
+ import java.io.InterruptedIOException;
+@@ -150,13 +151,15 @@
+ 		boolean completed = false;
+ 		try {
+ 			beginBlocking();
+-			readWriteLock.readLock().lockInterruptibly();
++			// Reading can synchronously evict a dirty cache entry.
++			var ioLock = CiphertextEpoch.enabled() ? readWriteLock.writeLock() : readWriteLock.readLock();
++			ioLock.lockInterruptibly();
+ 			try {
+ 				int read = readLocked(dst, position);
+ 				completed = true;
+ 				return read;
+ 			} finally {
+-				readWriteLock.readLock().unlock();
++				ioLock.unlock();
+ 			}
+ 		} catch (InterruptedException e) {
+ 			Thread.currentThread().interrupt();
+--- a/org/cryptomator/cryptofs/ch/CleartextFileChannel.java
++++ b/org/cryptomator/cryptofs/ch/CleartextFileChannel.java
+@@ -7,6 +7,7 @@
+ import org.cryptomator.cryptofs.fh.BufferPool;
+ import org.cryptomator.cryptofs.fh.Chunk;
+ import org.cryptomator.cryptofs.fh.ChunkCache;
++import org.cryptomator.cryptofs.fh.CiphertextEpoch;
+ import org.cryptomator.cryptofs.fh.CurrentOpenFilePath;
+ import org.cryptomator.cryptofs.fh.ExceptionsDuringWrite;
+ import org.cryptomator.cryptofs.fh.FileHeaderHolder;
+@@ -45,6 +46,10 @@
+ 	private static final Logger LOG = LoggerFactory.getLogger(CleartextFileChannel.class);
+ 
+ 	private final FileChannel ciphertextFileChannel;
++	private final ReadWriteLock fileLock;
++	private CiphertextEpoch epoch;
++
++	public void attachEpoch(CiphertextEpoch epoch) { this.epoch = epoch; }
+ 	private final FileHeaderHolder fileHeaderHolder;
+ 	private final Cryptor cryptor;
+ 	private final ChunkCache chunkCache;
+@@ -61,6 +66,7 @@
+ 	public CleartextFileChannel(FileChannel ciphertextFileChannel, FileHeaderHolder fileHeaderHolder, ReadWriteLock readWriteLock, Cryptor cryptor, ChunkCache chunkCache, BufferPool bufferPool, EffectiveOpenOptions options, @OpenFileSize AtomicLong fileSize, @OpenFileModifiedDate AtomicReference<Instant> lastModified, @CurrentOpenFilePath AtomicReference<Path> currentPath, ExceptionsDuringWrite exceptionsDuringWrite, Consumer<FileChannel> closeListener, CryptoFileSystemStats stats) {
+ 		super(readWriteLock);
+ 		this.ciphertextFileChannel = ciphertextFileChannel;
++		this.fileLock = readWriteLock;
+ 		this.fileHeaderHolder = fileHeaderHolder;
+ 		this.cryptor = cryptor;
+ 		this.chunkCache = chunkCache;
+@@ -98,6 +104,7 @@
+ 
+ 	@Override
+ 	protected int readLocked(ByteBuffer dst, long position) throws IOException {
++		if (epoch != null) epoch.assertHealthy();
+ 		int origLimit = dst.limit();
+ 		long limitConsideringEof = fileSize.get() - position;
+ 		if (limitConsideringEof < 1) {
+@@ -125,6 +132,25 @@
+ 	@Override
+ 	protected int writeLocked(ByteBuffer src, long position) throws IOException {
+ 		long oldFileSize = fileSize.get();
++		if (epoch != null && src.hasRemaining()) {
++			long end = Math.addExact(position, (long) src.remaining());
++			long firstCiphertext = fileHeaderHolder.headerIsPersisted().get() ? beginOfChunk(Math.min(position, oldFileSize)) : 0;
++			long lastCiphertext = beginOfChunk(end);
++			if (end % cryptor.fileContentCryptor().cleartextChunkSize() != 0) {
++				lastCiphertext = Math.addExact(lastCiphertext, cryptor.fileContentCryptor().ciphertextChunkSize());
++			}
++			epoch.admit(ciphertextFileChannel, firstCiphertext, lastCiphertext);
++			epoch.markMutation();
++		}
++		try {
++			return applyWrite(src, position, oldFileSize);
++		} catch (IOException | RuntimeException failure) {
++			if (epoch != null && epoch.active()) epoch.failed();
++			throw failure;
++		}
++	}
++
++	private int applyWrite(ByteBuffer src, long position, long oldFileSize) throws IOException {
+ 		long written;
+ 		if (position > oldFileSize) {
+ 			// we need to fill the gap:
+@@ -190,14 +216,38 @@
+ 			return;
+ 		}
+ 		LOG.trace("{} - Writing file header.", this);
+-		ciphertextFileChannel.write(fileHeaderHolder.getEncrypted(), 0);
++		if (epoch == null) {
++			ciphertextFileChannel.write(fileHeaderHolder.getEncrypted(), 0);
++		} else {
++			var header = fileHeaderHolder.getEncrypted();
++			epoch.admit(ciphertextFileChannel, 0, header.remaining());
++			epoch.markMutation();
++			CiphertextEpoch.writeFully(ciphertextFileChannel, header, 0);
++		}
+ 		fileHeaderHolder.headerIsPersisted().set(true);
+ 	}
+ 
+ 	@Override
+ 	protected void truncateLocked(long newSize) throws IOException {
+ 		Preconditions.checkArgument(newSize >= 0);
++		if (epoch != null) epoch.assertHealthy();
+ 		if (newSize < fileSize.get()) {
++			if (epoch != null) {
++				long start = beginOfChunk(newSize);
++				epoch.admit(ciphertextFileChannel, start, Math.max(start, ciphertextFileChannel.size()));
++				epoch.markMutation();
++			}
++			try {
++				shrinkLocked(newSize);
++			} catch (IOException | RuntimeException failure) {
++				if (epoch != null && epoch.active()) epoch.failed();
++				throw failure;
++			}
++		}
++	}
++
++	private void shrinkLocked(long newSize) throws IOException {
++		{
+ 			int cleartextChunkSize = cryptor.fileContentCryptor().cleartextChunkSize();
+ 			long indexOfLastChunk = (newSize + cleartextChunkSize - 1) / cleartextChunkSize - 1;
+ 			int sizeOfIncompleteChunk = (int) (newSize % cleartextChunkSize); // known to fit in int, because cleartextChunkSize is int
+@@ -220,14 +270,29 @@
+ 	@Override
+ 	public void force(boolean metaData) throws IOException {
+ 		assertOpen();
+-		forceInternal(metaData);
++		if (epoch == null) {
++			forceInternal(metaData);
++		} else {
++			fileLock.writeLock().lock();
++			try {
++				assertOpen();
++				forceInternal(metaData);
++			} finally {
++				fileLock.writeLock().unlock();
++			}
++		}
+ 	}
+ 
+ 	private void forceInternal(boolean metaData) throws IOException {
+-		flush();
+-		ciphertextFileChannel.force(metaData);
+-		if (metaData) {
+-			persistLastModified();
++		try {
++			if (epoch != null) epoch.assertHealthy();
++			flush();
++			ciphertextFileChannel.force(metaData);
++			if (metaData) persistLastModified();
++			if (epoch != null && isWritable()) epoch.forceComplete(ciphertextFileChannel);
++		} catch (IOException | RuntimeException failure) {
++			if (epoch != null && epoch.active()) epoch.failed();
++			throw failure;
+ 		}
+ 	}
+ 
+@@ -326,6 +391,20 @@
+ 
+ 	@Override
+ 	protected void implCloseChannel() throws IOException {
++		if (epoch != null) {
++			super.implCloseChannel();
++			fileLock.writeLock().lock();
++			try {
++				var actions = List.<CloseAction>of(
++						() -> { if (isWritable()) forceInternal(true); },
++						() -> closeListener.accept(ciphertextFileChannel),
++						ciphertextFileChannel::close);
++				tryAll(actions.iterator());
++			} finally {
++				fileLock.writeLock().unlock();
++			}
++			return;
++		}
+ 		var closeActions = List.<CloseAction>of(this::flush, //
+ 				super::implCloseChannel, //
+ 				() -> closeListener.accept(ciphertextFileChannel),
+--- a/org/cryptomator/cryptofs/fh/ChunkIO.java
++++ b/org/cryptomator/cryptofs/fh/ChunkIO.java
+@@ -12,6 +12,10 @@
+ 
+ @OpenFileScoped
+ class ChunkIO {
++
++	private CiphertextEpoch epoch;
++
++	void attachEpoch(CiphertextEpoch epoch) { this.epoch = epoch; }
+ 
+ 	private final Set<FileChannel> readableChannels = ConcurrentHashMap.newKeySet();
+ 	private final Set<FileChannel> writableChannels = ConcurrentHashMap.newKeySet();
+@@ -48,7 +52,16 @@
+ 	}
+ 
+ 	int write(ByteBuffer src, long position) throws IOException {
+-		return getWritableChannel().write(src, position);
++		if (epoch == null) return getWritableChannel().write(src, position);
++		epoch.assertHealthy();
++		int length = src.remaining();
++		try {
++			CiphertextEpoch.writeFully(getWritableChannel(), src, position);
++			return length;
++		} catch (IOException | RuntimeException failure) {
++			epoch.failed();
++			throw failure;
++		}
+ 	}
+ 
+ 	private FileChannel getReadableChannel() {
+--- /dev/null
++++ b/org/cryptomator/cryptofs/fh/CiphertextEpoch.java
+@@ -0,0 +1,366 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++package org.cryptomator.cryptofs.fh;
++
++import java.io.IOException;
++import java.nio.ByteBuffer;
++import java.nio.channels.FileChannel;
++import java.nio.file.*;
++import java.nio.file.attribute.PosixFilePermissions;
++import java.security.MessageDigest;
++import java.security.NoSuchAlgorithmException;
++import java.util.*;
++import java.util.concurrent.locks.ReentrantReadWriteLock;
++import java.util.function.Supplier;
++
++/** Experimental Linux journal integration. Not a published vault extension. */
++public final class CiphertextEpoch {
++    private static final long MAGIC = 0x4c52454a30303031L;
++    private static final int RECORD_BYTES = 64 * 1024;
++    private final Supplier<Path> path;
++    private final ReentrantReadWriteLock lock;
++    private final int headerLength;
++    private Path journal;
++    private LinuxCiphertextChannel.Identity identity;
++    private long originalEof;
++    private long records;
++    private boolean poisoned;
++    private boolean mutated;
++
++    public static boolean enabled() {
++        return System.getProperty("os.name").equals("Linux");
++    }
++
++    CiphertextEpoch(Supplier<Path> path, ReentrantReadWriteLock lock, int headerLength) {
++        this.path = path;
++        this.lock = lock;
++        this.headerLength = headerLength;
++    }
++
++    public boolean active() {
++        return journal != null;
++    }
++
++    private void requireLock() throws IOException {
++        if (!lock.isWriteLockedByCurrentThread())
++            throw new IOException("Ciphertext epoch requires exclusive file access");
++    }
++
++    public void assertHealthy() throws IOException {
++        requireLock();
++        if (poisoned)
++            throw new IOException(
++                "Ciphertext write failed; close all handles and reopen for rollback");
++    }
++
++    public void failed() {
++        poisoned = true;
++    }
++
++    public void markMutation() throws IOException {
++        assertHealthy();
++        mutated = true;
++    }
++
++    private static Path journalPath(Path ciphertext) {
++        String name = HexFormat.of().formatHex(hash(
++            ciphertext.getFileName().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
++        return ciphertext.resolveSibling(".lurker-epoch-" + name);
++    }
++
++    private static void forceDirectory(Path directory) throws IOException {
++        try (var channel = FileChannel.open(directory, StandardOpenOption.READ)) {
++            channel.force(true);
++        }
++    }
++
++    private void begin(FileChannel channel) throws IOException {
++        Path current = path.get();
++        if (current == null)
++            return; // already unlinked: no persistent namespace remains to recover
++        var actual = LinuxCiphertextChannel.identity(channel);
++        Path procTarget = current.toRealPath(LinkOption.NOFOLLOW_LINKS);
++        // Opening and closing another descriptor of this inode would release
++        // this process's POSIX record locks. Compare the pathname to the held
++        // descriptor without creating a second open file description.
++        var attributes = Files.readAttributes(
++            procTarget, "unix:dev,ino,isRegularFile", LinkOption.NOFOLLOW_LINKS);
++        if (!Boolean.TRUE.equals(attributes.get("isRegularFile"))
++            || ((Number) attributes.get("dev")).longValue() != actual.device()
++            || ((Number) attributes.get("ino")).longValue() != actual.inode()) {
++            throw new IOException("Ciphertext path changed before journaling");
++        }
++        originalEof = channel.size();
++        byte[] header = new byte[(int) Math.min(headerLength, originalEof)];
++        readFully(channel, ByteBuffer.wrap(header), 0);
++        byte[] encoded = checked(ByteBuffer.allocate(4 * Long.BYTES + header.length)
++                .putLong(MAGIC)
++                .putLong(actual.inode())
++                .putLong(originalEof)
++                .putLong(header.length)
++                .put(header)
++                .array());
++        Path target = journalPath(current);
++        // A process can stop after mkdir but before the header is durable.
++        // Keep that incomplete directory outside the recovery namespace.
++        Path draft = target.resolveSibling(".lurker-epoch-preparing-" + UUID.randomUUID());
++        LinuxCiphertextChannel.createPrivateDirectory(draft);
++        boolean renamed = false;
++        Throwable preparationFailure = null;
++        try {
++            writeRecord(draft.resolve("header"), encoded);
++            forceDirectory(draft);
++            LinuxCiphertextChannel.publishNoReplace(draft, target);
++            renamed = true;
++            forceDirectory(target.getParent());
++            journal = target;
++            identity = actual;
++            records = 0;
++        } catch (IOException | RuntimeException | Error failure) {
++            preparationFailure = failure;
++            throw failure;
++        } finally {
++            if (!renamed) {
++                try {
++                    Files.deleteIfExists(draft.resolve("header"));
++                    Files.delete(draft);
++                } catch (IOException cleanup) {
++                    if (preparationFailure == null)
++                        throw cleanup;
++                    preparationFailure.addSuppressed(cleanup);
++                }
++            }
++        }
++    }
++
++    public void admit(FileChannel channel, long start, long end) throws IOException {
++        assertHealthy();
++        if (start < 0 || end < start)
++            throw new IOException("Invalid ciphertext mutation interval");
++        if (!active())
++            begin(channel);
++        if (!active())
++            return;
++        requireIdentity(channel);
++        // Log every physical preimage in operation order. Reverse recovery
++        // restores the earliest bytes even when epochs overwrite ranges again.
++        // A previously truncated tail was captured before the earlier shrink.
++        long last = Math.min(end, Math.min(originalEof, channel.size()));
++        long cursor = start;
++        try {
++            while (cursor < last) {
++                int length = (int) Math.min(RECORD_BYTES, last - cursor);
++                byte[] bytes = new byte[length];
++                readFully(channel, ByteBuffer.wrap(bytes), cursor);
++                byte[] record = checked(
++                    ByteBuffer.allocate(Long.BYTES + length).putLong(cursor).put(bytes).array());
++                writeRecord(journal.resolve(recordName(records)), record);
++                forceDirectory(journal);
++                records = Math.incrementExact(records);
++                cursor += length;
++            }
++        } catch (IOException | RuntimeException failure) {
++            if (mutated)
++                poisoned = true;
++            throw failure;
++        }
++    }
++
++    private void requireIdentity(FileChannel channel) throws IOException {
++        if (!identity.equals(LinuxCiphertextChannel.identity(channel)))
++            throw new IOException("Ciphertext descriptor changed during epoch");
++    }
++
++    public void forceComplete(FileChannel channel) throws IOException {
++        assertHealthy();
++        if (!active())
++            return;
++        requireIdentity(channel);
++        channel.force(true);
++        retire(journal);
++        journal = null;
++        identity = null;
++        mutated = false;
++    }
++
++    void recoverBeforeOpen(boolean readonly) throws IOException {
++        requireLock();
++        // A live shared epoch belongs to the already-open channels. New handles
++        // must share it rather than undoing writes they can still force.
++        if (active()) {
++            assertHealthy();
++            return;
++        }
++        Path current = path.get();
++        if (current == null)
++            throw new IOException("Cannot reopen an unlinked ciphertext inode");
++        Path pending = journalPath(current);
++        if (!Files.exists(pending, LinkOption.NOFOLLOW_LINKS))
++            return;
++        if (readonly)
++            throw new IOException("Ciphertext has pending rollback; writable recovery required");
++        if (Files.isSymbolicLink(pending) || !Files.isDirectory(pending, LinkOption.NOFOLLOW_LINKS))
++            throw new IOException("Invalid epoch directory");
++        byte[] header = validated(pending.resolve("header"));
++        if (header.length < 4 * Long.BYTES)
++            throw new IOException("Truncated epoch header");
++        ByteBuffer input = ByteBuffer.wrap(header);
++        if (input.getLong() != MAGIC)
++            throw new IOException("Unknown epoch format");
++        long inode = input.getLong();
++        long eof = input.getLong();
++        long bindingLength = input.getLong();
++        if (eof < 0 || bindingLength < 0 || bindingLength > headerLength
++            || bindingLength != input.remaining())
++            throw new IOException("Invalid epoch header bounds");
++        byte[] binding = new byte[(int) bindingLength];
++        input.get(binding);
++        // Stream the directory to derive a count. No per-record paths or
++        // intervals are retained, keeping heap use independent of file length.
++        long recordCount = 0;
++        long maximum = -1;
++        try (var listing = Files.newDirectoryStream(pending)) {
++            for (Path entry : listing) {
++                String name = entry.getFileName().toString();
++                if (!name.endsWith(".record")) {
++                    if (!name.equals("header") && !name.startsWith(".draft-"))
++                        throw new IOException("Unknown epoch record");
++                    continue;
++                }
++                long index;
++                try {
++                    index = Long.parseLong(name.substring(0, name.length() - 7));
++                } catch (NumberFormatException failure) {
++                    throw new IOException("Invalid epoch record number", failure);
++                }
++                if (index < 0 || !name.equals(recordName(index)))
++                    throw new IOException("Invalid epoch record name");
++                recordCount = Math.incrementExact(recordCount);
++                maximum = Math.max(maximum, index);
++            }
++        }
++        if (maximum == Long.MAX_VALUE || maximum + 1 != recordCount)
++            throw new IOException("Missing epoch record");
++        // Validate every record before modifying ciphertext. Overlap is
++        // intentional: the reverse pass is an undo log, not a first-touch map.
++        for (long index = 0; index < recordCount; index++) {
++            byte[] bytes = validated(pending.resolve(recordName(index)));
++            if (bytes.length <= Long.BYTES || bytes.length > Long.BYTES + RECORD_BYTES)
++                throw new IOException("Invalid epoch record length");
++            long start = ByteBuffer.wrap(bytes).getLong();
++            long end = Math.addExact(start, bytes.length - Long.BYTES);
++            if (start < 0 || end > eof)
++                throw new IOException("Epoch range outside original EOF");
++        }
++        try (var data = LinuxCiphertextChannel.open(
++                 current, Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE))) {
++            if (LinuxCiphertextChannel.identity(data).inode() != inode)
++                throw new IOException("Epoch belongs to a different ciphertext inode");
++            // Existing encrypted headers are immutable for content operations.
++            // Empty newly-created files have no prior committed header to bind.
++            byte[] actual = new byte[binding.length];
++            readFully(data, ByteBuffer.wrap(actual), 0);
++            if (!MessageDigest.isEqual(actual, binding))
++                throw new IOException("Epoch ciphertext header differs");
++            data.truncate(eof);
++            for (long index = recordCount; index > 0; index--) {
++                byte[] bytes = validated(pending.resolve(recordName(index - 1)));
++                var record = ByteBuffer.wrap(bytes);
++                long position = record.getLong();
++                writeFully(data, record, position);
++            }
++            // Shrink recovery may need to extend a removed tail. Every byte of
++            // that tail was captured before truncate was admitted.
++            if (data.size() != eof)
++                throw new IOException("Epoch recovery did not restore original EOF");
++            data.force(true);
++            retire(pending);
++        }
++    }
++
++    private static void retire(Path pending) throws IOException {
++        Path retired =
++            pending.resolveSibling(pending.getFileName() + ".retired-" + UUID.randomUUID());
++        Files.move(pending, retired, StandardCopyOption.ATOMIC_MOVE);
++        forceDirectory(pending.getParent());
++        try (var entries = Files.newDirectoryStream(retired)) {
++            for (Path entry : entries) Files.delete(entry);
++        }
++        Files.delete(retired);
++        forceDirectory(retired.getParent());
++    }
++
++    private static String recordName(long index) {
++        return String.format(Locale.ROOT, "%020d.record", index);
++    }
++
++    private static void writeRecord(Path destination, byte[] bytes) throws IOException {
++        Path draft = destination.resolveSibling(".draft-" + UUID.randomUUID());
++        Throwable writeFailure = null;
++        try {
++            try (var output = LinuxCiphertextChannel.open(draft,
++                     Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE),
++                     PosixFilePermissions.asFileAttribute(
++                         PosixFilePermissions.fromString("rw-------")))) {
++                writeFully(output, ByteBuffer.wrap(bytes), 0);
++                output.force(true);
++            }
++            LinuxCiphertextChannel.publishNoReplace(draft, destination);
++        } catch (IOException | RuntimeException | Error failure) {
++            writeFailure = failure;
++            throw failure;
++        } finally {
++            try {
++                Files.deleteIfExists(draft);
++            } catch (IOException cleanup) {
++                if (writeFailure == null)
++                    throw cleanup;
++                writeFailure.addSuppressed(cleanup);
++            }
++        }
++    }
++
++    private static byte[] checked(byte[] bytes) {
++        return ByteBuffer.allocate(bytes.length + 32).put(bytes).put(hash(bytes)).array();
++    }
++
++    private static byte[] validated(Path file) throws IOException {
++        if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
++            throw new IOException("Invalid epoch record file");
++        long size = Files.size(file);
++        if (size < 32 || size > RECORD_BYTES + 128)
++            throw new IOException("Invalid epoch record size");
++        byte[] bytes = Files.readAllBytes(file);
++        int length = bytes.length - 32;
++        byte[] payload = Arrays.copyOf(bytes, length);
++        if (!MessageDigest.isEqual(hash(payload), Arrays.copyOfRange(bytes, length, bytes.length)))
++            throw new IOException("Epoch checksum mismatch");
++        return payload;
++    }
++
++    private static byte[] hash(byte[] bytes) {
++        try {
++            return MessageDigest.getInstance("SHA-256").digest(bytes);
++        } catch (NoSuchAlgorithmException error) {
++            throw new AssertionError(error);
++        }
++    }
++
++    static void readFully(FileChannel channel, ByteBuffer bytes, long position) throws IOException {
++        while (bytes.hasRemaining()) {
++            int count = channel.read(bytes, position);
++            if (count <= 0)
++                throw new IOException("Incomplete ciphertext read");
++            position += count;
++        }
++    }
++
++    public static void writeFully(FileChannel channel, ByteBuffer bytes, long position)
++        throws IOException {
++        while (bytes.hasRemaining()) {
++            int count = channel.write(bytes, position);
++            if (count <= 0)
++                throw new IOException("Incomplete ciphertext write");
++            position += count;
++        }
++    }
++}
+--- /dev/null
++++ b/org/cryptomator/cryptofs/fh/LinuxCiphertextChannel.java
+@@ -0,0 +1,483 @@
++package org.cryptomator.cryptofs.fh;
++
++import java.io.IOException;
++import java.lang.foreign.Arena;
++import java.lang.foreign.FunctionDescriptor;
++import java.lang.foreign.Linker;
++import java.lang.foreign.MemoryLayout;
++import java.lang.foreign.MemorySegment;
++import java.lang.foreign.ValueLayout;
++import java.lang.invoke.MethodHandle;
++import java.lang.invoke.VarHandle;
++import java.nio.ByteBuffer;
++import java.nio.MappedByteBuffer;
++import java.nio.channels.FileChannel;
++import java.nio.channels.FileLock;
++import java.nio.channels.ReadableByteChannel;
++import java.nio.channels.WritableByteChannel;
++import java.nio.file.AccessDeniedException;
++import java.nio.file.FileAlreadyExistsException;
++import java.nio.file.FileSystemException;
++import java.nio.file.Files;
++import java.nio.file.LinkOption;
++import java.nio.file.NoSuchFileException;
++import java.nio.file.OpenOption;
++import java.nio.file.Path;
++import java.nio.file.StandardOpenOption;
++import java.nio.file.attribute.FileAttribute;
++import java.nio.file.attribute.PosixFilePermission;
++import java.util.HashSet;
++import java.util.Locale;
++import java.util.Set;
++
++/** Linux prototype that owns an inode descriptor without JDK internals. */
++public final class LinuxCiphertextChannel extends FileChannel {
++    public record Identity(long device, long inode) {}
++    public static final class NativeIOException extends FileSystemException {
++        private final int errno;
++        NativeIOException(Path path, String operation, int errno) {
++            super(path.toString(), null, operation + " failed (errno " + errno + ")");
++            this.errno = errno;
++        }
++        public int errno() {
++            return errno;
++        }
++    }
++
++    private static final Linker LINKER = Linker.nativeLinker();
++    private static final VarHandle ERRNO = Linker.Option.captureStateLayout().varHandle(
++        MemoryLayout.PathElement.groupElement("errno"));
++    private static final MethodHandle OPEN =
++        LINKER.downcallHandle(LINKER.defaultLookup().find("open").orElseThrow(),
++            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
++                ValueLayout.JAVA_INT),
++            Linker.Option.firstVariadicArg(2), Linker.Option.captureCallState("errno"));
++    private static final MethodHandle CLOSE =
++        LINKER.downcallHandle(LINKER.defaultLookup().find("close").orElseThrow(),
++            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
++            Linker.Option.captureCallState("errno"));
++
++    private final FileChannel delegate;
++    private final int descriptor;
++    private final boolean writable;
++    private final Object positionLock = new Object();
++    private final Identity openedIdentity;
++    private final NativeThreadBridge nativeThreads = new NativeThreadBridge();
++    private final Object lifetime = new Object();
++    private int activeOperations;
++    private boolean retired;
++    private boolean descriptorClosed;
++
++    private LinuxCiphertextChannel(
++        FileChannel delegate, int descriptor, Identity identity, boolean writable) {
++        this.delegate = delegate;
++        this.descriptor = descriptor;
++        this.openedIdentity = identity;
++        this.writable = writable;
++    }
++
++    private static volatile boolean runtimeVerified;
++
++    public static void verifyRuntime() {
++        if (runtimeVerified)
++            return;
++        synchronized (LinuxCiphertextChannel.class) {
++            if (runtimeVerified)
++                return;
++            String arch = System.getProperty("os.arch").toLowerCase(Locale.ROOT);
++            if (!System.getProperty("os.name").equals("Linux")
++                || !Set.of("amd64", "x86_64", "aarch64").contains(arch)) {
++                throw new UnsupportedOperationException(
++                    "Linux ciphertext descriptor target is unsupported");
++            }
++            NativeStorage.verifyRuntime();
++            NativeThreadBridge threads = new NativeThreadBridge();
++            int token = threads.add();
++            threads.remove(token);
++            threads.signalAndWait();
++            runtimeVerified = true;
++        }
++    }
++
++    public static void main(String[] args) {
++        if (args.length != 1 || !args[0].equals("--verify-runtime")) {
++            throw new IllegalArgumentException("Expected --verify-runtime");
++        }
++        verifyRuntime();
++        System.out.println("linux-ciphertext-runtime: verified");
++    }
++
++    public static FileChannel open(Path path, Set<? extends OpenOption> supplied,
++        FileAttribute<?>... attributes) throws IOException {
++        verifyRuntime();
++        Set<OpenOption> options = new HashSet<>(supplied);
++        for (OpenOption option : options) {
++            if (!(option instanceof StandardOpenOption) && option != LinkOption.NOFOLLOW_LINKS) {
++                throw new UnsupportedOperationException("Unsupported open option " + option);
++            }
++        }
++        boolean append = options.contains(StandardOpenOption.APPEND);
++        boolean write = options.contains(StandardOpenOption.WRITE) || append;
++        boolean read = options.contains(StandardOpenOption.READ) || !write;
++        if (append && (read || options.contains(StandardOpenOption.TRUNCATE_EXISTING))) {
++            throw new IllegalArgumentException("APPEND conflicts with READ or TRUNCATE_EXISTING");
++        }
++        int flags = read && write ? 2 : write ? 1 : 0;
++        flags |= 0x80000; // O_CLOEXEC
++        if (write) {
++            if (options.contains(StandardOpenOption.CREATE_NEW))
++                flags |= 0x40 | 0x80;
++            else if (options.contains(StandardOpenOption.CREATE))
++                flags |= 0x40;
++            if (options.contains(StandardOpenOption.TRUNCATE_EXISTING))
++                flags |= 0x200;
++            if (append)
++                flags |= 0x400;
++            if (options.contains(StandardOpenOption.SYNC))
++                flags |= 0x101000;
++            else if (options.contains(StandardOpenOption.DSYNC))
++                flags |= 0x1000;
++        }
++        boolean delete = options.contains(StandardOpenOption.DELETE_ON_CLOSE);
++        if (delete || options.contains(LinkOption.NOFOLLOW_LINKS))
++            flags |= 0x20000;
++        int mode = 0666;
++        for (FileAttribute<?> attribute : attributes) {
++            if (!attribute.name().equals("posix:permissions")) {
++                throw new UnsupportedOperationException(
++                    "Unsupported atomic attribute " + attribute.name());
++            }
++            mode = permissions(attribute.value());
++        }
++        int fd = nativeOpen(path, flags, mode);
++        FileChannel channel = null;
++        try {
++            Path held = Path.of("/proc/self/fd/" + fd);
++            Identity identity = stat(held);
++            Set<OpenOption> reopen = new HashSet<>();
++            if (read)
++                reopen.add(StandardOpenOption.READ);
++            if (write)
++                reopen.add(StandardOpenOption.WRITE);
++            if (append)
++                reopen.add(StandardOpenOption.APPEND);
++            if (options.contains(StandardOpenOption.SYNC))
++                reopen.add(StandardOpenOption.SYNC);
++            if (options.contains(StandardOpenOption.DSYNC))
++                reopen.add(StandardOpenOption.DSYNC);
++            channel = FileChannel.open(held, reopen);
++            if (!identity.equals(stat(held)))
++                throw new IOException("Owned descriptor identity changed");
++            if (delete) {
++                if (!identity.equals(stat(path)))
++                    throw new IOException("Delete-on-close source changed");
++                Files.delete(path);
++            }
++            return new LinuxCiphertextChannel(channel, fd, identity, write);
++        } catch (Throwable failure) {
++            if (channel != null) {
++                try {
++                    channel.close();
++                } catch (IOException close) {
++                    failure.addSuppressed(close);
++                }
++            }
++            try {
++                closeDescriptor(fd);
++            } catch (IOException close) {
++                failure.addSuppressed(close);
++            }
++            if (failure instanceof IOException e)
++                throw e;
++            if (failure instanceof RuntimeException e)
++                throw e;
++            if (failure instanceof Error e)
++                throw e;
++            throw new IOException(failure);
++        }
++    }
++
++    private static int permissions(Object value) {
++        if (!(value instanceof Set<?> permissions))
++            throw new IllegalArgumentException("Invalid POSIX permissions");
++        int mode = 0;
++        for (Object permission : permissions) {
++            if (!(permission instanceof PosixFilePermission p))
++                throw new IllegalArgumentException("Invalid POSIX permission");
++            mode |= switch (p) {
++                case OWNER_READ -> 0400;
++                case OWNER_WRITE -> 0200;
++                case OWNER_EXECUTE -> 0100;
++                case GROUP_READ -> 0040;
++                case GROUP_WRITE -> 0020;
++                case GROUP_EXECUTE -> 0010;
++                case OTHERS_READ -> 0004;
++                case OTHERS_WRITE -> 0002;
++                case OTHERS_EXECUTE -> 0001;
++            };
++        }
++        return mode;
++    }
++
++    private static int nativeOpen(Path path, int flags, int mode) throws IOException {
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
++            int fd =
++                (int) OPEN.invokeExact(state, arena.allocateFrom(path.toString()), flags, mode);
++            if (fd < 0) {
++                int error = (int) ERRNO.get(state, 0L);
++                if (error == 17)
++                    throw new FileAlreadyExistsException(path.toString());
++                if (error == 2)
++                    throw new NoSuchFileException(path.toString());
++                if (error == 13)
++                    throw new AccessDeniedException(path.toString());
++                throw new NativeIOException(path, "open", error);
++            }
++            return fd;
++        } catch (IOException | RuntimeException | Error e) {
++            throw e;
++        } catch (Throwable e) {
++            throw new IOException("Native open invocation failed", e);
++        }
++    }
++
++    private static void closeDescriptor(int fd) throws IOException {
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
++            int result = (int) CLOSE.invokeExact(state, fd);
++            if (result != 0)
++                throw new IOException(
++                    "Native descriptor close failed (errno " + (int) ERRNO.get(state, 0L) + ")");
++        } catch (IOException | RuntimeException | Error e) {
++            throw e;
++        } catch (Throwable e) {
++            throw new IOException("Native close invocation failed", e);
++        }
++    }
++
++    private static Identity stat(Path path) throws IOException {
++        var attrs = Files.readAttributes(path, "unix:dev,ino,isRegularFile");
++        if (!Boolean.TRUE.equals(attrs.get("isRegularFile")))
++            throw new IOException("Ciphertext descriptor must be a regular file");
++        return new Identity(
++            ((Number) attrs.get("dev")).longValue(), ((Number) attrs.get("ino")).longValue());
++    }
++
++    public Identity identity() throws IOException {
++        synchronized (lifetime) {
++            if (!isOpen() || !delegate.isOpen())
++                throw new java.nio.channels.ClosedChannelException();
++            Identity current = stat(Path.of("/proc/self/fd/" + descriptor));
++            if (!openedIdentity.equals(current))
++                throw new IOException("Owned descriptor was replaced");
++            return current;
++        }
++    }
++    public static Identity identity(FileChannel channel) throws IOException {
++        if (!(channel instanceof LinuxCiphertextChannel owned))
++            throw new IOException("Ciphertext channel has no owned descriptor");
++        return owned.identity();
++    }
++
++    @Override
++    protected void implCloseChannel() throws IOException {
++        synchronized (lifetime) {
++            retired = true;
++        }
++        try {
++            delegate.close();
++        } finally {
++            try {
++                nativeThreads.signalAndWait();
++            } finally {
++                synchronized (lifetime) {
++                    closeRetiredDescriptor();
++                }
++            }
++        }
++    }
++
++    private void closeRetiredDescriptor() throws IOException {
++        if (retired && activeOperations == 0 && !descriptorClosed) {
++            descriptorClosed = true;
++            closeDescriptor(descriptor);
++        }
++    }
++
++    @FunctionalInterface
++    private interface Operation<T> {
++        T run() throws IOException;
++    }
++
++    private <T> T perform(Operation<T> operation) throws IOException {
++        if (!isOpen())
++            throw new java.nio.channels.ClosedChannelException();
++        try {
++            return operation.run();
++        } catch (java.nio.channels.ClosedChannelException failure) {
++            // The delegated channel can close itself on interrupt.
++            try {
++                close();
++            } catch (IOException cleanup) {
++                failure.addSuppressed(cleanup);
++            }
++            throw failure;
++        }
++    }
++
++    @FunctionalInterface
++    private interface NativeOperation<T> {
++        T run(int descriptor) throws IOException;
++    }
++
++    private <T> T nativeOperation(NativeOperation<T> operation) throws IOException {
++        boolean completed = false;
++        boolean acquired = false;
++        int nativeThread = -1;
++        begin();
++        try {
++            nativeThread = nativeThreads.add();
++            synchronized (lifetime) {
++                if (!isOpen() || retired)
++                    throw new java.nio.channels.ClosedChannelException();
++                activeOperations++;
++                acquired = true;
++            }
++            while (true) {
++                try {
++                    T result = operation.run(descriptor);
++                    completed = true;
++                    return result;
++                } catch (NativeIOException failure) {
++                    if (failure.errno() != 4 || !isOpen())
++                        throw failure;
++                }
++            }
++        } finally {
++            try {
++                if (nativeThread != -1)
++                    nativeThreads.remove(nativeThread);
++                if (acquired) {
++                    synchronized (lifetime) {
++                        activeOperations--;
++                        closeRetiredDescriptor();
++                    }
++                }
++            } finally {
++                end(completed);
++            }
++        }
++    }
++
++    public static void createPrivateDirectory(Path path) throws IOException {
++        NativeStorage.createPrivateDirectory(path);
++    }
++    public static void publishNoReplace(Path draft, Path destination) throws IOException {
++        NativeStorage.publishNoReplace(draft, destination);
++    }
++
++    private FileLock bind(FileLock underlying) {
++        if (underlying == null)
++            return null;
++        return new FileLock(this, underlying.position(), underlying.size(), underlying.isShared()) {
++            @Override
++            public boolean isValid() {
++                return LinuxCiphertextChannel.this.isOpen() && underlying.isValid();
++            }
++            @Override
++            public void release() throws IOException {
++                underlying.release();
++            }
++        };
++    }
++
++    @Override
++    public int read(ByteBuffer dst) throws IOException {
++        return perform(() -> delegate.read(dst));
++    }
++    @Override
++    public long read(ByteBuffer[] dst, int offset, int length) throws IOException {
++        return perform(() -> delegate.read(dst, offset, length));
++    }
++    @Override
++    public int read(ByteBuffer dst, long position) throws IOException {
++        return perform(() -> delegate.read(dst, position));
++    }
++    @Override
++    public int write(ByteBuffer src) throws IOException {
++        return perform(() -> delegate.write(src));
++    }
++    @Override
++    public long write(ByteBuffer[] src, int offset, int length) throws IOException {
++        return perform(() -> delegate.write(src, offset, length));
++    }
++    @Override
++    public int write(ByteBuffer src, long position) throws IOException {
++        if (position < 0)
++            throw new IllegalArgumentException("Negative file position");
++        if (!writable)
++            throw new java.nio.channels.NonWritableChannelException();
++        return nativeOperation(fd -> NativeStorage.write(fd, src, position));
++    }
++    @Override
++    public long position() throws IOException {
++        return perform(delegate::position);
++    }
++    @Override
++    public FileChannel position(long value) throws IOException {
++        perform(() -> delegate.position(value));
++        return this;
++    }
++    @Override
++    public long size() throws IOException {
++        return perform(delegate::size);
++    }
++    @Override
++    public FileChannel truncate(long size) throws IOException {
++        if (size < 0)
++            throw new IllegalArgumentException("Negative file size");
++        if (!writable)
++            throw new java.nio.channels.NonWritableChannelException();
++        synchronized (positionLock) {
++            long oldSize = perform(delegate::size);
++            if (size < oldSize)
++                nativeOperation(fd -> {
++                    NativeStorage.truncate(fd, size);
++                    return null;
++                });
++            if (perform(delegate::position) > size)
++                perform(() -> delegate.position(size));
++        }
++        return this;
++    }
++    @Override
++    public void force(boolean metadata) throws IOException {
++        nativeOperation(fd -> {
++            NativeStorage.force(fd, metadata);
++            return null;
++        });
++    }
++    @Override
++    public long transferTo(long position, long count, WritableByteChannel target)
++        throws IOException {
++        return perform(() -> delegate.transferTo(position, count, target));
++    }
++    @Override
++    public long transferFrom(ReadableByteChannel src, long position, long count)
++        throws IOException {
++        return perform(() -> delegate.transferFrom(src, position, count));
++    }
++    @Override
++    public MappedByteBuffer map(MapMode mode, long position, long size) throws IOException {
++        return perform(() -> delegate.map(mode, position, size));
++    }
++    @Override
++    public FileLock lock(long position, long size, boolean shared) throws IOException {
++        return bind(perform(() -> delegate.lock(position, size, shared)));
++    }
++    @Override
++    public FileLock tryLock(long position, long size, boolean shared) throws IOException {
++        return bind(perform(() -> delegate.tryLock(position, size, shared)));
++    }
++}
+--- /dev/null
++++ b/org/cryptomator/cryptofs/fh/NativeStorage.java
+@@ -0,0 +1,122 @@
++package org.cryptomator.cryptofs.fh;
++
++import java.io.IOException;
++import java.lang.foreign.*;
++import java.lang.invoke.MethodHandle;
++import java.lang.invoke.VarHandle;
++import java.nio.file.*;
++
++/** Supported FFM calls with errno captured before any further native call. */
++final class NativeStorage {
++    private static final Linker LINKER = Linker.nativeLinker();
++    private static final VarHandle ERRNO = Linker.Option.captureStateLayout().varHandle(
++        MemoryLayout.PathElement.groupElement("errno"));
++    private static MethodHandle function(String name, FunctionDescriptor signature) {
++        return LINKER.downcallHandle(LINKER.defaultLookup().find(name).orElseThrow(), signature,
++            Linker.Option.captureCallState("errno"));
++    }
++    private static final MethodHandle WRITE = function("pwrite",
++        FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
++            ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG));
++    private static final MethodHandle FSYNC =
++        function("fsync", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
++    private static final MethodHandle FDATASYNC =
++        function("fdatasync", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
++    private static final MethodHandle TRUNCATE = function("ftruncate",
++        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG));
++    private static final MethodHandle MKDIR = function("mkdir",
++        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
++    private static final int AT_FDCWD = -100;
++    private static final int RENAME_NOREPLACE = 1;
++    private static final MethodHandle RENAME = function("renameat2",
++        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
++            ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
++
++    static void verifyRuntime() {
++        // Calling this method initializes and links every required native symbol.
++    }
++
++    private static LinuxCiphertextChannel.NativeIOException failure(
++        MemorySegment state, String operation) {
++        return new LinuxCiphertextChannel.NativeIOException(
++            Path.of("<owned-ciphertext>"), operation, (int) ERRNO.get(state, 0L));
++    }
++    private static IOException invocation(Throwable failure) {
++        if (failure instanceof IOException io)
++            return io;
++        if (failure instanceof RuntimeException runtime)
++            throw runtime;
++        if (failure instanceof Error error)
++            throw error;
++        return new IOException("Native storage invocation failed", failure);
++    }
++    static int write(int fd, java.nio.ByteBuffer source, long position) throws IOException {
++        if (!source.hasRemaining())
++            return 0;
++        int size = Math.min(source.remaining(), 65536);
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
++            MemorySegment buffer = arena.allocate(size);
++            MemorySegment.copy(MemorySegment.ofBuffer(source), 0, buffer, 0, size);
++            long result = (long) WRITE.invokeExact(state, fd, buffer, (long) size, position);
++            if (result < 0)
++                throw failure(state, "pwrite");
++            if (result > size)
++                throw new IOException("Native write exceeded requested size");
++            source.position(source.position() + (int) result);
++            return (int) result;
++        } catch (Throwable failure) {
++            throw invocation(failure);
++        }
++    }
++    static void force(int fd, boolean metadata) throws IOException {
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
++            int result = metadata ? (int) FSYNC.invokeExact(state, fd)
++                                  : (int) FDATASYNC.invokeExact(state, fd);
++            if (result != 0)
++                throw failure(state, metadata ? "fsync" : "fdatasync");
++        } catch (Throwable failure) {
++            throw invocation(failure);
++        }
++    }
++    static void truncate(int fd, long length) throws IOException {
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
++            int result = (int) TRUNCATE.invokeExact(state, fd, length);
++            if (result != 0)
++                throw failure(state, "ftruncate");
++        } catch (Throwable failure) {
++            throw invocation(failure);
++        }
++    }
++    static void createPrivateDirectory(Path path) throws IOException {
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
++            int result = (int) MKDIR.invokeExact(state, arena.allocateFrom(path.toString()), 0700);
++            if (result != 0) {
++                int error = (int) ERRNO.get(state, 0L);
++                if (error == 17)
++                    throw new FileAlreadyExistsException(path.toString());
++                throw failure(state, "mkdir");
++            }
++        } catch (Throwable failure) {
++            throw invocation(failure);
++        }
++    }
++    static void publishNoReplace(Path draft, Path destination) throws IOException {
++        try (Arena arena = Arena.ofConfined()) {
++            MemorySegment state = arena.allocate(Linker.Option.captureStateLayout());
++            int result = (int) RENAME.invokeExact(state, AT_FDCWD, arena.allocateFrom(draft.toString()),
++                AT_FDCWD, arena.allocateFrom(destination.toString()), RENAME_NOREPLACE);
++            if (result != 0) {
++                int error = (int) ERRNO.get(state, 0L);
++                if (error == 17)
++                    throw new FileAlreadyExistsException(destination.toString());
++                throw failure(state, "renameat2");
++            }
++        } catch (Throwable failure) {
++            throw invocation(failure);
++        }
++    }
++}
+--- /dev/null
++++ b/org/cryptomator/cryptofs/fh/NativeThreadBridge.java
+@@ -0,0 +1,59 @@
++package org.cryptomator.cryptofs.fh;
++
++import java.lang.invoke.MethodHandle;
++import java.lang.invoke.MethodHandles;
++import java.lang.invoke.MethodType;
++
++/** Explicit compatibility bridge to the bundled JDK 25 native-thread set. */
++final class NativeThreadBridge {
++    private static final MethodHandle CONSTRUCTOR;
++    private static final MethodHandle ADD;
++    private static final MethodHandle REMOVE;
++    private static final MethodHandle SIGNAL_AND_WAIT;
++    static {
++        try {
++            Class<?> type = Class.forName("sun.nio.ch.NativeThreadSet");
++            MethodHandles.Lookup access =
++                MethodHandles.privateLookupIn(type, MethodHandles.lookup());
++            CONSTRUCTOR =
++                access.findConstructor(type, MethodType.methodType(void.class, int.class));
++            ADD = access.findVirtual(type, "add", MethodType.methodType(int.class));
++            REMOVE =
++                access.findVirtual(type, "remove", MethodType.methodType(void.class, int.class));
++            SIGNAL_AND_WAIT =
++                access.findVirtual(type, "signalAndWait", MethodType.methodType(void.class));
++        } catch (ReflectiveOperationException failure) {
++            throw new ExceptionInInitializerError(failure);
++        }
++    }
++    private final Object threads;
++    NativeThreadBridge() {
++        try {
++            threads = CONSTRUCTOR.invoke(2);
++        } catch (Throwable failure) {
++            throw new IllegalStateException(
++                "Bundled JDK native-thread API is unavailable", failure);
++        }
++    }
++    int add() {
++        try {
++            return (int) ADD.invoke(threads);
++        } catch (Throwable failure) {
++            throw new IllegalStateException("Cannot register native I/O thread", failure);
++        }
++    }
++    void remove(int token) {
++        try {
++            REMOVE.invoke(threads, token);
++        } catch (Throwable failure) {
++            throw new IllegalStateException("Cannot unregister native I/O thread", failure);
++        }
++    }
++    void signalAndWait() {
++        try {
++            SIGNAL_AND_WAIT.invoke(threads);
++        } catch (Throwable failure) {
++            throw new IllegalStateException("Cannot signal native I/O threads", failure);
++        }
++    }
++}
+--- a/org/cryptomator/cryptofs/fh/OpenCryptoFile.java
++++ b/org/cryptomator/cryptofs/fh/OpenCryptoFile.java
+@@ -32,6 +32,9 @@
+ 	private final AtomicReference<Path> currentFilePath;
+ 	private final AtomicLong fileSize;
+ 	private final OpenCryptoFileComponent component;
++	private final java.util.concurrent.locks.ReentrantReadWriteLock fileLock;
++	private final CiphertextEpoch epoch;
++	private final java.util.Map<FileChannel, CleartextFileChannel> writableChannels = new java.util.HashMap<>();
+ 
+ 	private final AtomicInteger openChannelsCount = new AtomicInteger(0);
+ 
+@@ -47,6 +50,14 @@
+ 		this.fileSize = fileSize;
+ 		this.component = component;
+ 		this.lastModified = lastModified;
++		if (CiphertextEpoch.enabled()) {
++			this.fileLock = (java.util.concurrent.locks.ReentrantReadWriteLock) component.fileLock();
++			this.epoch = new CiphertextEpoch(currentFilePath::get, fileLock, cryptor.fileHeaderCryptor().headerSize());
++			chunkIO.attachEpoch(epoch);
++		} else {
++			this.fileLock = null;
++			this.epoch = null;
++		}
+ 	}
+ 
+ 	/**
+@@ -56,7 +67,17 @@
+ 	 * @return A new file channel. Ideally used in a try-with-resource statement. If the channel is not properly closed, this OpenCryptoFile will stay open indefinite.
+ 	 * @throws IOException
+ 	 */
+-	public synchronized FileChannel newFileChannel(EffectiveOpenOptions options, FileAttribute<?>... attrs) throws IOException {
++	public FileChannel newFileChannel(EffectiveOpenOptions options, FileAttribute<?>... attrs) throws IOException {
++		if (epoch == null) return openChannel(options, attrs);
++		fileLock.writeLock().lock();
++		try {
++			return openChannel(options, attrs);
++		} finally {
++			fileLock.writeLock().unlock();
++		}
++	}
++
++	private synchronized FileChannel openChannel(EffectiveOpenOptions options, FileAttribute<?>... attrs) throws IOException {
+ 		Path path = currentFilePath.get();
+ 		if (path == null) {
+ 			throw new IllegalStateException("Cannot create file channel to deleted file");
+@@ -64,26 +85,53 @@
+ 		FileChannel ciphertextFileChannel = null;
+ 		CleartextFileChannel cleartextFileChannel = null;
+ 
++		boolean closedByCallback = false;
+ 		openChannelsCount.incrementAndGet(); // synchronized context, hence we can proactively increase the number
+ 		try {
+-			ciphertextFileChannel = path.getFileSystem().provider().newFileChannel(path, options.createOpenOptionsForEncryptedFile(), attrs);
++			if (epoch != null) {
++				epoch.recoverBeforeOpen(options.readonlyVault());
++				ciphertextFileChannel = LinuxCiphertextChannel.open(path, options.createOpenOptionsForEncryptedFile(), attrs);
++			} else {
++				ciphertextFileChannel = path.getFileSystem().provider().newFileChannel(path, options.createOpenOptionsForEncryptedFile(), attrs);
++			}
+ 			initFileHeader(options, ciphertextFileChannel);
+ 			initFileSize(ciphertextFileChannel);
+ 			cleartextFileChannel = component.newChannelComponent() //
+ 					.create(ciphertextFileChannel, options, this::cleartextChannelClosed) //
+ 					.channel();
++			if (epoch != null) {
++				cleartextFileChannel.attachEpoch(epoch);
++				chunkIO.registerChannel(ciphertextFileChannel, options.writable());
++				if (options.writable()) writableChannels.put(ciphertextFileChannel, cleartextFileChannel);
++			}
+ 			if (options.truncateExisting()) {
+-				cleartextFileChannel.truncate(0);
++				try {
++					cleartextFileChannel.truncate(0);
++				} catch (IOException failure) {
++					if (epoch != null) {
++						try {
++							cleartextFileChannel.close();
++						} catch (IOException e) {
++							failure.addSuppressed(e);
++						} finally {
++							// close() already ran the registered cleanup.
++							cleartextFileChannel = null;
++							ciphertextFileChannel = null;
++							closedByCallback = true;
++						}
++					}
++					throw failure;
++				}
+ 			}
+ 		} finally {
+-			if (cleartextFileChannel == null) { // i.e. something didn't work
++			if (cleartextFileChannel == null && !closedByCallback) { // channel cleanup
+ 				cleartextChannelClosed(ciphertextFileChannel);
+ 				closeQuietly(ciphertextFileChannel);
+ 			}
+ 		}
+ 
+ 		assert cleartextFileChannel != null; // otherwise there would have been an exception
+-		chunkIO.registerChannel(ciphertextFileChannel, options.writable());
++		if (epoch == null) chunkIO.registerChannel(ciphertextFileChannel, options.writable());
+ 		return cleartextFileChannel;
+ 	}
+ 
+@@ -171,14 +219,37 @@
+ 		currentFilePath.updateAndGet(p -> p == null ? null : newFilePath);
+ 	}
+ 
++	java.util.concurrent.locks.Lock lockNamespace() throws IOException {
++		if (epoch == null) return null;
++		var guard = fileLock.writeLock();
++		guard.lock();
++		boolean locked = false;
++		try {
++			epoch.assertHealthy();
++			epoch.recoverBeforeOpen(false);
++			if (epoch.active()) {
++				var channel = writableChannels.values().stream().findFirst()
++						.orElseThrow(() -> new IOException("Pending ciphertext has no writable channel"));
++				channel.force(true);
++			}
++			locked = true;
++			return guard;
++		} finally {
++			if (!locked) guard.unlock();
++		}
++	}
++
+ 	private synchronized void cleartextChannelClosed(FileChannel ciphertextFileChannel) {
+ 		if (ciphertextFileChannel != null) {
+ 			chunkIO.unregisterChannel(ciphertextFileChannel);
++			if (epoch != null) writableChannels.remove(ciphertextFileChannel);
+ 		}
+ 		if (openChannelsCount.decrementAndGet() == 0) {
+ 			close();
+ 		}
+ 	}
++
++	boolean isUnused() { return openChannelsCount.get() == 0; }
+ 
+ 	@Override
+ 	public void close() {
+--- a/org/cryptomator/cryptofs/fh/OpenCryptoFileComponent.java
++++ b/org/cryptomator/cryptofs/fh/OpenCryptoFileComponent.java
+@@ -12,6 +12,8 @@
+ 
+ 	OpenCryptoFile openCryptoFile();
+ 
++	java.util.concurrent.locks.ReadWriteLock fileLock();
++
+ 	ChannelComponent.Factory newChannelComponent();
+ 
+ 	@Subcomponent.Factory
+--- a/org/cryptomator/cryptofs/fh/OpenCryptoFiles.java
++++ b/org/cryptomator/cryptofs/fh/OpenCryptoFiles.java
+@@ -29,8 +29,54 @@
+ @CryptoFileSystemScoped
+ public class OpenCryptoFiles implements Closeable {
+ 
++	private final java.util.concurrent.locks.ReentrantReadWriteLock namespaceLock = new java.util.concurrent.locks.ReentrantReadWriteLock();
++
++	public NamespaceGuard namespaceRead() {
++		var guard = namespaceLock.readLock(); guard.lock(); return new NamespaceGuard(guard, this::reapRetirements);
++	}
++
++	public NamespaceGuard namespaceWrite() {
++		var guard = namespaceLock.writeLock(); guard.lock(); return new NamespaceGuard(guard, this::reapRetirements);
++	}
++
+ 	private final OpenCryptoFileComponent.Factory openCryptoFileComponentFactory;
+ 	private final ConcurrentMap<Path, OpenCryptoFile> openCryptoFiles = new ConcurrentHashMap<>();
++	private final java.util.Set<OpenCryptoFile> retirementCandidates = ConcurrentHashMap.newKeySet();
++
++	private boolean retire(Path path, OpenCryptoFile file) {
++		retirementCandidates.add(file);
++		reapRetirements();
++		return openCryptoFiles.get(path) != file;
++	}
++
++	private void reapRetirements() {
++		while (!retirementCandidates.isEmpty()) {
++			// Closing holds a file lock. Never wait for a namespace writer that
++			// may itself be waiting for that file lock.
++			if (namespaceLock.getReadLockCount() != 0 || namespaceLock.isWriteLocked()) return;
++			var guard = namespaceLock.writeLock();
++			if (!guard.tryLock()) return;
++			try {
++				for (OpenCryptoFile file : retirementCandidates) {
++					if (!file.isUnused()) continue;
++					Path current = file.getCurrentFilePath();
++					if (current != null) openCryptoFiles.remove(current, file);
++					retirementCandidates.remove(file);
++				}
++			} finally {
++				guard.unlock();
++			}
++			// A close may have queued a file after the iterator passed it while
++			// the writer was held. Recheck after releasing the writer, so either
++			// this pass or that close's own pass observes the unused object.
++			boolean retry = false;
++			for (OpenCryptoFile file : retirementCandidates) {
++				if (file.isUnused()) { retry = true; break; }
++			}
++			if (!retry) return;
++		}
++	}
++
+ 
+ 	@Inject
+ 	OpenCryptoFiles(OpenCryptoFileComponent.Factory openCryptoFileComponentFactory) {
+@@ -60,17 +106,17 @@
+ 	 */
+ 	public OpenCryptoFile getOrCreate(Path ciphertextPath) {
+ 		Path normalizedPath = ciphertextPath.toAbsolutePath().normalize();
+-		return openCryptoFiles.computeIfAbsent(normalizedPath, p -> openCryptoFileComponentFactory.create(p, openCryptoFiles::remove).openCryptoFile()); // computeIfAbsent is atomic, "create" is called at most once
++		return openCryptoFiles.computeIfAbsent(normalizedPath, p -> openCryptoFileComponentFactory.create(p, this::retire).openCryptoFile()); // computeIfAbsent is atomic, "create" is called at most once
+ 	}
+ 
+ 	public void writeCiphertextFile(Path ciphertextPath, EffectiveOpenOptions openOptions, ByteBuffer contents) throws IOException {
+-		try (OpenCryptoFile f = getOrCreate(ciphertextPath); FileChannel ch = f.newFileChannel(openOptions)) {
++		try (var namespace = namespaceRead(); OpenCryptoFile f = getOrCreate(ciphertextPath); FileChannel ch = f.newFileChannel(openOptions)) {
+ 			ch.write(contents);
+ 		}
+ 	}
+ 
+ 	public ByteBuffer readCiphertextFile(Path ciphertextPath, EffectiveOpenOptions openOptions, int maxBufferSize) throws BufferUnderflowException, IOException {
+-		try (OpenCryptoFile f = getOrCreate(ciphertextPath); FileChannel ch = f.newFileChannel(openOptions)) {
++		try (var namespace = namespaceRead(); OpenCryptoFile f = getOrCreate(ciphertextPath); FileChannel ch = f.newFileChannel(openOptions)) {
+ 			if (ch.size() > maxBufferSize) {
+ 				throw new BufferUnderflowException();
+ 			}
+@@ -104,7 +150,7 @@
+ 	 * @return Utility to update OpenCryptoFile references.
+ 	 * @throws FileAlreadyExistsException Thrown if the destination file is an existing file that is currently opened.
+ 	 */
+-	public TwoPhaseMove prepareMove(Path src, Path dst) throws FileAlreadyExistsException {
++	public TwoPhaseMove prepareMove(Path src, Path dst) throws IOException {
+ 		return new TwoPhaseMove(src, dst);
+ 	}
+ 
+@@ -126,12 +172,20 @@
+ 		private final Path src;
+ 		private final Path dst;
+ 		private final OpenCryptoFile openCryptoFile;
++		private final NamespaceGuard namespaceGuard;
+ 		private boolean committed;
+ 		private boolean rolledBack;
+ 
+-		private TwoPhaseMove(Path src, Path dst) throws FileAlreadyExistsException {
++		private TwoPhaseMove(Path src, Path dst) throws IOException {
+ 			this.src = Objects.requireNonNull(src);
+ 			this.dst = Objects.requireNonNull(dst);
++			this.namespaceGuard = prepareNamespace(src);
++			try (var targetGuard = prepareNamespace(dst)) {
++				// Recover a closed target's epoch before replacement discards its inode.
++			} catch (IOException failure) {
++				namespaceGuard.close();
++				throw failure;
++			}
+ 			try {
+ 				// ConcurrentHashMap.compute is atomic:
+ 				this.openCryptoFile = openCryptoFiles.compute(dst, (k, v) -> {
+@@ -142,6 +196,7 @@
+ 					}
+ 				});
+ 			} catch (AlreadyMappedException e) {
++				namespaceGuard.close();
+ 				throw new FileAlreadyExistsException(dst.toString(), null, "Destination file currently accessed by another thread.");
+ 			}
+ 		}
+@@ -167,9 +222,35 @@
+ 
+ 		@Override
+ 		public void close() {
+-			if (!committed) {
+-				rollback();
+-			}
++			try {
++				if (!committed) rollback();
++			} finally {
++				namespaceGuard.close();
++			}
++		}
++	}
++
++	public NamespaceGuard prepareNamespace(Path ciphertextPath) throws IOException {
++		if (!CiphertextEpoch.enabled()) return new NamespaceGuard(null);
++		Path normalized = ciphertextPath.toAbsolutePath().normalize();
++		OpenCryptoFile file = openCryptoFiles.get(normalized);
++		if (file == null) {
++			file = openCryptoFileComponentFactory.create(normalized, (p, f) -> false).openCryptoFile();
++		}
++		return new NamespaceGuard(file.lockNamespace());
++	}
++
++	public static final class NamespaceGuard implements AutoCloseable {
++		private final java.util.concurrent.locks.Lock lock;
++		private final Runnable afterClose;
++		private NamespaceGuard(java.util.concurrent.locks.Lock lock) { this(lock, () -> {}); }
++		private NamespaceGuard(java.util.concurrent.locks.Lock lock, Runnable afterClose) {
++			this.lock = lock;
++			this.afterClose = afterClose;
++		}
++		@Override public void close() {
++			if (lock != null) lock.unlock();
++			afterClose.run();
+ 		}
+ 	}
+ 

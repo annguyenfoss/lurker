@@ -9,6 +9,7 @@ import stat
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "stage-unix.py"
@@ -580,6 +581,57 @@ Version needs section '.gnu.version_r' contains 2 entries:
         source.files.return_value = []
         with self.assertRaisesRegex(ValueError, "source inventory differs"):
             stager.verify_cryptomator_sources(self.root, source)
+
+    def test_cryptomator_patch_provenance_binds_source_archive_diff_and_outputs(self):
+        module = "org.cryptomator.cryptofs"
+        name = "org/example/Storage.java"
+        old, new = "class Storage { int value = 1; }\n", "class Storage { int value = 2; }\n"
+        for path in ("mods", "patches", "source/linux-patches", "source/upstream", "source/patched-modules/" + module + "/org/example"):
+            (self.root / path).mkdir(parents=True, exist_ok=True)
+        archive = self.root / "source/upstream/cryptofs-2.8.0-sources.jar"
+        with zipfile.ZipFile(archive, "w") as output:
+            output.writestr(name, old)
+        patch = ("--- a/" + name + "\n+++ b/" + name + "\n@@ -1 +1 @@\n-" + old + "+" + new).encode()
+        entry = {"module": module, "artifact": "org.cryptomator:cryptofs:2.8.0:jar:sources",
+                 "base_jar": "cryptofs-2.8.0.jar", "patch": "crypto.patch", "jar": "crypto.jar",
+                 "source_sha256": stager.digest(archive)}
+        config = json.dumps({"schema": 1, "modules": [entry]}).encode()
+        (self.root / "source/linux-patches/manifest.json").write_bytes(config)
+        (self.root / "source/linux-patches/crypto.patch").write_bytes(patch)
+        base = self.root / "mods/cryptofs-2.8.0.jar"
+        base.write_bytes(b"upstream binary")
+        binary = self.root / "patches/crypto.jar"
+        binary.write_bytes(b"compiled patch")
+        unit = self.root / "source/patched-modules" / module / name
+        unit.write_text(new)
+        record = {**entry, "base_sha256": stager.digest(base), "patch_sha256": stager.hashlib.sha256(patch).hexdigest(),
+                  "jar_sha256": stager.digest(binary), "source_files": {name: stager.digest(unit)}}
+        manifest = {"linux_patches": {"configuration_sha256": stager.hashlib.sha256(config).hexdigest(), "modules": [record], "runtime_verified": True}}
+        lock = {"sha256": {base.name: stager.digest(base)}}
+        prefix = "native/folder/cryptomator/linux-patches/"
+        inputs = {prefix + "manifest.json": config, prefix + "crypto.patch": patch}
+        source = mock.Mock()
+        source.files.return_value = list(inputs)
+        source.read.side_effect = inputs.__getitem__
+        source.constant.return_value = {module: (entry["artifact"], entry["base_jar"])}
+        stager.verify_cryptomator_patches(self.root, manifest, source, lock)
+        for file, message in ((base, "base module differs"), (binary, "binary differs"), (archive, "upstream source differs")):
+            original = file.read_bytes()
+            file.write_bytes(b"changed")
+            with self.subTest(file=file.name), self.assertRaisesRegex(ValueError, message):
+                stager.verify_cryptomator_patches(self.root, manifest, source, lock)
+            file.write_bytes(original)
+        unit.write_text(new.replace("= 2", "= 3"))
+        record["source_files"][name] = stager.digest(unit)
+        with self.assertRaisesRegex(ValueError, "do not reproduce the reviewed patch"):
+            stager.verify_cryptomator_patches(self.root, manifest, source, lock)
+
+    def test_cryptomator_patch_artifact_cannot_add_patch_to_unpatched_source(self):
+        source = mock.Mock()
+        source.files.return_value = []
+        stager.verify_cryptomator_patches(self.root, {}, source, {})
+        with self.assertRaisesRegex(ValueError, "patches absent"):
+            stager.verify_cryptomator_patches(self.root, {"linux_patches": {}}, source, {})
 
     def test_cryptomator_module_path_matches_the_actual_locked_dependency_bytes(self):
         modules = self.root / "mods"

@@ -2,6 +2,7 @@
 """Stage verified Unix artifacts without building, installing or executing them."""
 import argparse
 import ast
+import difflib
 import hashlib
 import json
 import os
@@ -284,6 +285,71 @@ def verify_cryptomator_dependencies(root, lock):
         fail("Cryptomator runtime dependencies differ from source lock")
 
 
+def verify_cryptomator_patches(root, manifest, source, lock):
+    prefix = "native/folder/cryptomator/linux-patches/"
+    paths = sorted(name for name in source.files(prefix) if name.startswith(prefix))
+    proof = manifest.get("linux_patches")
+    if not paths:
+        if proof is not None:
+            fail("Cryptomator artifact has patches absent from its source commit")
+        return
+    configuration = source.read(prefix + "manifest.json")
+    expected = json.loads(configuration)
+    allowed = source.constant("scripts/build-cryptomator.py", "LINUX_PATCH_MODULES")
+    if expected.get("schema") != 1 or not expected.get("modules") or not isinstance(proof, dict):
+        fail("Cryptomator Linux patch provenance is missing")
+    if proof.get("configuration_sha256") != hashlib.sha256(configuration).hexdigest():
+        fail("Cryptomator Linux patch configuration differs from source")
+    if proof.get("runtime_verified") is not True:
+        fail("Cryptomator Linux runtime bridge was not verified")
+    for name in paths:
+        packaged = root / "source/linux-patches" / name.removeprefix(prefix)
+        if packaged.is_symlink() or not packaged.is_file() or digest(packaged) != hashlib.sha256(source.read(name)).hexdigest():
+            fail("Cryptomator Linux patch source differs: " + name)
+    records = proof.get("modules", [])
+    if not isinstance(records, list) or len(records) != len(expected["modules"]):
+        fail("Cryptomator Linux patch module inventory differs")
+    for entry, record in zip(expected["modules"], records):
+        if not isinstance(record, dict):
+            fail("Cryptomator Linux patch module record is invalid")
+        module = entry.get("module")
+        if module not in allowed or (entry.get("artifact"), entry.get("base_jar")) != tuple(allowed[module]):
+            fail("Cryptomator Linux patch module is unreviewed")
+        if any(record.get(key) != value for key, value in entry.items()):
+            fail("Cryptomator Linux patch record differs from source")
+        patch = source.read(prefix + str(relative(entry["patch"])))
+        if record.get("patch_sha256") != hashlib.sha256(patch).hexdigest():
+            fail("Cryptomator Linux patch checksum differs")
+        base = root / "mods" / relative(entry["base_jar"])
+        base_hash = lock["sha256"].get(entry["base_jar"])
+        if record.get("base_sha256") != base_hash or digest(base) != base_hash:
+            fail("Cryptomator Linux patch base module differs")
+        output = root / "patches" / relative(entry["jar"])
+        if digest(output) != record.get("jar_sha256"):
+            fail("Cryptomator Linux patch binary differs")
+        artifact = entry["artifact"].split(":")
+        archive = root / "source/upstream" / (artifact[1] + "-" + artifact[2] + "-sources.jar")
+        if digest(archive) != entry["source_sha256"]:
+            fail("Cryptomator Linux patch upstream source differs")
+        units = root / "source/patched-modules" / module
+        files = record.get("source_files", {})
+        actual = {str(path.relative_to(units)) for path in units.rglob("*") if path.is_file() or path.is_symlink()}
+        if not isinstance(files, dict) or not files or set(files) != actual:
+            fail("Cryptomator Linux patched source inventory differs")
+        difference = []
+        with zipfile.ZipFile(archive) as upstream:
+            for name in sorted(files):
+                path = units / relative(name)
+                if not name.endswith(".java") or Path(name).name == "module-info.java" or path.is_symlink() or digest(path) != files[name]:
+                    fail("Cryptomator Linux patched source differs: " + name)
+                old = upstream.read(name).decode().replace("\r\n", "\n") if name in upstream.namelist() else ""
+                new = path.read_text()
+                difference.extend(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True),
+                                  fromfile="a/" + name if name in upstream.namelist() else "/dev/null", tofile="b/" + name))
+        if "".join(difference).encode() != patch:
+            fail("Cryptomator Linux patched sources do not reproduce the reviewed patch")
+
+
 # These components belong to the host ABI and must never be shipped privately.
 LINUX_SYSTEM_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|resolv|util|anl|nss_[^/]+|BrokenLocale)\.so(?:\..*)?)$")
 LINUX_CXX_RUNTIME_ELF = re.compile(r"^lib(?:stdc\+\+|gcc_s)\.so(?:\..*)?$")
@@ -409,6 +475,7 @@ def validate_backend(kind, directory, source):
         if manifest.get("sources") != lock:
             fail("Cryptomator dependency provenance differs from source lock")
         verify_cryptomator_dependencies(root, lock)
+        verify_cryptomator_patches(root, manifest, source, lock)
         if not list((root / "mods").glob("*.jar")) or not (root / "runtime/lib").is_dir():
             fail("Cryptomator private Java runtime/modules are incomplete")
     elif kind in {"veracrypt-create", "veracrypt-userspace"}:
