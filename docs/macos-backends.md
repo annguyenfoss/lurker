@@ -88,7 +88,31 @@ Use only disposable `/tmp/lurker-*` files for native tests:
 TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 ```
 
-Native developer qualification, macOS 27.2.1 arm64 / SDK 27.2:
+## Packaged lifecycle on Buran
+
+On macOS 27.2.1 arm64 with SDK 27.2, the developer DMG from
+`b2da478d6e86fd8ea733ecff331099995bfa7a6d` passed 320 CLI checks across
+20 cases. The DMG SHA-256 was
+`afe4f38c72e666832d5d19ac869d01165198d7d0c65bac6580577ca94779b19c`.
+The standalone app passed the strict nested code signature and dependency
+checks and required macOS 27.2. The release build reused the verified native
+VeraCrypt and directory backend inputs.
+
+VeraCrypt passed 192 checks across AES, Serpent and Twofish with both
+password-only and binary-keyfile-only credentials and explicit and Auto
+mounts. It used FUSE-T 1.2.9. Apple images, gocryptfs, CryFS and Cryptomator
+each passed 32 checks. The directory backends used macFUSE for gocryptfs and
+CryFS and FUSE-T FSKit for Cryptomator.
+
+Every case wrote and synced three PDFs and a page of text, checked the four
+files after close and reopen, then appended to the text and synced a fifth
+file. All five SHA-256 digests matched after another close and reopen. Each
+case completed the CLI checks, including SQLite WAL and busy close, and both
+of its fixture mountpoints were clear afterward. Buran stayed online.
+An owned Cryptomator JVM exit also passed all five fence and recovery checks.
+Receipts are under `target/goal-validation/ssh-matrix-20261122/macos-evidence/b2da478/`.
+
+## Earlier macOS 27.2.1 arm64 results
 
 The `8aac707` artifact is a functional baseline. Later fault testing exposed
 plaintext fallthrough into a writable mount directory after unexpected detach;
