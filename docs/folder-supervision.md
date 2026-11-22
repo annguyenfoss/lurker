@@ -26,6 +26,21 @@ They remain available for inspection while an explicit reopen can inspect the
 vault. This does not claim that pending writes were recovered. Older sessions
 without a supervisor cannot acquire a manufactured successful exit result.
 
+## FreeBSD gocryptfs restart recovery
+
+New FreeBSD folder journals record the kernel boot ID. After a reboot,
+the old journal reserves its vault and mountpoint until an explicit
+unmount reconciles it. If the recorded mountpoint is vacant, Lurker
+archives the earlier journal and reports that it cannot confirm a clean
+close. The vault can then reopen. An occupied mountpoint preserves both
+the current mount and the old journal. Recovery issues no native unmount
+or process signal.
+
+FreeBSD can assign a new device number to the same filesystem after reboot.
+Journals written before boot IDs were recorded still use their original
+device, inode, and process checks. A legacy journal with a changed device
+number requires manual recovery.
+
 ## macOS Cryptomator underlay protection
 
 Before mounting, core opens the original empty directory without following

@@ -329,6 +329,8 @@ mod tests {
             backend: VolumeType::Gocryptfs,
             source: base.join("vault"),
             source_identity: Identity { device: 1, inode: 2 },
+            #[cfg(target_os = "freebsd")]
+            boot_id: None,
             mountpoint: base.join("mount"),
             readonly: false,
             mount_identity: None,

@@ -188,6 +188,9 @@ struct Session {
     backend: VolumeType,
     source: PathBuf,
     source_identity: Identity,
+    #[cfg(target_os = "freebsd")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    boot_id: Option<[u8; 16]>,
     mountpoint: PathBuf,
     readonly: bool,
     mount_identity: Option<String>,
@@ -328,6 +331,72 @@ fn session_snapshot(path: &Path) -> AppResult<Vec<(PathBuf, Session)>> {
         result.push((directory, session));
     }
     Ok(result)
+}
+
+#[cfg(target_os = "freebsd")]
+fn freebsd_boot_id() -> AppResult<Option<[u8; 16]>> {
+    let mut id = [0u8; 16];
+    let mut length = id.len();
+    // kern.boot_id is an opaque 16-byte value generated once per kernel boot.
+    let result = unsafe {
+        libc::sysctlbyname(
+            c"kern.boot_id".as_ptr(),
+            id.as_mut_ptr().cast(),
+            &mut length,
+            std::ptr::null(),
+            0,
+        )
+    };
+    if result != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ENOENT) {
+            return Ok(None);
+        }
+        return Err(AppError::io("Cannot read the FreeBSD kernel boot identity", error));
+    }
+    if length != id.len() {
+        return Err(AppError::new("Unexpected FreeBSD kernel boot identity size."));
+    }
+    Ok(Some(id))
+}
+
+#[cfg(target_os = "freebsd")]
+fn from_previous_freebsd_boot(session: &Session) -> AppResult<bool> {
+    // Legacy records retain the original device, inode, and process checks.
+    let Some(recorded) = session.boot_id else {
+        return Ok(false);
+    };
+    Ok(freebsd_boot_id()?.is_some_and(|current| current != recorded))
+}
+
+fn archive_failed_session(runtime: &Path, directory: &Path) -> AppResult<PathBuf> {
+    let archive = runtime.join(format!(
+        "failed-{}",
+        directory.file_name().unwrap().to_string_lossy()
+    ));
+    fs::rename(directory, &archive)
+        .map_err(|error| AppError::io("Cannot preserve failed backend session", error))?;
+    sync_dir(runtime)?;
+    Ok(archive)
+}
+
+#[cfg(target_os = "freebsd")]
+fn archive_previous_freebsd_session(
+    runtime: &Path,
+    directory: &Path,
+    session: &Session,
+) -> AppResult<Option<PathBuf>> {
+    if !from_previous_freebsd_boot(session)? {
+        return Ok(None);
+    }
+    if mount_identity(&session.mountpoint)?.is_some() {
+        return Err(AppError::new(
+            "A mount occupies the previous boot's mountpoint. Preserving both the mount and the session.",
+        ));
+    }
+    // A previous kernel cannot own a current mount or process. Preserve its
+    // journal without using its device identity or issuing any native cleanup.
+    archive_failed_session(runtime, directory).map(Some)
 }
 
 fn save(dir: &Path, session: &Session) -> AppResult<()> {
@@ -901,8 +970,11 @@ fn mount_inner(
         ));
     }
     let source_identity = Identity::read(&source)?;
-    for (_, s) in runtime.sessions()? {
-        if s.source_identity == source_identity {
+    let sessions = runtime.sessions()?;
+    for (_, s) in &sessions {
+        if s.source_identity == source_identity
+            || (cfg!(target_os = "freebsd") && s.source == source)
+        {
             return Err(AppError::new(
                 "Vault already has an active or recoverable session; close it before reopening.",
             ));
@@ -916,6 +988,11 @@ fn mount_inner(
     }
     let mountpoint = fs::canonicalize(&c.mountpoint)
         .map_err(|e| AppError::io("Cannot resolve mountpoint", e))?;
+    if cfg!(target_os = "freebsd") && sessions.iter().any(|(_, s)| s.mountpoint == mountpoint) {
+        return Err(AppError::new(
+            "Mountpoint has an active or recoverable session; close it before reusing it.",
+        ));
+    }
     if source.starts_with(&mountpoint) || mountpoint.starts_with(&source) {
         return Err(AppError::new(
             "Encrypted directory and mountpoint must not contain one another.",
@@ -931,6 +1008,8 @@ fn mount_inner(
             "Mountpoint must be an empty, unmounted directory.",
         ));
     }
+    #[cfg(target_os = "freebsd")]
+    let boot_id = freebsd_boot_id()?;
     let dir = runtime
         .path
         .join(format!("session-{}-{}", std::process::id(), nonce()));
@@ -941,6 +1020,8 @@ fn mount_inner(
         backend: c.volume_type,
         source,
         source_identity,
+        #[cfg(target_os = "freebsd")]
+        boot_id,
         mountpoint,
         readonly: c.readonly,
         mount_identity: None,
@@ -1100,6 +1181,13 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
             "Requested backend does not match the recorded session.",
         ));
     }
+    #[cfg(target_os = "freebsd")]
+    if let Some(archive) = archive_previous_freebsd_session(&runtime.path, &dir, &session)? {
+        return Err(AppError::new(format!(
+            "Previous-boot directory session has no confirmed close. Evidence retained at {}. You can reopen the vault.",
+            archive.display()
+        )));
+    }
     if Identity::read(&session.source)? != session.source_identity {
         return Err(AppError::new(
             "Encrypted directory was replaced; refusing to close a stale session.",
@@ -1169,9 +1257,7 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
     if let Err(error) = close_result {
         // No mount or live backend remains: retain evidence without preventing
         // an explicit reopen for inspection. Live/busy resources never reach here.
-        let archive = runtime.path.join(format!("failed-{}", dir.file_name().unwrap().to_string_lossy()));
-        fs::rename(&dir, &archive).map_err(|e| AppError::io("Cannot preserve failed backend session", e))?;
-        sync_dir(&runtime.path)?;
+        let archive = archive_failed_session(&runtime.path, &dir)?;
         return Err(AppError::new(format!("Filesystem detached, but backend close failed. Evidence retained at {}. {}", archive.display(), error.message)));
     }
     fs::remove_dir_all(dir).map_err(|e| AppError::io("Cannot remove closed session", e))?;
@@ -1185,6 +1271,10 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
     }
     let mut result = Vec::new();
     for (dir, s) in session_snapshot(&runtime_path())? {
+        #[cfg(target_os = "freebsd")]
+        if from_previous_freebsd_boot(&s)? {
+            continue;
+        }
         let mounted = mount_identity(&s.mountpoint)?
             .is_some_and(|identity| s.mount_identity.as_ref() == Some(&identity));
         let running = match s.process.as_ref() {
@@ -1303,6 +1393,8 @@ mod tests {
                 device: 1,
                 inode: 2,
             },
+            #[cfg(target_os = "freebsd")]
+            boot_id: None,
             mountpoint: "mountpoint".into(),
             readonly: false,
             mount_identity: None,
@@ -1312,6 +1404,43 @@ mod tests {
             fence: None,
         }
     }
+    #[cfg(target_os = "freebsd")]
+    #[test]
+    fn previous_boot_preserves_an_occupied_mountpoint_and_archives_its_journal_when_vacant() {
+        let root = std::env::temp_dir().join(format!("lurker-folder-boot-{}", nonce()));
+        secure_dir(&root).unwrap();
+        let directory = root.join("session-test");
+        secure_dir(&directory).unwrap();
+
+        let mut session = snapshot_record();
+        let boot_id = freebsd_boot_id().unwrap().expect("FreeBSD kern.boot_id");
+        assert_eq!(freebsd_boot_id().unwrap(), Some(boot_id));
+        assert!(!from_previous_freebsd_boot(&session).unwrap());
+        session.boot_id = Some(boot_id);
+        assert!(!from_previous_freebsd_boot(&session).unwrap());
+
+        let mut other_boot = boot_id;
+        other_boot[0] ^= 1;
+        session.boot_id = Some(other_boot);
+        session.mountpoint = "/".into();
+        save(&directory, &session).unwrap();
+        assert!(from_previous_freebsd_boot(&session).unwrap());
+        assert!(archive_previous_freebsd_session(&root, &directory, &session).is_err());
+        assert_eq!(session_snapshot(&root).unwrap().len(), 1);
+
+        session.mountpoint = root.join("vacant");
+        secure_dir(&session.mountpoint).unwrap();
+        save(&directory, &session).unwrap();
+        let evidence = fs::read(directory.join("session.json")).unwrap();
+        let archive = archive_previous_freebsd_session(&root, &directory, &session)
+            .unwrap()
+            .unwrap();
+        assert_eq!(fs::read(archive.join("session.json")).unwrap(), evidence);
+        assert!(!directory.exists());
+        assert!(session_snapshot(&root).unwrap().is_empty());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
     #[test]
     fn readonly_snapshot_ignores_operation_lock_and_never_recreates_state() {
         let root = std::env::temp_dir().join(format!("lurker-folder-snapshot-{}", nonce()));
@@ -1420,6 +1549,8 @@ mod tests {
                 device: 1,
                 inode: 2,
             },
+            #[cfg(target_os = "freebsd")]
+            boot_id: None,
             mountpoint: "mountpoint".into(),
             readonly: false,
             mount_identity: Some("confirmed mount".into()),
