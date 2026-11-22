@@ -338,10 +338,16 @@ of the ciphertext and then reopened the copy through the ordinary CLI.
 All five digests matched, normal close succeeded and the original
 ciphertext digest stayed unchanged.
 
-The earlier `rc.shutdown` result above establishes clean VeraCrypt
-reopen when the hook closes the vault before shutdown. Evidence for the
-no-hook case is under
-`target/goal-validation/ssh-matrix-20261122/openbsd-run/`.
+A follow-up on the same guest with the exact same package repeated the
+VeraCrypt workload with a fixture-only `rc.shutdown` hook. The vault was
+still mounted when `shutdown -r now` ran. The hook confirmed the mount and
+called `lurker session-close` with stdin closed. It returned zero and
+detached the vault. The boot identity changed from `1795364420` to
+`1795365677`. The ordinary CLI reopened the vault, all five file digests
+matched, and the filesystem closed normally without preen. The hook,
+fixture and isolated package were removed and the native inventories
+matched baseline. Evidence is under `target/goal-validation/ssh-matrix-20261122/`
+in `openbsd-run/` for the no-hook run and `openbsd-hook/` for the follow-up.
 
 ## Captured packaged CLI evidence
 
