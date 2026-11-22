@@ -181,7 +181,7 @@ class MacBackendTests(unittest.TestCase):
 
     def test_private_dependency_closure_is_rewritten_and_fuse_stays_external(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             source, library = root / "backend", root / "libprivate.dylib"
             source.write_bytes(b"exe")
             library.write_bytes(b"lib")
