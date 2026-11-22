@@ -141,6 +141,14 @@ operator's separately requested restart, with an unchanged boot identity
 throughout the storage tests. Receipts are under
 `target/goal-validation/ssh-matrix-20261122/macos-evidence/c997d6a/`.
 
+The same `c997d6a` DMG then passed all 320 CLI checks in 20 profiles on
+Buran. Each profile recovered the three PDFs, the appended text and the
+second file after a close and reopen. The exact package has five desktop
+callbacks and 75 Firefox checks, including the Cryptomator checks already
+run on that DMG. Buran retained its boot identity and the tests left no
+active mounts, journals, attached images, volumes or helper processes.
+The replay receipts are in the `full-replay/` subdirectory.
+
 ## Earlier macOS 27.2.1 arm64 results
 
 The `8aac707` artifact is a functional baseline. Later fault testing exposed

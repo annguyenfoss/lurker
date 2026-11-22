@@ -62,7 +62,7 @@ OS and are recorded with each receipt.
 | NetBSD | Two CGD fixtures passed on `14ede46` | The earlier abrupt power-loss WAL result remains open. |
 | DragonFly BSD | Six LUKS1 cipher and credential combinations passed on `14ede46` | Earlier abrupt power-loss durability remains open. |
 | OpenBSD | CRYPTO and RAID1C passed after stock reboot on `eca358d`. VeraCrypt passed with the native shutdown hook. | Stock VeraCrypt reboot without the hook required FFS preen on a separate copy. |
-| macOS | All 20 packaged CLI cases passed on `b2da478`. The `c997d6a` DMG verified the Cryptomator retry with two payload cases, 35 rapid closes, busy refusal and JVM crash recovery. | The macOS tests issued no reboot. The final DMG was verified after Buran's separately requested restart. |
+| macOS | The exact `c997d6a` DMG passed 320 checks across all 20 CLI profiles, 35 Cryptomator rapid closes, busy refusal, JVM crash recovery, five desktop callbacks, and 75 Firefox checks. | The macOS tests issued no reboot. The final DMG was verified after Buran's separately requested restart. |
 
 All ten KVM guests ran workspace checks and passed 1,234 Rust tests on
 `c997d6a`. Buran passed 103 workspace tests at the same revision. Packaged
