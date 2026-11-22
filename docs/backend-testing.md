@@ -378,6 +378,21 @@ package were removed, and the native inventories matched baseline. The
 serial log, kernel trace and copy checks are in
 `target/goal-validation/ssh-matrix-20261122/openbsd-native-boundary/`.
 
+The coordinated `16aa1f4` native installer has SHA-256
+`2bbfdfb9dc1c057e5cddf79da3d7a6ad3bdd3ac8d3888e93ec400a051bc8e046`.
+Its installed CLI passed 212 checks across 16 variants and 27 capacity
+checks. The installed desktop rendered an X11 window. All three login-user
+callbacks passed through the installed helper under a temporary helper-only
+sudoers entry. The original sudoers file was restored before reboot.
+
+CRYPTO, RAID1C and VeraCrypt were mounted when the guest requested the
+orderly reboot. The fixture-only hook closed all three successfully, and
+the boot identity changed from `1795369350` to `1795371153`. All five
+payload digests matched for each vault after normal Auto reopen. Removal
+restored the package and native storage inventories. Exact package and
+runtime receipts are in
+`target/goal-validation/ssh-matrix-20261122/openbsd-final-16aa1f4/`.
+
 ### NetBSD and DragonFly reboot with encrypted mounts active
 
 NetBSD 11.1 exercised the `14ede46` package with two CGD fixtures,
