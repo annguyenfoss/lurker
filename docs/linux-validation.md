@@ -193,6 +193,13 @@ reported the test overlay busy, and namespace exit removed it. Follow-up
 checks verified the original mounts, loop devices and package inventory
 after the installer was removed.
 
+An offline reinstall of the same Debian package passed 156 binary-keyfile
+lifecycle checks. It covered AES, Serpent and Twofish on LUKS2, LUKS1,
+kernel VeraCrypt and login-user VeraCrypt, with automatic format
+detection on open. All four AES routes also passed 24 guarded
+forced-replacement checks. The cleanup receipt verified the restored
+package, mount and loop-device inventories.
+
 The installer, installed desktop and results are hash-bound in
 `target/goal-validation/ssh-matrix-20261122/cryptomator/source-review/debian-release/supplement/`.
 
