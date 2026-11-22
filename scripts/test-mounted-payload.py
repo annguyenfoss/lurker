@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 
 
 FILES = ("bitcoin.pdf", "ethereum.pdf", "lamport.pdf", "page.txt")
@@ -29,8 +30,20 @@ def sync_directory(path):
 
 
 def verify(directory, expected):
-    if {path.name for path in directory.iterdir()} != expected.keys():
-        raise ValueError(f"Unexpected file inventory in {directory}")
+    names = {path.name for path in directory.iterdir()}
+    extra = names - expected.keys()
+    if sys.platform == "darwin":
+        # exFAT and some FUSE mounts store macOS metadata alongside each file.
+        for name in extra.copy():
+            sidecar = directory / name
+            if (name.startswith("._") and name[2:] in expected
+                    and not sidecar.is_symlink() and sidecar.is_file()):
+                with sidecar.open("rb") as stream:
+                    if stream.read(4) == b"\x00\x05\x16\x07":
+                        extra.remove(name)
+    missing = expected.keys() - names
+    if extra or missing:
+        raise ValueError(f"Unexpected file inventory in {directory}: missing {sorted(missing)}, extra {sorted(extra)}")
     digests = {}
     for name, wanted in expected.items():
         path = directory / name
