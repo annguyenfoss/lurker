@@ -259,7 +259,7 @@ The macOS backend implementations are:
 - **Apple Encryption** (default): an AES-256 encrypted, read/write `.dmg` virtual disk with APFS inside. Encryption protects the disk image, not individual files or the host filesystem. This uses Apple DiskImages encryption, not system FileVault.
 - **VeraCrypt**: a normal file container with AES, Serpent, or Twofish, SHA-512, and an exFAT filesystem inside.
 
-Apple encryption uses the built-in `/usr/bin/hdiutil`; VeraCrypt unmount also uses `/usr/sbin/diskutil` to reject busy filesystems. The packaged VeraCrypt backend needs its qualified separately installed FUSE runtime, and does not require VeraCrypt.app. Source-only builds retain installed-app discovery as a compatibility fallback; use the complete native backend builder for a standalone app. FUSE-T and macFUSE are not interchangeable without qualification.
+Apple encryption uses the built-in `/usr/bin/hdiutil`. VeraCrypt unmount uses `/usr/sbin/diskutil` to reject busy filesystems. The packaged private VeraCrypt backend uses separately installed FUSE-T 1.2.9 or later. For a source build, stage the private backend with `scripts/build-macos-backends.py`.
 
 Build and install the same binaries as above. Keep `lurker-helper` next to `lurker-desktop`. On macOS the helper runs in the login user session; Linux pkexec/sudo escalation is not used.
 

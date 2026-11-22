@@ -17,9 +17,15 @@ The shared `native/veracrypt/utf8-console.patch` preserves complete Unicode path
 in libc++ volume listings; its digest and patched input hashes are recorded and
 checked on cache reuse. It changes no encryption or storage format.
 
+The macOS-only `native/veracrypt/macos-fuset-loopback.patch` selects FUSE-T's
+`nobonjour` SMB mount option. Each auxiliary mount connects to its own loopback
+port. The previous shared Bonjour discovery name could time out on repeated
+create and unlock operations. FUSE-T 1.2.9 introduced this per-mount option.
+https://github.com/macos-fuse-t/fuse-t/releases/tag/1.2.9
+
 Build on a Mac using the user's Rust and Python toolchains, Xcode command-line
 tools, GNU-compatible make and pkg-config. VeraCrypt uses separately installed
-FUSE-T and its development headers exclusively. macFUSE is reserved for
+FUSE-T 1.2.9 or later and its development headers exclusively. macFUSE is reserved for
 gocryptfs/CryFS. Cryptomator requires FUSE-T's qualified FSKit transport on macOS
 26 or later, enabled under System Settings > General > Login Items & Extensions
 then File System Extensions. Packages require at least macOS 26; native dependency

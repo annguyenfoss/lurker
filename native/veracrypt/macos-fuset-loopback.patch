@@ -1,0 +1,6 @@
+--- a/src/Driver/Fuse/FuseService.cpp
++++ b/src/Driver/Fuse/FuseService.cpp
+@@ -1327,0 +1328,3 @@
++		// FUSE-T 1.2.9 can address this session's loopback port directly.
++		args.push_back ("-o");
++		args.push_back ("nobonjour");

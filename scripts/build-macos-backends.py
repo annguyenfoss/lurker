@@ -8,7 +8,10 @@ import platform
 import shutil
 import sys
 
-from macos_backend import FUSE_RUNTIMES, SOURCES, VC_REVISION, fuse_runtime_info, run, sha256, source, stage_macho, write_json
+from macos_backend import (
+    FUSE_RUNTIMES, SOURCES, VC_REVISION, VERACRYPT_PATCHES, fuse_runtime_info,
+    require_veracrypt_fuse_t_version, run, sha256, source, stage_macho, write_json,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,13 +33,14 @@ def main():
         if not shutil.which(tool):
             parser.error(f"Missing build prerequisite: {tool}")
     runtime = fuse_runtime_info(args.fuse_runtime)
+    require_veracrypt_fuse_t_version(runtime["version"])
     cache = args.cache_dir.expanduser().absolute()
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     if cache.is_symlink() or cache.stat().st_uid != os.geteuid() or cache.stat().st_mode & 0o022:
         parser.error("--cache-dir must be a real, user-owned directory without group/world write access")
     cache = cache.resolve()
-    patch = ROOT / "native/veracrypt/utf8-console.patch"
-    vc = source("veracrypt", cache, args.offline, patch=patch, variant=args.fuse_runtime)
+    patches = [ROOT / name for name in VERACRYPT_PATCHES]
+    vc = source("veracrypt", cache, args.offline, patches=patches, variant=args.fuse_runtime)
     wx = source("wxwidgets", cache, args.offline)
     # Use the supported native Cocoa build with a static wxWidgets dependency;
     # Lurker calls only its text interface. Console-only and reduced GUI builds
@@ -45,7 +49,7 @@ def main():
                 "LOCAL_DEVELOPMENT_BUILD=true", "WX_CONFIGURE_EXTRA_FLAGS=--with-regex=builtin"]
     flags = wx_flags + FUSE_RUNTIMES[args.fuse_runtime]["flags"]
     specification = {"schema": 1, "sources": SOURCES, "architecture": platform.machine(),
-                     "patches": {"native/veracrypt/utf8-console.patch": sha256(patch)},
+                     "patches": {str(patch.relative_to(ROOT)): sha256(patch) for patch in patches},
                      "flags": flags, "fuse_runtime": runtime,
                      "sdk": run("xcrun", "--show-sdk-version", capture=True).strip(),
                      "compiler": run("clang", "--version", capture=True).splitlines()[0]}

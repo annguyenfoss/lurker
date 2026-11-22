@@ -42,14 +42,21 @@ class MacBackendTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "lurker-veracrypt").write_bytes(b"private")
-            patch_name = "native/veracrypt/utf8-console.patch"
             project_root = Path(__file__).parents[2]
-            manifest = {"fuse_runtime": {"implementation": "fuse-t"},
+            manifest = {"fuse_runtime": {"implementation": "fuse-t", "version": "1.2.9"},
                         "veracrypt_revision": backend.VC_REVISION,
                         "source_archives": {n: {"url": s[0], "sha256": s[1]} for n, s in backend.SOURCES.items()},
-                        "patches": {patch_name: backend.sha256(project_root / patch_name)},
+                        "patches": {name: backend.sha256(project_root / name) for name in backend.VERACRYPT_PATCHES},
                         "artifacts": {"lurker-veracrypt": backend.sha256(root / "lurker-veracrypt")}}
             self.assertEqual(backend.verify_veracrypt_manifest(root, manifest, project_root), "fuse-t")
+            old_runtime = copy.deepcopy(manifest)
+            old_runtime["fuse_runtime"]["version"] = "1.2.7"
+            with self.assertRaisesRegex(RuntimeError, "requires FUSE-T 1.2.9"):
+                backend.verify_veracrypt_manifest(root, old_runtime, project_root)
+            missing_fix = copy.deepcopy(manifest)
+            del missing_fix["patches"]["native/veracrypt/macos-fuset-loopback.patch"]
+            with self.assertRaisesRegex(RuntimeError, "reviewed source/patch"):
+                backend.verify_veracrypt_manifest(root, missing_fix, project_root)
             old = copy.deepcopy(manifest); old["veracrypt_revision"] = "old"
             with self.assertRaisesRegex(RuntimeError, "reviewed source/patch"):
                 backend.verify_veracrypt_manifest(root, old, project_root)
@@ -155,13 +162,13 @@ class MacBackendTests(unittest.TestCase):
             approved_patch.write_text("--- a/input.txt\n+++ b/input.txt\n@@ -1 +1 @@\n-original\n+approved\n")
             with patch.dict(backend.SOURCES, {"fixture": ("unused", digest)}):
                 original = backend.source("fixture", cache, offline=True)
-                modified = backend.source("fixture", cache, offline=True, patch=approved_patch)
+                modified = backend.source("fixture", cache, offline=True, patches=(approved_patch,))
                 self.assertNotEqual(original, modified)
                 self.assertEqual((original / "input.txt").read_text(), "original\n")
                 self.assertEqual((modified / "input.txt").read_text(), "approved\n")
                 (modified / "input.txt").write_text("unapproved\n")
                 with self.assertRaisesRegex(RuntimeError, "source input changed"):
-                    backend.source("fixture", cache, offline=True, patch=approved_patch)
+                    backend.source("fixture", cache, offline=True, patches=(approved_patch,))
 
     def test_runtime_source_caches_keep_distinct_native_object_trees(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -13,6 +13,9 @@ import tarfile
 import urllib.request
 
 VC_REVISION = "7afc449f2bc69366e8b67b82ad66201325d318c3"
+VERACRYPT_PATCHES = ("native/veracrypt/utf8-console.patch",
+                     "native/veracrypt/macos-fuset-loopback.patch")
+VERACRYPT_FUSE_T_MINIMUM = "1.2.9"
 SOURCES = {
     "veracrypt": (
         f"https://codeload.github.com/veracrypt/VeraCrypt/tar.gz/{VC_REVISION}",
@@ -43,10 +46,12 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def source(name, cache, offline=False, *, patch=None, variant=None):
+def source(name, cache, offline=False, *, patches=(), variant=None):
     url, digest = SOURCES[name]
     archive = cache / f"{name}-{digest[:16]}.archive"
-    tag = f"{name}-{digest[:16]}" + (f"-patch-{sha256(patch)[:16]}" if patch else "")
+    tag = f"{name}-{digest[:16]}"
+    if patches:
+        tag += "-patch-" + "-".join(sha256(patch)[:16] for patch in patches)
     if variant is not None:
         if not re.fullmatch(r"[a-z0-9-]+", variant):
             raise ValueError("Unsafe native source cache variant")
@@ -78,14 +83,14 @@ def source(name, cache, offline=False, *, patch=None, variant=None):
             if len(entries) != 1 or not entries[0].is_dir():
                 raise RuntimeError(f"Unexpected source archive layout: {name}")
             entries[0].rename(destination)
-            if patch is not None:
+            for patch in patches:
                 run("patch", "-p1", "--forward", "--force", "--batch", "-i", Path(patch).resolve(), cwd=destination)
             write_json(manifest, {str(path.relative_to(destination)): sha256(path)
                                  for path in destination.rglob("*") if path.is_file()})
         finally:
             shutil.rmtree(temporary)
     if not manifest.is_file():
-        if patch is not None:
+        if patches:
             raise RuntimeError(f"Unverified patched source cache: {destination}; use a fresh --cache-dir")
         # Also verify caches created before input manifests were introduced;
         # derive expected bytes from the checked archive, never cached sources.
@@ -182,6 +187,12 @@ def veracrypt_fuse_runtime(provenance):
     return runtime
 
 
+def require_veracrypt_fuse_t_version(version):
+    if (not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+            or tuple(map(int, version.split("."))) < tuple(map(int, VERACRYPT_FUSE_T_MINIMUM.split(".")))):
+        raise RuntimeError(f"macOS VeraCrypt requires FUSE-T {VERACRYPT_FUSE_T_MINIMUM} or later for loopback SMB.")
+
+
 def verify_manifest_files(root, files):
     """Check digest-bound payload paths before following any private dependency."""
     root = Path(root).resolve(strict=True)
@@ -194,11 +205,12 @@ def verify_manifest_files(root, files):
 
 def verify_veracrypt_manifest(root, provenance, project_root):
     runtime = veracrypt_fuse_runtime(provenance)
+    require_veracrypt_fuse_t_version(provenance.get("fuse_runtime", {}).get("version"))
     expected = {name: {"url": spec[0], "sha256": spec[1]} for name, spec in SOURCES.items()}
-    patch_name = "native/veracrypt/utf8-console.patch"
+    patches = {name: sha256(Path(project_root) / name) for name in VERACRYPT_PATCHES}
     if (provenance.get("veracrypt_revision") != VC_REVISION
             or provenance.get("source_archives") != expected
-            or provenance.get("patches") != {patch_name: sha256(Path(project_root) / patch_name)}):
+            or provenance.get("patches") != patches):
         raise RuntimeError("Private VeraCrypt manifest differs from the current reviewed source/patch pins")
     artifacts = provenance.get("artifacts", {})
     if "lurker-veracrypt" not in artifacts:

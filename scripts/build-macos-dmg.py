@@ -12,7 +12,10 @@ import subprocess
 import sys
 import tempfile
 
-from macos_backend import architectures, verify_veracrypt_manifest, verify_folder_manifest, verify_cryptomator_manifest, minimum_version, sha256, stage_macho
+from macos_backend import (
+    VERACRYPT_FUSE_T_MINIMUM, architectures, minimum_version, sha256, stage_macho,
+    verify_cryptomator_manifest, verify_folder_manifest, verify_veracrypt_manifest,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -267,7 +270,7 @@ def main():
             "Drag Lurker.app onto Applications, then eject this disk image.\n"
             "Open Lurker from Applications. No package installer or terminal install is needed.\n\n"
             "Apple encrypted disk images work with built-in macOS tools.\n"
-            "VeraCrypt support is included. Install FUSE-T separately.\n"
+            f"VeraCrypt support is included. Install FUSE-T {VERACRYPT_FUSE_T_MINIMUM} or later.\n"
             + ("Included directory backends: " + ", ".join(options.folder_backends) + ".\n"
                if options.folder_backends else "")
             + ("gocryptfs/CryFS require separately installed macFUSE.\n"
