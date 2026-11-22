@@ -74,8 +74,10 @@ desktop, CLI and internal Rust helper retain library validation. This follows
 Apple's entitlement contract:
 https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.disable-library-validation
 
-Apple encrypted disk images continue using built-in `hdiutil`/`diskutil` and need
-no FUSE. Ad-hoc packages are development builds; public releases still require
+Apple encrypted disk images use built-in `hdiutil`/`diskutil`. Ordinary
+create, mount, close, and active-volume display work when VeraCrypt's FUSE-T
+library is unavailable. Forced replacement requires discovery of all attached
+containers. Ad-hoc packages are development builds. Public releases require
 Developer ID signing and notarization. Each release must qualify the exact
 FUSE/OS combination and test the final package without a separate VeraCrypt
 installation. Bundling alone does not prove native operation or durability.

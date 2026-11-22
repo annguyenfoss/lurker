@@ -10,6 +10,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{IsTerminal, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output as ProcessOutput, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -333,7 +334,29 @@ fn parse_veracrypt_list(text: &str) -> AppResult<Vec<Volume>> {
     Ok(result)
 }
 
-fn vera_volumes() -> AppResult<Vec<Volume>> {
+fn fuse_t_load_failed(result: &ProcessOutput) -> bool {
+    if result.status.signal() != Some(libc::SIGABRT) {
+        return false;
+    }
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    let Some((loader, library)) = stderr
+        .lines()
+        .next()
+        .and_then(|line| line.split_once("]: Library not loaded: "))
+    else {
+        return false;
+    };
+    let filename = Path::new(library.trim())
+        .file_name()
+        .and_then(|name| name.to_str());
+    loader.starts_with("dyld[")
+        && filename.is_some_and(|name| {
+            name == "libfuse-t.dylib"
+                || name.starts_with("libfuse-t-") && name.ends_with(".dylib")
+        })
+}
+
+fn read_veracrypt_volumes(allow_missing_fuse_t: bool) -> AppResult<Vec<Volume>> {
     let Some(program) = veracrypt() else {
         return Ok(Vec::new());
     };
@@ -342,6 +365,14 @@ fn vera_volumes() -> AppResult<Vec<Volume>> {
         &args(&["-t", "--list", "--verbose", "--non-interactive"]),
         None,
     )?;
+    if fuse_t_load_failed(&result) {
+        if allow_missing_fuse_t {
+            return Ok(Vec::new());
+        }
+        return Err(AppError::new(
+            "The private VeraCrypt engine could not load FUSE-T. Install FUSE-T 1.2.9 or later.",
+        ));
+    }
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&result.stdout),
@@ -359,9 +390,13 @@ fn vera_volumes() -> AppResult<Vec<Volume>> {
     parse_veracrypt_list(&String::from_utf8_lossy(&result.stdout))
 }
 
+fn vera_volumes() -> AppResult<Vec<Volume>> {
+    read_veracrypt_volumes(false)
+}
+
 fn volumes() -> AppResult<Vec<Volume>> {
     let mut result = apple_volumes()?;
-    result.extend(vera_volumes()?);
+    result.extend(read_veracrypt_volumes(true)?);
     Ok(result)
 }
 
@@ -512,10 +547,13 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         crate::credentials::ensure_distinct_target(&target, keyfile)?;
     }
     assert_target(&target, c.force)?;
-    // Check every attached image, including a plaintext image: overwriting an
-    // attached backing file can corrupt data even when --force is supplied.
-    if images()?.iter().any(|i| same_path(&i.path, &target))
-        || vera_volumes()?
+    // Forced replacement must check every attached image, including plaintext.
+    // Ordinary Apple create cannot overwrite a target and needs no VeraCrypt
+    // discovery. VeraCrypt create still checks that its runtime can start.
+    let attached_image = c.force && images()?.iter().any(|i| same_path(&i.path, &target));
+    let check_veracrypt = c.force || c.volume_type == VolumeType::Veracrypt;
+    if attached_image
+        || check_veracrypt && vera_volumes()?
             .iter()
             .any(|v| same_path(&v.source, &target))
     {
@@ -741,7 +779,7 @@ fn unmount(c: UnmountCommand, output: Output) -> AppResult<()> {
         .into_iter()
         .filter(matches_target)
         .collect();
-    if matches.is_empty() {
+    if matches.is_empty() && c.volume_type != VolumeType::Apple {
         matches = vera_volumes()?.into_iter().filter(matches_target).collect();
     }
     if matches.len() != 1 {
@@ -851,6 +889,23 @@ mod tests {
         assert!(v[0].readonly);
         assert!(v[1].mountpoint.is_none());
         assert!(parse_veracrypt_list("unexpected output").is_err());
+    }
+
+    #[test]
+    fn recognizes_only_fuse_t_dynamic_loader_failure() {
+        let mut result = ProcessOutput {
+            status: std::process::ExitStatus::from_raw(libc::SIGABRT),
+            stdout: Vec::new(),
+            stderr: b"dyld[123]: Library not loaded: /usr/local/lib/libfuse-t.dylib\n".to_vec(),
+        };
+        assert!(fuse_t_load_failed(&result));
+        result.stderr = b"dyld[123]: Library not loaded: @loader_path/libfuse-t-1.2.9.dylib\n".to_vec();
+        assert!(fuse_t_load_failed(&result));
+        result.stderr = b"dyld[123]: Library not loaded: @loader_path/libwx.dylib\n".to_vec();
+        assert!(!fuse_t_load_failed(&result));
+        result.status = std::process::ExitStatus::from_raw(1 << 8);
+        result.stderr = b"dyld[123]: Library not loaded: /usr/local/lib/libfuse-t.dylib\n".to_vec();
+        assert!(!fuse_t_load_failed(&result));
     }
 
     #[test]
