@@ -182,3 +182,16 @@ fixture removal. Package hashes, boot IDs, mounted payload digests, and
 per-case logs are indexed in
 `target/goal-validation/ssh-matrix-20261122/linux/matrix.json`. The abrupt
 power-cut results are recorded in `docs/vm-powerloss-testing.md`.
+
+### Updated Debian installer
+
+The exact `9ff2b5b` Debian installer also passed all nine loop-device
+profiles and rendered a window through both X11 and Wayland. The latter
+committed a 1340×860 Wayland surface using offline Weston 14.0.2 inputs
+in a private mount namespace. The probe passed. An explicit unmount
+reported the test overlay busy, and namespace exit removed it. Follow-up
+checks verified the original mounts, loop devices and package inventory
+after the installer was removed.
+
+The installer, installed desktop and results are hash-bound in
+`target/goal-validation/ssh-matrix-20261122/cryptomator/source-review/debian-release/supplement/`.
