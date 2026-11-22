@@ -318,6 +318,31 @@ the clone and removed it before the final shutdown. Evidence is under
 `/mnt/virt/lurker-shutdown-ob20261120/` in `result.json`,
 `test-shutdown-serial.log` and `test-lifecycle.log`.
 
+### OpenBSD reboot with encrypted mounts active
+
+The OpenBSD 8.0 amd64 KVM guest installed the native `eca358d` package
+into an isolated prefix and package database. The package SHA-256 was
+`d7cb00b3bc456c828d90a49b764ca8fc9f4705ef0946504c2d73e9632003f601`.
+The test wrote and synced three PDFs and a text file in each synchronous
+FFS vault. It closed and reopened each vault, checked the original bytes,
+then appended to the text file and synced an additional file. All three
+vaults were still mounted when the guest ran `shutdown -r now`. The guest
+had no `rc.shutdown` hook.
+
+After the reboot, the CLI reopened softraid CRYPTO and RAID1C normally.
+All five digests matched on both routes. VeraCrypt authentication
+succeeded, but FFS refused a writable mount of the unclean filesystem.
+The refusal left the native mount, vnode and session inventories at
+baseline. An administrator ran `fsck_ffs` preen on a separate copy
+of the ciphertext and then reopened the copy through the ordinary CLI.
+All five digests matched, normal close succeeded and the original
+ciphertext digest stayed unchanged.
+
+The earlier `rc.shutdown` result above establishes clean VeraCrypt
+reopen when the hook closes the vault before shutdown. Evidence for the
+no-hook case is under
+`target/goal-validation/ssh-matrix-20261122/openbsd-run/`.
+
 ## Captured packaged CLI evidence
 
 The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected
