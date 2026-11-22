@@ -349,6 +349,35 @@ fixture and isolated package were removed and the native inventories
 matched baseline. Evidence is under `target/goal-validation/ssh-matrix-20261122/`
 in `openbsd-run/` for the no-hook run and `openbsd-hook/` for the follow-up.
 
+#### OpenBSD VeraCrypt shutdown ordering
+
+An instrumented repeat with the same package traced only the fixture's
+VeraCrypt engine. `fstat` identified the process holding the ciphertext
+and `/dev/fuse0`. The trace recorded successful ciphertext `fsync` calls
+and ended at `SIGKILL`. The serial console reported `ENXIO` and then `EIO`
+when the kernel tried to unmount the fixture. The boot identity changed
+from `1795365677` to `1795369350`.
+
+OpenBSD's `reboot` sends `SIGKILL` to remaining processes before invoking
+the kernel reboot path that unmounts filesystems. Closing the FUSE device
+invalidates its session and fails queued requests with `ENXIO`. FFS needs
+an available vnode backing device to synchronously write its clean
+superblock during unmount. The opt-in close before process teardown gives
+FFS that ordering. A signal handler would have to race shutdown of vault
+consumers and the final `SIGKILL`.
+
+- OpenBSD userland reboot and kernel unmount order. https://github.com/openbsd/src/blob/21d1aaee0d3faf8c891ec6c79f083858881db5ae/sbin/reboot/reboot.c#L228-L266 https://github.com/openbsd/src/blob/63cbadc6e3505d8cbee5df5fa596ab27b384d1a5/sys/kern/vfs_subr.c#L1769-L1815
+- OpenBSD FUSE device cleanup and FFS unmount. https://github.com/openbsd/src/blob/500e6e56a2c43e9d4b097b7256e7a028aa1c7151/sys/miscfs/fuse/fuse_device.c#L100-L145 https://github.com/openbsd/src/blob/500e6e56a2c43e9d4b097b7256e7a028aa1c7151/sys/miscfs/fuse/fuse_device.c#L225-L240 https://github.com/openbsd/src/blob/ac6462867e8a2eb191d86ddc6cefd7589a14501e/sys/ufs/ffs/ffs_vfsops.c#L918-L944
+
+Read-only `fsck_ffs -fn` found the control copy clean after the ordinary
+pre-reboot close and the post-reboot copy unclean. The CLI refused
+writable reopen. A native read-only FFS mount on the diagnostic copy
+verified all five file hashes without repair. Both ciphertext hashes
+stayed unchanged during diagnosis. The fixture, credentials and test
+package were removed, and the native inventories matched baseline. The
+serial log, kernel trace and copy checks are in
+`target/goal-validation/ssh-matrix-20261122/openbsd-native-boundary/`.
+
 ### NetBSD and DragonFly reboot with encrypted mounts active
 
 NetBSD 11.1 exercised the `14ede46` package with two CGD fixtures,
