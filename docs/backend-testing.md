@@ -393,6 +393,17 @@ restored the package and native storage inventories. Exact package and
 runtime receipts are in
 `target/goal-validation/ssh-matrix-20261122/openbsd-final-16aa1f4/`.
 
+A stock reboot on the same installer tested two fixture-owned processes
+that called ordinary close on receipt of `SIGTERM`. The quiescent vault's
+close returned `VNDIOCCLR: Device not configured` after 507 ms. Its FFS
+reopened writable and all five file hashes matched. The other vault's
+close returned busy after 88 ms. Its reader released the file after
+757 ms, and FFS refused writable reopen. Kernel traces confirmed signal
+delivery to both close processes and the reader. The experiment used no
+shutdown hook and shows that the signal phase provides no reliable close
+order. The test installation and fixtures were removed. Receipts are in
+`target/goal-validation/ssh-matrix-20261122/openbsd-stock-signal/`.
+
 ### NetBSD and DragonFly reboot with encrypted mounts active
 
 NetBSD 11.1 exercised the `14ede46` package with two CGD fixtures,
