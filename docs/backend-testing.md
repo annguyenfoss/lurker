@@ -428,6 +428,14 @@ reopen in each fixture. Reopening and closing the vaults restored the
 pre-test mount, vnode, mapper and journal state. The package and reboot
 receipts are in `target/goal-validation/ssh-matrix-20261122/dragonfly-final/`.
 
+The same package passed 117 installed lifecycle checks, nine UFS capacity
+checks, the X11 window probe, and the login-user desktop callback through
+the installed helper. Retained test aliases exhausted the clone's outer
+tmpfs during the first batch. Two keyfile cases, the capacity case, and
+the callback passed when replayed with HAMMER2-backed fixture storage.
+The package and test mounts were removed, and retirement restored the
+host's domain and network inventories.
+
 ## Captured packaged CLI evidence
 
 The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected
