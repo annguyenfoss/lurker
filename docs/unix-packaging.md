@@ -117,6 +117,13 @@ Backend build entry points (no installation):
 - Cryptomator and reduced private JRE: `scripts/build-cryptomator.py`.
 - BSD VeraCrypt: `scripts/build-bsd-backends.py` produces `lurker-veracrypt-bsd`, private `lib/`, notices and `bsd-veracrypt-source.json`.
 
+The Linux Cryptomator build uses `patch` and the JDK's `javac` and `jar` tools
+to compile the private CryptoFS and FUSE adapter patches from pinned Maven
+source archives. The component includes the patched sources and records their
+JAR digests and runtime bridge check. Unix staging verifies the actual Maven
+modules against the dependency lock and binds the patch inputs and outputs to
+the verified Lurker source.
+
 Artifact arguments are repeated `--backend KIND=DIRECTORY`. Supported kinds are `veracrypt-create`, `veracrypt-userspace`, `veracrypt-bsd`, `gocryptfs`, `cryfs`, `cryptomator`. The userspace payload includes its creator; do not supply the creator twice. Folder builder aggregate directories are accepted: only the named executable, its manifest and its notices are copied. Full userspace/BSD VeraCrypt and Cryptomator preserve nested assets and internal relative symlinks.
 
 The creator's `creator-source.json` binds its binary, pinned revision and current source patch. Folder builder `gocryptfs.json` / `cryfs.json` bind revision, platform and executable checksum. Required folder patches also bind to exact selected source bytes through the builder's `PATCHES` inventory; unpatched or stale CryFS durability builds are rejected even when the upstream revision matches. Unpatched gocryptfs manifests may omit an empty patch map. Cryptomator's `manifest.json` binds the complete runtime/module tree to its dependency lock. The stager also compares its packaged `Main.java`, module descriptor and Maven project against the exact selected Lurker commit; a new helper cannot silently reuse an older private image. README-only changes do not require rebuilding Java. Full Linux userspace payloads additionally require a file envelope because the older `sources.json` lists source pins without output hashes:
