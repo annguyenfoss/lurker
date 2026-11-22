@@ -349,6 +349,31 @@ fixture and isolated package were removed and the native inventories
 matched baseline. Evidence is under `target/goal-validation/ssh-matrix-20261122/`
 in `openbsd-run/` for the no-hook run and `openbsd-hook/` for the follow-up.
 
+### NetBSD and DragonFly reboot with encrypted mounts active
+
+NetBSD 11.1 exercised the `14ede46` package with two CGD fixtures,
+covering the default minimum-size profile and explicit AES. DragonFly
+6.4.2 used the exact `14ede46` native package payload across LUKS1 AES,
+Serpent and Twofish, each with a password and a binary keyfile. Both
+guests wrote and synced the same three PDFs and a page of text, closed
+the vaults, reopened them and checked the original bytes. They then
+appended to the page, created a fifth file, and synced both writes.
+
+The two NetBSD and six DragonFly vaults were still mounted at the
+orderly reboot request. Both guests reported a new boot identity.
+Ordinary CLI reopen recovered all five file digests on every fixture,
+and normal close restored the mount, device and session inventories.
+DragonFly's ordinary conformance replay also completed 117 lifecycle
+and nine full-storage checks after replaying three keyfile cases from
+an administrator-controlled fixture path. Previous abrupt power-loss
+results remain separate in `docs/vm-powerloss-testing.md`.
+
+The NetBSD and DragonFly package SHA-256 digests were
+`d58bfdd9f2d7bf7141d061acdd9539c389cb26facb7b022a262d1c8d5eb7d3b7` and
+`c34cb4a80a54492fa659055acf7e075fc6fa8424c7f895fea623b747758ea3be`.
+Receipts are in `target/goal-validation/ssh-matrix-20261122/`, under
+`netbsd-evidence/` and `dragonfly-evidence/`.
+
 ## Captured packaged CLI evidence
 
 The runtime baseline is `76f05fbd2167313273c53201a070252719e4f4ea`; the corrected
