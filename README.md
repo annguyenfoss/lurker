@@ -16,16 +16,21 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | LUKS2 | ✅ | — | — | — | — | — |
 | LUKS1 | ✅ | — | — | — | — | ✅† |
-| VeraCrypt | ✅ | — | ✅ | ✅ | — | — |
+| VeraCrypt | ✅ | ✅† | ✅ | ✅ | — | — |
 | Apple encrypted disk images | — | ✅ | — | — | — | — |
 | GELI | — | — | ✅ | — | — | — |
 | CGD | — | — | — | — | ✅ | — |
 | softraid CRYPTO | — | — | — | ✅ | — | — |
 | softraid RAID1C | — | — | — | ✅ | — | — |
-| gocryptfs | ✅ | — | ✅ | — | — | — |
-| CryFS | ✅ | — | — | — | — | — |
+| gocryptfs | ✅ | ✅† | ✅ | — | — | — |
+| CryFS | ✅ | ✅† | — | — | — | — |
 | PEFS | — | — | ✅ | — | — | — |
-| Cryptomator | ✅ | — | — | — | — | — |
+| Cryptomator | ✅ | ✅† | — | — | — | — |
+
+The macOS developer package includes VeraCrypt, gocryptfs, CryFS and
+Cryptomator. Install FUSE-T separately for VeraCrypt and Cryptomator, and
+macFUSE separately for gocryptfs and CryFS. The [macOS build guide](docs/macos-backends.md)
+records the tested versions and package requirements.
 
 DragonFly's LUKS1 developer builds passed normal vault operations. Public release qualification still requires the base `cryptsetup` parser fix or equivalent reviewed protection. Abrupt power-cut tests also lost acknowledged writes. See the [validation results](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md) for the tested routes and recovery limits.
 
