@@ -12,10 +12,11 @@ version restrictions, and the broader inventory.
 driver or tools. **Candidate** requires native qualification on the listed
 driver and volume type. **Paid** means a supported commercial driver is
 required. A dash leaves the OS/filesystem pair outside the proposed scope.
+Windows targets use drivers and tools that run directly on Windows.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Candidate paid C/RW | Candidate native RW for compatible profiles | — | — | — | Candidate free driver RW or paid RW |
+| **ext4** | Native C/RW | Candidate paid C/RW | Candidate native RW for compatible profiles | — | — | — | Candidate Ext4Windows or Ext4Fsd RW, paid RW alternative |
 | **Btrfs** | Native C/RW | — | — | — | — | — | Candidate WinBtrfs C/RW |
 | **XFS** | Native C/RW | — | — | — | — | — | — |
 | **APFS** | Candidate paid RW | Native C/RW | — | — | — | — | Candidate paid RW for supported volumes |

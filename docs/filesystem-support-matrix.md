@@ -32,8 +32,8 @@ FFSv2 on NetBSD and OpenBSD, and HAMMER2 or UFS on DragonFly BSD.
   creation. **Subset** identifies a feature, release, or media restriction.
   Multiple paths in a cell can have different capabilities.
 - A dash means this survey identified no direct mount path for that host.
-  WSL, offline image builders, and file recovery are identified where they
-  apply. Standard access through a network share is covered separately.
+  Offline image builders and file recovery are identified where they apply.
+  Windows entries cover drivers and tools that run directly on Windows.
 
 The native inventory used Linux 7.2.15 on Arch, macOS 27.2.1 arm64, FreeBSD
 15.1, NetBSD 11.1, OpenBSD 8.0, and DragonFly 6.4.2 x86-64. Windows 11 and
@@ -48,7 +48,7 @@ mount or write tests were run for this survey.
 
 | File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Paid C/RW<br>FSKit beta C/RW | Native RW subset<br>Package C | Native R subset<br>Package C | Native R subset<br>Package C<br>Experimental FUSE RW | Native R subset<br>Package C<br>RW on current ext4 profiles unverified | Open-source driver RW on supported profiles<br>Paid RW<br>WSL2 C/RW<br>Janus or FsRover R | L1, M2, M5, F1, O2, N2, D4, W4–W5, W8–W9, X7 |
+| **ext4** | Native C/RW | Paid C/RW<br>FSKit beta C/RW | Native RW subset<br>Package C | Native R subset<br>Package C | Native R subset<br>Package C<br>Experimental FUSE RW | Native R subset<br>Package C<br>RW on current ext4 profiles unverified | Open-source driver RW on supported profiles<br>Paid RW<br>Janus or FsRover R | L1, M2, M5, F1, O2, N2, D4, W4–W5, W8–W9, X7 |
 | **Btrfs** | Native C/RW | Experimental R via btrfs4mac | Package RW via old LKL port | — | — | — | WinBtrfs C/RW<br>Paid or FsRover R | L1, F4, W5, W6, X6–X7 |
 | **XFS** | Native C/RW | Experimental FUSE R/RW | Package RW via old LKL port<br>Separate package C | — | — | — | Paid R, vendor RW claims conflict<br>FsRover R | L1, F4, W5, X6–X7 |
 | **F2FS** | Native C/RW | — | — | — | — | — | FsRover R | L1, X7 |
@@ -75,7 +75,7 @@ They carry lower priority for new general-purpose volumes.
 
 | File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext2 / ext3** | Native C/RW, including through ext4 where compatible | Paid C/RW<br>FSKit projects vary | Native RW subset<br>Package C | Native ext2 C/RW<br>Compatible ext3 subset | Native ext2 C/RW<br>ext3 feature limits | Native ext2 RW<br>ext3 feature limits | Paid RW<br>WSL2 or FsRover | L1, M2, M5, F1, O2, N2, D4, W4–W5, X7 |
+| **ext2 / ext3** | Native C/RW, including through ext4 where compatible | Paid C/RW<br>FSKit projects vary | Native RW subset<br>Package C | Native ext2 C/RW<br>Compatible ext3 subset | Native ext2 C/RW<br>ext3 feature limits | Native ext2 RW<br>ext3 feature limits | Ext4Fsd or paid RW<br>FsRover R | L1, M2, M5, F1, O2, N2, D4, W5, W8, X7 |
 | **ISO 9660 / Rock Ridge / Joliet** | Native R, image tools | Native R, image tools | Native R, `makefs` | Native R, `makefs` | Native R, `makefs` | Native R, `makefs` | Native R, image authoring supported separately | L1, M6, F5, O4, N5, D1, W7 |
 | **EROFS / SquashFS** | Native R, package image builders | — | SquashFS offline tools | SquashFS offline tools | SquashFS offline tools | SquashFS offline tools | — | L1, S1 |
 | **JFS** | Native RW when built, package C | — | — | — | — | — | FsRover R | L1, X7 |
@@ -232,11 +232,7 @@ They carry lower priority for new general-purpose volumes.
   Windows as a writable XFS target. The APFS and HFS+ products use separate
   drivers, with APFS volume-type restrictions.
   [W5–W6, X2–X3, Z4]
-- WSL2 provides Linux-side ext4 access on supported attachments. Windows
-  can access those files through the WSL share. Passing a disk into WSL
-  has administrative, in-use-disk, whole-disk, and removable-device
-  constraints. Janus implements experimental read-only ext4 through
-  WinFsp. [W4]
+- Janus implements experimental read-only ext4 through WinFsp. [W4]
 - Ext4Fsd is a free Windows ext4 kernel driver. Upstream documents
   writable support for metadata checksums and 64-bit block numbers.
   Features such as `bigalloc` and `verity` force read-only access.
@@ -306,7 +302,7 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **W1** Microsoft Windows format command. https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/format
 - **W2** Microsoft filesystem feature comparison and exFAT specification. https://learn.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison · https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
 - **W3** Microsoft ReFS and Windows 11 Dev Drive. https://learn.microsoft.com/en-us/windows-server/storage/refs/refs-overview · https://learn.microsoft.com/en-us/windows/dev-drive/
-- **W4** Microsoft WSL2 disk attachment and driver projects. https://learn.microsoft.com/en-us/windows/wsl/wsl2-mount-disk · https://github.com/SuperCoolPencil/janus · https://github.com/winfsp/winfsp · https://github.com/dokan-dev/dokany
+- **W4** Janus read-only driver and Windows filesystem frameworks. https://github.com/SuperCoolPencil/janus · https://github.com/winfsp/winfsp · https://github.com/dokan-dev/dokany
 - **W5** Paragon Linux File Systems for Windows product page and product brief. https://www.paragon-software.com/home/linuxfs-windows/ · https://dl.paragon-software.com/doc/Linux_File_Systems_for_Windows_OP.pdf
 - **W6** WinBtrfs driver and formatter. https://github.com/maharmstone/btrfs
 - **W7** Microsoft in-box filesystem driver overview. https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/about-file-system-drivers
