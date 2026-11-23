@@ -173,6 +173,15 @@ cleanly. This receipt covers ordinary file persistence. SQLite durability
 remains blocked by the FAT32 locking failure. Receipts are
 `target/dragonfly-tcplay/evidence/archive-ordinary-*.log`.
 
+In the separate busy-shutdown case, a process held its working directory
+inside the vault and a close attempt returned `Device busy`. Before the
+ordinary reboot, the workload synced a file, replaced another file by
+rename, and renamed the enclosing directory. After the boot ID changed,
+the installed CLI reopened through Auto and verified both recorded SHA-256
+values and the renamed paths. Final storage inventories were clean.
+The receipts are `archive-busy-shutdown-*.log` under
+`target/dragonfly-tcplay/evidence/`.
+
 The installed CLI opened AES and Serpent vaults concurrently. While both
 were mounted, a replacement at the AES source path caused close by source
 and by mountpoint to refuse cleanup. The vnode display followed the renamed
