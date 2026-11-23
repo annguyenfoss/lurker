@@ -440,7 +440,13 @@ The upstream console build also passed 84 lifecycle checks across AES,
 Serpent, and Twofish with passwords and binary keyfiles. Its FAT vault
 passed nine capacity checks including `SQLITE_FULL` and persistence after
 freeing space. OpenBSD refused read-only crypto attachment. GUI coverage
-was outside this console build.
+used a separate pristine build with signed wxGTK and GTK packages in an
+isolated dependency chroot. The VeraCrypt X11 window rendered at 724×541.
+The same binary's text interface created the FAT fixture. The native GUI
+ran three password unlock and dismount cycles as root and verified the
+five shared hashes after the final reopen. The chroot and installation
+were removed. Receipts are in
+`target/goal-validation/ssh-matrix-20261122/openbsd-upstream-gui/`.
 
 The Lurker `999eced` installer reused the existing VeraCrypt shutdown
 handler and added an identity-checked FFS close before vnode detach.

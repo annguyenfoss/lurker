@@ -43,8 +43,9 @@ work belongs in a later round unless it is required by the approved plan.
 
 Compare OpenBSD VeraCrypt with the unmodified upstream app at the pinned
 version on the same guest. Run equivalent lifecycle and persistence checks.
-Record limitations reproduced upstream and require Lurker to match the
-operations upstream passes. Record the inner filesystem for each result.
+Require Lurker to match the operations upstream passes. A limitation
+reproduced in an equivalent upstream workflow can be recorded as shared.
+Record the inner filesystem for each result.
 
 The round is complete when every gate passes. An upstream or host defect that
 prevents a gate from passing remains an explicit blocker with a reproducer and
