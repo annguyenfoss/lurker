@@ -51,16 +51,16 @@ Lurker wraps the platform's tools for these methods.
 
 ## Encryption dependencies
 
-Install the host packages for the backends you use. System tools ship with the OS. Linux package names follow Arch Linux.
+Install the host packages for the backends you use. System tools are executables shipped with the OS. Linux package names follow Arch Linux.
 
 | OS | Host packages | System tools | Bundled runtimes |
 | :--- | :--- | :--- | :--- |
-| Linux | `btrfs-progs`<br>`cryptsetup`<br>`fuse2`<br>`fuse3`<br>`util-linux` | Kernel Btrfs, device mapper, FUSE, loop devices | Java for Cryptomator |
-| macOS | `FUSE-T>=1.2.9`<br>`macFUSE` | `hdiutil`, `diskutil`, FSKit | Java for Cryptomator |
-| FreeBSD | `pefs-kmod` | GEOM, `geli`, `mdconfig`, `newfs`, `mount`, `umount`, `fusefs`, `mount_fusefs` | FUSE library for VeraCrypt |
-| OpenBSD | — | softraid, `bioctl`, `vnconfig`, `disklabel`, `newfs`, `mount`, `umount`, FUSE | — |
-| NetBSD | — | CGD, `cgdconfig`, `vnconfig`, `newfs`, `mount`, `umount` | — |
-| DragonFly BSD | — | `cryptsetup`, `dmsetup`, `dm_target_crypt`, `dm_target_linear`, `vnconfig`, `kldload`, `newfs`, `mount`, `umount` | — |
+| Linux | `btrfs-progs`<br>`cryptsetup`<br>`fuse2`<br>`fuse3`<br>`util-linux` |  | Java for Cryptomator |
+| macOS | `FUSE-T>=1.2.9`<br>`macFUSE` | `hdiutil`, `diskutil` | Java for Cryptomator |
+| FreeBSD | `pefs-kmod` | `geli`, `geom`, `mdconfig`, `newfs`, `mount`, `umount`, `mount_fusefs`, `sysctl` | FUSE library for VeraCrypt |
+| OpenBSD | — | `bioctl`, `vnconfig`, `disklabel`, `newfs`, `mount`, `umount`, `sysctl` | — |
+| NetBSD | — | `cgdconfig`, `vndconfig`, `newfs`, `mount`, `umount` | — |
+| DragonFly BSD | — | `cryptsetup`, `dmsetup`, `vnconfig`, `kldload`, `newfs`, `mount`, `umount` | — |
 
 ## Create. Unlock. Lock.
 
