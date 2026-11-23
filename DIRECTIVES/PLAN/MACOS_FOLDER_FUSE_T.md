@@ -136,6 +136,8 @@ comparison. https://github.com/macos-fuse-t/fuse-t/wiki
 Use [folder conformance](../../scripts/test-folder-backends.py),
 [native CLI conformance](../../scripts/test-backends.py), and
 [mounted payload verification](../../scripts/test-mounted-payload.py).
+Supply `--payload` with the verified fixture directory to the native CLI
+suite to run all payload phases and capture the hashes for each reopen.
 An unprivileged development CLI can point `LURKER_BACKEND_DIR` at the
 absolute private staging directory. Track direct backend, development CLI,
 and packaged artifact evidence under their own artifact hashes. Record OS

@@ -101,8 +101,8 @@ def validate_full_storage(parser, options):
         return
     if platform.system() == "Darwin" or options.backend in DIRECTORIES:
         parser.error("--full-storage requires a file container on Linux or BSD")
-    if getattr(options, "owner_user", None) or options.firefox:
-        parser.error("--full-storage runs a separate workload without Firefox or --owner-user")
+    if getattr(options, "owner_user", None) or options.firefox or getattr(options, "payload", None):
+        parser.error("--full-storage runs a separate workload without Firefox, --payload, or --owner-user")
     try:
         size = Decimal(options.size_gb)
     except InvalidOperation:
@@ -472,6 +472,19 @@ class Suite:
             raise AssertionError("CLI reported success but owned mount remains attached")
         self.mounted = False
 
+    def payload_phase(self, phase):
+        record = self.result["cases"][-1]
+        log = self.logs / (record["name"] + ".log")
+        harness = Path(__file__).with_name("test-mounted-payload.py")
+        command = [sys.executable, str(harness), phase, str(self.mountpoint), str(self.options.payload)]
+        result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                timeout=self.options.timeout)
+        log.write_text(result.stdout + result.stderr)
+        record["log"] = str(log)
+        if result.returncode:
+            raise AssertionError(f"Mounted payload phase {phase} failed; {log}")
+        record["sha256"] = json.loads(result.stdout)["sha256"]
+
     def close_args(self):
         if getattr(self.options, "session_close", False):
             return self.args("session-close", self.source)
@@ -765,6 +778,7 @@ class Suite:
                                           "sha256": file_hash(self.options.firefox),
                                           "uid": browser.uid}
             hook = getattr(self.options, "session_close", False)
+            payload = getattr(self.options, "payload", None)
             self.result["close_command"] = "session-close" if hook else "unmount"
             for name, function in [
                 ("create", self.create), ("no-overwrite", self.no_overwrite),
@@ -782,6 +796,15 @@ class Suite:
                 if browser and name in {"application-io", "persistence"}:
                     phase = "write" if name == "application-io" else "read"
                     self.case(f"firefox-profile-{phase}", lambda: browser.exercise(phase))
+                if payload and name == "application-io":
+                    self.case("payload-write", lambda: self.payload_phase("write"))
+                if payload and name == "persistence":
+                    self.case("payload-append", lambda: self.payload_phase("append"))
+            if payload:
+                for label in ("payload", "payload-repeat"):
+                    self.case(f"{label}-reopen", self.mount)
+                    self.case(f"{label}-verify", lambda: self.payload_phase("verify"))
+                    self.case(f"{label}-close", self.close)
             self.case("readonly", self.readonly_unsupported if self.options.expect_readonly_unsupported else self.readonly,
                       skip=self.options.skip_readonly)
             self.result["status"] = "passed"
@@ -804,6 +827,8 @@ def parse_args(argv=None):
     parser.add_argument("--timeout", type=float, default=240)
     parser.add_argument("--commit", help="Source SHA supplied by the verified build coordinator")
     parser.add_argument("--firefox", type=Path, help="Run a fresh headless Firefox profile on the encrypted mount as the login user")
+    parser.add_argument("--payload", type=Path,
+                        help="Directory containing bitcoin.pdf, ethereum.pdf, lamport.pdf, and page.txt")
     parser.add_argument("--unprivileged", action="store_true", help="Use Linux's explicit VeraCrypt user route")
     parser.add_argument("--auto-detect", action="store_true",
                         help="Use --type auto for mount/unmount while creating the explicitly selected format")
@@ -822,6 +847,10 @@ def parse_args(argv=None):
     options.binary = options.binary.resolve()
     if not options.binary.is_file() or not os.access(options.binary, os.X_OK):
         parser.error("--binary must name an existing executable artifact")
+    if options.payload:
+        options.payload = options.payload.resolve()
+        if not options.payload.is_dir():
+            parser.error("--payload requires an existing directory")
     if options.firefox:
         options.firefox = options.firefox.resolve()
         if not options.firefox.is_file() or not os.access(options.firefox, os.X_OK):

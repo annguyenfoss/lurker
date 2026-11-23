@@ -17,7 +17,7 @@ spec.loader.exec_module(harness)
 class HarnessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="lurker-harness-unit-", dir="/tmp")
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.binary = self.root / "fake-cli"
         self.binary.write_text("import sys\nsys.exit(0)\n")
         self.binary.chmod(0o700)
