@@ -1,0 +1,42 @@
+--- a/lib/libtcplay/hdr.c
++++ b/lib/libtcplay/hdr.c
+@@ -99,0 +100,5 @@
++	/* Check the VeraCrypt header fields before converting their byte order. */
++	if (memcmp(dhdr->tc_str, VC_SIG, sizeof(dhdr->tc_str)) == 0 &&
++	    crc32((void *)dhdr, 188) != be32toh(dhdr->crc_dhdr))
++		dhdr->tc_str[0] = '\0';
++
+--- a/lib/libtcplay/io.c
++++ b/lib/libtcplay/io.c
+@@ -57,0 +58,26 @@
++	/* Lurker supplies exactly one binary keyfile over the inherited pipe. */
++	if (offset == 0 && strcmp(file, "/dev/stdin") == 0) {
++		size_t used = 0;
++
++		if ((mem = alloc_safe_mem(*sz)) == NULL)
++			return NULL;
++		while (used < *sz) {
++			r = read(STDIN_FILENO, (char *)mem + used, *sz - used);
++			if (r == 0)
++				break;
++			if (r < 0 && errno == EINTR)
++				continue;
++			if (r < 0)
++				goto m_err_stdin;
++			used += r;
++		}
++		if (used == 0)
++			goto m_err_stdin;
++		*sz = used;
++		return mem;
++
++	m_err_stdin:
++		free_safe_mem(mem);
++		return NULL;
++	}
++
+--- a/lib/libtcplay/tcplay.c
++++ b/lib/libtcplay/tcplay.c
+@@ -491 +491 @@
+-			if (verify_hdr(dhdr, &pbkdf_prf_algos[i])) {
++			if (verify_hdr(dhdr, &pbkdf_prf_algos[i]) && dhdr->sec_sz != 0) {
