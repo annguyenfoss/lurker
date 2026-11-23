@@ -96,7 +96,22 @@ the marker, and matched the ciphertext digest recorded by OpenBSD. Both
 native inventories returned to baseline. The OpenBSD console SHA-256 is
 `2429fb0658331b953de7abe27920480f6d7ddfe32931ccd8aff81c9016e46272`.
 Receipts are `openbsd-aligned-origin.log` and `archive-openbsd-*.log` under
-`target/dragonfly-tcplay/evidence/`. FreeBSD and macOS remain pending.
+`target/dragonfly-tcplay/evidence/`.
+
+FreeBSD 15.1-RELEASE-p7 and macOS 27.2.1 passed the same two-way AES exchange
+with the installed DragonFly package. Each VeraCrypt 1.26.31 console created
+an aligned FAT32 image with 4 KiB clusters and verified DragonFly's marker.
+Each verified all five payload hashes in a Lurker-created image, wrote a
+marker, and sent back the resulting ciphertext. The installed CLI verified
+both markers on Auto reopen and matched both returned ciphertext digests.
+The native mount and device inventories returned to baseline. The FreeBSD
+console SHA-256 is
+`92edaf1363133aab8844ddd2c01656174967e260cd046569bd2dcbac64eec8b4`.
+The macOS console SHA-256 is
+`c5b2420f651e48d59a9bc602076a6e2aaee99e62bb025ef1b800e2992b9e466f`.
+Receipts are under `target/dragonfly-tcplay/evidence/` in the
+`freebsd-aligned-origin*.log`, `macos-aligned-origin.log`,
+`archive-freebsd-*.log`, and `archive-macos-*.log` files.
 
 The installed CLI rejected the eight incompatible inputs above and a
 compatible AES header with unqualified FAT32 geometry. Each of the nine
