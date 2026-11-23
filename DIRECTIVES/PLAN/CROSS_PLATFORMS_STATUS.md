@@ -194,6 +194,17 @@ remain unverified for this case. No power cut was performed. See
 `hammer2-stock-dedicated-*.log` and `hammer2-stock-dedicated-ps.png` under
 `target/dragonfly-tcplay/evidence/`.
 
+Live kernel traces confirmed the same hang on `dragonflybsd-core-01`.
+The staged `5786867a1725` test had advanced to the 260 MiB AES/keyfile
+case. Its wrapper was blocked in a 4 MiB write to `/dev/vn4` at a 180 MiB
+file offset. The write passed through `vnstrategy` into HAMMER2 and waited
+in `getnewbuf`. The heavy-buffer flusher was waiting for HAMMER2 writes
+while a HAMMER2 write worker waited for a free buffer. Forty-seven threads
+shared that buffer wait, including SSH and a console login process. The
+stock `tcplay` clone showed the same write and flusher stacks. The thread
+inventories, file descriptor checks, and console backtraces are under
+`target/dragonfly-tcplay/evidence/primary-kernel-hang/`.
+
 On a separate stock guest, writing and syncing 260 MiB of random data
 directly to a HAMMER2 file completed. Stock `tcplay` then created the header
 on that already initialized image and the native formatter made aligned
