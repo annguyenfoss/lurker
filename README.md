@@ -16,24 +16,79 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-<!-- OS headers use 13 monospace characters to keep their columns equally wide. -->
+<!-- Optional line breaks let the equal-width OS columns fit on narrow screens. -->
 
-| Encryption | <samp>&nbsp;&nbsp;&nbsp;&nbsp;Linux&nbsp;&nbsp;&nbsp;&nbsp;</samp> | <samp>&nbsp;&nbsp;&nbsp;&nbsp;MacOS&nbsp;&nbsp;&nbsp;&nbsp;</samp> | <samp>&nbsp;&nbsp;&nbsp;FreeBSD&nbsp;&nbsp;&nbsp;</samp> | <samp>&nbsp;&nbsp;&nbsp;OpenBSD&nbsp;&nbsp;&nbsp;</samp> | <samp>&nbsp;&nbsp;&nbsp;NetBSD&nbsp;&nbsp;&nbsp;&nbsp;</samp> | <samp>DragonFly&nbsp;BSD</samp> |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | 🧅 | 🍰 | 🍰 | 🍰 | 🍰 | 🧅 🛈 |
-| LUKS2 | 🧅 | 🍰 | 🍰 | 🍰 | 🍰 | 🍰 |
-| Apple Encrypted Disk Image | — | 🧅 | — | — | — | — |
-| APFS Encrypted | — | 🍰 | — | — | — | — |
-| GELI | — | — | 🧅 | — | — | — |
-| PEFS | — | — | 🧅 | — | — | — |
-| softraid CRYPTO | — | — | — | 🧅 | — | — |
-| softraid RAID1C | — | — | — | 🧅 | — | — |
-| CGD | — | — | — | — | 🧅 | — |
-| VeraCrypt | 🥑 | 🥑 | 🥑 | 🥑 | 🍰 | 🍰 |
-| gocryptfs | 🥑 | 🥑 | 🥑 | 🍰 | 🍰 | — |
-| CryFS | 🥑 | 🥑 | 🍰 | 🍰 | 🍰 | — |
-| Cryptomator | 🥑 | 🥑 | 🍰 | 🍰 | 🍰 | — |
-| securefs | 🍰 | 🍰 | 🍰 | 🍰 | 🍰 | — |
+<table>
+  <thead>
+    <tr>
+      <th align="left" scope="col">E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;i&#8203;o&#8203;n</th>
+      <th width="12%" scope="col">L&#8203;i&#8203;n&#8203;u&#8203;x</th>
+      <th width="12%" scope="col">M&#8203;a&#8203;c&#8203;O&#8203;S</th>
+      <th width="12%" scope="col">F&#8203;r&#8203;e&#8203;e&#8203;B&#8203;S&#8203;D</th>
+      <th width="12%" scope="col">O&#8203;p&#8203;e&#8203;n&#8203;B&#8203;S&#8203;D</th>
+      <th width="12%" scope="col">N&#8203;e&#8203;t&#8203;B&#8203;S&#8203;D</th>
+      <th width="12%" scope="col">D&#8203;r&#8203;a&#8203;g&#8203;o&#8203;n&#8203;F&#8203;l&#8203;y B&#8203;S&#8203;D</th>
+    </tr>
+  </thead>
+  <tbody align="center">
+    <tr>
+      <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;1</td>
+      <td><sup>🧅</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🧅 🛈</sup></td>
+    </tr>
+    <tr>
+      <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
+      <td><sup>🧅</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td>
+    </tr>
+    <tr>
+      <td align="left">A&#8203;p&#8203;p&#8203;l&#8203;e E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d D&#8203;i&#8203;s&#8203;k I&#8203;m&#8203;a&#8203;g&#8203;e</td>
+      <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">A&#8203;P&#8203;F&#8203;S E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d</td>
+      <td><sup>—</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">G&#8203;E&#8203;L&#8203;I</td>
+      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">P&#8203;E&#8203;F&#8203;S</td>
+      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d C&#8203;R&#8203;Y&#8203;P&#8203;T&#8203;O</td>
+      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d R&#8203;A&#8203;I&#8203;D&#8203;1&#8203;C</td>
+      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">C&#8203;G&#8203;D</td>
+      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
+      <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td>
+    </tr>
+    <tr>
+      <td align="left">g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s</td>
+      <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">C&#8203;r&#8203;y&#8203;F&#8203;S</td>
+      <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r</td>
+      <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td>
+    </tr>
+    <tr>
+      <td align="left">s&#8203;e&#8203;c&#8203;u&#8203;r&#8203;e&#8203;f&#8203;s</td>
+      <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td>
+    </tr>
+  </tbody>
+</table>
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
