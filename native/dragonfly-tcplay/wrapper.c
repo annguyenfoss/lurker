@@ -104,10 +104,10 @@ int
 main(int argc, char **argv)
 {
     if (argc == 2 && strcmp(argv[1], "protocol") == 0) {
-        puts("lurker-tcplay 1");
+        puts("lurker-tcplay 2");
         return 0;
     }
-    bool create = argc == 5 && strcmp(argv[1], "create") == 0;
+    bool create = argc == 5 && strcmp(argv[1], "create-header") == 0;
     bool map = argc == 6 && strcmp(argv[1], "map") == 0;
     if ((!create && !map) || !valid_name(argv[2], "/dev/vn", "0123456789"))
         return 2;
@@ -140,9 +140,10 @@ main(int argc, char **argv)
         goto done;
 
     if (create) {
+        /* Lurker already filled and synced the staging file. */
         if (tc_api_task_set(task, "cipher_chain", cipher) == TC_OK &&
             tc_api_task_set(task, "prf_algo", PROFILE) == TC_OK &&
-            tc_api_task_set(task, "secure_erase", 1) == TC_OK &&
+            tc_api_task_set(task, "secure_erase", 0) == TC_OK &&
             tc_api_task_do(task) == TC_OK) {
             puts("created");
             result = 0;

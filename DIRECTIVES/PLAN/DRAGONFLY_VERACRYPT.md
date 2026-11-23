@@ -78,10 +78,11 @@ scope matrix when coding begins. Public support follows package qualification.
    DragonFly-specific VeraCrypt adapter for the engine calls and format-specific state.
    Apply the [encryption profile](../LLM/ENCRYPTION.md) through the existing create
    dispatch and record any DragonFly-specific behavior there when it is implemented.
-2. For create, reserve a same-directory staging file and vnode. Create the normal
-   VeraCrypt volume with the fixed profile, authenticate and map it, and format the
-   verified decrypted provider with the qualified native FAT32 formatter. Flush and
-   close the owned resources before atomically publishing the image. Preserve the
+2. For create, reserve a same-directory staging file, fill it with random data, and
+   sync it before vnode attachment. Create the normal VeraCrypt header with the fixed
+   profile, authenticate and map the image, and format the verified decrypted provider
+   with the qualified native FAT32 formatter. Flush and close the owned resources
+   before atomically publishing the image. Preserve the
    existing destination and no-clobber semantics, including `--force` handling and
    invoking-user ownership. Record recoverable state before each operation that may
    leave an attached resource.

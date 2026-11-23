@@ -492,7 +492,7 @@ def validate_backend(kind, directory, source):
         pin = json.loads(source.read(upstream + "sources.json"))
         inputs = {name: hashlib.sha256(source.read(upstream + name)).hexdigest()
                   for name in ("sources.json", "lurker.patch", "wrapper.c")}
-        if (manifest.get("schema") != 1 or manifest.get("protocol") != "lurker-tcplay 1"
+        if (manifest.get("schema") != 1 or manifest.get("protocol") != "lurker-tcplay 2"
                 or manifest.get("revision") != pin["revision"] or manifest.get("inputs") != inputs):
             fail("DragonFly tcplay provenance differs from the reviewed source inputs")
         files = {"lurker-tcplay", "licenses/DragonFly-tcplay.txt"}

@@ -642,9 +642,14 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         #[cfg(target_os = "freebsd")]
         native::allocate_image(&file, size)?;
         #[cfg(target_os = "dragonfly")]
-        private_owned(&source, false)?;
-        #[cfg(target_os = "dragonfly")]
-        native::attach_backing(&registry, &mut session)?;
+        {
+            private_owned(&source, false)?;
+            if vc_program.is_some() {
+                dragonfly_vc::initialize_image(&file, size)?;
+                stage.verify_path()?;
+            }
+            native::attach_backing(&registry, &mut session)?;
+        }
         #[cfg(not(target_os = "dragonfly"))]
         {
             session.backing = Some(native::attach_file(&source, false)?);
@@ -676,7 +681,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         }
         #[cfg(target_os = "dragonfly")]
         if let Some(program) = &vc_program {
-            dragonfly_vc::format(&registry, &session, program, size, c.cipher, &credential)?;
+            dragonfly_vc::create_header(&registry, &session, program, c.cipher, &credential)?;
             session.mapped = Some(dragonfly_vc::activate(
                 &registry,
                 &mut session,

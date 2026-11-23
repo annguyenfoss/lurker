@@ -6,7 +6,7 @@ use crate::new_filesystem::Owner;
 use crate::{CreateCipher, VolumeType};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
-use std::io::{ErrorKind, Read};
+use std::io::{self, ErrorKind, Read};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -92,7 +92,7 @@ pub(in crate::bsd) fn validate(
         None,
     )?
     .trim()
-        != "lurker-tcplay 1"
+        != "lurker-tcplay 2"
     {
         return Err(AppError::new(
             "Incompatible DragonFly VeraCrypt wrapper. Install a matching Lurker package.",
@@ -195,26 +195,39 @@ pub(in crate::bsd) fn validate_create_size(bytes: u64) -> AppResult<()> {
     payload_sectors(bytes).map(|_| ())
 }
 
-pub(in crate::bsd) fn format(
+pub(in crate::bsd) fn initialize_image(mut file: &File, size: u64) -> AppResult<()> {
+    // Fill the private staging descriptor before attaching a vnode. Full
+    // initialization through a vnode stalled on DragonFly's HAMMER2.
+    let random = File::open("/dev/urandom")
+        .map_err(|e| AppError::io("Open random source for VeraCrypt initialization", e))?;
+    let written = io::copy(&mut random.take(size), &mut file)
+        .map_err(|e| AppError::io("Fully initialize staged VeraCrypt image", e))?;
+    if written != size {
+        return Err(AppError::new(
+            "Random source ended before VeraCrypt initialization completed.",
+        ));
+    }
+    file.sync_all()
+        .map_err(|e| AppError::io("Sync initialized VeraCrypt image", e))
+}
+
+pub(in crate::bsd) fn create_header(
     registry: &Registry,
     session: &Session,
     program: &Path,
-    size: u64,
     cipher: CreateCipher,
     credential: &Credential,
 ) -> AppResult<()> {
     require_crypt()?;
     let cipher = crate::workflow::dragonfly_veracrypt_cipher(cipher);
-    // Full initialization is proportional to the size of the image.
-    let timeout = COMMAND_TIMEOUT + Duration::from_secs(size / MIB);
     if run(
         registry,
         program,
-        "create",
+        "create-header",
         backing(session)?,
         &[&cipher],
         credential,
-        timeout,
+        COMMAND_TIMEOUT,
     )?
     .trim()
         != "created"

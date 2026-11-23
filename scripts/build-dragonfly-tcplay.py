@@ -74,7 +74,7 @@ def build(cache, output, offline):
             str(wrapper), *pin["sources"], "-L/usr/lib/priv", "-lprivate_crypto", "-ldm", "-lprop", "-lutil",
         ], cwd=work, check=True)
         version = subprocess.check_output([str(binary), "protocol"], text=True).strip()
-        if version != "lurker-tcplay 1":
+        if version != "lurker-tcplay 2":
             raise SystemExit("Unexpected wrapper protocol")
         output.mkdir(parents=True, exist_ok=True)
         license_path = output / "licenses" / "DragonFly-tcplay.txt"
