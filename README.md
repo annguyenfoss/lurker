@@ -12,6 +12,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 - 🧅 Wraps an encryption tool on your system
 - 🥑 Encryption engine included with Lurker
+- 🍰 Planned integration (“The cake is a lie”)
 - — Unavailable
 - 🛈 See note below
 
@@ -21,19 +22,19 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | LUKS2 | 🧅 | — | — | — | — | — | — |
 | Apple Encrypted Disk Image | — | 🧅 | — | — | — | — | — |
 | APFS Encrypted | — | 🧅 | — | — | — | — | — |
-| BitLocker / BitLocker To Go | — | — | PLANNED | — | — | — | — |
-| EFS | — | — | PLANNED | — | — | — | — |
+| BitLocker / BitLocker To Go | — | — | 🍰 | — | — | — | — |
+| EFS | — | — | 🍰 | — | — | — | — |
 | GELI | — | — | — | 🧅 | — | — | — |
 | PEFS | — | — | — | 🧅 | — | — | — |
 | softraid CRYPTO | — | — | — | — | 🧅 | — | — |
 | softraid RAID1C | — | — | — | — | 🧅 | — | — |
 | CGD | — | — | — | — | — | 🧅 | — |
-| VeraCrypt | 🥑 | 🥑 | PLANNED | 🥑 | 🥑 | PLANNED | PLANNED |
-| gocryptfs | 🥑 | 🥑 | PLANNED (cppcryptfs) | 🥑 | — | — | — |
+| VeraCrypt | 🥑 | 🥑 | 🍰 | 🥑 | 🥑 | 🍰 | 🍰 |
+| gocryptfs | 🥑 | 🥑 | 🍰 (cppcryptfs) | 🥑 | — | — | — |
 | CryFS | 🥑 | 🥑 | — | — | — | — | — |
-| Cryptomator | 🥑 | 🥑 | PLANNED | — | — | — | — |
-| securefs | — | — | PLANNED | — | — | — | — |
-| DiskCryptor | — | — | PLANNED | — | — | — | — |
+| Cryptomator | 🥑 | 🥑 | 🍰 | — | — | — | — |
+| securefs | — | — | 🍰 | — | — | — | — |
+| DiskCryptor | — | — | 🍰 | — | — | — | — |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
