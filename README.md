@@ -12,83 +12,26 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 - 🧅 Wraps an encryption tool on your system
 - 🥑 Encryption engine included with Lurker
-- 🍰 Planned integration (“The cake is a lie”)
+- **PLANNED** — On the roadmap
 - — Unavailable
 - 🛈 See note below
 
-<!-- Optional line breaks let the equal-width OS columns fit on narrow screens. -->
-
-<table>
-  <thead>
-    <tr>
-      <th align="left" scope="col">E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;i&#8203;o&#8203;n</th>
-      <th width="12%" scope="col">L&#8203;i&#8203;n&#8203;u&#8203;x</th>
-      <th width="12%" scope="col">M&#8203;a&#8203;c&#8203;O&#8203;S</th>
-      <th width="12%" scope="col">F&#8203;r&#8203;e&#8203;e&#8203;B&#8203;S&#8203;D</th>
-      <th width="12%" scope="col">O&#8203;p&#8203;e&#8203;n&#8203;B&#8203;S&#8203;D</th>
-      <th width="12%" scope="col">N&#8203;e&#8203;t&#8203;B&#8203;S&#8203;D</th>
-      <th width="12%" scope="col">D&#8203;r&#8203;a&#8203;g&#8203;o&#8203;n&#8203;F&#8203;l&#8203;y B&#8203;S&#8203;D</th>
-    </tr>
-  </thead>
-  <tbody align="center">
-    <tr>
-      <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;1</td>
-      <td><sup>🧅</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🧅 🛈</sup></td>
-    </tr>
-    <tr>
-      <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
-      <td><sup>🧅</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td>
-    </tr>
-    <tr>
-      <td align="left">A&#8203;p&#8203;p&#8203;l&#8203;e E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d D&#8203;i&#8203;s&#8203;k I&#8203;m&#8203;a&#8203;g&#8203;e</td>
-      <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">A&#8203;P&#8203;F&#8203;S E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d</td>
-      <td><sup>—</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">G&#8203;E&#8203;L&#8203;I</td>
-      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">P&#8203;E&#8203;F&#8203;S</td>
-      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d C&#8203;R&#8203;Y&#8203;P&#8203;T&#8203;O</td>
-      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d R&#8203;A&#8203;I&#8203;D&#8203;1&#8203;C</td>
-      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">C&#8203;G&#8203;D</td>
-      <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>—</sup></td> <td><sup>🧅</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
-      <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td>
-    </tr>
-    <tr>
-      <td align="left">g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s</td>
-      <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">C&#8203;r&#8203;y&#8203;F&#8203;S</td>
-      <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r</td>
-      <td><sup>🥑</sup></td> <td><sup>🥑</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td>
-    </tr>
-    <tr>
-      <td align="left">s&#8203;e&#8203;c&#8203;u&#8203;r&#8203;e&#8203;f&#8203;s</td>
-      <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>🍰</sup></td> <td><sup>—</sup></td>
-    </tr>
-  </tbody>
-</table>
+| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| LUKS1 | <sup>🧅</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>🧅&nbsp;🛈</sup> |
+| LUKS2 | <sup>🧅</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> |
+| Apple&nbsp;Encrypted&nbsp;Disk&nbsp;Image | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| APFS&nbsp;Encrypted | <sup>—</sup> | <sup>PLANNED</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| GELI | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| PEFS | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| softraid&nbsp;CRYPTO | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
+| softraid&nbsp;RAID1C | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
+| CGD | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> |
+| VeraCrypt | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> |
+| gocryptfs | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>—</sup> |
+| CryFS | <sup>🥑</sup> | <sup>🥑</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>—</sup> |
+| Cryptomator | <sup>🥑</sup> | <sup>🥑</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>—</sup> |
+| securefs | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>—</sup> |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
