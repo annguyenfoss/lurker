@@ -112,6 +112,14 @@ the window and reaped its processes. The receipt is
 `target/dragonfly-tcplay/evidence/archive-installed-desktop-window.json`.
 The desktop storage callbacks still need an end-to-end GUI test.
 
+The isolated UFS-backed guest performed an ordinary shutdown and reboot
+with a candidate vault mounted. The guest reported a new boot time and
+idle vnode and mapper inventories. The same installed CLI reopened the
+vault through Auto, verified the fsynced file's SHA-256, and closed it
+cleanly. This receipt covers ordinary file persistence. SQLite durability
+remains blocked by the FAT32 locking failure. Receipts are
+`target/dragonfly-tcplay/evidence/archive-ordinary-*.log`.
+
 ## Measurable completion criteria for the active implementation round
 
 The target is one verified final candidate covering the 16 approved non-macOS
