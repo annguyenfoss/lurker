@@ -123,20 +123,22 @@ class SourceProvenance(unittest.TestCase):
             member.size = len(original)
             tar.addfile(member, io.BytesIO(original))
             # Preserve the exact upstream contexts of the reviewed hunks.
-            for patch_name, target in (
-                ("auxiliary-path.patch", "src/Core/Unix/CoreUnix.cpp"),
-                ("openbsd-vnd-io.patch", "src/Driver/Fuse/FuseService.cpp"),
+            for patch_names, target in (
+                (("auxiliary-path.patch",), "src/Core/Unix/CoreUnix.cpp"),
+                (("openbsd-vnd-io.patch", "openbsd-ffs-shutdown.patch"),
+                 "src/Driver/Fuse/FuseService.cpp"),
             ):
                 hunks = []
-                matches_target = False
-                patch_path = builder.ROOT / "native/bsd-veracrypt" / patch_name
-                for line in patch_path.read_bytes().splitlines(keepends=True):
-                    if line.startswith(b"--- a/"):
-                        matches_target = line.rstrip() == b"--- a/" + target.encode()
-                    elif matches_target and line.startswith(b"@@ "):
-                        hunks.append([])
-                    elif matches_target and hunks and line[:1] in (b" ", b"-"):
-                        hunks[-1].append(line[1:])
+                for patch_name in patch_names:
+                    matches_target = False
+                    patch_path = builder.ROOT / "native/bsd-veracrypt" / patch_name
+                    for line in patch_path.read_bytes().splitlines(keepends=True):
+                        if line.startswith(b"--- a/"):
+                            matches_target = line.rstrip() == b"--- a/" + target.encode()
+                        elif matches_target and line.startswith(b"@@ "):
+                            hunks.append([])
+                        elif matches_target and hunks and line[:1] in (b" ", b"-"):
+                            hunks[-1].append(line[1:])
                 upstream = b"\n// reduced fixture separator\n".join(b"".join(h) for h in hunks)
                 member = tarfile.TarInfo("upstream/" + target)
                 member.size = len(upstream)
@@ -151,6 +153,7 @@ class SourceProvenance(unittest.TestCase):
             self.assertEqual(service.count(b"!fuse_service_data_access (path, fi)"), 3)
             self.assertIn(b"FuseService::FlushVolume();\n\t\t\t\treturn size;", service)
             self.assertIn(b"#if defined(TC_LINUX) || defined(TC_OPENBSD)\n\t\tfuse_service_oper.fsync", service)
+            self.assertIn(b"if (CloseOpenBsdFfs (*volume))", service)
             core = source / "src/Core/Unix/CoreUnix.cpp"
             reviewed = core.read_bytes()
             self.assertIn(b"arc4random_buf (nonce, sizeof (nonce))", reviewed)

@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PATCH_SHA256 = "b532ade3b7944a414162efe5d2b21a137698a0a05bbe3b6cdd146a861a4ace9d"
 COMMON_PATCH_SHA256 = "3d945f1ed832ffa61d7fb1ab817b36d5b15de858cd864a65ea181567cf6986e0"
 OPENBSD_VND_PATCH_SHA256 = "4173de985131b068615bf4a7f16d75fd300a02245007b35af353faa6e999abd0"
+OPENBSD_FFS_SHUTDOWN_PATCH_SHA256 = "a5cb728ce738ca621d13e4a16109b7a97fd2555fdf31e26fc030ee32e0f56255"
 FREEBSD_MD_PATCH_SHA256 = "9e2793dfa9671819b81719d14e18c12c99c9d621924bab08d5f9028677eba708"
 PATCH_TARGET = "src/Main/UserInterface.cpp"
 PATCH_TARGETS = (PATCH_TARGET, "src/Core/Unix/CoreUnix.cpp", "src/Driver/Fuse/FuseService.cpp")
@@ -104,6 +105,8 @@ def patch_inventory():
     elif system == "OpenBSD":
         patches.append({"path": "native/bsd-veracrypt/openbsd-vnd-io.patch",
                         "sha256": OPENBSD_VND_PATCH_SHA256})
+        patches.append({"path": "native/bsd-veracrypt/openbsd-ffs-shutdown.patch",
+                        "sha256": OPENBSD_FFS_SHUTDOWN_PATCH_SHA256})
     return patches
 
 

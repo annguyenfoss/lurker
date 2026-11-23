@@ -1,0 +1,104 @@
+--- a/src/Driver/Fuse/FuseService.cpp
++++ b/src/Driver/Fuse/FuseService.cpp
+@@ -46,6 +46,12 @@
+ #include <sys/statvfs.h>
+ #include <sys/time.h>
+ #include <sys/wait.h>
++#ifdef TC_OPENBSD
++#include <dev/vndioctl.h>
++#include <sys/ioctl.h>
++#include <sys/mount.h>
++#include <sys/stat.h>
++#endif
+-
++
+ #include "FuseService.h"
+ #if defined(TC_MACOSX) && defined(VC_MACOSX_FUSET)
+@@ -1733,6 +1739,59 @@
+-		MountedVolume->WriteSectors (buffer, byteOffset);
++		MountedVolume->WriteSectors (buffer, byteOffset);
+-	}
++	}
+-
++
++#ifdef TC_OPENBSD
++	static bool CloseOpenBsdFfs (const VolumeInfo &volume)
++	{
++		// Lurker mounts FFS on partition a after VeraCrypt attaches the
++		// whole disk. The ordinary mount lookup uses partition c.
++		if (!volume.MountPoint.IsEmpty())
++			return true;
++
++		const string device = volume.VirtualDevice;
++		const string prefix = "/dev/vnd";
++		if (device.size() <= prefix.size() + 1 || device.compare (0, prefix.size(), prefix) != 0 || device.back() != 'c')
++			return false;
++		const string unit = device.substr (prefix.size(), device.size() - prefix.size() - 1);
++		if (unit.find_first_not_of ("0123456789") != string::npos)
++			return false;
++
++		const string image = string (volume.AuxMountPoint) + FuseService::GetVolumeImagePath();
++		struct stat info;
++		if (lstat (image.c_str(), &info) != 0 || !S_ISREG (info.st_mode) || info.st_uid != 0 || (info.st_mode & 077) != 0)
++			return false;
++
++		const string raw = "/dev/rvnd" + unit + "c";
++		int control = open (raw.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
++		if (control < 0)
++			return false;
++
++		struct vnd_user backing = {};
++		backing.vnu_unit = -1;
++		int result = ioctl (control, VNDIOCGET, &backing);
++		close (control);
++		if (result != 0 || to_string (backing.vnu_unit) != unit || backing.vnu_dev != info.st_dev || backing.vnu_ino != info.st_ino)
++			return false;
++
++		struct statfs *mounts;
++		int count = getmntinfo (&mounts, MNT_NOWAIT);
++		if (count == 0)
++			return false;
++
++		const string partition = prefix + unit + "a";
++		const char *mountPoint = nullptr;
++		for (int i = 0; i < count; ++i)
++		{
++			if (partition != mounts[i].f_mntfromname)
++				continue;
++			if (mountPoint || strcmp (mounts[i].f_fstypename, "ffs") != 0)
++				return false;
++			mountPoint = mounts[i].f_mntonname;
++		}
++		// Keep the vnode and FUSE engine alive when an application is busy.
++		return !mountPoint || unmount (mountPoint, 0) == 0;
++	}
++#endif
++
+-	void FuseService::OnSignal (int signal)
++	void FuseService::OnSignal (int signal)
+-	{
++	{
+-		try
++		try
+@@ -1740,7 +1799,14 @@
+-			shared_ptr <VolumeInfo> volume = Core->GetMountedVolume (SlotNumber);
++			shared_ptr <VolumeInfo> volume = Core->GetMountedVolume (SlotNumber);
+-
++
+-			if (volume && volume->SerialInstanceNumber == GetSerialInstanceNumber())
++			if (volume && volume->SerialInstanceNumber == GetSerialInstanceNumber())
++			{
++#ifdef TC_OPENBSD
++				if (CloseOpenBsdFfs (*volume))
++					Core->DismountVolume (volume, false);
++#else
+-				Core->DismountVolume (volume, true);
++				Core->DismountVolume (volume, true);
++#endif
++			}
+-		}
++		}
+-		catch (...) { }
++		catch (...) { }
+-
++
