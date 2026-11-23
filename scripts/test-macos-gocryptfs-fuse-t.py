@@ -137,7 +137,10 @@ def write_and_sync(point):
         stream.truncate(len(payload) - 1)
         os.fsync(stream.fileno())
     staging.rename(point / "payload")
-    return digest(point / "payload")
+    expected = hashlib.sha256(payload[:-1]).hexdigest()
+    if digest(point / "payload") != expected:
+        raise RuntimeError("written payload differs from the expected bytes")
+    return expected
 
 
 def write_wal(point, record):
