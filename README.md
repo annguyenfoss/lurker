@@ -28,7 +28,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <th scope="col"><samp>F&#8203;r&#8203;e&#8203;e&#8203;B&#8203;S&#8203;D</samp></th>
       <th scope="col"><samp>O&#8203;p&#8203;e&#8203;n&#8203;B&#8203;S&#8203;D</samp></th>
       <th scope="col"><samp>N&#8203;e&#8203;t&#8203;B&#8203;S&#8203;D</samp></th>
-      <th scope="col" width="132"><samp>D&#8203;r&#8203;a&#8203;g&#8203;o&#8203;n&#8203;F&#8203;l&#8203;y B&#8203;S&#8203;D</samp></th>
+      <th scope="col" width="132" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
       <th scope="col"><samp>W&#8203;i&#8203;n&#8203;d&#8203;o&#8203;w&#8203;s</samp></th>
     </tr>
   </thead>
