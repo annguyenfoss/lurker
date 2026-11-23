@@ -4,7 +4,7 @@
 
 # Lurker — Encryption made easy.
 
-**For Linux, macOS, FreeBSD, OpenBSD, NetBSD and DragonFly BSD.**
+**For Linux, MacOS, FreeBSD, OpenBSD, NetBSD and DragonFly BSD.**
 
 Protect disks, file containers and directories with the CLI or native desktop app. Linux also supports creating vaults on physical devices.
 
@@ -15,7 +15,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-| Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
+| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 |
 | LUKS2 | 🧅 | — | — | — | — | — |
@@ -51,7 +51,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>Java for Cryptomator</td>
     </tr>
     <tr>
-      <td>macOS</td>
+      <td>MacOS</td>
       <td><code>FUSE-&#8288;T&gt;=1.2.9</code><br><code>macFUSE</code></td>
       <td><code>hdiutil</code>, <code>diskutil</code></td>
       <td>Java for Cryptomator</td>
@@ -96,6 +96,6 @@ Lurker chooses the native format for your OS. Use administrator authorization wh
 
 ## Get started
 
-[Build & usage](docs/usage.md) · [Linux & BSD packaging](docs/unix-packaging.md) · [macOS packaging](docs/macos-backends.md) · [Validation results](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
+[Build & usage](docs/usage.md) · [Linux & BSD packaging](docs/unix-packaging.md) · [MacOS packaging](docs/macos-backends.md) · [Validation results](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
 
 [GPL-3.0-only](LICENSE)
