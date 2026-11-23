@@ -8,22 +8,59 @@
 
 Protect disks, file containers and directories with the CLI or native desktop app. Linux also supports creating vaults on physical devices.
 
+## Encryption support
+
+- ✅ Available in the CLI with OS-provided encryption tools
+- 📦 Available in the CLI with software outside the base OS
+- — Unavailable · † Limited power-loss resilience
+
+| Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| LUKS1 | ✅ | — | — | — | — | ✅† |
+| LUKS2 | ✅ | — | — | — | — | — |
+| Apple encrypted disk images | — | ✅ | — | — | — | — |
+| GELI | — | — | ✅ | — | — | — |
+| CGD | — | — | — | — | ✅ | — |
+| softraid CRYPTO | — | — | — | ✅ | — | — |
+| softraid RAID1C | — | — | — | ✅ | — | — |
+| VeraCrypt | 📦 | 📦 | 📦 | 📦 | — | — |
+| gocryptfs | 📦 | 📦 | 📦 | — | — | — |
+| CryFS | 📦 | 📦 | — | — | — | — |
+| PEFS | — | — | 📦 | — | — | — |
+| Cryptomator | 📦 | 📦 | — | — | — | — |
+
+† [DragonFly LUKS1 qualification](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
+
+### OS-provided encryption
+
+Lurker wraps the platform's tools for these methods.
+
+- Linux — LUKS1 and LUKS2
+- macOS — Apple encrypted disk images
+- FreeBSD — GELI
+- OpenBSD — softraid CRYPTO and RAID1C
+- NetBSD — CGD
+- DragonFly BSD — LUKS1
+
+### Lurker-bundled encryption
+
+- VeraCrypt — Linux, macOS, FreeBSD, OpenBSD
+- gocryptfs — Linux, macOS, FreeBSD
+- CryFS — Linux, macOS
+- Cryptomator — Linux, macOS
+
 ## Encryption dependencies
 
 Host packages depend on the backends you use. Linux package names follow Arch Linux.
 
-| OS | Host packages | Bundled components |
-| :--- | :--- | :--- |
-| Linux | `btrfs-progs`<br>`cryptsetup`<br>`fuse2`<br>`fuse3`<br>`util-linux` | VeraCrypt, gocryptfs, CryFS, and Cryptomator with its Java runtime. |
-| macOS | `FUSE-T>=1.2.9`<br>`macFUSE` | VeraCrypt, gocryptfs, CryFS, and Cryptomator with its Java runtime. |
-| FreeBSD | `pefs-kmod` | VeraCrypt with its FUSE library, and gocryptfs. |
-| OpenBSD | — | VeraCrypt. |
-| NetBSD | — | — |
-| DragonFly BSD | — | — |
-
-DragonFly LUKS1 has limited power-loss resilience. See the [qualification results](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md).
-
-See [Linux and BSD packaging](docs/unix-packaging.md) and [macOS packaging](docs/macos-backends.md) for package variants, desktop dependencies, and setup.
+| OS | Host packages | System tools and setup | Bundled runtimes |
+| :--- | :--- | :--- | :--- |
+| Linux | `btrfs-progs`<br>`cryptsetup`<br>`fuse2`<br>`fuse3`<br>`util-linux` | CryFS uses `fusermount`. Login-user VeraCrypt and Cryptomator use `fusermount3`. gocryptfs accepts either. | Java for Cryptomator |
+| macOS | `FUSE-T>=1.2.9`<br>`macFUSE` | `hdiutil` for Apple disk images and `diskutil` for VeraCrypt. FUSE-T for VeraCrypt, with its FSKit extension enabled for Cryptomator. macFUSE for gocryptfs and CryFS. | Java for Cryptomator |
+| FreeBSD | `pefs-kmod` | `geli`, GEOM, `mdconfig`, `newfs`, and mount utilities. `fusefs` for VeraCrypt and gocryptfs. gocryptfs also needs `mount_fusefs`, `/dev/fuse` access, and user mounts enabled. | FUSE library for VeraCrypt |
+| OpenBSD | — | `bioctl`, softraid, `vnconfig`, `disklabel`, `newfs`, and mount utilities. Base-system FUSE for VeraCrypt. | — |
+| NetBSD | — | `cgdconfig`, CGD, `vnconfig`, `newfs`, and mount utilities. | — |
+| DragonFly BSD | — | `cryptsetup`, `dmsetup`, `vnconfig`, `kldload`, `newfs`, and mount utilities. | — |
 
 ## Create. Unlock. Lock.
 
