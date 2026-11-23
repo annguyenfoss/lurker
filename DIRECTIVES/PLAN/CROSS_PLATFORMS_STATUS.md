@@ -238,6 +238,21 @@ restored native inventories. The combined receipt is
 `target/dragonfly-tcplay/evidence/prefill-installed-matrix-combined.json`
 with SHA-256 `92d8693b64827a1f4409b2037aade5fd09fa8ebbe9248e667dc08b300bef6ae9`.
 
+The full opt-in desktop package built from the same `aa34ed3` source has
+SHA-256 `bab5a95e1b56f9243ad2fc992cf0e91757870d8151c87c307bbf006f46c2eb4d`.
+It passed offline native installation and package checks in a private root
+on the stock DragonFly 6.4.2 clone. The installed Slint app ran under X11
+as UID 1300. Through its authorized installed helper it created an AES
+VeraCrypt vault, unlocked it with Auto detection, closed it, reopened it,
+and closed it again. The login user synced a 64 KiB payload and verified
+the same SHA-256 after reopen. The read-only request displayed the native
+mapper limitation and preserved the vault's ciphertext and the resource
+inventory. The mounted detail still labels the filesystem value `msdos`
+as the cipher. Teardown removed temporary authorization, uninstalled the
+private package, restored the mount inventory, and verified the original
+system package database and CLI digests. See `prefill-desktop-*.log` and
+`desktop-input/protocol2-*` in `target/dragonfly-tcplay/evidence/`.
+
 The optimized default package also passed offline installation, file and
 dependency checks. Its CLI refused VeraCrypt create before staging or device
 attachment, created LUKS1 through the default route, and matched the synced
