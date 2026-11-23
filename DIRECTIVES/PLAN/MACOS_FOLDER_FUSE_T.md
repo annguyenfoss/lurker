@@ -1,10 +1,9 @@
 # FUSE-T evaluation for CryFS and gocryptfs on macOS
 
-Evaluate each backend independently on Buran. A candidate must demonstrate
-that it mounted through FUSE-T and can preserve application data across
-close and reopen. The current macOS runtime policy uses macFUSE for both
-backends in Lurker packages. The `c997d6a` DMG provides the macFUSE
-lifecycle baseline for comparison.
+This completed evaluation tested each backend independently on Buran.
+Candidates had to mount through FUSE-T and preserve application data
+across close and reopen. The `c997d6a` DMG was the historical lifecycle
+control.
 [macOS runtime policy](../LLM/CIPHER.md) ·
 [Buran qualification results](../../docs/macos-backends.md)
 

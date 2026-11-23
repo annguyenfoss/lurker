@@ -1,10 +1,9 @@
-# Experimental gocryptfs FUSE-T on macOS
+# gocryptfs FUSE-T qualification on macOS
 
-The opt-in Darwin build tag `lurkerfuset` selects the FUSE-T helper and
-length-framed Unix socket transport for gocryptfs. It requires an explicit
-transport and retains the current production gocryptfs build path. This note
-covers direct backend evidence. Follow the native CLI and packaged app gates
-for broader qualification. [Evaluation plan](../../DIRECTIVES/PLAN/MACOS_FOLDER_FUSE_T.md)
+The macOS package build uses the Darwin build tag `lurkerfuset` and selects
+FSKit through the signed FUSE-T 1.2.9 helper. This note records the direct
+backend experiments that qualified the transport.
+[Evaluation plan](../../DIRECTIVES/PLAN/MACOS_FOLDER_FUSE_T.md)
 
 ## Native results
 
