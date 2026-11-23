@@ -33,6 +33,23 @@ attachment. The application and power-loss gates remain open and release
 support remains planned. Test receipts and disposable fixture locations are
 under `target/dragonfly-tcplay/evidence/`.
 
+The aligned candidate `5786867a17252ea95059c3922944de8a8ac9c773`
+passed `cargo check --workspace --locked` and 96 workspace tests with four
+ignored on `dragonflybsd-core-01` in run `20261123T121207Z-42cce614`. The
+packaging checks passed 50 tests. The fault harness passed 36 tests after
+supplying the guest's separately packaged Python SQLite extension.
+
+Its CLI and desktop package SHA-256 was
+`95e384feb463fb9387da5ea1a757c7e11b29a116221aeb7e602bd21559aecc10`.
+An isolated DragonFly clone installed it offline and verified its package
+inventory and base-library resolution. The clone stopped returning SSH
+banners during the aligned runtime suite, which ended without a complete
+receipt. On the named host, the separately staged CLI from the same source
+completed the AES/password case and verified all five payload hashes across
+explicit and automatic opens. Directory `fsync` still failed. The remaining
+aligned runs and clean shutdown, desktop callbacks, and two-way installed
+package exchange remain unverified.
+
 ## Measurable completion criteria for the active implementation round
 
 The target is one verified final candidate covering the 16 approved non-macOS
