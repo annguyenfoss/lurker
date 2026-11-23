@@ -14,7 +14,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - 📦 Available in the CLI with software outside the base OS
 - — Unavailable · † Limited power-loss resilience
 
-| Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD |
+| Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | LUKS1 | ✅ | — | — | — | — | ✅† |
 | LUKS2 | ✅ | — | — | — | — | — |
@@ -60,7 +60,7 @@ Install the host packages for the backends you use. System tools are executables
 | FreeBSD | `pefs-kmod` | `geli`, `geom`, `mdconfig`, `newfs`, `mount`, `umount`, `mount_fusefs`, `sysctl` | FUSE library for VeraCrypt |
 | OpenBSD | — | `bioctl`, `vnconfig`, `disklabel`, `newfs`, `mount`, `umount`, `sysctl` | — |
 | NetBSD | — | `cgdconfig`, `vndconfig`, `newfs`, `mount`, `umount` | — |
-| DragonFly BSD | — | `cryptsetup`, `dmsetup`, `vnconfig`, `kldload`, `newfs`, `mount`, `umount` | — |
+| DragonFly&nbsp;BSD | — | `cryptsetup`, `dmsetup`, `vnconfig`, `kldload`, `newfs`, `mount`, `umount` | — |
 
 ## Create. Unlock. Lock.
 
