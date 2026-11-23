@@ -36,7 +36,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | securefs | 🍰 | 🍰 | 🍰 | — | — | — | 🍰 |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
-DragonFly VeraCrypt remains planned. Its FAT32 route on 6.4.2 fails the directory sync and SQLite locking checks.
 
 ### Planned integration batches
 
