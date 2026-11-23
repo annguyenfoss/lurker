@@ -84,6 +84,13 @@ All six directory `fsync` checks still failed. The raw receipt is
 `target/dragonfly-tcplay/evidence/archive-recovery-installed-aligned-matrix.json`.
 The named host's follow-up suite remained inaccessible over SSH.
 
+On November 24, direct SSH to the named guest's verified IP briefly returned
+its running release, unchanged boot time, HAMMER2 mount table, and available
+space as UID 1300. The hostname lookup still failed. The privileged storage
+inventory attempt timed out during SSH banner exchange, so the current
+candidate smoke test could not start there. See
+`target/dragonfly-tcplay/evidence/exact-primary-ssh/`.
+
 The installed package and Linux VeraCrypt 1.26.31 exchanged writable FAT32
 containers in both directions for AES, Serpent, and Twofish. Linux verified
 the DragonFly marker in each upstream-created image. For each Lurker-created
