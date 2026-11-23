@@ -26,6 +26,66 @@ summary with the result path. Nonzero exit means failed (1) or blocked (2).
 The remote runner can invoke this as an installed-artifact stage in its custom
 specification; the stage log contains the result reference.
 
+## DragonFly VeraCrypt candidate
+
+Build and check the candidate on `dragonflybsd-core-01` using the `dragonflybsd`
+remote runner target. Stage the candidate with `--select veracrypt` and
+`--backend veracrypt-dragonfly=PATH`, using the pinned private wrapper produced
+by `scripts/build-dragonfly-tcplay.py`. The packaging guide covers recording
+the build inputs and producing the native package.
+[Remote runner](remote-testing.md) [BSD packaging](bsd-packaging.md)
+
+Install the package offline on an isolated DragonFly 6.4.2 x86-64 guest.
+Record its boot time, source revision, package, CLI and wrapper SHA-256 values,
+and initial mount, vnode, mapper and session inventories. Verify the package
+files and wrapper library resolution with `pkg check -s lurker` and `ldd`
+before exercising storage.
+
+Run as root on the dedicated guest with a Python interpreter that includes
+`sqlite3`. Set `CLI` to the installed executable, `COMMIT` to the full source
+revision, and `FIXTURE_PARENT` to a persistent, administrator-controlled
+directory with space for the retained images. Each invocation allocates a
+separate fixture and prints the path to its JSON result.
+
+Run one case at a time. Set `SUITE` to `test-backends.py` for password
+authentication or `test-veracrypt-keyfiles.py` for binary keyfiles. Run each
+with `CIPHER` set to `aes`, `serpent`, and `twofish`, first with explicit
+detection and then with `--auto-detect` appended. Check that the owned mount
+and devices are gone before starting the next case.
+
+```sh
+python3 "scripts/$SUITE" --binary "$CLI" --backend veracrypt \
+  --cipher "$CIPHER" --size-gb 0.5 --root "$FIXTURE_PARENT" \
+  --commit "$COMMIT" --expect-readonly-unsupported
+```
+
+Use a separate disposable container for the payload lifecycle if the conformance
+suite stops at its application workload. Create one 0.5 GiB image per cipher and
+credential pair. Use a 64-byte UTF-8 password in one boundary case and a binary
+keyfile containing NUL and newline bytes in each keyfile case. Mount explicitly,
+run `test-mounted-payload.py write MOUNTPOINT PAYLOAD_DIR`, and close by source.
+Reopen with `--type auto`, run the `append` phase, and close by mountpoint. Reopen
+again and run `verify` to record all five SHA-256 values. Record any failed sync
+from `write` or `append` even if `verify` finds the expected bytes. Probe a
+65-byte password, a wrong credential, and `--readonly` while the image is closed.
+Compare its ciphertext hash and the native inventories before and after each
+rejection. Verify the original credential still opens the image.
+
+The 6.4.2 controls rejected directory `fsync` and SQLite locking on bare FAT32
+and on stock `tcplay` FAT32. The candidate also rejects read-only opens before
+attachment because the native read-only mapper control accepted writes. Pass
+`--full-storage` to `test-backends.py` for the separate 0.5 GiB inner capacity
+workload. Preserve failures in the application and capacity checks. Require the
+file and directory syncs and SQLite FULL/WAL commit to be acknowledged before a
+power cut. [Power-loss runbook](vm-powerloss-testing.md)
+
+The remaining matrix covers interoperability, interruption, ordinary reboot,
+and desktop callbacks. Measured results and exact artifact revisions are in the
+status record. [Qualification plan](../DIRECTIVES/PLAN/DRAGONFLY_VERACRYPT.md)
+[Cross-platform status](../DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
+
+## Common options
+
 `--auto-detect` retains the known format for create and sends `--type auto` for
 mount/unmount, including incorrect-credential, alias, busy and read-only cases.
 Results identify `detection_mode` as `auto` or `explicit`; keep these qualification
