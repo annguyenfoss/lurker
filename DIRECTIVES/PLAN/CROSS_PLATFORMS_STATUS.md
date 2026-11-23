@@ -50,6 +50,18 @@ explicit and automatic opens. Directory `fsync` still failed. The remaining
 aligned runs and clean shutdown, desktop callbacks, and two-way installed
 package exchange remain unverified.
 
+A separate isolated guest booted the stock 6.4.2 kernel from a hash-verified
+clean archive. It rebuilt the wrapper offline from `5786867a1725` and matched
+the installed wrapper SHA-256. That binary rejected upstream Argon2id,
+BLAKE2s, Camellia, PIM 501, SHA-256, Whirlpool, an AES–Twofish cascade, and an
+80-byte password. The upstream AES/SHA-512/PIM 0 control authenticated and
+mapped at byte offset 131072 with a 66846720-byte payload. Each test retained
+its ciphertext hash and restored the vnode, mapper and mount inventories.
+`kern.cryptodevallowsoft` stayed at `0`. These results qualify the wrapper's
+header checks. The installed CLI's unsupported-import path and the filesystem
+exchange still need native receipts. Build and rejection logs are in
+`target/dragonfly-tcplay/evidence/archive-recovery-wrapper-*.log`.
+
 ## Measurable completion criteria for the active implementation round
 
 The target is one verified final candidate covering the 16 approved non-macOS
