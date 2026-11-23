@@ -12,6 +12,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 - 🧅 Wraps an encryption tool on your system
 - 🥑 Encryption engine included with Lurker
+- ↔ Supported on multiple OSes
 - — Unavailable
 - 🛈 See note below
 
@@ -25,7 +26,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | softraid CRYPTO | — | — | — | 🧅 | — | — |
 | softraid RAID1C | — | — | — | 🧅 | — | — |
 | CGD | — | — | — | — | 🧅 | — |
-| VeraCrypt | 🥑 | 🥑 | 🥑 | 🥑 | — | — |
+| VeraCrypt ↔ | 🥑 | 🥑 | 🥑 | 🥑 | — | — |
 | gocryptfs | 🥑 | 🥑 | 🥑 | — | — | — |
 | CryFS | 🥑 | 🥑 | — | — | — | — |
 | Cryptomator | 🥑 | 🥑 | — | — | — | — |
