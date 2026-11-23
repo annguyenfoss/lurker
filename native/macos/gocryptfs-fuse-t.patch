@@ -93,6 +93,65 @@ index bb11b2ca5ce9a9d7bcb67e1b165937ab32c461cd..60376c697dc5cbe0609c9b00605b5806
 +		release()
 +	}
 +	return err
+diff --git a/fuse/fuset_rename_darwin_test.go b/fuse/fuset_rename_darwin_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..a173db358369a0cd993486578b006b6c92ed1976
+--- /dev/null
++++ b/fuse/fuset_rename_darwin_test.go
+@@ -0,0 +1,53 @@
++//go:build lurkerfuset
++
++package fuse
++
++import (
++	"encoding/binary"
++	"testing"
++	"unsafe"
++
++	"github.com/hanwen/go-fuse/v2/internal/renameat"
++)
++
++func TestFuseTRenameLayout(t *testing.T) {
++	for _, scenario := range []struct {
++		name       string
++		negotiated uint64
++		flags      uint32
++	}{
++		{"compatibility", 0, 0},
++		{"extended", CAP_RENAME_SWAP, renameat.RENAME_EXCHANGE},
++	} {
++		t.Run(scenario.name, func(t *testing.T) {
++			size := compatRenameInSize
++			if scenario.negotiated != 0 {
++				size = int(unsafe.Sizeof(RenameIn{}))
++			}
++			packet := make([]byte, size)
++			binary.LittleEndian.PutUint32(packet[4:], _OP_RENAME)
++			binary.LittleEndian.PutUint64(packet[compatRenameInSize-8:], 2)
++			if scenario.negotiated != 0 {
++				binary.LittleEndian.PutUint32(packet[compatRenameInSize:], scenario.flags)
++			}
++			packet = append(packet, []byte("scratch\x00payload\x00")...)
++			binary.LittleEndian.PutUint32(packet, uint32(len(packet)))
++			req := &requestAlloc{}
++			req.setInput(packet)
++
++			handler, inputSize, _, _, status := parseRequest(req.inputBuf, scenario.negotiated)
++			if status != OK || inputSize != size {
++				t.Fatalf("parse returned status %v and size %d; want OK and %d", status, inputSize, size)
++			}
++			if status := req.splitPayload(inputSize, int(handler.InputSize)); status != OK {
++				t.Fatalf("split returned status %v", status)
++			}
++			oldName, newName, status := req.filenames()
++			input := (*RenameIn)(req.inData())
++			if status != OK || oldName != "scratch" || newName != "payload" ||
++				input.Newdir != 2 || input.Flags != scenario.flags {
++				t.Fatalf("rename fields are %v, %q, %q, %#v", status, oldName, newName, input)
++			}
++		})
++	}
++}
 diff --git a/fuse/mount_darwin.go b/fuse/mount_darwin.go
 index 1e733aede1b82b25cc17551c704dccf673ae50c6..03e22ca66b2174a8e40601d88247676d788e3228 100644
 --- a/fuse/mount_darwin.go
@@ -102,10 +161,10 @@ index 1e733aede1b82b25cc17551c704dccf673ae50c6..03e22ca66b2174a8e40601d88247676d
 +
 diff --git a/fuse/mount_fuset_darwin.go b/fuse/mount_fuset_darwin.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..129a3aff71becdb74b7e56c874abee9d57288661
+index 0000000000000000000000000000000000000000..15b642fb6f392874163203e37782b2d6c8651cb3
 --- /dev/null
 +++ b/fuse/mount_fuset_darwin.go
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,182 @@
 +//go:build lurkerfuset
 +
 +// Copyright 2016-2026 the Go-FUSE Authors. All rights reserved.
@@ -143,6 +202,9 @@ index 0000000000000000000000000000000000000000..129a3aff71becdb74b7e56c874abee9d
 +	if opts.AllowOther {
 +		return -1, fmt.Errorf("allow_other is unavailable in the FUSE-T experiment")
 +	}
++	// The pinned FUSE-T helper advertises extended rename support but
++	// sends the compatibility request. Negotiate the compatibility layout.
++	opts.DisabledCapabilities |= CAP_RENAME_SWAP
 +	transport := os.Getenv("LURKER_EXPERIMENT_FUSE_T_TRANSPORT")
 +	switch transport {
 +	case "fskit", "smb", "nfs":
@@ -285,16 +347,52 @@ index 0000000000000000000000000000000000000000..129a3aff71becdb74b7e56c874abee9d
 +func unmount(dir string, opts *MountOptions) error {
 +	return syscall.Unmount(dir, 0)
 +}
+diff --git a/fuse/protocol-server.go b/fuse/protocol-server.go
+index 5f0851d1526d3e4c544302359e0f0874eb076c87..a6a0372da77496fcca4ad751bd113f412001269f 100644
+--- a/fuse/protocol-server.go
++++ b/fuse/protocol-server.go
+@@ -326 +326 @@ func (ps *ProtocolServer) HandleRequest(in [][]byte, out [][]byte) (int, Status)
+-	h, inSize, outSize, outPayloadSize, code := parseRequest(req.smallInputBuf[:n], &ps.kernelSettings, ps.negotiatedFlags)
++	h, inSize, outSize, outPayloadSize, code := parseRequest(req.smallInputBuf[:n], ps.negotiatedFlags)
+diff --git a/fuse/request.go b/fuse/request.go
+index e4a68f45bebedb58d8026e8ca8476c77ff5ce33f..b87aad2e3a4cf237c5731900b97fcfdb573d17d4 100644
+--- a/fuse/request.go
++++ b/fuse/request.go
+@@ -275 +275 @@ func (r *request) inData() unsafe.Pointer {
+-func parseRequest(in []byte, kernelSettings *InitIn, negotiated uint64) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
++func parseRequest(in []byte, negotiated uint64) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
+@@ -292 +292 @@ func parseRequest(in []byte, kernelSettings *InitIn, negotiated uint64) (h *oper
+-		inSize = renameInSize(kernelSettings)
++		inSize = renameInSize(negotiated)
 diff --git a/fuse/server.go b/fuse/server.go
-index fc9a6f4eb62030f4d5124d861cd488532a96d167..81d6da5f3bbdbcdf0a4a2889be583bf7e47de725 100644
+index fc9a6f4eb62030f4d5124d861cd488532a96d167..2fb8ee62e016526697688c900db896f8c446f68f 100644
 --- a/fuse/server.go
 +++ b/fuse/server.go
 @@ -253,0 +254,3 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 +		if release := o.fuseTRelease; release != nil {
 +			release()
 +		}
-@@ -830,0 +834,4 @@ func (ms *Server) WaitMount() error {
+@@ -488 +491 @@ func (ms *Server) handleRequest(req *requestAlloc) Status {
+-	h, inSize, outSize, outPayloadSize, code := parseRequest(req.inputBuf, &ms.kernelSettings, ms.negotiatedFlags)
++	h, inSize, outSize, outPayloadSize, code := parseRequest(req.inputBuf, ms.negotiatedFlags)
+@@ -817,6 +819,0 @@ func (in *InitIn) SupportsNotify(notifyType int) bool {
+-// supportsRenameSwap returns whether the kernel supports the
+-// renamex_np(2) syscall. This is only supported on OS X.
+-func (in *InitIn) supportsRenameSwap() bool {
+-	return in.Flags&CAP_RENAME_SWAP != 0
+-}
+-
+@@ -830,0 +828,4 @@ func (ms *Server) WaitMount() error {
 +	if ms.opts.fuseTRelease != nil {
 +		// The FUSE-T monitor acknowledges completion of the native mount.
 +		return nil
 +	}
+diff --git a/fuse/types.go b/fuse/types.go
+index dde862045f01bd7cd74c312990b198996d760208..559772b2754506cac3173de7d5bd84adc01114b1 100644
+--- a/fuse/types.go
++++ b/fuse/types.go
+@@ -113,2 +113,2 @@ const compatRenameInSize = int(unsafe.Sizeof(InHeader{})) + 8
+-func renameInSize(kernelSettings *InitIn) int {
+-	if !kernelSettings.supportsRenameSwap() {
++func renameInSize(negotiated uint64) int {
++	if negotiated&CAP_RENAME_SWAP == 0 {

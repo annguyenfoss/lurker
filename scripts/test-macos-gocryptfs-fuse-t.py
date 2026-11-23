@@ -59,6 +59,9 @@ def build(output: Path, cache: Path, jobs: int) -> None:
     env = dict(os.environ, GOTOOLCHAIN="local", CGO_ENABLED="0", GOOS="darwin",
                GOARCH="arm64", GOMAXPROCS=str(jobs), GOCACHE=str(cache / "objects"),
                GOMODCACHE=str(cache / "modules"))
+    subprocess.run([go, "test", "-p", str(jobs), "-mod=readonly", "-tags", "lurkerfuset",
+                    "./fuse", "-run", "^TestFuseTRenameLayout$", "-v"],
+                   cwd=fuse, env=env, check=True, timeout=180)
     subprocess.run([go, "mod", "edit", "-replace",
                     f"github.com/hanwen/go-fuse/v2={fuse}"], cwd=source, env=env, check=True)
     subprocess.run([go, "mod", "verify"], cwd=source, env=env, check=True, timeout=180)
