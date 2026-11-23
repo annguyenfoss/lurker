@@ -144,6 +144,15 @@ checks with stock `cryptsetup` 1.1.2. Final mounts, mappings and vnode
 inventories were clean. The receipt is
 `target/dragonfly-tcplay/evidence/archive-luks1-auto-regression.json`.
 
+The installed CLI opened a fully allocated 260 MiB image for a bounded FAT32
+capacity test. After syncing a 269623296-byte filler, one 4 KiB cluster
+remained. A 1 MiB append returned `ENOSPC`. The earlier file hash and the
+append target's original prefix survived a close and reopen. Removing the
+filler made room for a new synced file that also survived reopen. The final
+native inventory matched baseline. The receipt is
+`target/dragonfly-tcplay/evidence/archive-inner-capacity.log`. Outer capacity
+and the FAT32 per-file size boundary still need separate checks.
+
 ## Measurable completion criteria for the active implementation round
 
 The target is one verified final candidate covering the 16 approved non-macOS
