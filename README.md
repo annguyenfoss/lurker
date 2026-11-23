@@ -16,18 +16,18 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 | Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20"> | — | — | — | — | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20">† |
-| LUKS2 | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20"> | — | — | — | — | — |
-| Apple encrypted disk images | — | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20"> | — | — | — | — |
-| GELI | — | — | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20"> | — | — | — |
-| PEFS | — | — | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20"> | — | — | — |
-| softraid CRYPTO | — | — | — | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20"> | — | — |
-| softraid RAID1C | — | — | — | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20"> | — | — |
-| CGD | — | — | — | — | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f36c.png" alt="Wrapper" width="20" height="20"> | — |
-| VeraCrypt | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | — | — |
-| gocryptfs | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | — | — | — |
-| CryFS | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | — | — | — | — |
-| Cryptomator | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | <img src="https://github.githubassets.com/images/icons/emoji/unicode/1f4e6.png" alt="Bundled engine" width="20" height="20"> | — | — | — | — |
+| LUKS1 | 🍬 | — | — | — | — | 🍬† |
+| LUKS2 | 🍬 | — | — | — | — | — |
+| Apple encrypted disk images | — | 🍬 | — | — | — | — |
+| GELI | — | — | 🍬 | — | — | — |
+| PEFS | — | — | 🍬 | — | — | — |
+| softraid CRYPTO | — | — | — | 🍬 | — | — |
+| softraid RAID1C | — | — | — | 🍬 | — | — |
+| CGD | — | — | — | — | 🍬 | — |
+| VeraCrypt | 📦 | 📦 | 📦 | 📦 | — | — |
+| gocryptfs | 📦 | 📦 | 📦 | — | — | — |
+| CryFS | 📦 | 📦 | — | — | — | — |
+| Cryptomator | 📦 | 📦 | — | — | — | — |
 
 † [DragonFly LUKS1 qualification](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
 
