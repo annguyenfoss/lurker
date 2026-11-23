@@ -56,7 +56,7 @@ Install the dependencies for the backends you use. Built-in tools are the execut
 | OS | Dependencies | Built-in tools | Bundled runtimes |
 | :--- | :--- | :--- | :--- |
 | Linux | `btrfs-progs`<br>`cryptsetup`<br>`fuse2`<br>`fuse3`<br>`util-linux` |  | Java for Cryptomator |
-| macOS | `FUSE-T>=1.2.9`<br>`macFUSE` | `hdiutil`, `diskutil` | Java for Cryptomator |
+| macOS | <code>FUSE-&#8288;T&gt;=1.2.9</code><br>`macFUSE` | `hdiutil`, `diskutil` | Java for Cryptomator |
 | FreeBSD | `pefs-kmod` | `geli`, `geom`, `mdconfig`, `newfs`, `mount`, `umount`, `mount_fusefs`, `sysctl` | FUSE library for VeraCrypt |
 | OpenBSD | — | `bioctl`, `vnconfig`, `disklabel`, `newfs`, `mount`, `umount`, `sysctl` | — |
 | NetBSD | — | `cgdconfig`, `vndconfig`, `newfs`, `mount`, `umount` | — |
