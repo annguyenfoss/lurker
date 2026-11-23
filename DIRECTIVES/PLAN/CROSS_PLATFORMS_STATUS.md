@@ -288,6 +288,14 @@ The `63b82f5` installed DragonFly CLI verified the returned ciphertext and
 both markers after Auto reopen. Native inventories returned to baseline.
 See `target/dragonfly-tcplay/evidence/fat32-explicit-openbsd/`.
 
+The same 379 MiB image passed a writable FreeBSD 15.1-RELEASE-p7 round
+trip with the pinned VeraCrypt 1.26.31 console. FreeBSD verified the FAT
+geometry and original marker, wrote and synced a marker through `msdosfs`,
+and restored its mount, md-device, and FUSE module state. The `63b82f5`
+DragonFly CLI authenticated a temporary copy of the returned ciphertext
+and verified both marker hashes. The peer retained the verified image.
+See `target/dragonfly-tcplay/evidence/fat32-explicit-freebsd/`.
+
 The full opt-in desktop package built from the same `aa34ed3` source has
 SHA-256 `bab5a95e1b56f9243ad2fc992cf0e91757870d8151c87c307bbf006f46c2eb4d`.
 It passed offline native installation and package checks in a private root
