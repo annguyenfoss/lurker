@@ -16,24 +16,24 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-| Encryption | Linux | MacOS | Windows | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
+| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD | Windows |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | 🧅 | — | — | — | — | — | 🧅 🛈 |
+| LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 | — |
 | LUKS2 | 🧅 | — | — | — | — | — | — |
 | Apple Encrypted Disk Image | — | 🧅 | — | — | — | — | — |
 | APFS Encrypted | — | 🧅 | — | — | — | — | — |
-| BitLocker / BitLocker To Go | — | — | 🍰 | — | — | — | — |
-| EFS | — | — | 🍰 | — | — | — | — |
-| GELI | — | — | — | 🧅 | — | — | — |
-| PEFS | — | — | — | 🧅 | — | — | — |
-| softraid CRYPTO | — | — | — | — | 🧅 | — | — |
-| softraid RAID1C | — | — | — | — | 🧅 | — | — |
-| CGD | — | — | — | — | — | 🧅 | — |
-| VeraCrypt | 🥑 | 🥑 | 🍰 | 🥑 | 🥑 | 🍰 | 🍰 |
-| gocryptfs | 🥑 | 🥑 | 🍰 | 🥑 | — | — | — |
+| BitLocker / BitLocker To Go | — | — | — | — | — | — | 🍰 |
+| EFS | — | — | — | — | — | — | 🍰 |
+| GELI | — | — | 🧅 | — | — | — | — |
+| PEFS | — | — | 🧅 | — | — | — | — |
+| softraid CRYPTO | — | — | — | 🧅 | — | — | — |
+| softraid RAID1C | — | — | — | 🧅 | — | — | — |
+| CGD | — | — | — | — | 🧅 | — | — |
+| VeraCrypt | 🥑 | 🥑 | 🥑 | 🥑 | 🍰 | 🍰 | 🍰 |
+| gocryptfs | 🥑 | 🥑 | 🥑 | — | — | — | 🍰 |
 | CryFS | 🥑 | 🥑 | — | — | — | — | — |
-| Cryptomator | 🥑 | 🥑 | 🍰 | — | — | — | — |
-| securefs | 🍰 | 🍰 | 🍰 | 🍰 | — | — | — |
+| Cryptomator | 🥑 | 🥑 | — | — | — | — | 🍰 |
+| securefs | 🍰 | 🍰 | 🍰 | — | — | — | 🍰 |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
