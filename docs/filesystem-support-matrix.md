@@ -48,9 +48,9 @@ mount or write tests were run for this survey.
 
 | File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Paid C/RW<br>FSKit beta C/RW | Native RW subset<br>Package C | Native R subset<br>Package C | Native R subset<br>Package C<br>Experimental FUSE RW | Native R subset<br>Package C<br>RW on current ext4 profiles unverified | Open-source driver RW on supported profiles<br>Paid RW<br>Janus or FsRover R | L1, M2, M5, F1, O2, N2, D4, W4–W5, W8–W9, X7 |
-| **Btrfs** | Native C/RW | Experimental R via btrfs4mac | Package RW via old LKL port | — | — | — | WinBtrfs C/RW<br>Paid or FsRover R | L1, F4, W5, W6, X6–X7 |
-| **XFS** | Native C/RW | Experimental FUSE R/RW | Package RW via old LKL port<br>Separate package C | — | — | — | Paid R, vendor RW claims conflict<br>FsRover R | L1, F4, W5, X6–X7 |
+| **ext4** | Native C/RW | Paid C/RW<br>Ext4Kit beta C/RW<br>xlinuxfs FSKit RW | Native RW subset<br>Package C | Native R subset<br>Package C | Native R subset<br>Package C<br>Experimental FUSE RW | Native R subset<br>Package C<br>RW on current ext4 profiles unverified | Open-source driver RW on supported profiles<br>Paid RW<br>Janus or FsRover R | L1, M2, M5, M8, F1, O2, N2, D4, W4–W5, W8–W9, X7 |
+| **Btrfs** | Native C/RW | xlinuxfs FSKit RW<br>Experimental R via btrfs4mac | Package RW via old LKL port | — | — | — | WinBtrfs C/RW<br>Paid or FsRover R | L1, M8, F4, W5, W6, X6–X7 |
+| **XFS** | Native C/RW | xlinuxfs FSKit RW<br>Experimental FUSE R/RW | Package RW via old LKL port<br>Separate package C | — | — | — | Paid R, vendor RW claims conflict<br>FsRover R | L1, M8, F4, W5, X6–X7 |
 | **F2FS** | Native C/RW | — | — | — | — | — | FsRover R | L1, X7 |
 | **bcachefs** | Package C/RW via upstream DKMS on current kernels | — | — | — | — | — | — | L6 |
 | **ZFS / OpenZFS** | Package C/RW | Package C/RW, version and architecture dependent | Native C/RW | — | Native module C/RW, port-specific feature set | — | Experimental C/RW, release-candidate driver | Z1–Z4 |
@@ -58,10 +58,10 @@ mount or write tests were run for this survey.
 | **HFS+ / HFSX** | Native RW subset<br>Paid RW | Native C/RW, including journaled HFS+ | Package R | Experimental FUSE R | Native R | Package R requires working FUSE | Paid RW<br>FsRover R | L1, M1, M6, F1, N1, D2–D3, X3, X7 |
 | **NTFS** | Native `ntfs3` or `ntfs` RW<br>Package C and NTFS-3G RW | Native R<br>Open-source FSKit RW, experimental C<br>NTFS-3G with FUSE-T RW<br>Paid C/RW | Package C/RW | Native R<br>Package C/RW | Native R and limited overwrite<br>Package C/RW | Native R<br>FUSE package C/RW requires working FUSE | Native C/RW | L2–L4, M3, M7, F1, O3, N3, D2–D3, W1 |
 | **ReFS** | Experimental OpenRefs R<br>Paid RW on vendor-supported versions | Experimental FUSE R | Experimental FUSE R candidate | Experimental FUSE R candidate | Experimental FUSE R candidate | Experimental FUSE R candidate where FUSE works | Native C/RW on supported Windows edition and volume type | W1, W3, X4–X5 |
-| **exFAT** | Native C/RW | Native C/RW | Package C/RW via exFAT FUSE and utilities | Package C/RW via exFAT FUSE | Package C/RW via exFAT FUSE | Package C<br>RW requires working FUSE | Native C/RW | L5, M1, F1–F2, O3, N3, D2–D3, W1 |
+| **exFAT** | Native C/RW | Native C/RW<br>Legacy fuse-exfat C/RW with its documented runtime | Package C/RW via exFAT FUSE and utilities | Package C/RW via exFAT FUSE | Package C/RW via exFAT FUSE | Package C<br>RW requires working FUSE | Native C/RW | L5, M1, F1–F2, O3, N3, D2–D3, W1 |
 | **FAT12/16/32** | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | L1, M1, F1, O1, N1, D1, W1–W2 |
-| **UFS1 / FFSv1** | Native R<br>Experimental writes for select variants | Experimental image creation | Native C/RW | Native C/RW | Native C/RW | Native C/RW for DragonFly's UFS format | Experimental C/RW via UFS2Tool and Dokan<br>FsRover R | U1–U3, F1, O1, N1, D1, X7 |
-| **UFS2 / FFSv2** | Native R<br>Experimental writes for select variants | Experimental image creation | Native C/RW | Native C/RW | Native C/RW | — | Experimental C/RW via UFS2Tool and Dokan<br>FsRover R | U1–U3, F1, O1, N1, D1, X7 |
+| **UFS1 / FFSv1** | Native R<br>Experimental writes for select variants | Experimental image creation | Native C/RW | Native C/RW | Native C/RW | Native C/RW for DragonFly's UFS format | UFS2Tool C and limited image RW via Dokan<br>FsRover R | U1–U3, F1, O1, N1, D1, X7 |
+| **UFS2 / FFSv2** | Native R<br>Experimental writes for select variants | Experimental image creation | Native C/RW | Native C/RW | Native C/RW | — | UFS2Tool C and limited image RW via Dokan<br>FsRover R | U1–U3, F1, O1, N1, D1, X7 |
 | **HAMMER2** | Experimental kernel C/RW<br>Userspace image tools | — | Package C/R on supported releases<br>Experimental RW | Experimental kernel port | Experimental kernel port | Native C/RW | — | D1, H1–H3 |
 | **HAMMER** | — | — | — | — | — | Native C/RW, predecessor to HAMMER2 | — | D1 |
 | **BSD LFS** | — | — | — | — | Native C/RW | — | — | N4 |
@@ -162,7 +162,11 @@ They carry lower priority for new general-purpose volumes.
 - OpenZFS on macOS ships separately and has OS/architecture-specific builds.
   Pool compatibility with Linux and FreeBSD depends on the feature flags
   supported by the installed builds. [Z1, Z3]
-- Community alternatives cover some Linux formats. btrfs4mac documents a
+- xlinuxfs uses LKL inside a signed FSKit extension for writable ext4,
+  Btrfs, and XFS mounts. Its documented scope covers supported partitions
+  and disk images. The OS release determines the raw-image attachment
+  workflow. [M8]
+- btrfs4mac documents a
   read-only FUSE mount and FSKit work. The `fuse-xfs` projects range from
   a historical read-only driver to a newer community fork that advertises
   optional writes. These are distinct paths from a native Linux mount.
@@ -311,6 +315,7 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **M5** Apple FSKit and ext4 provider examples. https://developer.apple.com/documentation/FSKit · https://github.com/kthchew/ExtendFS · https://github.com/rayhanadev/Ext4Kit
 - **M6** Apple filesystem details, including UDF and optical filesystems. https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/FileSystemDetails/FileSystemDetails.html
 - **M7** Open-source macOS NTFS drivers through FSKit and FUSE-T. https://github.com/ntfstool/ntfstool · https://github.com/vahidzekic/ntfs4mac · https://github.com/macos-fuse-t/ntfs-3g
+- **M8** macOS ext4, Btrfs, and XFS via LKL and FSKit. https://github.com/HuanchuanTech/xlinuxfs
 - **W1** Microsoft Windows format command. https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/format
 - **W2** Microsoft filesystem feature comparison and exFAT specification. https://learn.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison · https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
 - **W3** Microsoft ReFS and Windows 11 Dev Drive. https://learn.microsoft.com/en-us/windows-server/storage/refs/refs-overview · https://learn.microsoft.com/en-us/windows/dev-drive/

@@ -12,20 +12,22 @@ version restrictions, and the broader inventory.
 driver or tools. **Candidate** requires native qualification on the listed
 driver and volume type. **Paid** means a supported commercial driver is
 required. A dash leaves the OS/filesystem pair outside the proposed scope.
-Windows targets use drivers and tools that run directly on Windows.
+An **Open source** line names the native implementation or an alternative
+with a write path. Under a dash, it records a research option. Windows
+targets use drivers and tools that run directly on Windows.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Candidate Ext4Kit or paid C/RW | Candidate native RW for compatible profiles | — | — | — | Candidate Ext4Windows or Ext4Fsd RW, paid RW alternative |
-| **Btrfs** | Native C/RW | — | — | — | — | — | Candidate WinBtrfs C/RW |
-| **XFS** | Native C/RW | — | — | — | — | — | — |
-| **APFS** | Candidate experimental `linux-apfs-rw` or paid RW | Native C/RW | — | — | — | — | Candidate experimental `winapfs` or paid RW for supported volumes |
-| **UFS1 / FFSv1** | — | — | Native UFS1 C/RW | Native FFS1 C/RW | Native FFSv1 C/RW | Native UFS1 C/RW | — |
-| **UFS2 / FFSv2** | — | — | Native UFS2 C/RW | Native FFS2 C/RW | Native FFSv2 and FFSv2ea C/RW | Target C/RW, needs a qualified driver and formatter | — |
-| **HAMMER2** | — | — | — | — | — | Native C/RW | — |
-| **NTFS** | Native RW, formatter package C | Candidate FSKit or paid RW | Candidate NTFS-3G RW | Candidate NTFS-3G RW | Candidate NTFS-3G RW | — | Native C/RW |
-| **exFAT** | Native C/RW | Native C/RW | Package C/RW | Package C/RW | Package C/RW | Candidate C/RW once release FUSE works | Native C/RW |
-| **OpenZFS** | Package pool and dataset workflow | Candidate package pool and dataset workflow | Native pool and dataset workflow | — | Candidate pool and dataset workflow | — | — |
+| **ext4** | Native C/RW<br>Open source: Linux ext4 + e2fsprogs | Candidate C/RW, paid option<br>Open source: Ext4Kit (beta C/RW), xlinuxfs (RW) | Candidate native RW subset<br>Open source: ext2fs | — | —<br>Open source: fuse-ext2 (experimental RW) | — | Candidate RW, paid option<br>Open source: Ext4Windows, Ext4Fsd |
+| **Btrfs** | Native C/RW<br>Open source: Linux Btrfs + btrfs-progs | —<br>Open source: xlinuxfs (RW) | —<br>Open source: fusefs-lkl (older kernel) | — | — | — | Candidate C/RW<br>Open source: WinBtrfs |
+| **XFS** | Native C/RW<br>Open source: Linux XFS + xfsprogs | —<br>Open source: xlinuxfs (RW) | —<br>Open source: fusefs-lkl (older kernel) + xfsprogs | — | — | — | — |
+| **APFS** | Candidate RW, paid option<br>Open source: linux-apfs-rw (experimental) | Native C/RW | — | — | — | — | Candidate RW, paid option<br>Open source: winapfs (experimental) |
+| **UFS1 / FFSv1** | —<br>Open source: Linux UFS (experimental RW, select variants) | — | Native C/RW<br>Open source: FreeBSD UFS1 + newfs | Native C/RW<br>Open source: OpenBSD FFS1 + newfs | Native C/RW<br>Open source: NetBSD FFSv1 + newfs | Native C/RW<br>Open source: DragonFly UFS1 + newfs | —<br>Open source: UFS2Tool + Dokan (limited image RW) |
+| **UFS2 / FFSv2** | —<br>Open source: Linux UFS or fuse-ufs (experimental RW) | — | Native C/RW<br>Open source: FreeBSD UFS2 + newfs | Native C/RW<br>Open source: OpenBSD FFS2 + newfs | Native C/RW<br>Open source: NetBSD FFSv2 and FFSv2ea + newfs | C/RW target, driver and formatter need qualification<br>Open-source port candidate: fuse-ufs | —<br>Open source: UFS2Tool + Dokan (limited image RW) |
+| **HAMMER2** | —<br>Open source: linux_hammer2 (development RW) | — | —<br>Open source: freebsd_hammer2 (experimental RW) | —<br>Open source: openbsd_hammer2 (development port) | —<br>Open source: netbsd_hammer2 (development port) | Native C/RW<br>Open source: DragonFly HAMMER2 | — |
+| **NTFS** | Native RW, formatter package C<br>Open source: ntfs or ntfs3, NTFS-3G + mkntfs | Candidate RW, paid option<br>Open source: NTFSTool, NTFS4Mac, NTFS-3G via FUSE-T | Candidate RW<br>Open source: NTFS-3G | Candidate RW<br>Open source: NTFS-3G | Candidate RW<br>Open source: NTFS-3G | —<br>Open source: NTFS-3G (needs working FUSE) | Native C/RW |
+| **exFAT** | Native C/RW<br>Open source: Linux exFAT + exfatprogs | Native C/RW<br>Open source: legacy fuse-exfat (outside macOS runtime scope) | Package C/RW<br>Open source: fuse-exfat + exFAT utilities | Package C/RW<br>Open source: exfat-fuse + exFAT utilities | Package C/RW<br>Open source: fuse-exfat + exFAT utilities | Candidate C/RW once release FUSE works<br>Open source: fusefs-exfat + exfat-utils | Native C/RW |
+| **OpenZFS** | Package pool and dataset C/RW<br>Open source: OpenZFS | Candidate pool and dataset C/RW<br>Open source: OpenZFS on macOS | Native pool and dataset C/RW<br>Open source: base OpenZFS | — | Candidate pool and dataset C/RW<br>Open source: NetBSD ZFS port | — | —<br>Open source: OpenZFS on Windows (release candidate) |
 
 ## Integration priorities
 
