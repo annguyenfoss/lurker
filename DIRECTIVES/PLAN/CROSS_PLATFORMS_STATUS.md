@@ -56,8 +56,7 @@ BLAKE2s, Camellia, PIM 501, SHA-256, Whirlpool, an AES–Twofish cascade, and an
 80-byte password. The upstream AES/SHA-512/PIM 0 control authenticated and
 mapped at byte offset 131072 with a 66846720-byte payload. Each test retained
 its ciphertext hash and restored the vnode, mapper and mount inventories.
-`kern.cryptodevallowsoft` stayed at `0`. The installed CLI's unsupported-import
-path still needs a native receipt. Build and rejection logs are in
+`kern.cryptodevallowsoft` stayed at `0`. Build and rejection logs are in
 `target/dragonfly-tcplay/evidence/archive-recovery-wrapper-*.log`.
 
 The exact CLI and desktop package was recovered from a read-only copy of the
@@ -88,6 +87,23 @@ The three receipts are `archive-linux-forward.log`,
 `archive-linux-upstream-retry.log`, and `archive-linux-reverse.log` under
 `target/dragonfly-tcplay/evidence/`. Installed exchange with FreeBSD, OpenBSD,
 and macOS remains pending. Windows is unverified.
+
+The installed CLI rejected the eight incompatible inputs above and a
+compatible AES header with unqualified FAT32 geometry. Each of the nine
+fixtures was tested with explicit VeraCrypt and Auto open. All 18 rejections
+preserved the source digests and restored the native inventories.
+
+The installed helper ran as login UID 1300 through scoped sudo authorization.
+It created an invoking-user-owned image, refused read-only before attachment,
+and exposed the active FAT32 mount with mode `0700` in the authorized volume
+list. An open working directory blocked close. After releasing it, the helper
+closed the mount, reopened it through Auto, and verified the written payload
+hash. The temporary sudo rule was removed and native inventories returned to
+baseline. An ASCII file `fsync` succeeded. Directory `fsync` returned `EINVAL`
+and SQLite 3.54.1 returned `SQLITE_IOERR_LOCK` in both WAL and rollback-journal
+mode. The required power-loss workload could not be armed. The receipts are
+`archive-installed-import-rejections.log` and `archive-installed-login-helper.log`
+under `target/dragonfly-tcplay/evidence/`. The Slint callback test is still open.
 
 ## Measurable completion criteria for the active implementation round
 
