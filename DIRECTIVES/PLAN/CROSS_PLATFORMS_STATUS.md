@@ -218,6 +218,24 @@ Both suites restored the storage inventories. See
 `hammer2-prefill-installed-package.log` and
 `prefill-installed-fat32-conformance.log` under `target/dragonfly-tcplay/evidence/`.
 
+The same optimized opt-in CLI passed the lifecycle for all six cipher and
+credential pairs. The two runs recorded 121 steps and all 30 expected payload
+hashes. Mount-root `fsync` returned `EINVAL` in every pair. The first Twofish
+keyfile case returned the expected refusal exit code on active replacement
+but its PTY transcript was empty. The full case passed on a fresh image with
+pipe capture, including the expected active-session diagnostic. Both runs
+restored native inventories. The combined receipt is
+`target/dragonfly-tcplay/evidence/prefill-installed-matrix-combined.json`
+with SHA-256 `92d8693b64827a1f4409b2037aade5fd09fa8ebbe9248e667dc08b300bef6ae9`.
+
+The optimized default package also passed offline installation, file and
+dependency checks. Its CLI refused VeraCrypt create before staging or device
+attachment, created LUKS1 through the default route, and matched the synced
+payload after close and Auto reopen. The original package database and
+installed application were preserved. The receipts are
+`prefill-default-package-install.log` and `prefill-default-package-smoke.log`
+under `target/dragonfly-tcplay/evidence/`.
+
 The standard VeraCrypt conformance suite passed create, no-overwrite, and
 unlock. Its application case failed with `EINVAL` on creation of a UTF-8
 filename. The suite retained the test mount and an explicit CLI close
