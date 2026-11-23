@@ -10,7 +10,7 @@ pub struct VolumeRowView {
     pub source: String,
     pub mount: String,
     pub readonly: bool,
-    pub cipher: String,
+    pub filesystem: String,
     pub source_kind: String,
     pub unprivileged: bool,
 }
@@ -382,7 +382,7 @@ pub fn volume_rows(volumes: &[ActiveVolume]) -> Vec<VolumeRowView> {
                 source: source_display,
                 mount: mount_display,
                 readonly: volume.readonly,
-                cipher: volume.filesystem_type.as_deref().unwrap_or("").to_string(),
+                filesystem: volume.filesystem_type.as_deref().unwrap_or("").to_string(),
                 source_kind,
             }
         })
@@ -885,7 +885,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].name, "lurker_test");
         assert_eq!(rows[0].mount, "/mnt/test");
-        assert_eq!(rows[0].cipher, "btrfs");
+        assert_eq!(rows[0].filesystem, "btrfs");
     }
     #[test]
     fn apple_create_preserves_passphrase_spaces_and_mac_volume_metadata() {

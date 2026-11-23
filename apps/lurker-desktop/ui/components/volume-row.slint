@@ -9,7 +9,7 @@ export struct VolumeRowData {
     source: string,
     mount: string,
     readonly: bool,
-    cipher: string,
+    filesystem: string,
     source-kind: string,
     unprivileged: bool,
 }
@@ -134,17 +134,17 @@ export component VolumeRow inherits Rectangle {
                 spacing: 4px * UiTheme.scale;
                 horizontal-stretch: 1;
 
-                if root.data.cipher != "": HorizontalLayout {
+                if root.data.filesystem != "": HorizontalLayout {
                     spacing: 14px * UiTheme.scale;
                     Text {
-                        text: "cipher";
+                        text: "filesystem";
                         font-size: 11.5px * UiTheme.scale;
                         font-family: "JetBrains Mono";
                         color: UiTheme.fg-3;
-                        min-width: 56px * UiTheme.scale;
+                        min-width: 76px * UiTheme.scale;
                     }
                     Text {
-                        text: root.data.cipher;
+                        text: root.data.filesystem;
                         font-size: 11.5px * UiTheme.scale;
                         font-family: "JetBrains Mono";
                         color: UiTheme.fg-1;
@@ -158,7 +158,7 @@ export component VolumeRow inherits Rectangle {
                         font-size: 11.5px * UiTheme.scale;
                         font-family: "JetBrains Mono";
                         color: UiTheme.fg-3;
-                        min-width: 56px * UiTheme.scale;
+                        min-width: 76px * UiTheme.scale;
                     }
                     Text {
                         text: (root.data.readonly ? "read-only" : "read/write") + (root.data.unprivileged ? " · unprivileged" : "");

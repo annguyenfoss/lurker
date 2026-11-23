@@ -468,7 +468,7 @@ fn replace_active_volumes(
             source: row.source.into(),
             mount: row.mount.into(),
             readonly: row.readonly,
-            cipher: row.cipher.into(),
+            filesystem: row.filesystem.into(),
             source_kind: row.source_kind.into(),
         })
         .collect::<Vec<_>>();
