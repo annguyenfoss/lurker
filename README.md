@@ -16,8 +16,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 | Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS2 | ✅ | — | — | — | — | — |
 | LUKS1 | ✅ | — | — | — | — | ✅† |
+| LUKS2 | ✅ | — | — | — | — | — |
 | Apple encrypted disk images | — | ✅ | — | — | — | — |
 | GELI | — | — | ✅ | — | — | — |
 | CGD | — | — | — | — | ✅ | — |
