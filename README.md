@@ -20,10 +20,10 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | LUKS2 | ✅ | — | — | — | — | — |
 | Apple encrypted disk images | — | ✅ | — | — | — | — |
 | GELI | — | — | ✅ | — | — | — |
-| CGD | — | — | — | — | ✅ | — |
+| PEFS | — | — | ✅ | — | — | — |
 | softraid CRYPTO | — | — | — | ✅ | — | — |
 | softraid RAID1C | — | — | — | ✅ | — | — |
-| PEFS | — | — | ✅ | — | — | — |
+| CGD | — | — | — | — | ✅ | — |
 | VeraCrypt | 📦 | 📦 | 📦 | 📦 | — | — |
 | gocryptfs | 📦 | 📦 | 📦 | — | — | — |
 | CryFS | 📦 | 📦 | — | — | — | — |
