@@ -48,6 +48,12 @@ callback also syncs that file under the existing data-node access check.
 This preserves the vnode device's write ordering through the private engine.
 The outer filesystem and storage device still determine media durability.
 
+On OpenBSD, `openbsd-ffs-shutdown.patch` extends the engine's existing
+shutdown handler to recognize Lurker's FFS partition. It checks the
+kernel vnode backing identity against the private auxiliary image, then
+unmounts the corresponding FFS before detaching the vnode and FUSE mount.
+The unmount refuses a busy filesystem.
+
 The staged executable uses upstream's text/stdin interface. It is intended for
 Lurker's trusted, administrator-controlled private backend directory; a normal
 user's build output must never be automatically elevated. FreeBSD private

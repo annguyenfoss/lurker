@@ -61,7 +61,7 @@ OS and are recorded with each receipt.
 | FreeBSD | The exact `16aa1f4` installer passed 260 checks across 20 variants, all 11 mounted reboot fixtures, four installed-helper callbacks, and X11. | gocryptfs requires explicit journal reconciliation after a reboot with an active mount. Legacy journals with a changed device number require manual recovery. |
 | NetBSD | The exact `16aa1f4` TGZ passed 26 CGD lifecycle checks, nine capacity checks, two mounted reboot fixtures, the login-user desktop callback, and X11. | The package was installed under a private destination. The earlier abrupt power-loss WAL result remains open. |
 | DragonFly BSD | The exact `16aa1f4` installer passed 117 LUKS1 lifecycle checks, nine capacity checks, X11, and the login-user installed-helper callback. All six mounted cipher and credential profiles reopened after an orderly reboot. | Earlier abrupt power-loss durability remains open. |
-| OpenBSD | The exact `16aa1f4` TGZ passed 212 checks across 16 CLI variants, 27 capacity checks, three login-user installed-helper callbacks, and X11. All three mounted fixtures reopened with the opt-in shutdown hook. CRYPTO and RAID1C also passed an ordinary reboot without the hook on `16aa1f4`. | The November 23 replay again left VeraCrypt FFS unclean and unable to reopen writable. |
+| OpenBSD | The `16aa1f4` TGZ passed 212 checks across 16 CLI variants, 27 capacity checks, three login-user installed-helper callbacks, and X11. CRYPTO and RAID1C passed an ordinary reboot. With `999eced`, two mounted VeraCrypt FFS vaults reopened writable after an ordinary reboot without a shutdown hook, matching the outcome of upstream VeraCrypt's default FAT vault. | A busy FFS mount can prevent an orderly close. |
 | macOS | The exact `c997d6a` DMG passed 320 checks across all 20 CLI profiles, 35 Cryptomator rapid closes, busy refusal, JVM crash recovery, five desktop callbacks, and 75 Firefox checks. | The macOS tests issued no reboot. The final DMG was verified after Buran's separately requested restart. |
 
 All ten KVM guests ran workspace checks and passed 1,234 Rust tests on
@@ -70,7 +70,6 @@ lifecycle receipts retain their exact source and artifact hashes.
 
 The updated non-macOS installers passed 1,785 lifecycle checks, ten X11
 probes, six Wayland probes, and nine BSD installed-helper callbacks.
-The stock OpenBSD VeraCrypt reboot remains an open lifecycle failure.
 
 Receipts and handoffs are in `target/goal-validation/ssh-matrix-20261122/`.
 See `docs/linux-validation.md`, `docs/backend-testing.md`,

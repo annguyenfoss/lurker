@@ -402,11 +402,13 @@ session and reports where the unpublished image remains for inspection.
 For CGD, keep any staged `.cgdparams` file with that image.
 
 OpenBSD mounts writable FFS synchronously for softraid CRYPTO, RAID1C and
-VeraCrypt. OpenBSD read-only crypto attachment is unsupported. An orderly
-reboot with VeraCrypt still mounted can leave FFS unclean. Close the vault as
-part of the shutdown workflow using `unmount` or `session-close`. An unclean
-FFS can require a manual filesystem check before a writable mount. Keep an
-untouched copy before performing any repair.
+VeraCrypt. OpenBSD read-only crypto attachment is unsupported. During
+ordinary shutdown the bundled VeraCrypt engine closes its FFS mount
+before detaching the backing device. A busy vault can prevent a clean
+close. Stop consumers first and use `unmount` or `session-close` before
+requesting shutdown if you need to confirm the close succeeded. An unclean
+FFS can require a manual filesystem check before a writable mount. Keep
+an untouched copy before performing any repair.
 Native packages carry private third-party engines; host kernel tools and FUSE
 remain prerequisites, with macOS FUSE installed separately. A Cargo-only build
 does not include every private native engine.

@@ -436,6 +436,24 @@ Neither run added a shutdown hook. The receipts and exact upstream
 binary digest are in
 `target/goal-validation/ssh-matrix-20261122/openbsd-upstream-veracrypt/`.
 
+The upstream console build also passed 84 lifecycle checks across AES,
+Serpent, and Twofish with passwords and binary keyfiles. Its FAT vault
+passed nine capacity checks including `SQLITE_FULL` and persistence after
+freeing space. OpenBSD refused read-only crypto attachment. GUI coverage
+was outside this console build.
+
+The Lurker `999eced` installer reused the existing VeraCrypt shutdown
+handler and added an identity-checked FFS close before vnode detach.
+Its native TGZ SHA-256 is
+`81ea8bea671e37ecfda9e7e66f8cd5f5dd99233d844be0c60bf491ab9e105a20`.
+An AES password vault and an AES binary-keyfile vault were both mounted
+on FFS when OpenBSD requested an ordinary reboot. There was no shutdown
+hook. The boot identity changed from `1795402087` to `1795402879`.
+Both vaults reopened writable through Auto and matched all five file
+hashes. A new synced write survived another close and reopen in each.
+Package and reboot receipts are in
+`target/goal-validation/ssh-matrix-20261122/openbsd-vc-ffs-parity/`.
+
 ### NetBSD and DragonFly reboot with encrypted mounts active
 
 NetBSD 11.1 exercised the `14ede46` package with two CGD fixtures,
