@@ -17,18 +17,18 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-<!-- Soft breaks let labels wrap. Row heights leave room for two lines. -->
+<!-- Soft breaks allow wrapping. The wide footer lets the table fill the GitHub README. -->
 
 <table>
   <thead>
     <tr>
-      <th scope="col" align="left">E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;i&#8203;o&#8203;n</th>
+      <th scope="col" width="149" align="left">E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;i&#8203;o&#8203;n</th>
       <th scope="col"><samp>L&#8203;i&#8203;n&#8203;u&#8203;x</samp></th>
       <th scope="col"><samp>M&#8203;a&#8203;c&#8203;O&#8203;S</samp></th>
       <th scope="col"><samp>F&#8203;r&#8203;e&#8203;e&#8203;B&#8203;S&#8203;D</samp></th>
       <th scope="col"><samp>O&#8203;p&#8203;e&#8203;n&#8203;B&#8203;S&#8203;D</samp></th>
       <th scope="col"><samp>N&#8203;e&#8203;t&#8203;B&#8203;S&#8203;D</samp></th>
-      <th scope="col"><samp>D&#8203;r&#8203;a&#8203;g&#8203;o&#8203;n&#8203;F&#8203;l&#8203;y B&#8203;S&#8203;D</samp></th>
+      <th scope="col" width="132"><samp>D&#8203;r&#8203;a&#8203;g&#8203;o&#8203;n&#8203;F&#8203;l&#8203;y B&#8203;S&#8203;D</samp></th>
       <th scope="col"><samp>W&#8203;i&#8203;n&#8203;d&#8203;o&#8203;w&#8203;s</samp></th>
     </tr>
   </thead>
@@ -164,9 +164,12 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
     </tr>
   </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="8" width="4096" align="left">🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.</td>
+    </tr>
+  </tfoot>
 </table>
-
-🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
 ## Dependencies
 
