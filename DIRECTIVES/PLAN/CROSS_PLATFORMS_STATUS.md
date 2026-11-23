@@ -85,8 +85,18 @@ recorded. The Linux console SHA-256 is
 `ed01a2348e21d3b760fe35564338a98160db427e610379088f715c90f7a37eaf`.
 The three receipts are `archive-linux-forward.log`,
 `archive-linux-upstream-retry.log`, and `archive-linux-reverse.log` under
-`target/dragonfly-tcplay/evidence/`. Installed exchange with FreeBSD, OpenBSD,
-and macOS remains pending. Windows is unverified.
+`target/dragonfly-tcplay/evidence/`. Windows is unverified.
+
+OpenBSD 8.0 VeraCrypt 1.26.31 and the installed DragonFly CLI exchanged AES
+containers in both directions. OpenBSD created a FAT32 volume with 4 KiB
+clusters and a 565248-byte data offset, then verified DragonFly's marker.
+OpenBSD also verified all five payload hashes in a DragonFly-created image,
+wrote a marker, and returned it. DragonFly reopened it through Auto, verified
+the marker, and matched the ciphertext digest recorded by OpenBSD. Both
+native inventories returned to baseline. The OpenBSD console SHA-256 is
+`2429fb0658331b953de7abe27920480f6d7ddfe32931ccd8aff81c9016e46272`.
+Receipts are `openbsd-aligned-origin.log` and `archive-openbsd-*.log` under
+`target/dragonfly-tcplay/evidence/`. FreeBSD and macOS remain pending.
 
 The installed CLI rejected the eight incompatible inputs above and a
 compatible AES header with unqualified FAT32 geometry. Each of the nine
