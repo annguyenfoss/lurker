@@ -31,7 +31,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ### OS-provided encryption
 
-Lurker uses your OS's tools for the methods marked ✅.
+Some encryption methods ship with the OS. Lurker wraps the tools below.
 
 | Platform | Encryption | System tools |
 | :--- | :--- | :--- |
@@ -42,18 +42,11 @@ Lurker uses your OS's tools for the methods marked ✅.
 | NetBSD | CGD | `cgdconfig` and CGD, plus `vnconfig`, `newfs`, and mount utilities |
 | DragonFly BSD | LUKS1 | `cryptsetup` and `dmsetup`, plus `vnconfig`, `kldload`, `newfs`, and mount utilities |
 
-The BSD tools ship with the OS. On Linux, the native Lurker package declares
-the required tools so your package manager can install any that are missing.
+† [DragonFly LUKS1 qualification](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
 
-DragonFly's LUKS1 developer builds passed normal vault operations. Public release qualification still requires the base `cryptsetup` parser fix or equivalent reviewed protection. Abrupt power-cut tests also lost acknowledged writes. See the [validation results](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md) for the tested routes and recovery limits.
+### Lurker-bundled encryption
 
-### Other encryption methods
-
-Lurker packages bundle VeraCrypt, gocryptfs, CryFS and Cryptomator on the
-platforms shown. FreeBSD PEFS needs the `pefs-kmod` package matching the running
-kernel. On macOS, install FUSE-T separately for VeraCrypt and Cryptomator, and
-macFUSE separately for gocryptfs and CryFS. The [macOS build guide](docs/macos-backends.md)
-records the tested versions and package requirements.
+For methods marked 📦, the goal is one Lurker install with the engine and runtime included.
 
 ## Create. Unlock. Lock.
 
