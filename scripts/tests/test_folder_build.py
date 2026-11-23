@@ -34,7 +34,7 @@ class ConanTests(unittest.TestCase):
 
             with patch.object(BUILD, "run", side_effect=write_graph):
                 path, prefix = BUILD.conan_boost_include(["conan"], options, root, root, None, {})
-            self.assertEqual(path, header.parent.parent)
+            self.assertEqual(path, header.parent.parent.resolve())
             self.assertEqual(prefix, "/usr/src/boost-1.84.0/include")
 
 
