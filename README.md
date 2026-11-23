@@ -30,7 +30,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | softraid RAID1C | — | — | — | — | 🧅 | — | — |
 | CGD | — | — | — | — | — | 🧅 | — |
 | VeraCrypt | 🥑 | 🥑 | 🍰 | 🥑 | 🥑 | 🍰 | 🍰 |
-| gocryptfs | 🥑 | 🥑 | 🍰 (cppcryptfs) | 🥑 | — | — | — |
+| gocryptfs | 🥑 | 🥑 | 🍰 | 🥑 | — | — | — |
 | CryFS | 🥑 | 🥑 | — | — | — | — | — |
 | Cryptomator | 🥑 | 🥑 | 🍰 | — | — | — | — |
 | securefs | 🍰 | 🍰 | 🍰 | 🍰 | — | — | — |
