@@ -214,6 +214,14 @@ error notifications, with their detailed reasons clipped at the window edge.
 The screenshots and inventories are under
 `target/dragonfly-tcplay/evidence/desktop-input/`.
 
+The desktop now wraps notification details and sizes the card to the
+wrapped text. A native desktop rebuild using the installed candidate helper
+displayed the full read-only refusal, authentication guidance and `Device busy`
+error in a 1280 × 860 window. Releasing the holder enabled a normal close.
+The desktop unit suite passed 33 tests with one ignored. See
+`size-clone-desktop-toast-build.log` and the `desktop-input/fixed-*` receipts
+under `target/dragonfly-tcplay/evidence/`.
+
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
 digest, the sample ciphertext and the native storage inventories matched

@@ -524,6 +524,7 @@ export component Toast inherits Rectangle {
         : UiTheme.ok;
 
     min-width: 260px * UiTheme.scale;
+    min-height: content.preferred-height;
     preferred-height: 56px * UiTheme.scale;
     border-radius: 10px * UiTheme.scale;
     border-width: 0.5px * UiTheme.scale;
@@ -536,7 +537,7 @@ export component Toast inherits Rectangle {
 
     animate opacity { duration: 200ms; easing: ease-out; }
 
-    HorizontalLayout {
+    content := HorizontalLayout {
         padding-left: 14px * UiTheme.scale;
         padding-right: 14px * UiTheme.scale;
         padding-top: 10px * UiTheme.scale;
@@ -566,6 +567,7 @@ export component Toast inherits Rectangle {
 
             if root.data.detail != "": Text {
                 text: root.data.detail;
+                wrap: word-wrap;
                 font-size: 11px * UiTheme.scale;
                 font-family: "JetBrains Mono";
                 color: UiTheme.fg-3;
