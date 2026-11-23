@@ -130,6 +130,16 @@ Opening without a credential or controlling terminal also failed in both
 modes with the source digest and native inventory intact. The receipt is
 `target/dragonfly-tcplay/evidence/archive-missing-credential-retry.log`.
 
+The optimized protocol-2 package at `aa34ed3` repeated the header and
+credential rejections with the same hash-verified upstream fixtures. The
+22 checks covered explicit and Auto open for the incompatible headers,
+the 80-byte password, old FAT32 geometry, missing credentials, and read-only
+requests. The same keyfile authenticated the compatible AES header in the
+positive wrapper control, which reported a 131,072-byte offset and a
+66,846,720-byte payload. Source hashes, native inventories, and
+`kern.cryptodevallowsoft` matched baseline. The receipt is
+`target/dragonfly-tcplay/evidence/prefill-installed-import-rejections.json`.
+
 The installed helper ran as login UID 1300 through scoped sudo authorization.
 It created an invoking-user-owned image, refused read-only before attachment,
 and exposed the active FAT32 mount with mode `0700` in the authorized volume
