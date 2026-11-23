@@ -1,12 +1,10 @@
 # File system support by operating system
 
-Survey date 2026-11-23. The matrix covers the seven OSes in Lurker's platform
-matrix and file systems an unlocked local disk, partition, or file-backed block
-device can carry. It includes maintained native formats, optional open-source
+Survey date 2026-11-23. The matrix covers local disks, partitions, and
+file-backed block devices on Linux, macOS, FreeBSD, OpenBSD, NetBSD, DragonFly
+BSD, and Windows. It includes maintained native formats, optional open-source
 drivers, experimental ports, commercial tools, and compatibility formats.
-A separate inventory records specialized and legacy paths. An OS or vendor
-capability in this survey does not establish Lurker integration or lifecycle
-validation.
+A separate inventory records specialized and legacy paths.
 
 **exFAT is the modern interchange choice.** Linux, macOS, and Windows have
 native read/write drivers. FreeBSD, NetBSD, and OpenBSD have packaged exFAT
@@ -70,7 +68,7 @@ mount or write tests were run for this survey.
 ### Specialized, legacy, and recovery formats
 
 These rows matter for imports, read-only volumes, and specialized deployments.
-They carry lower priority for new general-purpose encrypted volumes.
+They carry lower priority for new general-purpose volumes.
 
 | File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -102,7 +100,7 @@ They carry lower priority for new general-purpose encrypted volumes.
 | **ReiserFS** | Legacy Linux kernels, offline tools or FsRover R | — | Offline tools where packaged | — | — | — | FsRover R | L1, S6, X7 |
 | **VMFS, FATX, FbFS, LynxFS, RedoxFS and SFS** | FsRover R | — | — | — | — | — | FsRover R | X7 |
 
-## Findings that affect Lurker
+## Findings by OS and filesystem
 
 ### Interchange and native defaults
 
@@ -112,9 +110,6 @@ They carry lower priority for new general-purpose encrypted volumes.
   at mount time and lack per-file POSIX metadata and metadata journaling.
   Include filename and case behavior, capacity limits, and recovery in an
   interchange test. [L5, M1, W2, D2]
-- ext4, Btrfs, XFS, APFS, NTFS, UFS/FFS and HAMMER2 serve different native
-  workflows. A VeraCrypt or LUKS header can be portable even when the
-  decrypted filesystem needs a driver absent from the receiving host.
 - A filesystem family can contain incompatible feature profiles. Examples
   include ext4 extents and journal replay, XFS feature upgrades, ZFS pool
   feature flags, ReFS Windows releases, and FFSv2 with NetBSD WAPBL. Compare
@@ -140,21 +135,14 @@ They carry lower priority for new general-purpose encrypted volumes.
   configuration labels UFS write support experimental. A portable UFS
   import policy should start with read-only access and identify the variant.
   [U1]
-- GFS2 and OCFS2 need explicit cluster configuration. Lurker's unprivileged
-  Linux VeraCrypt path has its own filesystem driver set inside LKL. It
-  currently validates Btrfs, ext4, exFAT, FAT, NTFS3, and XFS. Privileged
-  Linux mounting delegates to the host. [L1, S2]
-  [Lurker Linux filesystem routes](linux-userspace.md#supported-unprivileged-operations)
+- GFS2 and OCFS2 need explicit cluster configuration. [L1, S2]
 
 ### macOS
 
 - `diskutil listFilesystems` on macOS 27.2.1 lists APFS, case-sensitive APFS,
   exFAT, FAT12/16/32, and HFS+ variants for normal disk formatting. The host
   also ships `newfs_udf` and `mount_udf` for applicable media and images.
-  Apple's announced restriction for macOS 28 and later concerns encrypted
-  HFS+ volumes. Current unencrypted HFS+ filesystems can still be used above
-  a separate encryption layer when the host accepts the attachment.
-  [M1, M4, M6]
+  [M1, M6]
 - The native NTFS access path is read-only. Paragon's NTFS for Mac and
   Tuxera's NTFS for Mac provide write access. The Paragon product also
   advertises formatting. Check the installed product's exact macOS release
@@ -164,9 +152,8 @@ They carry lower priority for new general-purpose encrypted volumes.
   provider determines which on-disk format and operations it implements.
   [M2, M3, M5]
 - OpenZFS on macOS ships separately and has OS/architecture-specific builds.
-  The upstream release notes also document an Apple Silicon encryption fix in
-  2.4.1p2. Qualify pool compatibility against the actual port build, particularly
-  when sharing pools with Linux or FreeBSD. [Z1, Z3]
+  Pool compatibility with Linux and FreeBSD depends on the feature flags
+  supported by the installed builds. [Z1, Z3]
 - Community alternatives cover some Linux formats. btrfs4mac documents a
   read-only FUSE mount and FSKit work. The `fuse-xfs` projects range from
   a historical read-only driver to a newer community fork that advertises
@@ -204,20 +191,15 @@ They carry lower priority for new general-purpose encrypted volumes.
   allows only limited overwrites, and native NILFS2 and HFS+ are read-only.
   The native ext4 extent reader and the experimental writable `fuse-ext2`
   port have different support levels. [N1–N6, Z2]
-- NetBSD's current CGD route uses FFSv2 with WAPBL for writes. Other
-  filesystems would need evidence for the relevant device flush behavior.
-  OpenBSD's current encrypted disk adapters use synchronous FFS writes.
-  Adding a different filesystem changes the recovery assumptions of the
-  adapter. [N7]
-  [Lurker durability evidence](../DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md#supported-routes-and-power-cut-results)
+- NetBSD provides metadata journaling for FFS through WAPBL. Compatibility
+  with other FFS implementations depends in part on whether the volume was
+  cleanly unmounted. [N7]
 
 ### DragonFly BSD
 
 - UFS, HAMMER, and HAMMER2 are native and have separate formatters. HAMMER2
   is the maintained general-purpose target and DragonFly's default root
-  filesystem. Keep UFS as a proven Lurker baseline. Test HAMMER2 on the
-  decrypted provider independently of HAMMER2 on the host containing the
-  encrypted file. [D1]
+  filesystem. [D1]
 - Stock **6.4.2** has `newfs_msdos`, `mount_msdos`, native
   `mount_ext2fs`, and legacy read-only NTFS/UDF. Its `ext2fs` source
   accepts only a subset of ext4 features. Native ext4 write compatibility
@@ -260,77 +242,30 @@ They carry lower priority for new general-purpose encrypted volumes.
   separate commercial Linux driver with write support for specified 1.x and
   3.x versions. Verify the exact build and volume profile. [X4–X5]
 - The Linux APFS kernel project defaults to read-only and describes writes as
-  experimental. `apfs-fuse` offers a separate read-only route, including
-  support for some software-encrypted volumes. Paragon provides a commercial
-  Linux read/write driver and a different APFS driver for Windows. The vendor
-  documents restrictions on hardware-encrypted volumes and APFS variants.
-  Reformatting an APFS volume is a separate capability from writing files to
-  one. [X1–X2]
+  experimental. `apfs-fuse` offers a separate read-only route. Paragon offers a
+  commercial Linux read/write driver and a separate Windows driver with
+  volume-type restrictions. [X1–X2]
 - HAMMER2 has separate FreeBSD, NetBSD, and OpenBSD work. The current FreeBSD
   port marks write support experimental. NetBSD and OpenBSD have development
   ports. Linux has an out-of-tree kernel project with formatting and write
   support under development, plus independent userspace image tools. [H1–H3]
 - Commercial **UFS Explorer** on Windows, macOS, and Linux can inspect or
   recover files from APFS, HFS+, UFS, ZFS, XFS, Btrfs, ReFS, and other
-  formats listed by the vendor. Those reader/extraction capabilities are
-  separate from a writable mount of the unlocked disk. The experimental
-  UFS2Tool has a distinct Windows Dokan mount path for FreeBSD UFS images.
+  formats listed by the vendor. The experimental UFS2Tool has a Windows
+  Dokan mount path for FreeBSD UFS images.
   [U3, S7]
 - **FsRover** provides a free read-only mount as well as extraction on Windows
   through WinFsp or Dokany and on Linux through FUSE. Its documented formats
-  include ext4, XFS, Btrfs, F2FS, APFS, UFS, JFS, ReiserFS, and ReFS.
-  Filesystem-native encryption support is outside that reader's capabilities.
-  [X7]
+  include ext4, XFS, Btrfs, F2FS, APFS, UFS, JFS, ReiserFS, and ReFS. [X7]
 
-### Filesystem support beside disk containers
+### Network, virtual, and archive filesystems
 
 SMB, NFS, WebDAV, SSHFS, CephFS, Lustre, BeeGFS, and other network or
-distributed filesystems expose a tree from another machine or cluster. They
-matter as host storage for vault files and directories. They do not determine
-which filesystem the host can mount on an unlocked local block device. The
-same distinction applies to overlay, memory, synthetic, and archive
-filesystems such as OverlayFS, nullfs, tmpfs, procfs, and tarfs. WIM,
-DMG, VHDX, GPT and MBR are image or partition formats used to carry
-filesystems. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
+distributed filesystems expose a tree from another machine or cluster.
+OverlayFS, nullfs, tmpfs, procfs, and tarfs expose views of directories,
+memory, kernel state, or archives. WIM, DMG, VHDX, GPT, and MBR are image or
+partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 [L1, M5–M6, O4, W4, S2, S4–S5]
-
-## Implementation implications for the current encryption integrations
-
-| Operation | Implication |
-| --- | --- |
-| Create a new disk container | Keep a sensible native default and offer host formatters whose output can also be mounted on that host. Validate formatter and mount driver independently. Check filesystem minimum size, sector geometry, supported features, native authorization, and required packages. |
-| Open an existing disk container | Unlock encryption, identify the filesystem on the verified decrypted device, and use the host's supported mount path. A known read-only driver should report that mode. Explicit read-only access must reach the underlying crypto device as well as the filesystem. |
-| Directory encryption | The host filesystem already exists. Qualify filesystem behavior needed by the directory engine, including naming, metadata, atomic rename, locking and durability. |
-| ZFS and cluster filesystems | ZFS requires verified pool creation or import, dataset mount, export, and recovery. Cluster filesystems have their own membership and setup requirements. An ordinary single-device formatter and mount workflow covers a different case. |
-| Optional or paid drivers | Detect the actual installed version and matching OS support. Record format, mount, read-only and recovery capabilities independently. Vendor availability establishes a potential host route. Integration, licensing and redistribution need their own evidence. |
-| Validation | A formatter and a mount driver establish the starting point. Qualify create, read/write, close/reopen, external imports, filesystem limits, fsync, full storage and recovery on the same encryption/OS route before advertising it. |
-
-### Current Lurker coverage
-
-Packaged native lifecycle tests cover 20 encryption/OS pairs across six OSes.
-The table groups the tested encryption backends by the filesystem Lurker
-creates inside the container. Directory backends use an existing filesystem
-for storage.
-
-| OS | Integrated disk and container encryption | Integrated directory encryption |
-| --- | --- | --- |
-| Linux | LUKS1, LUKS2 and VeraCrypt create Btrfs. Privileged unlock uses the host mount tools for existing filesystems. Login-user VeraCrypt has validated mounts for Btrfs, ext4, exFAT, FAT, NTFS and XFS. | gocryptfs, CryFS, Cryptomator |
-| macOS | Apple Encrypted Disk Image creates APFS inside the image. VeraCrypt creates exFAT. | gocryptfs, CryFS, Cryptomator |
-| FreeBSD | GELI and VeraCrypt create and mount UFS. | PEFS, gocryptfs |
-| OpenBSD | softraid CRYPTO, softraid RAID1C and VeraCrypt create and mount FFSv2. | — |
-| NetBSD | CGD creates and mounts FFSv2. | — |
-| DragonFly BSD | LUKS1 creates and mounts UFS. | — |
-| Windows | — | — |
-
-Physical-device creation is currently Linux-only. Standalone encrypted APFS
-volume management is listed as implemented in the README, but the approved
-scope and current code show a separate, unqualified workflow. The tested APFS
-path is inside Apple Encrypted Disk Image.
-
-[Native lifecycle records](../DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md#supported-routes-and-power-cut-results) ·
-[macOS FUSE-T package results](macos-backends.md#fuse-t-package-qualification) ·
-[Linux userspace mounts](linux-userspace.md#supported-unprivileged-operations) ·
-[Approved encryption scope](../DIRECTIVES/LLM/ENCRYPTION.md#approved-backend-scope)
 
 ## Primary references
 
@@ -351,7 +286,6 @@ path is inside Apple Encrypted Disk Image.
 - **M1** Apple Disk Utility filesystem formats. https://support.apple.com/guide/disk-utility/file-system-formats-dsku19ed921c/22.7/mac/27
 - **M2** Paragon extFS for Mac. https://www.paragon-software.com/home/extfs-mac/
 - **M3** Paragon and Tuxera NTFS for Mac. https://www.paragon-software.com/home/ntfs-mac/ · https://ntfsformac.tuxera.com/
-- **M4** Apple encrypted HFS+ lifecycle. https://support.apple.com/en-us/125615
 - **M5** Apple FSKit and ext4 provider examples. https://developer.apple.com/documentation/FSKit · https://github.com/kthchew/ExtendFS · https://github.com/rayhanadev/Ext4Kit
 - **M6** Apple filesystem details, including UDF and optical filesystems. https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/FileSystemDetails/FileSystemDetails.html
 - **W1** Microsoft Windows format command. https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/format

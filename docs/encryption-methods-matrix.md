@@ -4,8 +4,6 @@ Research date: 2026-11-12. Platforms: Windows, macOS, Linux, FreeBSD, NetBSD, Dr
 
 This note records the existing survey of platform availability, integration interfaces, security and recovery limitations, maintenance, and licensing. Assessments describe research findings; product scope and implementation plans are maintained separately. Licensing eligibility does not override maintenance or platform-support qualifications.
 
-The [filesystem support matrix](filesystem-support-matrix.md) covers the formats each OS can create or mount on an unlocked device.
-
 Native encryption management can use each OS's own format without requiring a shared format. The native integration paths are BitLocker on Windows, Apple encryption on macOS, LUKS2 on Linux, GELI on FreeBSD, CGD on NetBSD, dm-crypt/LUKS on DragonFly BSD, and softraid CRYPTO on OpenBSD. DragonFly's old bundled cryptsetup requires a separate security/version review before admission. File encryption, encrypted folders, and encrypted backups need different workflows from disk containers.
 
 This inventory covers major general-purpose data-at-rest methods, plus encrypted archives, backups, and specialized file formats relevant to disk, container, directory, and file protection. It does not count AES, ChaCha20, KDFs, transport encryption, password managers, or every commercial frontend as separate storage methods. Tomb, SiriKali, Plasma Vault, cryptmount, and systemd-homed manage other backends; they are not additional encryption formats. Age and rage implement one format, as do gocryptfs and cppcryptfs. Separate rows for LUKS1/LUKS2 and EncFS/CryFS generations capture materially different compatibility or maturity.
