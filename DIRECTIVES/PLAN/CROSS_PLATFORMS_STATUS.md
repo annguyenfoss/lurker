@@ -62,6 +62,22 @@ header checks. The installed CLI's unsupported-import path and the filesystem
 exchange still need native receipts. Build and rejection logs are in
 `target/dragonfly-tcplay/evidence/archive-recovery-wrapper-*.log`.
 
+The exact CLI and desktop package was recovered from a read-only copy of the
+stalled clone's HAMMER2 disk and installed offline on the clean UFS-backed
+guest. `pkg check -s` and `pkg check -d` passed, and the installed product and
+wrapper hashes matched. The first replay used the old 64 MiB fixtures and
+received the expected 260 MiB minimum error in every case.
+
+At the corrected 260 MiB size, the installed CLI passed the lifecycle for all
+six cipher and credential pairs. The 121 recorded steps covered explicit and
+Auto open, wrong credentials, the 64/65-byte password boundary, alias and
+busy-close rejection, close by mountpoint and source, and five payload hashes
+per pair across close, append, and reopen. The vnode, mapper, mount and
+session inventories returned to baseline with `kern.cryptodevallowsoft=0`.
+All six directory `fsync` checks still failed. The raw receipt is
+`target/dragonfly-tcplay/evidence/archive-recovery-installed-aligned-matrix.json`.
+The named host's follow-up suite remained inaccessible over SSH.
+
 ## Measurable completion criteria for the active implementation round
 
 The target is one verified final candidate covering the 16 approved non-macOS
