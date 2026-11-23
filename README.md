@@ -12,6 +12,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 - 🧅 Wraps an encryption tool on your system
 - 🥑 Encryption engine included with Lurker
+- 🍆 Integration in progress
 - **PLANNED** — On the roadmap
 - — Unavailable
 - 🛈 See note below
@@ -21,13 +22,13 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | LUKS1 | <sup>🧅</sup> | PLANNED | PLANNED | PLANNED | PLANNED | <sup>🧅&nbsp;🛈</sup> |
 | LUKS2 | <sup>🧅</sup> | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |
 | Apple&nbsp;Encrypted&nbsp;Disk&nbsp;Image | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| APFS&nbsp;Encrypted | <sup>—</sup> | PLANNED | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| APFS&nbsp;Encrypted | <sup>—</sup> | <sup>🍆</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
 | GELI | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
 | PEFS | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
 | softraid&nbsp;CRYPTO | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
 | softraid&nbsp;RAID1C | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
 | CGD | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> |
-| VeraCrypt | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED |
+| VeraCrypt | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🍆</sup> | <sup>🍆</sup> |
 | gocryptfs | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | <sup>—</sup> |
 | CryFS | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | PLANNED | <sup>—</sup> |
 | Cryptomator | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | PLANNED | <sup>—</sup> |
