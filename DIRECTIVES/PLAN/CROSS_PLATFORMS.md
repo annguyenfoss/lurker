@@ -2,6 +2,8 @@
 
 Status: implementation plan, recorded 2026-11-14. This document records the approved scope and acceptance gates. Current implementation and qualification results are tracked in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`; the baseline below is historical. `DIRECTIVES/LLM/ENCRYPTION.md` remains authoritative for backend selection and crypto profiles.
 
+The [DragonFly BSD VeraCrypt implementation plan](DRAGONFLY_VERACRYPT.md) covers the planned `tcplay` route and its native release gates.
+
 ## 1. Required outcome
 
 Build Lurker so users do **not** need a separate VeraCrypt installation on Linux or macOS. Bundle the necessary VeraCrypt-derived backend, supporting libraries and notices with Lurker. Aim for the same arrangement on the selected BSD platforms, FreeBSD and OpenBSD, where native builds and filesystem integration prove feasible.
