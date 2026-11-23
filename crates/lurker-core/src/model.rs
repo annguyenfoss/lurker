@@ -206,7 +206,9 @@ impl VolumeType {
             Self::Apple => os == "macos",
             Self::Luks => os == "linux",
             Self::Luks1 => matches!(os, "linux" | "dragonfly"),
-            Self::Veracrypt => matches!(os, "linux" | "macos" | "freebsd" | "openbsd"),
+            Self::Veracrypt => {
+                matches!(os, "linux" | "macos" | "freebsd" | "dragonfly" | "openbsd")
+            }
             Self::Geli | Self::Pefs => os == "freebsd",
             Self::Cgd => os == "netbsd",
             Self::Softraid | Self::Raid1c => os == "openbsd",
@@ -234,10 +236,7 @@ mod scope_tests {
             (VolumeType::Apple, [true, false, false, false, false, false]),
             (VolumeType::Luks, [false, true, false, false, false, false]),
             (VolumeType::Luks1, [false, true, false, true, false, false]),
-            (
-                VolumeType::Veracrypt,
-                [true, true, true, false, false, true],
-            ),
+            (VolumeType::Veracrypt, [true, true, true, true, false, true]),
             (VolumeType::Geli, [false, false, true, false, false, false]),
             (VolumeType::Cgd, [false, false, false, false, true, false]),
             (

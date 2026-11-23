@@ -152,6 +152,17 @@ pub(crate) fn luks_keyslot_kdf_args(cipher: CreateCipher, version: u16) -> Vec<O
     result
 }
 
+#[cfg(target_os = "dragonfly")]
+pub(crate) fn dragonfly_veracrypt_cipher(cipher: CreateCipher) -> String {
+    // DragonFly uses the same normal VeraCrypt XTS256 profile via libtcplay.
+    format!(
+        "{}-256-XTS",
+        cipher_profile(cipher)
+            .veracrypt_encryption
+            .to_ascii_uppercase()
+    )
+}
+
 // Linux and native BSD routes share the upstream VeraCrypt header profile.
 // Adapters select the native inner filesystem; transport never changes crypto.
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]

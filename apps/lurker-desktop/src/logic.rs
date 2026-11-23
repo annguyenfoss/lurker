@@ -474,7 +474,7 @@ mod tests {
             ("freebsd", "geli", 4),
             ("netbsd", "cgd", 1),
             ("openbsd", "softraid", 3),
-            ("dragonfly", "luks1", 1),
+            ("dragonfly", "luks1", 2),
         ] {
             let formats = super::create_formats(os, false);
             assert_eq!(formats[0], default);

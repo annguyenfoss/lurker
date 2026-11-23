@@ -712,7 +712,11 @@ mod tests {
             );
         };
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            ui.set_create_format(format.as_str().into());
+            ui.set_create_format(if backend == lurker_core::VolumeType::Veracrypt {
+                "vera"
+            } else {
+                format.as_str()
+            }.into());
             render(&window);
             ui.set_create_target_kind(
                 if backend.is_directory() {
@@ -728,7 +732,9 @@ mod tests {
                 ui.set_create_peer_source(peer.to_string_lossy().as_ref().into());
             }
             ui.set_create_size(
-                if cfg!(target_os = "linux") {
+                if cfg!(target_os = "dragonfly") && backend == lurker_core::VolumeType::Veracrypt {
+                    "260"
+                } else if cfg!(target_os = "linux") {
                     "256"
                 } else {
                     "128"
@@ -1159,8 +1165,14 @@ mod tests {
 }
 
 fn set_create_formats(window: &MainWindow, os: &str, unprivileged: bool) {
+    let installed_dragonfly_veracrypt = !cfg!(target_os = "dragonfly")
+        || os != "dragonfly"
+        || lurker_core::probe_system().is_ok_and(|probe| {
+            probe.tools.iter().any(|tool| tool.name == "lurker-tcplay" && tool.path.is_some())
+        });
     let formats = logic::create_formats(os, unprivileged)
         .into_iter()
+        .filter(|format| *format != "vera" || installed_dragonfly_veracrypt)
         .map(Into::into)
         .collect::<Vec<slint::SharedString>>();
     window.set_create_formats(ModelRc::from(Rc::new(VecModel::from(formats))));

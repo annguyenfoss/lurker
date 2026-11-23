@@ -45,6 +45,8 @@ use openbsd as native;
 mod dragonfly;
 #[cfg(target_os = "dragonfly")]
 use dragonfly as native;
+#[cfg(target_os = "dragonfly")]
+use dragonfly::veracrypt as dragonfly_vc;
 
 const STATE: &str = "/var/run/lurker-bsd";
 
@@ -145,6 +147,9 @@ struct Session {
     #[cfg(target_os = "dragonfly")]
     #[serde(default)]
     dragonfly_layer: Option<dragonfly::linear::Layer>,
+    #[cfg(target_os = "dragonfly")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dragonfly_veracrypt: Option<dragonfly_vc::Mapping>,
     mapped: Option<String>,
     mounted: Option<Mounted>,
     #[serde(default)]
@@ -334,8 +339,11 @@ fn check_backend(kind: VolumeType) -> AppResult<VolumeType> {
         kind
     };
     if kind != default_backend()
-        && !(cfg!(any(target_os = "freebsd", target_os = "openbsd"))
-            && kind == VolumeType::Veracrypt)
+        && !(cfg!(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "dragonfly"
+        )) && kind == VolumeType::Veracrypt)
     {
         return Err(AppError::new(format!(
             "Backend {kind} is not implemented by this native BSD adapter."
@@ -356,6 +364,10 @@ fn mount_backend(kind: VolumeType, source: &Path) -> AppResult<VolumeType> {
         } else {
             VolumeType::Veracrypt
         });
+    }
+    #[cfg(target_os = "dragonfly")]
+    if kind == VolumeType::Auto {
+        return dragonfly_vc::classify(source);
     }
     let _ = source;
     Ok(backend)
@@ -543,6 +555,13 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         c.keyfile.as_deref(),
         c.passphrase.is_none() && c.keyfile.is_none(),
     )?;
+    #[cfg(target_os = "dragonfly")]
+    let vc_program = if backend == VolumeType::Veracrypt {
+        dragonfly_vc::validate_create_size(size)?;
+        Some(dragonfly_vc::validate(&credential, Some(&target))?)
+    } else {
+        None
+    };
     let parent = target
         .parent()
         .ok_or_else(|| AppError::new("Container needs a parent directory."))?;
@@ -583,6 +602,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         dragonfly_backing_detach_requested: false,
         #[cfg(target_os = "dragonfly")]
         dragonfly_layer: None,
+        #[cfg(target_os = "dragonfly")]
+        dragonfly_veracrypt: None,
         mapped: None,
         mounted: None,
         peer_sources: Vec::new(),
@@ -652,6 +673,19 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         {
             native::format(backing, c.cipher, &credential)?;
             session.mapped = Some(native::unlock(backing, false, &credential)?);
+        }
+        #[cfg(target_os = "dragonfly")]
+        if let Some(program) = &vc_program {
+            dragonfly_vc::format(&registry, &session, program, size, c.cipher, &credential)?;
+            session.mapped = Some(dragonfly_vc::activate(
+                &registry,
+                &mut session,
+                program,
+                &credential,
+            )?);
+            return initialize_acquired_mapping(&registry, &session, |mapped| {
+                dragonfly_vc::make_filesystem(&registry, mapped, size)
+            });
         }
         #[cfg(target_os = "dragonfly")]
         {
@@ -839,15 +873,30 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             "Native BSD disk containers must be regular files.",
         ));
     }
-    let backend = mount_backend(c.volume_type, &source)?;
     let identity = Identity::read(&source)?;
+    let backend = mount_backend(c.volume_type, &source)?;
     let registry = Registry::open()?;
     registry.ensure_unused(&source)?;
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
     if backend == VolumeType::Veracrypt {
         veracrypt::ensure_source_available_with_managed(&source, &managed_veracrypt(&registry)?)?;
     }
+    #[cfg(target_os = "dragonfly")]
+    if backend == VolumeType::Veracrypt && c.readonly {
+        return Err(AppError::new(
+            "DragonFly VeraCrypt read-only mode is unavailable because the native mapper cannot enforce it.",
+        ));
+    }
     let credential = credential(c.passphrase.as_deref(), c.keyfile.as_deref(), false)?;
+    #[cfg(target_os = "dragonfly")]
+    let vc = (backend == VolumeType::Veracrypt)
+        .then(|| -> AppResult<_> {
+            Ok((
+                dragonfly_vc::validate(&credential, Some(&source))?,
+                crate::new_filesystem::invoking_owner()?,
+            ))
+        })
+        .transpose()?;
     if !c.mountpoint.exists() {
         fs::create_dir_all(&c.mountpoint).map_err(|e| AppError::io("Create mountpoint", e))?;
     }
@@ -902,6 +951,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         dragonfly_backing_detach_requested: false,
         #[cfg(target_os = "dragonfly")]
         dragonfly_layer: None,
+        #[cfg(target_os = "dragonfly")]
+        dragonfly_veracrypt: None,
         mapped: None,
         mounted: None,
         peer_sources: Vec::new(),
@@ -968,9 +1019,16 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                 }
                 #[cfg(target_os = "dragonfly")]
                 {
-                    session.mapped = Some(dragonfly::linear::activate(
-                        &registry, &mut session, c.readonly, &credential,
-                    )?);
+                    session.mapped = Some(if let Some((program, _)) = &vc {
+                        dragonfly_vc::activate(&registry, &mut session, program, &credential)?
+                    } else {
+                        dragonfly::linear::activate(
+                            &registry,
+                            &mut session,
+                            c.readonly,
+                            &credential,
+                        )?
+                    });
                 }
                 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
                 {
@@ -983,6 +1041,13 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                 registry.save(&session)?;
             }
         }
+        #[cfg(target_os = "dragonfly")]
+        if let Some((_, owner)) = &vc {
+            dragonfly_vc::mount(&registry, &session, &target, *owner)?;
+        } else {
+            mount_filesystem(session.mapped.as_deref().unwrap(), &target, c.readonly)?;
+        }
+        #[cfg(not(target_os = "dragonfly"))]
         mount_filesystem(session.mapped.as_deref().unwrap(), &target, c.readonly)?;
         session.mounted = mounts()?.into_iter().find(|m| m.target == target);
         let mounted = session.mounted.as_ref().ok_or_else(|| AppError::new("Mount succeeded but native mount identity is missing; preserve session for recovery."))?;
@@ -994,6 +1059,15 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             ));
         }
         registry.save(&session)?;
+        #[cfg(target_os = "dragonfly")]
+        if let Some((_, owner)) = &vc {
+            if mounted.filesystem != "msdos" {
+                return Err(AppError::new(
+                    "Unexpected mounted DragonFly VeraCrypt filesystem.",
+                ));
+            }
+            dragonfly_vc::verify_access(&target, *owner)?;
+        }
         require_write_journal(mounted)?;
         Ok(())
     })();
@@ -1240,6 +1314,9 @@ fn unmount_matching(c: UnmountCommand, output: Output, source_only: bool) -> App
                 }
             }
             || s.mounted.as_ref().is_some_and(|m| m.target == target)
+            || (cfg!(target_os = "dragonfly")
+                && s.backend == VolumeType::Veracrypt
+                && s.intended_mountpoint.as_ref() == Some(&target))
             || s.mapped.as_ref().is_some_and(|m| Path::new(m) == target)
             || identity
                 .as_ref()
@@ -1303,7 +1380,12 @@ fn verify_session(s: &Session) -> AppResult<()> {
         native::verify_backing(backing, &s.source)?;
     }
     #[cfg(target_os = "dragonfly")]
-    dragonfly::linear::verify(Path::new(STATE), s)?;
+    {
+        if s.backend == VolumeType::Veracrypt {
+            return dragonfly_vc::verify(s);
+        }
+        dragonfly::linear::verify(Path::new(STATE), s)?;
+    }
     if let (Some(mapped), Some(backing)) = (&s.mapped, &s.backing) {
         #[cfg(target_os = "dragonfly")]
         let backing = &*dragonfly::linear::crypto_backing(s, backing);
@@ -1326,7 +1408,11 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     #[cfg(target_os = "dragonfly")]
     {
         dragonfly::reconcile_backing_reservation(registry, s)?;
-        dragonfly::linear::reconcile_activation(registry, s)?;
+        if s.backend == VolumeType::Veracrypt {
+            dragonfly_vc::reconcile(registry, s)?;
+        } else {
+            dragonfly::linear::reconcile_activation(registry, s)?;
+        }
         dragonfly::reconcile_backing_detach(registry, s)?;
     }
     verify_session(s)?;
@@ -1345,11 +1431,15 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
                     "Mount identity changed; refusing to unmount its replacement.",
                 ));
             }
-            exec(
-                "/sbin/umount",
-                &[recorded.target.as_os_str().to_owned()],
-                None,
-            )?;
+            let argv = [recorded.target.as_os_str().to_owned()];
+            #[cfg(target_os = "dragonfly")]
+            if s.backend == VolumeType::Veracrypt {
+                exec_dragonfly_locked(registry, Path::new("/sbin/umount"), &argv, None, Duration::from_secs(300))?;
+            } else {
+                exec("/sbin/umount", &argv, None)?;
+            }
+            #[cfg(not(target_os = "dragonfly"))]
+            exec("/sbin/umount", &argv, None)?;
         }
         s.mounted = None;
         s.intended_mountpoint = None;
@@ -1376,6 +1466,13 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
             s.freebsd_detach = Some(freebsd::DetachIntent::Geli);
             registry.save(s)?;
         }
+        #[cfg(target_os = "dragonfly")]
+        if s.backend == VolumeType::Veracrypt {
+            dragonfly_vc::remove(registry, s)?;
+        } else {
+            close_mapping(s, mapped)?;
+        }
+        #[cfg(not(target_os = "dragonfly"))]
         close_mapping(s, mapped)?;
         s.mapped = None;
         #[cfg(target_os = "freebsd")]
@@ -1495,7 +1592,7 @@ pub fn probe_system() -> AppResult<SystemProbe> {
     } else {
         vec!["/usr/sbin/vnconfig", "/sbin/cryptsetup", "/sbin/dmsetup"]
     };
-    let tools = native
+    let mut tools: Vec<_> = native
         .into_iter()
         .chain(["/sbin/newfs", "/sbin/mount", "/sbin/umount"])
         .map(|s| ToolStatus {
@@ -1508,6 +1605,28 @@ pub fn probe_system() -> AppResult<SystemProbe> {
             required: true,
         })
         .collect();
+    if cfg!(target_os = "dragonfly") {
+        tools.push(ToolStatus {
+            name: "mount_msdos".into(),
+            path: Path::new("/sbin/mount_msdos")
+                .is_file()
+                .then(|| "/sbin/mount_msdos".into()),
+            required: false,
+        });
+        tools.push(ToolStatus {
+            name: "newfs_msdos".into(),
+            path: Path::new("/sbin/newfs_msdos")
+                .is_file()
+                .then(|| "/sbin/newfs_msdos".into()),
+            required: false,
+        });
+    }
+    #[cfg(target_os = "dragonfly")]
+    tools.push(ToolStatus {
+        name: "lurker-tcplay".into(),
+        path: dragonfly_vc::backend().ok(),
+        required: false,
+    });
     Ok(SystemProbe {
         is_root: crate::effective_uid() == 0,
         tools,
@@ -1520,7 +1639,15 @@ pub(super) fn args(values: &[&str]) -> Vec<OsString> {
 
 /// Tool output is bounded and secrets are never interpolated into diagnostics.
 pub(super) fn exec(program: &str, argv: &[OsString], input: Option<&[u8]>) -> AppResult<String> {
-    exec_in_locale(program, argv, input, "C", None)
+    exec_in_locale(
+        program,
+        argv,
+        input,
+        "C",
+        None,
+        Duration::from_secs(300),
+        None,
+    )
 }
 
 #[cfg(target_os = "dragonfly")]
@@ -1529,7 +1656,15 @@ pub(super) fn exec_interruptible(
     argv: &[OsString],
     input: Option<&[u8]>,
 ) -> AppResult<String> {
-    exec_in_locale(program, argv, input, "C", Some(Duration::from_secs(5)))
+    exec_in_locale(
+        program,
+        argv,
+        input,
+        "C",
+        Some(Duration::from_secs(5)),
+        Duration::from_secs(300),
+        None,
+    )
 }
 
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
@@ -1538,7 +1673,37 @@ pub(super) fn exec_utf8(
     argv: &[OsString],
     input: Option<&[u8]>,
 ) -> AppResult<String> {
-    exec_in_locale(program, argv, input, "C.UTF-8", None)
+    exec_in_locale(
+        program,
+        argv,
+        input,
+        "C.UTF-8",
+        None,
+        Duration::from_secs(300),
+        None,
+    )
+}
+
+#[cfg(target_os = "dragonfly")]
+fn exec_dragonfly_locked(
+    registry: &Registry,
+    program: &Path,
+    argv: &[OsString],
+    input: Option<&[u8]>,
+    timeout: Duration,
+) -> AppResult<String> {
+    let program = program
+        .to_str()
+        .ok_or_else(|| AppError::new("Invalid DragonFly backend path."))?;
+    exec_in_locale(
+        program,
+        argv,
+        input,
+        "C",
+        None,
+        timeout,
+        Some(registry._lock.as_raw_fd()),
+    )
 }
 
 fn stop_timed_out_child(
@@ -1569,9 +1734,26 @@ fn exec_in_locale(
     input: Option<&[u8]>,
     locale: &str,
     interrupt_grace: Option<Duration>,
+    timeout: Duration,
+    lock: Option<i32>,
 ) -> AppResult<String> {
+    use std::os::unix::process::CommandExt;
+
     let executable = crate::trusted_privileged_executable(Path::new(program))?;
-    let mut child = Command::new(&executable)
+    let mut command = Command::new(&executable);
+    if let Some(lock) = lock {
+        // Keep the open file description and its flock alive until the native
+        // operation exits. Recovery can then reason about terminal state.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::fcntl(lock, libc::F_SETFD, 0) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+    let mut child = command
         .args(argv)
         .env_clear()
         .env("LC_ALL", locale)
@@ -1583,9 +1765,10 @@ fn exec_in_locale(
         .spawn()
         .map_err(|e| AppError::io(format!("Launch {program}"), e))?;
     let mut stdin = child.stdin.take().unwrap();
-    let bytes = input.unwrap_or_default().to_vec();
+    let mut bytes = input.unwrap_or_default().to_vec();
     let writer = std::thread::spawn(move || {
         let result = stdin.write_all(&bytes);
+        bytes.fill(0);
         drop(stdin);
         result
     });
@@ -1613,7 +1796,7 @@ fn exec_in_locale(
         {
             break status;
         }
-        if start.elapsed() > Duration::from_secs(300) {
+        if start.elapsed() > timeout {
             let _ = stop_timed_out_child(&mut child, interrupt_grace);
             return Err(AppError::new(format!(
                 "{program} timed out; inspect retained BSD session before retrying."
@@ -1808,6 +1991,8 @@ mod tests {
             dragonfly_backing_detach_requested: false,
             #[cfg(target_os = "dragonfly")]
             dragonfly_layer: None,
+            #[cfg(target_os = "dragonfly")]
+            dragonfly_veracrypt: None,
             mapped: None,
             mounted: None,
             intended_mountpoint: None,
@@ -1941,6 +2126,8 @@ mod tests {
             dragonfly_backing_detach_requested: false,
             #[cfg(target_os = "dragonfly")]
             dragonfly_layer: None,
+            #[cfg(target_os = "dragonfly")]
+            dragonfly_veracrypt: None,
             mapped: None,
             mounted: None,
             peer_sources: Vec::new(),

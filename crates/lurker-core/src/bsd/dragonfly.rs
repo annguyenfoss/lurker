@@ -1,5 +1,5 @@
-//! DragonFly's native LUKS1/dm-crypt adapter. The base cryptsetup 1.1.2
-//! interface deliberately receives neither LUKS2 nor Argon2 arguments.
+//! Native DragonFly vnode and device-mapper support. LUKS1 uses the base
+//! cryptsetup 1.1.2 interface, while VeraCrypt uses the private tcplay adapter.
 use super::{Credential, Identity, Registry, Session, args, exec, exec_interruptible};
 use crate::{AppError, AppResult, CreateCipher};
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,7 @@ use std::path::Path;
 
 pub(super) mod linear;
 mod metadata;
+pub(super) mod veracrypt;
 
 const VNCONFIG: &str = "/usr/sbin/vnconfig";
 const CRYPTSETUP: &str = "/sbin/cryptsetup";
@@ -457,7 +458,7 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
 
 fn attached_private_copy(path: &Path) -> AppResult<Option<String>> {
     let metadata = std::fs::metadata(path)
-        .map_err(|e| AppError::io("Inspect private DragonFly vnode backing", e))?;
+        .map_err(|e| AppError::io("Inspect DragonFly vnode backing file", e))?;
     let expected = VnodeState::File(metadata.dev(), metadata.ino());
     // vnconfig's bulk listing stops at the first missing unit and continues
     // past failed kernel queries. Inspect every existing device by descriptor.
@@ -474,7 +475,7 @@ fn attached_private_copy(path: &Path) -> AppResult<Option<String>> {
         if vnode_name(name).is_ok() && vnode_state(name)? == expected {
             if found.is_some() {
                 return Err(AppError::new(
-                    "Multiple vnodes cover the private LUKS1 metadata.",
+                    "Multiple DragonFly vnodes cover the same backing file.",
                 ));
             }
             found = Some(format!("/dev/{name}"));
@@ -541,6 +542,10 @@ fn verify_dependencies(mapped: &str, backing: &[&str]) -> AppResult<()> {
 }
 
 pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
+    mapping_sectors(mapped, backing).map(|_| ())
+}
+
+fn mapping_sectors(mapped: &str, backing: &str) -> AppResult<u64> {
     if backing.starts_with("/dev/mapper/lurker_linear_") {
         mapping_name(backing)?;
     } else {
@@ -554,17 +559,12 @@ pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
     )?;
     let mut entries = status.lines();
     let mut first = entries.next().unwrap_or_default().split_whitespace();
-    if first.next() != Some("0")
-        || first
-            .next()
-            .and_then(|v| v.parse::<u64>().ok())
-            .is_none_or(|size| size == 0)
-        || first.next() != Some("crypt")
-        || entries.next().is_some()
-    {
-        return Err(AppError::new("DragonFly crypto mapping type changed."));
-    }
-    Ok(())
+    let start = first.next();
+    let size = first.next().and_then(|value| value.parse().ok());
+    size.filter(|&size| {
+        start == Some("0") && size > 0 && first.next() == Some("crypt") && entries.next().is_none()
+    })
+    .ok_or_else(|| AppError::new("DragonFly crypto mapping type changed."))
 }
 
 #[cfg(test)]

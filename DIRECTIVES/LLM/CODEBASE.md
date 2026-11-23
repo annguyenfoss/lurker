@@ -23,7 +23,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 
 - `crates/lurker-core`
   - `src/folder.rs`: shared login-user gocryptfs/CryFS/Cryptomator lifecycle, fixed profiles, private backend discovery and identity-checked sessions
-  - `src/bsd.rs`, `src/bsd/`: shared BSD file-container lifecycle with FreeBSD GELI and PEFS, NetBSD CGD, OpenBSD CRYPTO and RAID1C, and DragonFly LUKS1. FreeBSD and OpenBSD use the private VeraCrypt engine.
+  - `src/bsd.rs`, `src/bsd/`: shared BSD file-container lifecycle with FreeBSD GELI and PEFS, NetBSD CGD, OpenBSD CRYPTO and RAID1C, and DragonFly LUKS1. FreeBSD and OpenBSD use the private VeraCrypt engine. DragonFly VeraCrypt uses the private `tcplay` wrapper and native device mapper.
   - `src/api.rs`: shared serde command/response types
   - `src/model.rs`: enums such as `VolumeType`, `CreateCipher`, `SourceKind`
   - `src/credentials.rs`: password/keyfile exclusivity and keyfile validation
@@ -51,6 +51,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
   - `ui/controls.slint`: custom button/select/checkbox controls
   - `ui/theme.slint`: layout tokens
   - `ui/zoom-metrics.slint`: regression surface for text zoom tests
+- `scripts/build-dragonfly-tcplay.py`: verifies and builds the pinned DragonFly userspace `tcplay` sources, then stages the private wrapper and notices for `scripts/stage-unix.py`.
 - `scripts/build-macos-backends.py`: pinned native VeraCrypt/wx build and audited private dependency staging; compatible FUSE remains external
 - `scripts/build-folder-backends.py`, `scripts/build-cryptomator.py`: pinned private directory engines and a private Cryptomator Java runtime
 - `scripts/remote-test.py`: isolated exact-commit remote jobs with bounded summaries; see `docs/remote-testing.md`

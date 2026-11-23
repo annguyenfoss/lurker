@@ -19,6 +19,7 @@ pub struct Cli {
 #[derive(Debug)]
 pub enum ParseOutcome {
     Run(Cli),
+    ListNative(ColorMode),
     SessionClose {
         command: UnmountCommand,
         timeout: Option<Duration>,
@@ -335,6 +336,16 @@ where
             color_mode,
             to_stdout: true,
         }));
+    }
+
+    if first == "list" && matches!(os, "freebsd" | "dragonfly" | "netbsd" | "openbsd") {
+        if parsed_args.len() != 1 || volume_type_explicit || readonly || create_cipher_explicit
+            || privilege_mode_explicit || keyfile.is_some() || new_keyfile.is_some()
+            || slot.is_some() || close_timeout.is_some() || !peer_sources.is_empty() || allow_degraded
+        {
+            return Err(usage_failure(&script_name, color_mode, "Usage: lurker list [--color=WHEN]"));
+        }
+        return Ok(ParseOutcome::ListNative(color_mode));
     }
 
     if first == "-a" {
@@ -938,7 +949,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     };
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return format!(
-            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\nNative default: {}. File containers only; native device operations require administrator privileges.\n{raid_help}{directory_help}{session_help}",
+            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\n  {script_name} list\nNative default: {}. File containers only; native device operations require administrator privileges.\n{raid_help}{directory_help}{session_help}",
             VolumeType::default_create()
         );
     }
@@ -1092,6 +1103,18 @@ mod tests {
     use super::{parse_env_args, CommandAction, ParseOutcome};
     use lurker_core::{CreateCipher, SourceKind, VolumeType};
     use std::ffi::OsString;
+
+    #[test]
+    fn native_list_accepts_color_without_operation_options() {
+        let parse = |args| super::parse_args_for_platform(args, "dragonfly");
+        assert!(matches!(
+            parse(["lurker", "list", "--color=never"].map(OsString::from)),
+            Ok(ParseOutcome::ListNative(lurker_core::ColorMode::Never))
+        ));
+        for argument in ["--type=luks1", "--readonly", "extra"] {
+            assert!(parse(["lurker", "list", argument].map(OsString::from)).is_err());
+        }
+    }
 
     #[test]
     fn session_close_requires_an_explicit_backend_and_absolute_source() {

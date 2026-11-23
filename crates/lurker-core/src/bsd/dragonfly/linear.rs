@@ -78,7 +78,7 @@ fn read_header(source: &str, image_size: u64) -> AppResult<(metadata::Geometry, 
     Ok((geometry, prefix))
 }
 
-fn has_mapping(path: &str) -> AppResult<bool> {
+pub(super) fn has_mapping(path: &str) -> AppResult<bool> {
     let name = mapping_name(path)?;
     Ok(exec(DMSETUP, &args(&["ls"]), None)?
         .lines()
@@ -483,6 +483,7 @@ mod tests {
             dragonfly_backing_reservation: None,
             dragonfly_backing_detach_requested: false,
             dragonfly_layer: None,
+            dragonfly_veracrypt: None,
             mapped: None,
             mounted: None,
             intended_mountpoint: None,

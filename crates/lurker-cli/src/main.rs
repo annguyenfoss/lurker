@@ -25,6 +25,30 @@ fn main_entry() -> i32 {
                 }
             }
         }
+        Ok(ParseOutcome::ListNative(color_mode)) => {
+            let output = Output::new(color_mode);
+            match lurker_core::list_native_active_volumes() {
+                Ok(volumes) if volumes.is_empty() => {
+                    output.raw_stdout("No active native volumes.\n");
+                    0
+                }
+                Ok(volumes) => {
+                    for volume in volumes {
+                        let source = volume.source_path.as_deref().unwrap_or(&volume.mapper_path);
+                        let location = volume.mountpoint.as_ref().map_or_else(
+                            || "unmounted, close pending".to_owned(),
+                            |path| format!("mounted at {path:?}"),
+                        );
+                        output.raw_stdout(&format!("{source:?} {location}\n"));
+                    }
+                    0
+                }
+                Err(error) => {
+                    output.error(&error.message);
+                    error.exit_code
+                }
+            }
+        }
         Ok(ParseOutcome::SessionClose {
             command,
             timeout,
