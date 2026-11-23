@@ -177,6 +177,47 @@ remain unverified for this case. No power cut was performed. See
 `hammer2-stock-dedicated-*.log` and `hammer2-stock-dedicated-ps.png` under
 `target/dragonfly-tcplay/evidence/`.
 
+On a separate stock guest, writing and syncing 260 MiB of random data
+directly to a HAMMER2 file completed. Stock `tcplay` then created the header
+on that already initialized image and the native formatter made aligned
+FAT32. The installed Lurker package opened the image. The unchanged worker
+synced and renamed its 64 KiB file, then hit `EINVAL` on mount-root `fsync`
+before publishing readiness. Normal close restored the storage inventories.
+The initial allocation probe expected a different suffix from `hammer2 stat`.
+The follow-up used the retained image and recorded native `data-use` of
+260.52 MB and the SHA-256 of the containing HAMMER2 image. See
+`hammer2-prefill-control.log` and `hammer2-prefill-lurker-readiness.log`.
+
+The revised Lurker create path at `aa34ed3` fully initializes the backing file through
+the staging descriptor before attaching a vnode. The protocol-2 wrapper
+then creates the header. A native rebuild created a 260 MiB AES vault with a
+binary keyfile on HAMMER2, recorded 260.52 MB of allocated data, and verified
+an ordinary synced payload after explicit close and Auto reopen. A forced
+replacement exhausted the backing filesystem during initialization and
+preserved the original inode and ciphertext digest. The new CLI rejected
+a protocol-1 wrapper before staging, and its LUKS1 Auto suite passed all
+13 checks. The tests restored their native resource inventories. The
+receipts are `hammer2-prefill-candidate.log`,
+`hammer2-prefill-wrapper-mismatch.log`, and
+`hammer2-prefill-luks1-regression.log` under `target/dragonfly-tcplay/evidence/`.
+Native workspace check passed, and the workspace suite passed 97 tests with
+four ignored. The staging and BSD package harnesses passed 50 tests. See
+`target/dragonfly-tcplay/prefill-candidate/remote-workspace-*.log`.
+
+The optimized CLI packages built from `aa34ed3a99bae4400b95da5301e7b7382a5437f7`
+are under `target/dragonfly-tcplay/prefill-candidate/`. The LUKS1-only package
+omits the wrapper. The opt-in package includes protocol 2 and has SHA-256
+`e5b4d55df43c39b5623e08044b4e38b20d8955ec294e82b410ddabc380fba21e`.
+An offline `pkg` install into a private root passed file and dependency checks.
+Its installed CLI repeated the HAMMER2 AES create, explicit and Auto reopen,
+payload digest and forced-replacement exhaustion checks. The standard
+conformance suite on the same installed CLI passed create, overwrite protection,
+unlock and ASCII rename and truncation. It reproduced `EINVAL` for the UTF-8
+filename and directory syncs, and `SQLITE_IOERR_LOCK` for SQLite FULL/WAL.
+Both suites restored the storage inventories. See
+`hammer2-prefill-installed-package.log` and
+`prefill-installed-fat32-conformance.log` under `target/dragonfly-tcplay/evidence/`.
+
 The standard VeraCrypt conformance suite passed create, no-overwrite, and
 unlock. Its application case failed with `EINVAL` on creation of a UTF-8
 filename. The suite retained the test mount and an explicit CLI close
