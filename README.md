@@ -6,7 +6,7 @@
 
 **For Linux, MacOS, FreeBSD, OpenBSD, NetBSD and DragonFly BSD.**
 
-Protect disks, file containers and directories with the CLI or native desktop app. Linux also supports creating vaults on physical devices.
+Protect disks, file containers and directories with the CLI or native desktop app.
 
 ## Encryption support
 
