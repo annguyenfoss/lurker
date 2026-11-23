@@ -238,6 +238,22 @@ restored native inventories. The combined receipt is
 `target/dragonfly-tcplay/evidence/prefill-installed-matrix-combined.json`
 with SHA-256 `92d8693b64827a1f4409b2037aade5fd09fa8ebbe9248e667dc08b300bef6ae9`.
 
+Stock `newfs_msdos` on DragonFly 6.4.2 produced undersized FATs at 379 MiB
+and 892 MiB in an 822-case geometry sweep. Both failures appeared in the
+boot sectors of formatted test images. Passing the FAT length explicitly
+passed 823 geometry checks. The opt-in CLI package at `63b82f5` uses that
+length. It passed native offline installation, file and dependency checks,
+and create, explicit open, and Auto reopen at both sizes. The authenticated
+devices had aligned data regions and enough FAT entries. A synced 64 KiB
+payload matched after each reopen. Package removal restored the pretest
+inventory and preserved the system package database and CLI digests.
+Workspace check and tests passed with 98 tests and four ignored. The
+CLI package SHA-256 is
+`bf63ce462d17a25edeb66052207b2d22a92059b0863e8567c75d500324706171`.
+See `fat32-explicit-capacity/native-installed-geometry-retry.log` and
+`primary-ssh-recheck/formatter-*-sweep.json` under
+`target/dragonfly-tcplay/evidence/`.
+
 The full opt-in desktop package built from the same `aa34ed3` source has
 SHA-256 `bab5a95e1b56f9243ad2fc992cf0e91757870d8151c87c307bbf006f46c2eb4d`.
 It passed offline native installation and package checks in a private root
