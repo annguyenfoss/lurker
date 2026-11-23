@@ -296,6 +296,14 @@ DragonFly CLI authenticated a temporary copy of the returned ciphertext
 and verified both marker hashes. The peer retained the verified image.
 See `target/dragonfly-tcplay/evidence/fat32-explicit-freebsd/`.
 
+The same DragonFly-origin vault passed a writable round trip with macOS
+27.2.1 and the pinned VeraCrypt 1.26.31 console. The login user verified
+the 758-sector FAT layout and original marker, then wrote and synced a
+second marker through native `msdos`. The `63b82f5` DragonFly CLI matched
+the returned ciphertext digest and both marker hashes after Auto reopen.
+Both hosts restored their storage inventories. See
+`target/dragonfly-tcplay/evidence/fat32-explicit-macos/`.
+
 The full opt-in desktop package built from the same `aa34ed3` source has
 SHA-256 `bab5a95e1b56f9243ad2fc992cf0e91757870d8151c87c307bbf006f46c2eb4d`.
 It passed offline native installation and package checks in a private root
