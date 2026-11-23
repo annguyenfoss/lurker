@@ -10,8 +10,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Encryption support
 
-- ✅ Available in the CLI with OS-provided encryption tools
-- 📦 Available in the CLI with software outside the base OS
+- ✅ CLI wrapper for a built-in tool or an installed dependency
+- 📦 CLI support with an encryption engine bundled by Lurker
 - — Unavailable · † Limited power-loss resilience
 
 | Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
@@ -23,21 +23,21 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | CGD | — | — | — | — | ✅ | — |
 | softraid CRYPTO | — | — | — | ✅ | — | — |
 | softraid RAID1C | — | — | — | ✅ | — | — |
+| PEFS | — | — | ✅ | — | — | — |
 | VeraCrypt | 📦 | 📦 | 📦 | 📦 | — | — |
 | gocryptfs | 📦 | 📦 | 📦 | — | — | — |
 | CryFS | 📦 | 📦 | — | — | — | — |
-| PEFS | — | — | 📦 | — | — | — |
 | Cryptomator | 📦 | 📦 | — | — | — | — |
 
 † [DragonFly LUKS1 qualification](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
 
-### OS-provided encryption
+### Encryption wrappers
 
-Lurker wraps the platform's tools for these methods.
+Lurker uses built-in tools or installed dependencies for these methods.
 
 - Linux — LUKS1 and LUKS2
 - macOS — Apple encrypted disk images
-- FreeBSD — GELI
+- FreeBSD — GELI and PEFS (requires `pefs-kmod`)
 - OpenBSD — softraid CRYPTO and RAID1C
 - NetBSD — CGD
 - DragonFly BSD — LUKS1
