@@ -157,6 +157,18 @@ restored the native inventories. The receipts are
 `archive-veracrypt-conformance-cleanup.log` under
 `target/dragonfly-tcplay/evidence/`.
 
+On the same stock kernel, the bare aligned FAT32 control reproduced the
+filename rejection with the default mount options. With `-L en_US.UTF-8`,
+`-L zh_Hant_TW.UTF-8`, or `-L en_US.UTF-8 -D CP950`, the control wrote and
+synced `profile 密碼.bin`. The FAT32 directory entries contained the exact
+UTF-16 name, but after remount the native filesystem listed `profile ??.bin`
+and opening the original name returned `ENOENT`. All four mounts also
+returned `EINVAL` for a POSIX byte-range lock and directory `fsync`. The
+same login-user operations passed on UFS. The 6.4.2 `msdosfs` vnode table
+has no advisory-lock handler and uses the default handler that returns
+`EINVAL`. The receipts are `size-clone-fat-locale-probe.log` and
+`size-clone-fat-locale-ondisk.log` under `target/dragonfly-tcplay/evidence/`.
+
 The installed Slint desktop opened a 1280 × 860 software-rendered X11 window
 as UID 1300 using the verified Xvfb archive. The first probe lacked `xdpyinfo`
 and stopped before launch. The retry with the offline X11 test tools captured
