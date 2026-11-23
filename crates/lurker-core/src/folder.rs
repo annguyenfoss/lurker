@@ -1168,6 +1168,17 @@ fn darwin_unmount_busy(stderr: &[u8]) -> bool {
     )
 }
 
+fn darwin_fuse_t_fskit_mount(identity: &str) -> bool {
+    let Some((_, options)) = identity.rsplit_once(" (") else {
+        return false;
+    };
+    let Some(options) = options.strip_suffix(')') else {
+        return false;
+    };
+    let mut options = options.split(", ");
+    options.next() == Some("fuse-t") && options.any(|option| option == "fskit")
+}
+
 fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bool) -> AppResult<()> {
     if c.tag.is_some() {
         return Err(AppError::new(
@@ -1196,9 +1207,7 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
             archive.display()
         )));
     }
-    let mut retry_busy = cfg!(target_os = "macos")
-        && session.backend == VolumeType::Cryptomator
-        && session.fence.is_some();
+    let mut retry_available = cfg!(target_os = "macos");
     loop {
         if Identity::read(&session.source)? != session.source_identity {
             return Err(AppError::new(
@@ -1218,6 +1227,9 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
             })?;
             Ok(!alive(process)?)
         })?;
+        let retry_busy = retry_available
+            && (darwin_fuse_t_fskit_mount(&identity)
+                || (session.backend == VolumeType::Cryptomator && session.fence.is_some()));
         let result = native_unmount(&session.mountpoint, retry_busy)?;
         if result.status.success() {
             break;
@@ -1229,7 +1241,7 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
         }
         // FSKit can briefly report a newly mounted volume as busy. Retry once
         // with ordinary unmount after revalidating the exact source and mount.
-        retry_busy = false;
+        retry_available = false;
         std::thread::sleep(Duration::from_millis(150));
     }
     if mount_identity(&session.mountpoint)?.is_some() {
@@ -1338,6 +1350,22 @@ mod tests {
         ));
         assert!(!darwin_unmount_busy(
             b"umount(/tmp/Resource busy): Operation not permitted\n"
+        ));
+    }
+
+    #[test]
+    fn recognizes_fuse_t_fskit_from_native_mount_options() {
+        assert!(darwin_fuse_t_fskit_mount(
+            "file:///private/tmp/fuset-session-42/session.json on /tmp/vault (fuse-t, local, nodev, fskit, mounted by tester)"
+        ));
+        assert!(!darwin_fuse_t_fskit_mount(
+            "fuse-t:/fskit on /tmp/vault (nfs, nodev, nosuid)"
+        ));
+        assert!(!darwin_fuse_t_fskit_mount(
+            "gocryptfs on /tmp/vault (macfuse, local, fskit)"
+        ));
+        assert!(!darwin_fuse_t_fskit_mount(
+            "fuse-t on /tmp/vault (fuse-t, nodev, nofskit)"
         ));
     }
     #[test]
