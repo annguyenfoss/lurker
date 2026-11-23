@@ -79,9 +79,20 @@ workload. Preserve failures in the application and capacity checks. Require the
 file and directory syncs and SQLite FULL/WAL commit to be acknowledged before a
 power cut. [Power-loss runbook](vm-powerloss-testing.md)
 
-The remaining matrix covers interoperability, interruption, ordinary reboot,
-and desktop callbacks. Measured results and exact artifact revisions are in the
-status record. [Qualification plan](../DIRECTIVES/PLAN/DRAGONFLY_VERACRYPT.md)
+For interruption checks on an isolated guest, use the installed CLI with a
+fresh disposable destination and a separate fixture for reopen and close.
+Derive the phase stop points from the exact executable's disassembly. On
+DragonFly 6.4.2, run GDB with `stop-on-solib-events` enabled and use the
+inferior's procfs `map` to resolve the relocated executable addresses. Verify
+the expected journal, vnode, mapper, and mount state while the inferior is
+stopped, then deliver `SIGINT` or `SIGKILL` to that inferior. Record the
+termination and verify cleanup through the CLI. Compare the destination inode
+and digest for interrupted creates, the payload digest after reopen, and the
+final native inventories. The status record lists the offsets for the
+tested executable and links the receipts.
+
+The qualification plan also covers interoperability, ordinary reboot, and
+desktop callbacks. [Qualification plan](../DIRECTIVES/PLAN/DRAGONFLY_VERACRYPT.md)
 [Cross-platform status](../DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
 
 ## Common options

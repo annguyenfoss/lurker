@@ -172,6 +172,23 @@ mapping and ciphertext digest were preserved. Restoring the authenticated
 mapping allowed Lurker to finish cleanup after the native unmount. The
 receipt is `target/dragonfly-tcplay/evidence/archive-foreign-mapper-reused.log`.
 
+All 14 installed CLI interruption cases passed on the isolated DragonFly
+6.4.2 UFS guest. The debugger stopped the hash-verified CLI after staging,
+vnode attachment, mapper activation, format, mount, unmount, and mapper
+removal, once each for `SIGINT` and `SIGKILL`. The harness checked each
+stop against the actual native devices and journal before sending the signal.
+Interrupted creates preserved the destination inode and bytes. Recovery
+closed the owned state, reopens matched the original payload hash, and the
+final inventories matched baseline.
+
+The CLI SHA-256 is
+`65f25054610b3309f8308bcae350f7834b9b26a98fbcb6f2c57d4f04c35c51ae`.
+The executable-relative stop offsets
+were `0x5df10`, `0x6a370`, `0x68be0`, `0x5a820`, `0x50bf3`, `0x5aa4d`,
+and `0x5ad1a` in phase order. The receipt records the resolved addresses and
+observed journal and device state. See
+`target/dragonfly-tcplay/evidence/archive-interruptions.json`.
+
 LUKS1 Auto detection on the same installed CLI passed all 13 conformance
 checks with stock `cryptsetup` 1.1.2. Final mounts, mappings and vnode
 inventories were clean. The receipt is
