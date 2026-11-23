@@ -15,18 +15,18 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-| Encryption | MacOS | Linux | DragonFly&nbsp;BSD | FreeBSD | OpenBSD | NetBSD |
+| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | — | 🧅 | 🧅 🛈 | — | — | — |
-| LUKS2 | — | 🧅 | — | — | — | — |
-| Apple encrypted disk images | 🧅 | — | — | — | — | — |
-| GELI | — | — | — | 🧅 | — | — |
-| PEFS | — | — | — | 🧅 | — | — |
-| softraid CRYPTO | — | — | — | — | 🧅 | — |
-| softraid RAID1C | — | — | — | — | 🧅 | — |
-| CGD | — | — | — | — | — | 🧅 |
-| VeraCrypt | 🥑 | 🥑 | — | 🥑 | 🥑 | — |
-| gocryptfs | 🥑 | 🥑 | — | 🥑 | — | — |
+| LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 |
+| LUKS2 | 🧅 | — | — | — | — | — |
+| Apple encrypted disk images | — | 🧅 | — | — | — | — |
+| GELI | — | — | 🧅 | — | — | — |
+| PEFS | — | — | 🧅 | — | — | — |
+| softraid CRYPTO | — | — | — | 🧅 | — | — |
+| softraid RAID1C | — | — | — | 🧅 | — | — |
+| CGD | — | — | — | — | 🧅 | — |
+| VeraCrypt | 🥑 | 🥑 | 🥑 | 🥑 | — | — |
+| gocryptfs | 🥑 | 🥑 | 🥑 | — | — | — |
 | CryFS | 🥑 | 🥑 | — | — | — | — |
 | Cryptomator | 🥑 | 🥑 | — | — | — | — |
 
