@@ -276,6 +276,19 @@ the committed WAL rows and passed `integrity_check`. All inventories returned
 to baseline.
 The receipt is `target/dragonfly-tcplay/evidence/rebuild-application-gates.log`.
 
+The standard `scripts/test-backends.py` harness at `9cfdbc1` reproduced the
+failure on the rebuilt AES package on the isolated 6.4.2 UFS-backed guest.
+Create, overwrite protection and unlock passed. The application case recorded
+successful ASCII rename and truncation, `EINVAL` on UTF-8 filename creation
+and both mount-root syncs, and `SQLITE_IOERR_LOCK` on the FULL/WAL workload.
+All five checks passed on the guest's plain UFS. The UFS control also read
+back the exact committed row and passed `integrity_check`. Normal CLI close
+restored the vnode, mapper, mount and Lurker session inventories. The
+receipts are `rebuild-standard-conformance-fat32.json` and
+`rebuild-standard-conformance-ufs.json` under
+`target/dragonfly-tcplay/evidence/`. During this run the named primary was
+unreachable over SSH, including a direct probe to its recorded address.
+
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
 digest, the sample ciphertext and the native storage inventories matched
