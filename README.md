@@ -10,8 +10,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Encryption support
 
-- 🧅 CLI wrapper for a built-in tool or an installed dependency
-- 🥑 CLI support with an encryption engine bundled by Lurker
+- 🧅 Wraps an encryption tool on your system
+- 🥑 Encryption engine included with Lurker
 - — Unavailable · † Limited power-loss resilience
 
 | Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
