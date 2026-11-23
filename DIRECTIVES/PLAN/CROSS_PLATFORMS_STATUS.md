@@ -273,6 +273,13 @@ checks with stock `cryptsetup` 1.1.2. Final mounts, mappings and vnode
 inventories were clean. The receipt is
 `target/dragonfly-tcplay/evidence/archive-luks1-auto-regression.json`.
 
+The installed candidate also listed and closed an active LUKS1 volume whose
+version 1 journal was written by the earlier `14ede46fb401` CLI. Listing
+preserved the original journal bytes. The candidate reopened the same
+volume through Auto, verified the synced payload hash, and closed by
+mountpoint. Final inventories matched baseline. The receipt is
+`target/dragonfly-tcplay/evidence/size-clone-luks1-old-journal-retry.log`.
+
 The installed CLI opened a fully allocated 260 MiB image for a bounded FAT32
 capacity test. After syncing a 269623296-byte filler, one 4 KiB cluster
 remained. A 1 MiB append returned `ENOSPC`. The earlier file hash and the
