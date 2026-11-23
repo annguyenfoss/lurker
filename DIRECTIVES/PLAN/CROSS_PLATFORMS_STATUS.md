@@ -233,6 +233,24 @@ The desktop unit suite passed 33 tests with one ignored. See
 `size-clone-desktop-toast-build.log` and the `desktop-input/fixed-*` receipts
 under `target/dragonfly-tcplay/evidence/`.
 
+The isolated 6.4.2 builder produced both native packages offline from
+`a366506c712a10216033a520f89e1353ad2363af`, including that desktop fix.
+Both packages contain the same CLI, helper and desktop binaries. The default
+package contains LUKS1 and has SHA-256
+`a082d42b2ca591b1120b044ae01d35cae02ef430fa9cfabb7fcf504ce74fdcc4`.
+The opt-in package contains LUKS1 and the verified private `tcplay` wrapper
+and has SHA-256
+`b5188507244dad957b55a6db26e09e8cd2180f8927bb4dbbce34d973cbaae97b`.
+Offline installation and file and dependency checks passed for both. The
+default desktop offered only LUKS1, and its CLI reopened a legacy LUKS1
+fixture with the expected payload. It refused VeraCrypt create before
+attaching resources. The opt-in desktop offered VeraCrypt and rendered the
+full read-only refusal. The opt-in CLI created, explicitly mounted, wrote,
+closed and reopened an AES vault through Auto with a matching payload hash.
+The installer receipts are under `target/dragonfly-tcplay/rebuild-a366506c712a/`
+and the installed tests are `rebuild-installed-*.log` and
+`desktop-input/rebuilt-*` under `target/dragonfly-tcplay/evidence/`.
+
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
 digest, the sample ciphertext and the native storage inventories matched
