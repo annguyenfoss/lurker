@@ -156,6 +156,17 @@ record required for a power cut. The HAMMER2 fixture and vault closed with
 idle storage inventories. The receipts are `hammer2-readiness-*.log` and
 `hammer2-readiness-guest.json` under `target/dragonfly-tcplay/evidence/`.
 
+The unchanged worker reproduced the mount-root `fsync` failure with stock
+`tcplay` 3.3 and the same aligned FAT32 geometry. The sparse UFS, fully
+allocated UFS, and sparse HAMMER2 cases all wrote, synced and renamed the
+worker file before exiting with `EINVAL`. None produced a readiness record.
+Each completed control restored its storage inventory and
+`kern.cryptodevallowsoft`. The fully allocated HAMMER2 case stopped reporting
+progress during setup and the isolated guest stopped returning SSH banners.
+Its worker outcome and cleanup are unverified. The receipts are
+`stock-readiness-ufs-*.log`, `stock-readiness-hammer2.log`, and the retained
+console capture under `target/dragonfly-tcplay/evidence/`.
+
 The standard VeraCrypt conformance suite passed create, no-overwrite, and
 unlock. Its application case failed with `EINVAL` on creation of a UTF-8
 filename. The suite retained the test mount and an explicit CLI close
