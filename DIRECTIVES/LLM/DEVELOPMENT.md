@@ -3,41 +3,76 @@
 ## Development cycle
 
 1. Read the relevant project directives and inspect the working tree and
-   index. Define the intended behavior, the affected platforms and entry
-   points, and the evidence needed to verify the change. For encryption
-   changes, include the real create, unlock, write, close, and reopen
-   lifecycle for the affected route.
+   index. Use [CIPHER.md](CIPHER.md) to identify the approved routes and
+   supported create options, then compare them with the code and available
+   native receipts. Define the affected platforms, entry points, checks,
+   and success criteria. Use day-to-day Arch Linux LUKS2 with elevation and
+   VeraCrypt as the login user as the practical baseline for normal behavior.
 2. Start from the latest verified baseline for the affected workflow. Use
    the batch process below to collect failures, implement compatible fixes,
-   and verify them together. Keep logical changes in atomic commits and
-   preserve unrelated work.
-3. Choose the validation scope based on what changed. Workspace checks
-   cover compilation and unit tests. Native functional tests cover real
-   encryption and storage behavior. Installed-artifact tests cover package
+   and verify them together.
+3. Smoke-test a new or repaired route on its primary host with a real
+   create, unlock, write, close, and reopen. Then run broader validation
+   against the affected workflows. Workspace checks cover compilation and
+   unit tests. Native functional tests cover real encryption and storage
+   behavior. Installed-artifact tests cover package
    contents, dependencies, and the shipped CLI or desktop entry points.
    Include fault or recovery scenarios when the change affects them.
-4. Deliver a verified candidate with its source revision, build artifacts,
-   test results, and any outstanding issues. Report milestones as they
-   pass so follow-up investigation can proceed from a known baseline.
+4. Review each atomic diff, run its applicable checks, and commit it when
+   ready. Push validated commits as they land. Deliver the source revision,
+   artifact identities, test outcomes, and remaining issues or scope
+   exceptions. Preserve unrelated work in the index and working tree.
 
 ## Remote execution boundary
 
-The user's workstation is the editor/coordinator. Run **all tests on remote
-VMs**, including Rust/Python unit tests, desktop probes and storage suites.
-Run builds remotely by default too. A warm local cache does not justify testing
-on the host. macOS work runs on Buran. Never touch installed Lurker sessions.
+Use the workstation to edit, dispatch SSH jobs, and collect evidence. Run
+all tests on their remote targets, including Rust/Python unit tests, desktop
+probes and storage suites. Run builds remotely by default. Preserve existing
+Lurker installations and sessions outside the job's test scope.
 
-Read `CODEBASE.md`, `../PLAN/CROSS_PLATFORMS.md` and
-`../../docs/remote-testing.md`. The latter documents the runner's actual
-capabilities and historical results; this file explains operating discipline.
+- **Linux and BSD.** Start development on Arch Linux and the affected BSD
+  guests. For a full native matrix, include Arch, Debian, Ubuntu, Fedora,
+  openSUSE and Gentoo, plus FreeBSD, NetBSD, OpenBSD and DragonFly BSD. Use
+  the [tracked SSH inventory](../../scripts/remote-test/hosts.json) to select
+  guests. Dedicated KVM guests can receive needed package updates and
+  orderly reboots. Coordinate exclusive guest access before reboots,
+  package changes or changes to attached storage. Run those operations
+  within the assigned guest or its libvirt domain.
+- **macOS.** Use the inventory's `macos` target via `ssh adjutant@buran`.
+  If the short name fails to resolve, try `buran.local` or `buran.swarm`.
+  Buran is a live shared Mac. **Never reboot or shut it down.** Pause the
+  job if an operator is restarting it, then verify SSH and the job's state
+  before continuing. Use private source, staging directories, app bundles,
+  and disposable fixtures. Run as the login user and use the available
+  passwordless sudo only for scoped tasks that require it. Coordinate
+  prerequisite or system changes with the operator. See the
+  [macOS build and package notes](../../docs/macos-backends.md).
+
+The [cross-platform plan](../PLAN/CROSS_PLATFORMS.md) defines topology and
+release coverage. The [remote runner reference](../../docs/remote-testing.md)
+covers invocation, recipes, toolchains, and result collection.
+
+## Coordinating full-matrix work
+
+Before dispatching a multi-OS round, write a common brief and an OS-specific
+handoff for each of Linux, macOS, FreeBSD, NetBSD, OpenBSD and DragonFly BSD.
+Give each OS one owner when delegating. The Linux owner covers all six
+distributions. Include the baseline revision, inventory keys, allowed host
+operations, build recipe, artifact and fixture locations, test matrix, and
+definition of done. Assign one owner per guest while it is in use and
+coordinate edits to shared build and packaging files.
+
+Keep the handoffs with the private run evidence under `target/goal-validation/`
+in a directory specific to the round. Owners update their note with commit
+and run IDs, result paths, blockers, and the next action so a later owner can
+resume from that state. Let owners run their checks independently. The
+coordinator reviews concise milestones and intervenes for shared changes,
+host conflicts, or blockers. Reconcile each OS result against the agreed
+checks before closing the round.
 
 ## Batch failure investigation, fixes and validation
 
-Earlier qualification cycled through rebuilds and broad retests as individual
-issues surfaced. Once the clean-install baseline passed, many follow-up checks
-could run against that existing build. For example, the six stock Linux guests
-ran all 54 loop-device profiles against the existing `14ede46` installers.
-Use the following workflow to reduce the number of expensive build cycles.
+Group compatible changes so a single native build can verify multiple fixes.
 
 1. **Freeze a baseline and collect failures together.** Record the source
    revision, artifact hashes, and relevant guest and fixture details. Run the
@@ -70,19 +105,74 @@ Use the following workflow to reduce the number of expensive build cycles.
    next batch unless they invalidate the current results or block a required
    check.
 
+## Native lifecycle and persistence
+
+Run the shipped CLI and desktop helper from the exact candidate package in
+the target's test scope. Use the existing
+[backend conformance suites](../../docs/backend-testing.md) and
+[Linux package checks](../../docs/linux-package-testing.md). Use a clean
+guest or isolated test environment for offline dependency and install/remove
+checks. Keep a staged or development binary's results identified separately
+from an installed package's results.
+
+1. For full qualification, enumerate the supported create variations from
+   [CIPHER.md](CIPHER.md), including ciphers, password or keyfile, privilege
+   routes, and applicable options. Use representative sizes and boundaries
+   for numeric inputs. Use fixture-owned loop devices for Linux device tests
+   and the approved file-backed routes on BSD and macOS. Where supported,
+   test both explicit and Auto discovery, read-only, wrong credentials,
+   duplicate and aliased sources, existing-destination protection, and busy
+   close. Include application and recovery cases affected by the change,
+   such as SQLite WAL, atomic rename, or full storage.
+2. Prepare a common payload with the Bitcoin and Ethereum papers, a third
+   math or computer science PDF, and about one page of plain text. Pin the
+   input hashes and expected hashes after appending. The
+   [payload harness](../../scripts/test-mounted-payload.py) expects
+   `bitcoin.pdf`, `ethereum.pdf`, `lamport.pdf`, and `page.txt`. Run its
+   `write` phase on the verified mount, then close and reopen the vault.
+   The `append` phase verifies the original bytes before it updates the
+   text and syncs both that update and the new file. Use `verify` after the
+   final reopen.
+3. On KVM, leave the test vaults mounted and request an ordinary guest
+   reboot. Record pre-reboot mounts and both boot identities. Batch
+   independent fixtures in one reboot when native device limits permit.
+   After SSH returns, reopen through the normal product workflow and
+   compare all five SHA-256 digests. Record any repair, custom shutdown
+   hook, or manual reconciliation as a separate result with its prerequisites.
+4. On Buran, close and reopen the fixture again to verify all five digests.
+   For changes to recovery behavior, use a scoped exit of an owned backend
+   process where applicable. Record OS reboot as unexercised. For the native
+   app, exercise the packaged CLI and desktop helper from a private copy of
+   the app extracted from the candidate DMG. Use the intended FUSE
+   prerequisites and login-user session.
+
+If a failure could be in an upstream engine or native OS layer, run the
+unmodified pinned upstream app on the same guest with the same workload
+and comparable credential, privilege, and filesystem settings. For OpenBSD
+VeraCrypt, test the upstream default consumer workflow as well as a matched
+inner-filesystem control when they differ. Treat an upstream success as the
+bar for Lurker. Record a shared limitation only when the equivalent upstream
+workflow reproduces it. Keep ordinary reboot qualification distinct from
+abrupt power-loss work, which uses [disposable VM clones](../../docs/vm-powerloss-testing.md)
+when required by the task.
+
 ## Remote job setup and evidence
 
-1. Inspect the working tree/index and relevant directives. Preserve unrelated
-   edits. Commit each ready atomic change; the runner deploys committed code only.
+1. Commit the code under test before dispatch. The runner uses Git snapshots.
 2. Check the selected guest's OS, toolchains, CPU/RAM, swap and actual storage
    locations. Reuse existing toolchains and caches; do not bootstrap blindly.
 3. Freeze one product commit and dispatch an appropriate recipe with
    `scripts/remote-test.py`. Use that same product revision across the matrix.
-4. Record run ID, full source commit, recipe identity and evidence paths in a
-   small checkpoint. Distinguish a later harness-only revision from the product
-   revision. Never relabel old binaries/results as a newer commit.
+4. Record run ID, full source commit, recipe identity, package and relevant
+   binary hashes, and evidence paths in a small checkpoint. Record the
+   harness revision separately when it differs from the product revision.
+   Carry a prior result forward under its original identity after checking
+   that the relevant inputs and artifacts still match.
 5. Collect structured summaries. Retrieve a named log only for a failed stage.
    Fix the specific cause before rerunning affected checks.
+6. Before closing the round, match each required check to its run result,
+   confirm the recorded artifact and payload hashes, and verify cleanup.
+   Record failed and blocked cases and any scope exceptions alongside passes.
 
 Coordinator example (use its existing managed Python):
 
@@ -103,8 +193,8 @@ pass; retain actual passed/failed/ignored counts and blocked prerequisites.
 
 The local manifest/summary lives under `target/remote-test/RUN_ID/`; the remote
 result retains precise source, toolchain, log and artifact identities. Upload a
-source snapshot once per job. Poll persisted state rather than redeploying.
-An SSH timeout is an observation failure, not permission to start another job.
+source snapshot once per job. Poll persisted state after reconnecting and
+reconcile any still-running job before launching another one.
 
 ## Context and token budget
 
@@ -176,39 +266,10 @@ processes and custom coordinators on every affected host, including root-owned
 workers. Check process identity/start time before signaling anything; never use
 broad `pkill`, stop the VM, or force-unmount to stop a build.
 
-Cancellation is not cleanup. Check detached workers, job locks, mounts, devices,
-temporary authorization, tmpfs and attached scratch disks separately. Reconcile
-a stale lock with its owner record before removing it. A missing runner or lost
-SSH connection is incomplete, not passed. Resume only when requested, from the
-saved identity/state, without duplicating a possibly live job.
-
-## Stopped checkpoint — 2026-11-15
-
-The user stopped builds and cleared the implementation goal. **Do not resume
-builds, package installation or repairs without a new instruction.** All build
-jobs were canceled; process and custom-worker audits are retained in
-`target/build-stop-20261115/`. OpenBSD was additionally checked directly and had
-no build worker. No fault-test domains/networks are currently registered.
-
-- Product package candidate: `2ebae8fb78ddc821cf73b1feb3e66ade72b88ee1`.
-  Later harness fix: `8293000` (resolve full identity with Git).
-- Five Linux candidates passed privileged suites and 52 userspace cases each;
-  cleanup then hit a harness bug. Its fix was committed, but the replacement
-  userspace matrix was canceled. Do not claim complete final qualification.
-- FreeBSD root was full and a temporary 2 GiB tmpfs nearly full. A separate
-  16 GiB disk, serial `LURKERBUILD_20261115`, is attached live as `vdb`/`vtbd1`,
-  mounted at `/mnt/lurker-build-scratch`. Persistent domain XML is unchanged.
-  Its migration script failed with `SyntaxError`; caches were **not** moved and
-  root space was **not** recovered. Inspect its `user/migration.log`. Scratch
-  disk/tmpfs cleanup remains pending. Host files:
-  `/mnt/virt/lurker-build-scratch-20261115/`.
-- NetBSD's damaged rustix archive/source were renamed with
-  `.damaged-20261115`; do not reuse those as valid cache entries.
-- DragonFly has a missing Python shared library and malformed package database;
-  package backups exist, but restoration was not completed.
-- OpenBSD recovered boot/SSH and passed workspace/window checks at their
-  recorded revisions. Final package staging needed sudo; inspect its retained
-  result instead of assuming the subsequent installation completed.
-- `/mnt/virt/lurker-fault-*` contains separate crash-test VM copies/evidence.
-  `/mnt/virt/vmi/20261113T091832Z/` contains dated reusable VM images, not
-  continuously updated backups. Do not delete or substitute either implicitly.
+Compare the final inventory against the preflight inventory. Check detached
+workers, locks, packages, mounts, devices, temporary authorization, and scratch
+storage. Reconcile a stale lock with its owner record before removing it. Keep
+failure evidence and mark missing results incomplete. After a user-requested
+stop, resume only when requested and use the saved job state to avoid
+duplicating a potentially live job. Keep dated checkpoints with their run
+evidence so the runbook remains applicable to future work.
