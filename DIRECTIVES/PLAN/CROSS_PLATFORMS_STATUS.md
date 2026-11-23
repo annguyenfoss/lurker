@@ -46,9 +46,8 @@ inventory and base-library resolution. The clone stopped returning SSH
 banners during the aligned runtime suite, which ended without a complete
 receipt. On the named host, the separately staged CLI from the same source
 completed the AES/password case and verified all five payload hashes across
-explicit and automatic opens. Directory `fsync` still failed. The remaining
-aligned runs and clean shutdown, desktop callbacks, and two-way installed
-package exchange remain unverified.
+explicit and automatic opens. Directory `fsync` still failed. Those two
+guests gave no complete aligned matrix receipt.
 
 A separate isolated guest booted the stock 6.4.2 kernel from a hash-verified
 clean archive. It rebuilt the wrapper offline from `5786867a1725` and matched
@@ -57,9 +56,8 @@ BLAKE2s, Camellia, PIM 501, SHA-256, Whirlpool, an AES–Twofish cascade, and an
 80-byte password. The upstream AES/SHA-512/PIM 0 control authenticated and
 mapped at byte offset 131072 with a 66846720-byte payload. Each test retained
 its ciphertext hash and restored the vnode, mapper and mount inventories.
-`kern.cryptodevallowsoft` stayed at `0`. These results qualify the wrapper's
-header checks. The installed CLI's unsupported-import path and the filesystem
-exchange still need native receipts. Build and rejection logs are in
+`kern.cryptodevallowsoft` stayed at `0`. The installed CLI's unsupported-import
+path still needs a native receipt. Build and rejection logs are in
 `target/dragonfly-tcplay/evidence/archive-recovery-wrapper-*.log`.
 
 The exact CLI and desktop package was recovered from a read-only copy of the
@@ -77,6 +75,19 @@ session inventories returned to baseline with `kern.cryptodevallowsoft=0`.
 All six directory `fsync` checks still failed. The raw receipt is
 `target/dragonfly-tcplay/evidence/archive-recovery-installed-aligned-matrix.json`.
 The named host's follow-up suite remained inaccessible over SSH.
+
+The installed package and Linux VeraCrypt 1.26.31 exchanged writable FAT32
+containers in both directions for AES, Serpent, and Twofish. Linux verified
+the DragonFly marker in each upstream-created image. For each Lurker-created
+image, Linux verified all five post-append payload hashes, wrote a marker,
+and returned the image. The installed CLI reopened each through Auto,
+verified the Linux marker and closed with the same ciphertext hash Linux
+recorded. The Linux console SHA-256 is
+`ed01a2348e21d3b760fe35564338a98160db427e610379088f715c90f7a37eaf`.
+The three receipts are `archive-linux-forward.log`,
+`archive-linux-upstream-retry.log`, and `archive-linux-reverse.log` under
+`target/dragonfly-tcplay/evidence/`. Installed exchange with FreeBSD, OpenBSD,
+and macOS remains pending. Windows is unverified.
 
 ## Measurable completion criteria for the active implementation round
 
