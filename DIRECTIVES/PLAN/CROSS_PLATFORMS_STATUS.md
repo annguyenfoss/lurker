@@ -195,6 +195,14 @@ returns `EINVAL` for the filesystem root. The standard power-loss worker
 syncs that root and SQLite also requires the unavailable file locks. The
 receipt is `target/dragonfly-tcplay/evidence/archive-fat-directory-scope.log`.
 
+The upstream 6.4 maintenance revision `fa3b19cbc1d7` has the same FAT
+metadata update, sync, filename conversion, and default vnode operations
+sources as 6.4.2. At upstream mainline `d46c840edcae`, the FAT sync
+function and vnode table are also identical to 6.4.2. Root metadata
+updates still return `EINVAL`, and FAT still inherits the default
+`vop_advlock` that returns `EINVAL`. The source comparison receipt is
+`target/dragonfly-tcplay/evidence/upstream-fat32-source-audit.log`.
+
 The installed Slint desktop opened a 1280 × 860 software-rendered X11 window
 as UID 1300 using the verified Xvfb archive. The first probe lacked `xdpyinfo`
 and stopped before launch. The retry with the offline X11 test tools captured
@@ -288,6 +296,16 @@ receipts are `rebuild-standard-conformance-fat32.json` and
 `rebuild-standard-conformance-ufs.json` under
 `target/dragonfly-tcplay/evidence/`. During this run the named primary was
 unreachable over SSH, including a direct probe to its recorded address.
+
+The packaged `tcplay` wrapper and native mapper passed the same five
+application checks with UFS inside a disposable AES VeraCrypt container.
+The 64 MiB test image was on the same guest's UFS backing store and opened
+with a binary keyfile. A directory rename and its parent sync passed. After
+normal unmount, mapper removal and vnode detachment, reauthentication and
+reopen verified the exact file and row and SQLite `integrity_check`. The
+inventories and `kern.cryptodevallowsoft` matched baseline after both
+cycles. This diagnostic used a native UFS mount on the authenticated
+mapper. See `target/dragonfly-tcplay/evidence/rebuild-encrypted-ufs-control.log`.
 
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
