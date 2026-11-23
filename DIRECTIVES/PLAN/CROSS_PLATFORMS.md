@@ -6,7 +6,7 @@ Status: implementation plan, recorded 2026-11-14. This document records the appr
 
 Build Lurker so users do **not** need a separate VeraCrypt installation on Linux or macOS. Bundle the necessary VeraCrypt-derived backend, supporting libraries and notices with Lurker. Aim for the same arrangement on the selected BSD platforms, FreeBSD and OpenBSD, where native builds and filesystem integration prove feasible.
 
-**macOS FUSE is an accepted external dependency.** VeraCrypt must use **FUSE-T only**, with no macFUSE build or fallback. macFUSE is reserved for **gocryptfs and CryFS**. Cryptomator must use a qualified FUSE-T or native no-FUSE provider. Users install the required runtime separately; bundling encryption engines does not remove that requirement. Do not make a new FUSE implementation, automatic FUSE installation or an in-house FSKit bridge a prerequisite for delivering this plan.
+**macOS FUSE is an accepted external dependency.** Use **FUSE-T** for VeraCrypt, gocryptfs, CryFS and Cryptomator. Use the qualified 1.2.9 helper for gocryptfs. Users install the required runtime separately; bundling encryption engines does not remove that requirement. Do not make a new FUSE implementation, automatic FUSE installation or an in-house FSKit bridge a prerequisite for delivering this plan.
 
 The broader distribution policy is:
 
@@ -76,7 +76,7 @@ Both native and portable releases must operate without a separately installed Ve
 
 The DMG contains a complete Lurker app, private encryption backends, redistributable non-system libraries, required private language runtimes, and notices. No VeraCrypt.app, Homebrew VeraCrypt, Java installation or Go installation is required at runtime.
 
-Users install FUSE separately. Qualify VeraCrypt with FUSE-T only, gocryptfs/CryFS with macFUSE, and Cryptomator with FUSE-T or a native no-FUSE provider. Do not substitute one runtime when the required one is missing. Apple disk-image operations must remain available without FUSE. Missing FUSE disables only the operations that require it and produces an actionable diagnosis.
+Users install FUSE separately. Qualify VeraCrypt with FUSE-T SMB loopback and gocryptfs, CryFS and Cryptomator with FUSE-T FSKit. Do not substitute one runtime when the required one is missing. Apple disk-image operations must remain available without FUSE. Missing FUSE disables only the operations that require it and produces an actionable diagnosis.
 
 Build native arm64 and x86-64 artifacts where upstream dependencies support them. Decide on a universal app only after every bundled executable and library has compatible slices. Derive the minimum OS version from the complete dependency set. Sign all nested code before signing the app; notarize and staple public Developer ID releases. Keep ad-hoc developer builds clearly distinct from notarized releases.
 
@@ -206,7 +206,7 @@ Exit: on a clean Linux VM with required OS tools and FUSE but no VeraCrypt packa
 3. Bundle non-system dependencies recursively. Rewrite install names/rpaths to private locations and reject references to a developer's Homebrew prefix or checkout. Keep the separately installed FUSE boundary explicit rather than copying its runtime into the app.
 4. Replace installed-app discovery with trusted bundled discovery for create, mount, list and unmount. Decide how to discover externally mounted volumes safely; never detach unrelated images to preserve a broad listing feature.
 5. Extend `scripts/build-macos-dmg.py` for backend/runtime staging, nested signing, license/provenance payloads, architecture/deployment checks and release notarization.
-6. Test macFUSE/FUSE-T variants separately if both are offered. Select a qualified default; unsupported combinations must fail with a useful explanation.
+6. Verify the qualified FUSE-T transport for each packaged backend. Report missing or unsupported prerequisites with a useful explanation.
 
 Exit: a clean Mac with the qualified FUSE runtime, no VeraCrypt.app and no developer package-manager dependencies can create, mount, use and close a VeraCrypt file from the packaged app. Apple images work without FUSE. Busy-unmount protection remains intact. Native release signing and dependency checks pass for each published architecture.
 

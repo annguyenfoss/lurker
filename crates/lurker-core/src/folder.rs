@@ -117,6 +117,20 @@ fn executable(path: &Path) -> bool {
 
 fn find_program(kind: VolumeType) -> AppResult<PathBuf> {
     let name = program_name(kind)?;
+    let exe = std::env::current_exe().ok();
+    let executable_dir = exe.as_deref().and_then(Path::parent);
+    if cfg!(target_os = "macos") {
+        if let Some(contents) = executable_dir
+            .filter(|dir| dir.ends_with("Contents/MacOS"))
+            .and_then(Path::parent)
+        {
+            return fs::canonicalize(contents)
+                .ok()
+                .map(|path| path.join("Helpers").join(name))
+                .filter(|path| fs::canonicalize(path).is_ok_and(|resolved| resolved == *path) && executable(path))
+                .ok_or_else(|| AppError::new(format!("Bundled {name} is missing from Lurker.app.")));
+        }
+    }
     let mut dirs = Vec::new();
     if let Some(path) = std::env::var_os("LURKER_BACKEND_DIR") {
         let path = PathBuf::from(path);
@@ -125,19 +139,19 @@ fn find_program(kind: VolumeType) -> AppResult<PathBuf> {
         }
         dirs.push(path);
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            dirs.extend([
-                parent.join("backends"),
-                parent.join("../Helpers"),
-                parent.join("../libexec/lurker/backends"),
-            ]);
-        }
+    if let Some(parent) = executable_dir {
+        dirs.extend([
+            parent.join("backends"),
+            parent.join("../Helpers"),
+            parent.join("../libexec/lurker/backends"),
+        ]);
     }
-    dirs.extend([
-        PathBuf::from("/usr/libexec/lurker/backends"),
-        PathBuf::from("/usr/local/libexec/lurker/backends"),
-    ]);
+    if !cfg!(target_os = "macos") {
+        dirs.extend([
+            PathBuf::from("/usr/libexec/lurker/backends"),
+            PathBuf::from("/usr/local/libexec/lurker/backends"),
+        ]);
+    }
     dirs.into_iter().flat_map(|dir| [dir.join(name), dir.join("cryptomator").join(name)]).find(|p| executable(p))
         .and_then(|p| fs::canonicalize(p).ok())
         .ok_or_else(|| AppError::new(format!("Bundled {name} is missing. Build/install the selected Lurker backend; development builds may set LURKER_BACKEND_DIR.")))
@@ -722,6 +736,9 @@ fn mount_args(
     }
     if readonly && kind == VolumeType::Cryfs {
         args.extend(["-o".into(), "ro".into()]);
+    }
+    if cfg!(target_os = "macos") && kind == VolumeType::Cryfs {
+        args.extend(["-o".into(), "backend=fskit".into()]);
     }
     args.extend([source.as_os_str().into(), mountpoint.as_os_str().into()]);
     if readonly && kind == VolumeType::Cryptomator {

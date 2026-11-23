@@ -25,11 +25,12 @@ https://github.com/macos-fuse-t/fuse-t/releases/tag/1.2.9
 
 Build on a Mac using the user's Rust and Python toolchains, Xcode command-line
 tools, GNU-compatible make and pkg-config. VeraCrypt uses separately installed
-FUSE-T 1.2.9 or later and its development headers exclusively. macFUSE is reserved for
-gocryptfs/CryFS. Cryptomator requires FUSE-T's qualified FSKit transport on macOS
-26 or later, enabled under System Settings > General > Login Items & Extensions
-then File System Extensions. Packages require at least macOS 26; native dependency
-deployment targets can raise the app minimum further.
+FUSE-T 1.2.9 or later and its development headers for SMB loopback. The full
+bundle uses FUSE-T 1.2.9 because gocryptfs uses its versioned, signed helper.
+gocryptfs, CryFS and Cryptomator mount through FUSE-T FSKit. Enable FUSE-T in
+System Settings > General > Login Items & Extensions > File System Extensions.
+FSKit requires macOS 26 or later. Native deployment targets may raise the
+minimum macOS version recorded in the package.
 The build never installs FUSE or changes system permissions:
 
 ```bash
@@ -37,12 +38,11 @@ python scripts/build-macos-backends.py --jobs 4
 python scripts/build-macos-dmg.py
 ```
 
-`--fuse-runtime fuse-t` is accepted explicitly; macFUSE selection is rejected.
-The build records both FUSE-selection flags, runtime implementation/version and
-FUSE API version. Verified source, patched inputs and build specifications keep
-old native objects from being recertified under different inputs. The packager
-rejects a macFUSE VeraCrypt manifest, while its generic dependency auditor still
-supports macFUSE for the directory engines.
+`--fuse-runtime fuse-t` is accepted explicitly. The build records both
+FUSE-selection flags, runtime implementation/version and FUSE API version.
+Verified source, patched inputs and build specifications keep old native
+objects from being recertified under different inputs. Mach-O dependency
+audits accept only the reviewed FUSE-T install names for external FUSE.
 
 After building directory backends into `target/release/backends`, include them
 explicitly with `--folder-backends gocryptfs cryfs cryptomator`. The packager
@@ -191,7 +191,7 @@ and verified the same boot identity. Receipts are under
 and `coexistence.json`.
 
 This verification covers direct experimental engines and the native CLI.
-The existing packaged CLI and desktop results use the macFUSE baseline.
+The packaged CLI and desktop control results above predate the FUSE-T migration.
 [Evaluation plan](../DIRECTIVES/PLAN/MACOS_FOLDER_FUSE_T.md)
 
 ## Earlier macOS 27.2.1 arm64 results

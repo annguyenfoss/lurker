@@ -164,7 +164,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..15b642fb6f392874163203e37782b2d6c8651cb3
 --- /dev/null
 +++ b/fuse/mount_fuset_darwin.go
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,187 @@
 +//go:build lurkerfuset
 +
 +// Copyright 2016-2026 the Go-FUSE Authors. All rights reserved.
@@ -192,6 +192,8 @@ index 0000000000000000000000000000000000000000..15b642fb6f392874163203e37782b2d6
 +	closeTimeout = 5 * time.Second
 +)
 +
++var fuseTTransport string // Set by the macOS package build.
++
 +func getMaxWrite() int {
 +	return 1 << 20
 +}
@@ -205,7 +207,10 @@ index 0000000000000000000000000000000000000000..15b642fb6f392874163203e37782b2d6
 +	// The pinned FUSE-T helper advertises extended rename support but
 +	// sends the compatibility request. Negotiate the compatibility layout.
 +	opts.DisabledCapabilities |= CAP_RENAME_SWAP
-+	transport := os.Getenv("LURKER_EXPERIMENT_FUSE_T_TRANSPORT")
++	transport := fuseTTransport
++	if transport == "" {
++		transport = os.Getenv("LURKER_EXPERIMENT_FUSE_T_TRANSPORT")
++	}
 +	switch transport {
 +	case "fskit", "smb", "nfs":
 +	default:

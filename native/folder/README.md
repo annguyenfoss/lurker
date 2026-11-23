@@ -31,14 +31,16 @@ the component. Unpatched upstream and intermediate patch builds cannot satisfy
 the current release provenance. See `cryfs/README.md` for durability evidence and
 the write-through performance tradeoff.
 
-On macOS the builder additionally applies `cryfs/macos-compiler.patch` for newer
-libc++/range-v3 compatibility, recording both patch digests. This patch preserves
-the ordinary `fuse` ABI and requires separately installed macFUSE; the older
-experimental FUSE-T patch is not a production CryFS input. `--jobs` bounds Go,
-Conan and CMake build parallelism, including dependency compilation.
-The macOS CryFS artifact stores compiler dylibs beside it in `cryfs-libs/` with
-relative loader paths and hashes in `private_libraries`; only macFUSE remains
-external. Ship this closure together or restage it through the DMG builder.
+On macOS the builder applies `native/macos/cryfs-fuse-t.patch` for modern
+libc++/range-v3 support and the vendor's FUSE-T library. The stage manifest
+records both CryFS patch digests and the private compiler dylibs in
+`cryfs-libs/`. FUSE-T is an external runtime. Ship this closure together or
+restage it through the DMG builder.
+
+The macOS gocryptfs build uses a pinned, patched Go-FUSE checkout. The patch
+builds in the signed FUSE-T 1.2.9 helper path and selects FSKit. The manifest
+records the Go-FUSE revision and patch digest. `--jobs` bounds Go, Conan and
+CMake build parallelism, including dependency compilation.
 
 FreeBSD's Go FUSE route needs the base `fusefs` kernel module, access to
 `/dev/fuse`, `/sbin/mount_fusefs` and native permission for user mounts. Its CLI

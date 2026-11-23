@@ -7,6 +7,7 @@ Verbose logs remain under target/folder-build. Runtime FUSE stays external.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -26,9 +27,11 @@ PINS = {
 PATCHES = {"cryfs": ["native/folder/cryfs/fsyncdir.patch"]}
 PLATFORM_PATCHES = {
     "Linux": {"cryfs": ["native/folder/cryfs/linux-localstate.patch"]},
-    "Darwin": {"cryfs": ["native/folder/cryfs/macos-compiler.patch"]},
+    "Darwin": {"cryfs": ["native/macos/cryfs-fuse-t.patch"]},
     "FreeBSD": {"gocryptfs": ["native/folder/gocryptfs/freebsd-futimes.patch"]},
 }
+DARWIN_GO_FUSE = ("https://github.com/hanwen/go-fuse.git", "2d50fff207d78c197869fa492eff3a79bc1d8408")
+DARWIN_GO_FUSE_PATCH = "native/macos/gocryptfs-fuse-t.patch"
 
 
 def selected_patches(name: str, system: str | None = None) -> list[str]:
@@ -66,9 +69,9 @@ def copy_notice(source: Path, destination: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def go_module_notices(src: Path, destination: Path) -> list[dict]:
+def go_module_notices(src: Path, destination: Path, module_flags=()) -> list[dict]:
     """Keep exact transitive identities and original license/notice files."""
-    text = capture(["go", "list", "-m", "-json", "all"], src)
+    text = capture(["go", "list", "-m", "-json", *module_flags, "all"], src)
     decoder = json.JSONDecoder()
     modules = []
     while text.strip():
@@ -193,23 +196,42 @@ def patched_source(name: str, pristine: Path, cache: Path, log, *, system: str |
         return worktree, identities
 
 
+def darwin_go_fuse(src: Path, workspace: Path, log, env) -> tuple[list[str], dict[str, str]]:
+    url, revision = DARWIN_GO_FUSE
+    fuse = workspace / "go-fuse"
+    fuse.mkdir()
+    run(["git", "init", "-q"], fuse, log)
+    run(["git", "fetch", "--depth=1", url, revision], fuse, log)
+    run(["git", "checkout", "--detach", "FETCH_HEAD"], fuse, log)
+    if capture(["git", "rev-parse", "HEAD"], fuse) != revision:
+        raise RuntimeError("Unexpected Darwin Go-FUSE source revision")
+    patch = workspace / "go-fuse.patch"
+    patch.write_bytes((ROOT / DARWIN_GO_FUSE_PATCH).read_bytes())
+    run(["git", "apply", "--unidiff-zero", str(patch)], fuse, log)
+    for suffix in ("mod", "sum"):
+        shutil.copyfile(src / f"go.{suffix}", workspace / f"darwin.{suffix}")
+    flags = ["-modfile=" + str(workspace / "darwin.mod")]
+    run(["go", "mod", "edit", *flags, "-replace", f"github.com/hanwen/go-fuse/v2={fuse}"], src, log, env)
+    return flags, {DARWIN_GO_FUSE_PATCH: sha256(patch)}
+
+
 def stage_macos_cryfs(binary: Path, output: Path) -> dict:
-    """Keep compiler libraries private and leave only genuine macFUSE external."""
-    from macos_backend import fuse_runtime_info, sha256 as native_digest, stage_macho
+    """Keep compiler libraries private and use the installed FUSE-T runtime."""
+    from macos_backend import FOLDER_FUSE_MOUNT, fuse_runtime_info, sha256 as native_digest, stage_macho
     destination, libraries = output / "cryfs", output / "cryfs-libs"
     if destination.exists() or libraries.exists():
         raise RuntimeError("macOS CryFS output already exists; choose a fresh output directory")
     with tempfile.TemporaryDirectory(prefix=".cryfs-stage-", dir=output) as temporary:
         root = Path(temporary)
         targets, external = stage_macho(binary, root / "cryfs", root / "cryfs-libs",
-                                       platform.machine(), fuse_runtime="macfuse")
+                                       platform.machine(), fuse_runtime="fuse-t")
         for target in reversed(targets):
             subprocess.run(["codesign", "--force", "--sign", "-", str(target)], check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         # Publish the manifest only after every library and executable is ready.
         (root / "cryfs-libs").rename(libraries)
         (root / "cryfs").rename(destination)
-    return {"fuse_runtime": fuse_runtime_info("macfuse"),
+    return {"fuse_runtime": fuse_runtime_info("fuse-t"), "mount": FOLDER_FUSE_MOUNT,
             "external_libraries": external,
             "private_libraries": {str(path.relative_to(output)): native_digest(path)
                                   for path in sorted(libraries.iterdir()) if path.is_file()}}
@@ -258,7 +280,7 @@ def conan_boost_include(conan: list[str], options: list[str], src: Path,
 def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
     url, revision, version = PINS[name]
     logpath = cache / f"{name}.log"
-    with logpath.open("wb") as log:
+    with logpath.open("wb") as log, ExitStack() as cleanup:
         pristine = source(name, cache, log)
         build_system = platform.system()
         source_system = build_system
@@ -274,10 +296,19 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         if name == "gocryptfs":
             toolchain = capture(["go", "version"], src)
             env.update(CGO_ENABLED="0", GOMAXPROCS=str(jobs))
+            module_flags, tags = [], []
+            ldflags = f"-X main.GitVersion={version} -X main.BuildDate=2026-11-11"
+            if source_system == "Darwin":
+                from macos_backend import FOLDER_FUSE_MOUNT
+                workspace = Path(cleanup.enter_context(tempfile.TemporaryDirectory(prefix="darwin-go-fuse-", dir=cache)))
+                module_flags, patches = darwin_go_fuse(src, workspace, log, env)
+                tags = ["-tags", "lurkerfuset"]
+                ldflags += " -X github.com/hanwen/go-fuse/v2/fuse.fuseTTransport=fskit"
+                native_manifest = {"mount": FOLDER_FUSE_MOUNT, "go_fuse_revision": DARWIN_GO_FUSE[1],
+                                   "external_libraries": []}
             # Direct build avoids upstream build.bash installing into GOPATH/bin.
-            run(["go", "mod", "verify"], src, log, env)
-            run(["go", "build", "-p", str(jobs), "-mod=readonly", "-trimpath", "-ldflags="
-                 f"-X main.GitVersion={version} -X main.BuildDate=2026-11-11",
+            run(["go", "mod", "verify", *module_flags], src, log, env)
+            run(["go", "build", "-p", str(jobs), "-mod=readonly", *module_flags, *tags, "-trimpath", "-ldflags=" + ldflags,
                  "-o", str(output / name), "."], src, log, env)
             host_arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
             if (source_system, target_arch) == (build_system, host_arch):
@@ -347,7 +378,7 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         dependencies = None
         target = {"os": platform.system(), "machine": platform.machine()}
         if name == "gocryptfs":
-            dependencies = go_module_notices(src, license_dir / "modules")
+            dependencies = go_module_notices(src, license_dir / "modules", module_flags)
             target = {"GOOS": target_os, "GOARCH": target_arch}
             (license_dir / "modules.json").write_text(json.dumps(dependencies, indent=2) + "\n")
             runtime_notices = go_runtime_notices(src, license_dir / "go-runtime")

@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import plistlib
 import re
 import shutil
 import stat
@@ -27,8 +26,13 @@ SOURCES = {
     ),
 }
 
+FOLDER_FUSE_MOUNT = {"runtime": "fuse-t", "transport": "fskit", "minimum_os": "26.0"}
+GOCRYPTFS_FUSE_HELPER = Path("/Library/Application Support/fuse-t/bin/go-nfsv4-1.2.9")
+GOCRYPTFS_FUSE_HELPER_SHA256 = "348361a699b768d555ec41803e492075b9179691dbfac6b9020db5c20add5fa7"
+# Historical recipe metadata. Legacy install names are recognized only to reject them.
+MACFUSE_REFERENCE = {"package": "fuse", "library": "/usr/local/lib/libfuse.2.dylib",
+                     "info": "/Library/Filesystems/macfuse.fs/Contents/Info.plist"}
 FUSE_RUNTIMES = {
-    "macfuse": {"package": "fuse", "library": "/usr/local/lib/libfuse.2.dylib"},
     "fuse-t": {"package": "fuse-t", "library": "/usr/local/lib/libfuse-t.dylib",
                "flags": ["WITHFUSET=1", "VC_OSX_FUSET=1"]},
 }
@@ -125,14 +129,14 @@ def external_fuse_runtime(path):
     # Do not allow arbitrary /usr/local or Homebrew libraries through this rule.
     if re.fullmatch(r"/usr/local/lib/libfuse-t(?:-[0-9.]+)?\.dylib", path):
         return "fuse-t"
-    if path in {"/usr/local/lib/libfuse.2.dylib", "/usr/local/lib/libfuse.dylib",
-                "/usr/local/lib/libosxfuse.2.dylib"}:
+    if (Path(path).name in {"libfuse.2.dylib", "libfuse.dylib", "libosxfuse.2.dylib"}
+            or re.search(r"/(?:macfuse|osxfuse)\.fs/", path, re.IGNORECASE)):
         return "macfuse"
     return None
 
 
 def is_external_fuse(path):
-    return external_fuse_runtime(path) is not None
+    return external_fuse_runtime(path) == "fuse-t"
 
 
 def require_administrator_controlled(path):
@@ -151,18 +155,15 @@ def require_administrator_controlled(path):
 
 
 def fuse_runtime_info(runtime):
+    if runtime not in FUSE_RUNTIMES:
+        raise RuntimeError("macOS builds require FUSE-T")
     configuration = FUSE_RUNTIMES[runtime]
     package = configuration["package"]
     run("pkg-config", "--exists", package)
     api_version = run("pkg-config", "--modversion", package, capture=True).strip()
     library = configuration["library"]
     require_administrator_controlled(library)
-    version = api_version
-    if runtime == "macfuse":
-        info = Path("/Library/Filesystems/macfuse.fs/Contents/Info.plist")
-        require_administrator_controlled(info)
-        version = plistlib.loads(info.read_bytes())["CFBundleShortVersionString"]
-    return {"implementation": runtime, "version": version, "api_version": api_version,
+    return {"implementation": runtime, "version": api_version, "api_version": api_version,
             "pkg_config": package, "library": library, "library_sha256": sha256(library)}
 
 
@@ -175,16 +176,12 @@ def manifest_fuse_runtime(provenance):
             raise RuntimeError("Backend manifest does not identify one supported FUSE runtime")
         runtime = choices.pop()
     if runtime not in FUSE_RUNTIMES:
-        raise RuntimeError(f"Unsupported FUSE runtime in backend manifest: {runtime}")
+        raise RuntimeError("macOS backend manifest must select FUSE-T")
     return runtime
 
 
 def veracrypt_fuse_runtime(provenance):
-    """VeraCrypt has one approved macOS runtime; other engines differ."""
-    runtime = manifest_fuse_runtime(provenance)
-    if runtime != "fuse-t":
-        raise RuntimeError("macOS VeraCrypt requires FUSE-T; macFUSE is reserved for directory backends")
-    return runtime
+    return manifest_fuse_runtime(provenance)
 
 
 def require_veracrypt_fuse_t_version(version):
@@ -231,6 +228,11 @@ def verify_folder_manifest(root, backend, manifest, project_root, architecture):
     url, revision, _ = source_constant(project_root, recipe, "PINS")[backend]
     patches = source_constant(project_root, recipe, "PATCHES").get(backend, [])
     patches += source_constant(project_root, recipe, "PLATFORM_PATCHES").get("Darwin", {}).get(backend, [])
+    if backend == "gocryptfs":
+        patches.append(source_constant(project_root, recipe, "DARWIN_GO_FUSE_PATCH"))
+        revision_go_fuse = source_constant(project_root, recipe, "DARWIN_GO_FUSE")[1]
+        if manifest.get("go_fuse_revision") != revision_go_fuse or manifest.get("external_libraries") != []:
+            raise RuntimeError("Private gocryptfs must use the reviewed FUSE-T helper transport")
     expected = {relative: sha256(Path(project_root) / relative) for relative in patches}
     if manifest.get("source") != url or manifest.get("revision") != revision or manifest.get("patches", {}) != expected:
         raise RuntimeError(f"Private {backend} differs from reviewed source/patch pins")
@@ -248,8 +250,17 @@ def verify_folder_manifest(root, backend, manifest, project_root, architecture):
     if any(Path(name).name == "libomp.dylib" for name in private) and "native/llvm-openmp/LICENSE.TXT" not in notices:
         raise RuntimeError(f"Private {backend} is missing the LLVM OpenMP notice")
     verify_manifest_files(Path(root) / "licenses" / backend, notices)
-    if backend == "cryfs" and manifest_fuse_runtime(manifest) != "macfuse":
-        raise RuntimeError("macOS CryFS requires macFUSE")
+    if manifest.get("mount") != FOLDER_FUSE_MOUNT:
+        raise RuntimeError(f"macOS {backend} requires the FUSE-T FSKit profile")
+    if backend == "cryfs":
+        manifest_fuse_runtime(manifest)
+
+
+def verify_gocryptfs_fuse_helper():
+    require_administrator_controlled(GOCRYPTFS_FUSE_HELPER)
+    if sha256(GOCRYPTFS_FUSE_HELPER) != GOCRYPTFS_FUSE_HELPER_SHA256:
+        raise RuntimeError("Install the qualified FUSE-T 1.2.9 helper for gocryptfs")
+    run("codesign", "--verify", "--strict", GOCRYPTFS_FUSE_HELPER)
 
 
 def verify_cryptomator_manifest(root, manifest, project_root, architecture):
@@ -289,6 +300,8 @@ def stage_macho(source_binary, destination, frameworks, architecture, *, fuse_ru
     Reject unresolved rpaths and frameworks instead of leaking developer paths.
     Dependencies of external FUSE are the user's FUSE installation's contract.
     """
+    if fuse_runtime is not None and fuse_runtime not in FUSE_RUNTIMES:
+        raise RuntimeError("macOS staging requires FUSE-T")
     destination.parent.mkdir(parents=True, exist_ok=True)
     frameworks.mkdir(parents=True, exist_ok=True)
     copied = {}
@@ -313,15 +326,14 @@ def stage_macho(source_binary, destination, frameworks, architecture, *, fuse_ru
                 continue
             if is_system(dependency):
                 continue
-            # Rewrite only known external FUSE install names. The two runtimes
-            # have distinct ABIs/lifecycles and must never be silently swapped.
+            # Rewrite only the reviewed external FUSE-T install names.
             external_fuse = dependency
             if dependency.startswith("@rpath/"):
                 external_fuse = "/usr/local/lib/" + dependency.removeprefix("@rpath/")
             runtime = external_fuse_runtime(external_fuse)
             if runtime is not None:
-                if fuse_runtime is not None and runtime != fuse_runtime:
-                    raise RuntimeError(f"FUSE dependency {dependency} differs from selected runtime {fuse_runtime}")
+                if runtime != "fuse-t":
+                    raise RuntimeError(f"Unsupported external FUSE dependency: {dependency}")
                 require_administrator_controlled(external_fuse)
                 resolved_runtime = external_fuse_runtime(str(Path(external_fuse).resolve()))
                 if resolved_runtime is not None and resolved_runtime != runtime:
@@ -339,6 +351,8 @@ def stage_macho(source_binary, destination, frameworks, architecture, *, fuse_ru
             if ".framework/" in str(resolved):
                 raise RuntimeError(f"Private framework packaging requires an explicit recipe: {resolved}")
             resolved = resolved.resolve(strict=True)
+            if external_fuse_runtime(str(resolved)) == "macfuse":
+                raise RuntimeError(f"Unsupported external FUSE dependency: {dependency}")
             name = resolved.name
             if name in original_by_name and original_by_name[name] != resolved:
                 raise RuntimeError(f"Dylib basename collision: {resolved}")

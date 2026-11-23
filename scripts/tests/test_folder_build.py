@@ -82,16 +82,16 @@ class NoticeTests(unittest.TestCase):
 
 
 class PlatformPatchTests(unittest.TestCase):
-    def test_mac_compiler_patch_preserves_common_durability_and_native_fuse(self):
+    def test_mac_fuse_t_patch_preserves_common_durability_and_compiler_fixes(self):
         common = ["native/folder/cryfs/fsyncdir.patch"]
         linux = BUILD.selected_patches("cryfs", "Linux")
         mac = BUILD.selected_patches("cryfs", "Darwin")
         self.assertEqual(linux, common + ["native/folder/cryfs/linux-localstate.patch"])
-        self.assertEqual(mac, common + ["native/folder/cryfs/macos-compiler.patch"])
+        self.assertEqual(mac, common + ["native/macos/cryfs-fuse-t.patch"])
         compiler = (BUILD.ROOT / mac[-1]).read_text()
         self.assertIn("IdWrapper.h", compiler)
-        self.assertNotIn("fuse-t", compiler)
-        self.assertNotIn("src/fspp/fuse/CMakeLists.txt", compiler)
+        self.assertIn("fuse-t", compiler)
+        self.assertIn("src/fspp/fuse/CMakeLists.txt", compiler)
         self.assertEqual(BUILD.selected_patches("gocryptfs", "Darwin"), [])
 
 
@@ -118,13 +118,13 @@ class MacStagingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             def stage(binary, destination, libraries, architecture, *, fuse_runtime):
-                self.assertEqual(fuse_runtime, "macfuse")
+                self.assertEqual(fuse_runtime, "fuse-t")
                 libraries.mkdir()
                 destination.write_bytes(b"executable")
                 library = libraries / "libomp.dylib"
                 library.write_bytes(b"library")
-                return [destination, library], ["/usr/local/lib/libfuse.2.dylib"]
-            module = SimpleNamespace(stage_macho=stage, fuse_runtime_info=lambda _: {}, sha256=BUILD.sha256)
+                return [destination, library], ["/usr/local/lib/libfuse-t.dylib"]
+            module = SimpleNamespace(FOLDER_FUSE_MOUNT={}, stage_macho=stage, fuse_runtime_info=lambda _: {}, sha256=BUILD.sha256)
             with patch.dict("sys.modules", {"macos_backend": module}), patch.object(
                     BUILD.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "codesign")):
                 with self.assertRaises(subprocess.CalledProcessError):
@@ -138,7 +138,7 @@ class MacStagingTests(unittest.TestCase):
             root = Path(directory)
             binary = root / "cryfs"
             binary.write_bytes(b"previous artifact")
-            module = SimpleNamespace(stage_macho=None, fuse_runtime_info=None, sha256=None)
+            module = SimpleNamespace(FOLDER_FUSE_MOUNT={}, stage_macho=None, fuse_runtime_info=None, sha256=None)
             with patch.dict("sys.modules", {"macos_backend": module}):
                 with self.assertRaisesRegex(RuntimeError, "already exists"):
                     BUILD.stage_macos_cryfs(root / "input", root)

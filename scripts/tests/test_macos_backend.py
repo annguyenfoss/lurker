@@ -15,26 +15,25 @@ SPEC.loader.exec_module(backend)
 
 class MacBackendTests(unittest.TestCase):
     def test_external_fuse_allowlist_does_not_allow_homebrew_or_arbitrary_libraries(self):
-        for path in ["/usr/local/lib/libfuse-t.dylib", "/usr/local/lib/libfuse-t-1.2.9.dylib",
-                     "/usr/local/lib/libfuse.2.dylib", "/usr/local/lib/libosxfuse.2.dylib"]:
+        for path in ["/usr/local/lib/libfuse-t.dylib", "/usr/local/lib/libfuse-t-1.2.9.dylib"]:
             self.assertTrue(backend.is_external_fuse(path))
-        for path in ["/opt/homebrew/lib/libfuse-t.dylib", "/usr/local/lib/libcrypto.dylib",
+        for path in ["/usr/local/lib/libfuse.2.dylib", "/usr/local/lib/libosxfuse.2.dylib",
+                     "/opt/homebrew/lib/libfuse-t.dylib", "/usr/local/lib/libcrypto.dylib",
                      "/tmp/libfuse-t.dylib", "/usr/local/lib/libfuse-t-malicious.dylib"]:
             self.assertFalse(backend.is_external_fuse(path))
 
     def test_runtime_flags_and_manifest_selection_do_not_silently_swap_fuse(self):
-        self.assertNotIn("flags", backend.FUSE_RUNTIMES["macfuse"])
+        self.assertEqual(set(backend.FUSE_RUNTIMES), {"fuse-t"})
         self.assertEqual(backend.FUSE_RUNTIMES["fuse-t"]["flags"], ["WITHFUSET=1", "VC_OSX_FUSET=1"])
-        self.assertEqual(backend.manifest_fuse_runtime({"fuse_runtime": {"implementation": "macfuse"}}), "macfuse")
         self.assertEqual(backend.manifest_fuse_runtime({"external_libraries": ["/usr/local/lib/libfuse-t.dylib"]}), "fuse-t")
         with self.assertRaisesRegex(RuntimeError, "one supported"):
             backend.manifest_fuse_runtime({"external_libraries": ["/usr/local/lib/libfuse-t.dylib", "/usr/local/lib/libfuse.2.dylib"]})
 
-    def test_veracrypt_manifest_rejects_macfuse_even_though_folder_staging_supports_it(self):
+    def test_veracrypt_manifest_rejects_inactive_macfuse(self):
         self.assertEqual(backend.veracrypt_fuse_runtime({"fuse_runtime": {"implementation": "fuse-t"}}), "fuse-t")
         for manifest in [{"fuse_runtime": {"implementation": "macfuse"}},
                          {"external_libraries": ["/usr/local/lib/libfuse.2.dylib"]}]:
-            with self.assertRaisesRegex(RuntimeError, "VeraCrypt requires FUSE-T"):
+            with self.assertRaisesRegex(RuntimeError, "manifest must select FUSE-T"):
                 backend.veracrypt_fuse_runtime(manifest)
 
     def test_veracrypt_package_rejects_stale_pins_and_escaping_artifacts(self):
@@ -81,8 +80,14 @@ class MacBackendTests(unittest.TestCase):
                         "private_libraries": {"cryfs-libs/libomp.dylib": backend.sha256(root / "cryfs-libs/libomp.dylib")},
                         "license_files": {"LICENSE.txt": backend.sha256(root / "licenses/cryfs/LICENSE.txt"),
                                           "native/llvm-openmp/LICENSE.TXT": backend.sha256(root / "licenses/cryfs/native/llvm-openmp/LICENSE.TXT")},
-                        "fuse_runtime": {"implementation": "macfuse"}}
+                        "fuse_runtime": {"implementation": "fuse-t"}, "mount": backend.FOLDER_FUSE_MOUNT}
             backend.verify_folder_manifest(root, "cryfs", manifest, project, "arm64")
+            for changes, reason in [
+                ({"mount": {"transport": "nfs"}}, "requires the FUSE-T FSKit profile"),
+                ({"fuse_runtime": {"implementation": "macfuse"}}, "manifest must select FUSE-T"),
+            ]:
+                with self.assertRaisesRegex(RuntimeError, reason):
+                    backend.verify_folder_manifest(root, "cryfs", {**manifest, **changes}, project, "arm64")
             missing_notice = copy.deepcopy(manifest)
             del missing_notice["license_files"]["native/llvm-openmp/LICENSE.TXT"]
             with self.assertRaisesRegex(RuntimeError, "LLVM OpenMP notice"):
@@ -262,20 +267,19 @@ class MacBackendTests(unittest.TestCase):
             root = Path(temporary); source = root / "source"; source.write_bytes(b"exe")
             with patch.object(backend, "architectures", return_value={"arm64"}), \
                  patch.object(backend, "dependencies", return_value=["/usr/local/lib/libfuse-t.dylib"]):
-                with self.assertRaisesRegex(RuntimeError, "differs from selected runtime"):
+                with self.assertRaisesRegex(RuntimeError, "staging requires FUSE-T"):
                     backend.stage_macho(source, root / "out/backend", root / "out/Frameworks", "arm64", fuse_runtime="macfuse")
 
-    def test_macfuse_stays_external_and_is_not_added_to_private_frameworks(self):
+    def test_macfuse_dependencies_are_rejected_before_probing_installation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); source = root / "source"; source.write_bytes(b"exe")
             with patch.object(backend, "architectures", return_value={"arm64"}), \
                  patch.object(backend, "dependencies", side_effect=[["/usr/local/lib/libfuse.2.dylib"], []]), \
                  patch.object(backend, "require_administrator_controlled") as trusted, \
                  patch.object(backend, "run", return_value=""):
-                targets, external = backend.stage_macho(source, root / "out/backend", root / "out/Frameworks", "arm64", fuse_runtime="macfuse")
-            trusted.assert_called_once_with("/usr/local/lib/libfuse.2.dylib")
-            self.assertEqual(external, ["/usr/local/lib/libfuse.2.dylib"])
-            self.assertEqual(len(targets), 1)
+                with self.assertRaisesRegex(RuntimeError, "Unsupported external FUSE dependency"):
+                    backend.stage_macho(source, root / "out/backend", root / "out/Frameworks", "arm64", fuse_runtime="fuse-t")
+            trusted.assert_not_called()
             self.assertFalse((root / "out/Frameworks/libfuse.2.dylib").exists())
 
 

@@ -56,7 +56,9 @@ probe sends a fresh disposable password through stdin, runs CryFS in the
 foreground, records the native mount row, and uses ordinary `umount` on
 the exact owned mount before reopening it with the same transport.
 
-Lurker's macOS package baseline uses macFUSE. Track further experimental
-CLI and package checks against their own artifact hashes.
+Lurker packages use FUSE-T. The old compiler-only patch at
+`native/folder/cryfs/macos-compiler.patch` remains as a reference.
+The earlier macFUSE builder is preserved in the source history at
+https://github.com/annguyenfoss/lurker/tree/8344905baab8e66397478db967815d9de6bb0ac6
 [Evaluation plan](../../DIRECTIVES/PLAN/MACOS_FOLDER_FUSE_T.md) ·
 [Package evidence](../../docs/macos-backends.md)

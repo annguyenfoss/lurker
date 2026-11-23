@@ -52,7 +52,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
     </tr>
     <tr>
       <td>MacOS</td>
-      <td><code>FUSE-&#8288;T&gt;=1.2.9</code><br><code>macFUSE</code></td>
+      <td><code>FUSE-&#8288;T==1.2.9</code></td>
       <td><code>hdiutil</code>, <code>diskutil</code></td>
       <td>Java for Cryptomator</td>
     </tr>

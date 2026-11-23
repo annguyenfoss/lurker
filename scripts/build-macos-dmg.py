@@ -14,7 +14,7 @@ import tempfile
 
 from macos_backend import (
     VERACRYPT_FUSE_T_MINIMUM, architectures, minimum_version, sha256, stage_macho,
-    verify_cryptomator_manifest, verify_folder_manifest, verify_veracrypt_manifest,
+    verify_cryptomator_manifest, verify_folder_manifest, verify_gocryptfs_fuse_helper, verify_veracrypt_manifest,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -177,8 +177,11 @@ def main():
                 manifest = json.loads((folder_root / f"{backend}.json").read_text())
                 source = folder_root / backend
                 verify_folder_manifest(folder_root, backend, manifest, ROOT, architecture)
+                backend_minimum_versions.append(manifest["mount"]["minimum_os"])
+                if backend == "gocryptfs":
+                    verify_gocryptfs_fuse_helper()
                 targets, folder_external = stage_macho(source, helper_dir / backend, frameworks, architecture,
-                                                       fuse_runtime="macfuse")
+                                                       fuse_runtime="fuse-t")
                 expected_names = {backend, *(Path(name).name for name in manifest.get("private_libraries", {}))}
                 if {path.name for path in targets} != expected_names:
                     raise SystemExit(f"Staged {backend} closure includes unmanifested private code")
@@ -273,11 +276,11 @@ def main():
             f"VeraCrypt support is included. Install FUSE-T {VERACRYPT_FUSE_T_MINIMUM} or later.\n"
             + ("Included directory backends: " + ", ".join(options.folder_backends) + ".\n"
                if options.folder_backends else "")
-            + ("gocryptfs/CryFS require separately installed macFUSE.\n"
-               if any(name in options.folder_backends for name in ["gocryptfs", "cryfs"]) else "")
-            + ("Cryptomator requires FUSE-T with FSKit enabled (macOS 26+).\n"
+            + ("The bundled directory backends require FUSE-T with FSKit enabled (macOS 26+).\n"
                "Enable FUSE-T in System Settings > General > Login Items & Extensions > File System Extensions.\n"
-               if "cryptomator" in options.folder_backends else "")
+               if options.folder_backends else "")
+            + ("gocryptfs uses the qualified FUSE-T 1.2.9 helper.\n"
+               if "gocryptfs" in options.folder_backends else "")
             +
             "The CLI is Lurker.app/Contents/MacOS/lurker.\n\n"
             + signature_note + f"Requires macOS {minimum} or later; architecture: {architecture}.\n",
