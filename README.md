@@ -18,8 +18,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 | Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 |
-| LUKS2 | 🧅 | — | — | — | — | — |
+| LUKS1 | 🧅 | 🍰 | 🍰 | 🍰 | 🍰 | 🧅 🛈 |
+| LUKS2 | 🧅 | 🍰 | 🍰 | 🍰 | 🍰 | 🍰 |
 | Apple Encrypted Disk Image | — | 🧅 | — | — | — | — |
 | APFS Encrypted | — | 🍰 | — | — | — | — |
 | GELI | — | — | 🧅 | — | — | — |
@@ -28,10 +28,10 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | softraid RAID1C | — | — | — | 🧅 | — | — |
 | CGD | — | — | — | — | 🧅 | — |
 | VeraCrypt | 🥑 | 🥑 | 🥑 | 🥑 | 🍰 | 🍰 |
-| gocryptfs | 🥑 | 🥑 | 🥑 | — | — | — |
-| CryFS | 🥑 | 🥑 | — | — | — | — |
-| Cryptomator | 🥑 | 🥑 | — | — | — | — |
-| securefs | 🍰 | 🍰 | 🍰 | — | — | — |
+| gocryptfs | 🥑 | 🥑 | 🥑 | 🍰 | 🍰 | — |
+| CryFS | 🥑 | 🥑 | 🍰 | 🍰 | 🍰 | — |
+| Cryptomator | 🥑 | 🥑 | 🍰 | 🍰 | 🍰 | — |
+| securefs | 🍰 | 🍰 | 🍰 | 🍰 | 🍰 | — |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
@@ -39,6 +39,10 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 - **Batch 1** — VeraCrypt on DragonFly BSD, APFS Encrypted on MacOS, and securefs on Linux, MacOS, and FreeBSD.
 - **Batch 2** — VeraCrypt on NetBSD.
+- **Batch 3**
+  - LUKS1 and LUKS2 on MacOS, FreeBSD, OpenBSD, and NetBSD, plus LUKS2 on DragonFly BSD.
+  - gocryptfs and securefs on OpenBSD and NetBSD.
+  - CryFS and Cryptomator on FreeBSD, OpenBSD, and NetBSD.
 
 ## Dependencies
 

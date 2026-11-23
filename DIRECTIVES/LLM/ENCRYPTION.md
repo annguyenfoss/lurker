@@ -11,18 +11,18 @@ Use this file as the source of truth for selected encryption backends and create
 | Apple Encrypted Disk Image | ✅ | — | — | — | — | — |
 | APFS Encrypted | 🟦 | — | — | — | — | — |
 | Startup-volume FileVault management | 🟦 | — | — | — | — | — |
-| LUKS2 | — | ✅ | — | — | — | — |
+| LUKS2 | 🟦 | ✅ | 🟦 | 🟦 | 🟦 | 🟦 |
 | VeraCrypt | ✅ | ✅ | ✅ | 🟦 | 🟦 | ✅ |
-| CryFS stable 1.x | ✅ | ✅ | — | — | — | — |
-| gocryptfs | ✅ | ✅ | ✅ | — | — | — |
+| CryFS stable 1.x | ✅ | ✅ | 🟦 | — | 🟦 | 🟦 |
+| gocryptfs | ✅ | ✅ | ✅ | — | 🟦 | 🟦 |
 | GELI | — | — | ✅ | — | — | — |
 | CGD | — | — | — | — | ✅ | — |
 | softraid CRYPTO | — | — | — | — | — | ✅ |
 | softraid RAID1C | — | — | — | — | — | ✅ |
 | PEFS | — | — | ✅ | — | — | — |
-| Cryptomator | ✅ | ✅ | — | — | — | — |
-| LUKS1 | — | ✅ | — | ✅ | — | — |
-| securefs | 🟦 | 🟦 | 🟦 | — | — | — |
+| Cryptomator | ✅ | ✅ | 🟦 | — | 🟦 | 🟦 |
+| LUKS1 | 🟦 | ✅ | 🟦 | ✅ | 🟦 | 🟦 |
+| securefs | 🟦 | 🟦 | 🟦 | — | 🟦 | 🟦 |
 
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, encrypted archives, backups and rclone crypt are excluded. LUKS still uses dm-crypt internally. Research availability is not approval to integrate.
 - age/rage is excluded: Lurker targets writable encrypted disks, filesystems and directories unlocked for use during a session. age/rage encrypts files/streams; rage-mount provides only read-only archive access, not writable directory encryption.
@@ -35,10 +35,14 @@ Use this file as the source of truth for selected encryption backends and create
 
 - **Batch 1** — DragonFly BSD VeraCrypt file containers via the [native `tcplay` and device-mapper route](../PLAN/DRAGONFLY_VERACRYPT.md), macOS APFS Encrypted data volumes via `diskutil`, and securefs on Linux, macOS, and FreeBSD.
 - **Batch 2** — VeraCrypt on NetBSD.
+- **Batch 3**
+  - LUKS1 and LUKS2 on macOS, FreeBSD, OpenBSD, and NetBSD, plus LUKS2 on DragonFly BSD. Start with file-backed AES profiles. Qualify Btrfs access separately for existing Linux Lurker vaults.
+  - gocryptfs and securefs on OpenBSD and NetBSD.
+  - Stable CryFS 1.x and Cryptomator on FreeBSD, OpenBSD, and NetBSD.
 
 ### Windows integration postponed indefinitely
 
-Windows platform support and all integrations formerly in Batch 3 are postponed indefinitely. This includes native BitLocker / BitLocker To Go setup and unlock, native EFS, VeraCrypt, gocryptfs via `cppcryptfs`, stable CryFS 1.x, Cryptomator, and securefs. The former Batch 4 for opening existing BitLocker / BitLocker To Go volumes on Linux, macOS, and FreeBSD is also postponed indefinitely.
+Windows platform support and all Windows integrations are postponed indefinitely. This includes native BitLocker / BitLocker To Go setup and unlock, native EFS, VeraCrypt, gocryptfs via `cppcryptfs`, stable CryFS 1.x, Cryptomator, and securefs. Opening existing BitLocker / BitLocker To Go volumes on Linux, macOS, and FreeBSD is also postponed indefinitely.
 
 ## Physical-device setup scope
 
