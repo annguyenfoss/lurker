@@ -303,6 +303,19 @@ closed and reopened the vault and the synced 64 KiB payload matched.
 Final close and uninstall restored the initial inventories and system
 package digests. See `target/dragonfly-tcplay/evidence/fat32-explicit-desktop/`.
 
+The installed `63b82f5` desktop package ran the standard application checks
+on its GUI-created vault. ASCII rename and truncation passed. UTF-8 filename
+creation and both mount-root syncs returned `EINVAL`, and SQLite 3.54.1
+returned `SQLITE_IOERR_LOCK` with FULL/WAL. A plain UFS control on the same
+guest passed all five checks and ordinary readback of the committed row.
+The unmodified power-loss worker on the VeraCrypt mount synced and renamed
+its file, then stopped at mount-root `fsync` before starting SQLite or
+recording readiness. Ordinary close and authenticated reopen matched the
+worker file and the original GUI payload. No power cut was performed.
+Package removal restored the pretest native inventories. The receipt
+`target/dragonfly-tcplay/evidence/fat32-explicit-readiness/native-readiness.json`
+has SHA-256 `36d0733f774e9fd313de2e786368da872fdefd228b7f81a75403ad8029d20962`.
+
 The optimized default package also passed offline installation, file and
 dependency checks. Its CLI refused VeraCrypt create before staging or device
 attachment, created LUKS1 through the default route, and matched the synced
