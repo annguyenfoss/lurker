@@ -88,7 +88,21 @@ Use only disposable `/tmp/lurker-*` files for native tests:
 TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 ```
 
-## Packaged lifecycle on Buran
+## FUSE-T package qualification
+
+The development DMG from `4dcf8d68434b7856a1cd3bd13977098482628e23`
+passed 356 CLI checks across 20 cases on Buran (macOS 27.2.1 arm64).
+Apple disk images, VeraCrypt and all three directory backends passed.
+The test confirmed 14 FUSE-T FSKit mount observations per directory
+backend and covered SQLite WAL, read-only access, rapid close and
+reopen, and exact file digests. Strict code signature checks passed,
+and the dependency audit covered 23 Mach-O files. The tested DMG records
+macOS 27.2 as its minimum and has SHA-256
+`e4c5aeae7a6e7ec0bcb02d4859c480ceadf3666e376cc74c5a6f0ab8c48bfb9e`.
+Workspace check and 104 workspace tests passed in run
+`20261123T080933Z-cde84fab`.
+
+## Earlier packaged lifecycle on Buran
 
 On macOS 27.2.1 arm64 with SDK 27.2, the developer DMG from
 `b2da478d6e86fd8ea733ecff331099995bfa7a6d` passed 320 CLI checks across
