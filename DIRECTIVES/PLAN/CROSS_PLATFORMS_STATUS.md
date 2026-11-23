@@ -154,6 +154,14 @@ reopened with matching marker hashes. The original fixture digests and final
 native inventories matched baseline. The receipt is
 `target/dragonfly-tcplay/evidence/archive-concurrent-replacement-normalized.log`.
 
+An independent linear mapper survived a normal VeraCrypt close. When the
+recorded VeraCrypt mapper was removed outside Lurker, close preserved the
+journal. Reusing its name for a linear mapper with a different UUID and
+backing file caused both close entry points to refuse cleanup. The foreign
+mapping and ciphertext digest were preserved. Restoring the authenticated
+mapping allowed Lurker to finish cleanup after the native unmount. The
+receipt is `target/dragonfly-tcplay/evidence/archive-foreign-mapper-reused.log`.
+
 LUKS1 Auto detection on the same installed CLI passed all 13 conformance
 checks with stock `cryptsetup` 1.1.2. Final mounts, mappings and vnode
 inventories were clean. The receipt is
@@ -165,8 +173,16 @@ remained. A 1 MiB append returned `ENOSPC`. The earlier file hash and the
 append target's original prefix survived a close and reopen. Removing the
 filler made room for a new synced file that also survived reopen. The final
 native inventory matched baseline. The receipt is
-`target/dragonfly-tcplay/evidence/archive-inner-capacity.log`. Outer capacity
-and the FAT32 per-file size boundary still need separate checks.
+`target/dragonfly-tcplay/evidence/archive-inner-capacity.log`.
+
+A separate 360 MiB UFS fixture had 194928640 bytes available when a 260 MiB
+VeraCrypt create with `--force` failed. The existing destination retained its
+inode and bytes, an unrelated committed file survived, and the staging and
+session inventories returned to baseline. Freeing the filler allowed fully
+allocated creation and a synced payload survived close and reopen. A write
+that would grow the FAT32 file past 4294967295 bytes returned `EFBIG` and
+preserved the payload. Acceptance at the maximum file size remains to be
+verified. The receipt is `target/dragonfly-tcplay/evidence/archive-outer-capacity.log`.
 
 ## Measurable completion criteria for the active implementation round
 
