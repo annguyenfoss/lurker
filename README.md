@@ -33,8 +33,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | gocryptfs | 🥑 | 🥑 | 🍰 (cppcryptfs) | 🥑 | — | — | — |
 | CryFS | 🥑 | 🥑 | — | — | — | — | — |
 | Cryptomator | 🥑 | 🥑 | 🍰 | — | — | — | — |
-| securefs | — | — | 🍰 | — | — | — | — |
-| DiskCryptor | — | — | 🍰 | — | — | — | — |
+| securefs | 🍰 | 🍰 | 🍰 | 🍰 | — | — | — |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
