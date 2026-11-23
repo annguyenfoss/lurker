@@ -88,9 +88,12 @@ def matching_helpers(point: Path) -> list[str]:
             if str(HELPER) in line and line.endswith(f" {point}")]
 
 
-def start_mount(binary, source, point, password, env, log):
+def start_mount(binary, source, point, password, env, log, debug):
+    args = [binary, "-fg", "-passfile", "/dev/stdin"]
+    if debug:
+        args.append("-fusedebug")
     process = subprocess.Popen(
-        [binary, "-fg", "-passfile", "/dev/stdin", source, point],
+        [*args, source, point],
         stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT, env=env,
     )
     assert process.stdin is not None
@@ -136,9 +139,8 @@ def write_and_sync(point):
         os.fsync(stream.fileno())
         stream.truncate(len(payload) - 1)
         os.fsync(stream.fileno())
-    staging.rename(point / "payload")
     expected = hashlib.sha256(payload[:-1]).hexdigest()
-    if digest(point / "payload") != expected:
+    if digest(staging) != expected:
         raise RuntimeError("written payload differs from the expected bytes")
     return expected
 
@@ -170,11 +172,12 @@ def read_wal(point):
             raise RuntimeError("SQLite committed row missing after reopen")
 
 
-def probe(output: Path, transport: str) -> bool:
+def probe(output: Path, transport: str, results: Path, debug: bool) -> bool:
     if digest(HELPER) != HELPER_SHA256:
         raise RuntimeError("installed FUSE-T helper differs from the pinned 1.2.9 release")
     subprocess.run(["/usr/bin/codesign", "--verify", "--strict", str(HELPER)], check=True,
                    timeout=15)
+    results.mkdir(mode=0o700, parents=True, exist_ok=True)
     binary = output / "gocryptfs"
     built = json.loads((output / "build.json").read_text())
     if digest(binary) != built["binary_sha256"] or digest(PATCH) != built["patch_sha256"]:
@@ -189,36 +192,47 @@ def probe(output: Path, transport: str) -> bool:
               "binary_sha256": built["binary_sha256"], "helper_sha256": HELPER_SHA256,
               "sqlite_version": sqlite3.sqlite_version,
               "boot": capture(["/usr/sbin/sysctl", "-n", "kern.boottime"]),
-              "mounts": [], "checks": []}
+              "mounts": [], "checks": [], "failures": []}
 
     process = None
+    stage = "init"
     try:
-        with (output / f"{transport}-mount.log").open("wb") as log:
-            stage = "init"
+        with (results / f"{transport}-mount.log").open("xb") as log:
             subprocess.run([binary, "-init", "-scryptn", "16", "-passfile", "/dev/stdin", source],
                            input=password, check=True, stdout=log, stderr=subprocess.STDOUT,
                            env=env, timeout=30)
             for step in ("write", "reopen"):
                 stage = f"{step}-mount"
-                process = start_mount(binary, source, point, password, env, log)
+                process = start_mount(binary, source, point, password, env, log, debug)
                 record["mounts"].append(await_mount(process, point, transport))
                 stage = f"{step}-payload"
                 if step == "write":
                     expected = write_and_sync(point)
                     record["payload_sha256"] = expected
-                    record["checks"].append("write-fsync-truncate-rename")
-                    stage = "sqlite-wal"
-                    write_wal(point, record)
-                    record["checks"].append("sqlite-wal-full-cross-connection-checkpoint")
+                    record["checks"].append("write-fsync-truncate")
+                    try:
+                        (point / "scratch").rename(point / "payload")
+                        record["checks"].append("rename")
+                    except OSError as err:
+                        record["failures"].append({"stage": "rename", "error": str(err)})
+                    payload_name = "payload" if (point / "payload").is_file() else "scratch"
+                    try:
+                        write_wal(point, record)
+                        record["checks"].append("sqlite-wal-full-cross-connection-checkpoint")
+                    except (OSError, RuntimeError, sqlite3.Error) as err:
+                        record["failures"].append({"stage": "sqlite-wal", "error": str(err)})
                 else:
-                    if digest(point / "payload") != expected:
+                    if digest(point / payload_name) != expected:
                         raise RuntimeError("payload hash changed after reopen")
-                    read_wal(point)
-                    record["checks"].append("durable-payload-and-sqlite-reopen")
+                    record["checks"].append("durable-payload-reopen")
+                    if "sqlite-wal-full-cross-connection-checkpoint" in record["checks"]:
+                        read_wal(point)
+                        record["checks"].append("durable-sqlite-reopen")
                 stage = f"{step}-close"
                 close_mount(process, point)
                 process = None
-            record["status"] = "passed"
+            if not record["failures"]:
+                record["status"] = "passed"
     except (OSError, RuntimeError, sqlite3.Error, subprocess.SubprocessError) as err:
         record.update(error=f"{type(err).__name__}: {err}", stage=stage)
     finally:
@@ -233,7 +247,7 @@ def probe(output: Path, transport: str) -> bool:
         except (OSError, RuntimeError, subprocess.SubprocessError) as err:
             record.update(status="failed", cleanup=f"{type(err).__name__}: {err}")
         record["boot_unchanged"] = record["boot"] == capture(["/usr/sbin/sysctl", "-n", "kern.boottime"])
-        (output / f"{transport}.json").write_text(json.dumps(record, indent=2) + "\n")
+        (results / f"{transport}.json").write_text(json.dumps(record, indent=2) + "\n")
         print(json.dumps(record), flush=True)
     return record["status"] == "passed" and record["boot_unchanged"]
 
@@ -248,6 +262,8 @@ def main() -> int:
     tester = commands.add_parser("probe")
     tester.add_argument("--output", type=Path, required=True)
     tester.add_argument("--transport", choices=["fskit", "smb", "nfs"], required=True)
+    tester.add_argument("--results", type=Path)
+    tester.add_argument("--debug", action="store_true")
     options = parser.parse_args()
     if platform.system() != "Darwin" or platform.machine() != "arm64" or os.geteuid() == 0:
         parser.error("Run the experiment as the macOS arm64 login user")
@@ -256,7 +272,8 @@ def main() -> int:
             parser.error("--jobs must be positive")
         build(options.output.resolve(), options.cache.resolve(), options.jobs)
         return 0
-    return 0 if probe(options.output.resolve(), options.transport) else 1
+    results = options.results or options.output
+    return 0 if probe(options.output.resolve(), options.transport, results.resolve(), options.debug) else 1
 
 
 if __name__ == "__main__":
