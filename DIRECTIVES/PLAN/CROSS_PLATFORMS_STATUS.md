@@ -280,6 +280,14 @@ and mount inventories. The Linux console SHA-256 is
 `ed01a2348e21d3b760fe35564338a98160db427e610379088f715c90f7a37eaf`.
 See `target/dragonfly-tcplay/evidence/fat32-explicit-exchange/`.
 
+The same 379 MiB DragonFly-origin vault also passed a writable OpenBSD
+round trip. The pinned VeraCrypt 1.26.31 console on OpenBSD 8.0 authenticated
+the copied image, verified both the original marker and the aligned
+758-sector FAT layout, and synced a new marker through native `msdos`.
+The `63b82f5` installed DragonFly CLI verified the returned ciphertext and
+both markers after Auto reopen. Native inventories returned to baseline.
+See `target/dragonfly-tcplay/evidence/fat32-explicit-openbsd/`.
+
 The full opt-in desktop package built from the same `aa34ed3` source has
 SHA-256 `bab5a95e1b56f9243ad2fc992cf0e91757870d8151c87c307bbf006f46c2eb4d`.
 It passed offline native installation and package checks in a private root
