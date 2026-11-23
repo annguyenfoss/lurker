@@ -49,7 +49,7 @@ mount or write tests were run for this survey.
 | File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ext4** | Native C/RW | Paid C/RW<br>Ext4Kit beta C/RW<br>xlinuxfs FSKit RW | Native RW subset<br>Package C | Native R subset<br>Package C | Native R subset<br>Package C<br>Experimental FUSE RW | Native R subset<br>Package C<br>RW on current ext4 profiles unverified | Open-source driver RW on supported profiles<br>Paid RW<br>Janus or FsRover R | L1, M2, M5, M8, F1, O2, N2, D4, W4–W5, W8–W9, X7 |
-| **Btrfs** | Native C/RW | xlinuxfs FSKit RW<br>Experimental R via btrfs4mac | Package RW via old LKL port | — | — | — | WinBtrfs C/RW<br>Paid or FsRover R | L1, M8, F4, W5, W6, X6–X7 |
+| **Btrfs** | Native C/RW | FSKit RW<br>MicroVM RW (open source or paid)<br>Experimental R via btrfs4mac | Package RW via old LKL port | — | — | — | WinBtrfs C/RW<br>Paid or FsRover R | L1, M8–M10, F4, W5, W6, X6–X7 |
 | **XFS** | Native C/RW | xlinuxfs FSKit RW<br>Experimental FUSE R/RW | Package RW via old LKL port<br>Separate package C | — | — | — | Paid R, vendor RW claims conflict<br>FsRover R | L1, M8, F4, W5, X6–X7 |
 | **F2FS** | Native C/RW | — | — | — | — | — | FsRover R | L1, X7 |
 | **bcachefs** | Package C/RW via upstream DKMS on current kernels | — | — | — | — | — | — | L6 |
@@ -166,6 +166,15 @@ They carry lower priority for new general-purpose volumes.
   Btrfs, and XFS mounts. Its documented scope covers supported partitions
   and disk images. The OS release determines the raw-image attachment
   workflow. [M8]
+- For Btrfs, PolyDrive Disk advertises writable external drives and subvolumes
+  on Apple Silicon with macOS 26 or later. The open-source `anylinuxfs` exposes
+  writable Btrfs drives and disk images over NFS from a Linux microVM, and
+  vmount Pro offers a paid microVM route for writable external drives. Lurker
+  has yet to qualify any of these routes on an unlocked container. [M9]
+- Paragon lists Mac Btrfs in its OEM File System Link compatibility chart.
+  The chart gives no write capability or current product name for that pair.
+  Its retail extFS for Mac covers ext2, ext3, and ext4. Its documented
+  Windows Btrfs access is read-only. [M2, M10, W5]
 - btrfs4mac documents a
   read-only FUSE mount and FSKit work. The `fuse-xfs` projects range from
   a historical read-only driver to a newer community fork that advertises
@@ -316,6 +325,8 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **M6** Apple filesystem details, including UDF and optical filesystems. https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/FileSystemDetails/FileSystemDetails.html
 - **M7** Open-source macOS NTFS drivers through FSKit and FUSE-T. https://github.com/ntfstool/ntfstool · https://github.com/vahidzekic/ntfs4mac · https://github.com/macos-fuse-t/ntfs-3g
 - **M8** macOS ext4, Btrfs, and XFS via LKL and FSKit. https://github.com/HuanchuanTech/xlinuxfs
+- **M9** macOS Btrfs writable access. https://polydrive.net/disk/ · https://github.com/nohajc/anylinuxfs · https://vmount.app/use-cases/mount-btrfs-mac/
+- **M10** Paragon OEM File System Link compatibility chart. https://registration.paragon-software.com/technologies/file-system-link-business/ · https://download.paragon-software.com/doc/Paragon-FSL-for-Business-EN.0418.pdf
 - **W1** Microsoft Windows format command. https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/format
 - **W2** Microsoft filesystem feature comparison and exFAT specification. https://learn.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison · https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
 - **W3** Microsoft ReFS and Windows 11 Dev Drive. https://learn.microsoft.com/en-us/windows-server/storage/refs/refs-overview · https://learn.microsoft.com/en-us/windows/dev-drive/
