@@ -376,6 +376,25 @@ inventories and `kern.cryptodevallowsoft` matched baseline after both
 cycles. This diagnostic used a native UFS mount on the authenticated
 mapper. See `target/dragonfly-tcplay/evidence/rebuild-encrypted-ufs-control.log`.
 
+The packaged protocol-2 wrapper also authenticated a disposable AES vault
+with native HAMMER2 on its mapper. The 260 MiB image was fully initialized
+on UFS. DragonFly 6.4.2 `fstyp` identified HAMMER2 before the native mount.
+The standard application checks passed, including UTF-8 filenames, atomic
+file and directory renames, mount-root sync, and SQLite FULL/WAL. A login
+user with UID 1300 wrote and synced a file and SQLite row in a private
+directory and verified both after unmount and authenticated reopen.
+
+On a fresh diagnostic image, the unchanged power-loss worker acknowledged
+file sync, directory sync after rename, and a SQLite FULL/WAL commit with
+the connection open. The diagnostic stopped the worker and performed a
+normal unmount. The next authenticated reopen matched the file hash and
+only the committed SQLite row, and `integrity_check` returned `ok`. No
+power cut was performed. The diagnostic used manual native mounts and
+restored all storage inventories. The application and readiness receipts
+are `prefill-encrypted-hammer2-control.json` and
+`prefill-encrypted-hammer2-readiness.json` under
+`target/dragonfly-tcplay/evidence/`.
+
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
 digest, the sample ciphertext and the native storage inventories matched
