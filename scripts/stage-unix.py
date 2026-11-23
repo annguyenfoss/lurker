@@ -22,18 +22,23 @@ ROOT = Path(__file__).resolve().parents[1]
 SUPPORTED = {"Linux", "FreeBSD", "DragonFly", "NetBSD", "OpenBSD"}
 ALLOW = {
     "luks": {"Linux"}, "luks1": {"Linux", "DragonFly"},
-    "veracrypt": {"Linux", "FreeBSD", "OpenBSD"},
+    "veracrypt": {"Linux", "FreeBSD", "DragonFly", "OpenBSD"},
     "gocryptfs": {"Linux", "FreeBSD"}, "cryfs": {"Linux"},
     "cryptomator": {"Linux"}, "geli": {"FreeBSD"}, "pefs": {"FreeBSD"},
     "cgd": {"NetBSD"}, "softraid": {"OpenBSD"}, "raid1c": {"OpenBSD"},
 }
 ARTIFACTS = {"veracrypt-create": "veracrypt", "veracrypt-userspace": "veracrypt",
-             "veracrypt-bsd": "veracrypt", "gocryptfs": "gocryptfs",
+             "veracrypt-bsd": "veracrypt", "veracrypt-dragonfly": "veracrypt", "gocryptfs": "gocryptfs",
              "cryfs": "cryfs", "cryptomator": "cryptomator"}
 ENTRY = {"veracrypt-create": ["lurker-veracrypt-create"],
          "veracrypt-userspace": ["lurker-veracrypt", "lurker-fs", "lurker-veracrypt-create"],
-         "veracrypt-bsd": ["lurker-veracrypt-bsd"], "gocryptfs": ["gocryptfs"],
+         "veracrypt-bsd": ["lurker-veracrypt-bsd"], "veracrypt-dragonfly": ["lurker-tcplay"], "gocryptfs": ["gocryptfs"],
          "cryfs": ["cryfs"], "cryptomator": ["lurker-cryptomator", "runtime/bin/java"]}
+VERACRYPT_ARTIFACTS = {
+    "Linux": {"veracrypt-create", "veracrypt-userspace"},
+    "FreeBSD": {"veracrypt-bsd"}, "OpenBSD": {"veracrypt-bsd"},
+    "DragonFly": {"veracrypt-dragonfly"},
+}
 TOOLS = {
     "Linux": {"luks": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "lsblk", "losetup"],
               "luks1": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "lsblk", "losetup"],
@@ -44,7 +49,8 @@ TOOLS = {
     "NetBSD": {"cgd": ["cgdconfig", "vnconfig", "newfs", "mount", "umount"]},
     "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"],
                 "raid1c": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
-    "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "dmsetup", "kldload", "newfs", "mount", "umount"]},
+    "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "dmsetup", "kldload", "newfs", "mount", "umount"],
+                  "veracrypt": ["vnconfig", "dmsetup", "kldload", "newfs_msdos", "mount_msdos", "umount"]},
 }
 
 
@@ -479,6 +485,31 @@ def validate_backend(kind, directory, source):
         verify_cryptomator_patches(root, manifest, source, lock)
         if not list((root / "mods").glob("*.jar")) or not (root / "runtime/lib").is_dir():
             fail("Cryptomator private Java runtime/modules are incomplete")
+    elif kind == "veracrypt-dragonfly":
+        manifest = json_file(root / "dragonfly-tcplay-source.json")
+        verify_platform(manifest)
+        upstream = "native/dragonfly-tcplay/"
+        pin = json.loads(source.read(upstream + "sources.json"))
+        inputs = {name: hashlib.sha256(source.read(upstream + name)).hexdigest()
+                  for name in ("sources.json", "lurker.patch", "wrapper.c")}
+        if (manifest.get("schema") != 1 or manifest.get("protocol") != "lurker-tcplay 1"
+                or manifest.get("revision") != pin["revision"] or manifest.get("inputs") != inputs):
+            fail("DragonFly tcplay provenance differs from the reviewed source inputs")
+        files = {"lurker-tcplay", "licenses/DragonFly-tcplay.txt"}
+        actual = {str(path.relative_to(root)) for path, _ in entries(root)}
+        if set(manifest.get("files", {})) != files or actual != files | {"dragonfly-tcplay-source.json"}:
+            fail("DragonFly tcplay runtime inventory differs")
+        verify_files(root, manifest["files"])
+        readelf = shutil.which("readelf") or shutil.which("llvm-readelf")
+        if not readelf:
+            fail("readelf/llvm-readelf is required to inspect the DragonFly wrapper")
+        runtime = elf_info(root / "lurker-tcplay", readelf)
+        # DragonFly's base compiler adds its own administrator-controlled
+        # GCC directory even when this executable needs only /lib providers.
+        if (any(not re.fullmatch(r"/usr/lib/gcc[0-9]+", path) for path in runtime["search"])
+                or any(not re.fullmatch(r"lib(?:private_crypto|dm|prop|util|c)\.so\.[0-9]+", name)
+                       or not (Path("/lib") / name).is_file() for name in runtime["needed"])):
+            fail("DragonFly tcplay must use only base libraries and the base compiler search path")
     elif kind in {"veracrypt-create", "veracrypt-userspace"}:
         manifest = json_file(root / "creator-source.json")
         pin = source.constant("scripts/build-linux-userspace.py", "SOURCES")
@@ -923,7 +954,7 @@ def stage(args):
             fail("invalid/duplicate backend artifact: " + item)
         if ARTIFACTS[name] not in selected:
             fail("artifact backend was not selected: " + name)
-        if name.startswith("veracrypt-") and ((name == "veracrypt-bsd") == (system == "Linux")):
+        if ARTIFACTS[name] == "veracrypt" and name not in VERACRYPT_ARTIFACTS.get(system, set()):
             fail("VeraCrypt artifact route does not match native OS")
         input_snapshots[name] = file_manifest(safe_root(directory))
         artifacts[name] = validate_backend(name, Path(directory), source)
@@ -1009,11 +1040,12 @@ def stage(args):
                 verify_files(target, expected)
             if kind == "cryptomator":
                 copied_tree("", private / "cryptomator")
-            elif kind in {"gocryptfs", "cryfs", "veracrypt-create"}:
+            elif kind in {"gocryptfs", "cryfs", "veracrypt-create", "veracrypt-dragonfly"}:
                 for name in ENTRY[kind]:
                     copied_file(name, private / name)
                     (private / name).chmod(0o755)
-                metadata = kind + ".json" if kind in {"gocryptfs", "cryfs"} else "creator-source.json"
+                metadata = {"veracrypt-create": "creator-source.json",
+                            "veracrypt-dragonfly": "dragonfly-tcplay-source.json"}.get(kind, kind + ".json")
                 copied_file(metadata, share / "provenance" / (kind + ".json"))
                 licenses = "licenses/" + kind if kind in {"gocryptfs", "cryfs"} else "licenses"
                 copied_tree(licenses, share / "licenses" / kind)
@@ -1053,7 +1085,8 @@ def stage(args):
                         + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])
                         + (["VeraCrypt userspace/LKL requires the FUSE kernel interface and fusermount3"] if "veracrypt-userspace" in artifacts else [])
                         + (["PEFS module must match the FreeBSD kernel"] if "pefs" in selected else [])
-                        + (["LUKS1 requires the stock DragonFly dm_target_linear kernel module"] if system == "DragonFly" and "luks1" in selected else []),
+                        + (["LUKS1 requires the stock DragonFly dm_target_linear kernel module"] if system == "DragonFly" and "luks1" in selected else [])
+                        + (["VeraCrypt requires the stock DragonFly dm_target_crypt kernel module"] if system == "DragonFly" and "veracrypt" in selected else []),
                     "self_contained": False, "native_operation_qualification": "not performed by staging",
                     "files": file_manifest(prefix)}
         (share / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

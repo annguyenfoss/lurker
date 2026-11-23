@@ -43,6 +43,17 @@ stages, and the notice-incomplete stages were refused. Each guest passed
 45 builder and staging tests. Receipts are under
 `target/goal-validation/bsd-wx-notices/`.
 
+DragonFly VeraCrypt candidate packages use `--select veracrypt` explicitly
+with `scripts/build-unix.py`. Add `--select luks1` to include both native routes.
+The corresponding artifact kind is `veracrypt-dragonfly`. Use
+`scripts/build-dragonfly-tcplay.py --source-dir CACHE --output-dir OUTPUT` to
+build it separately. Add `--offline` after populating the source cache. When
+refreshing the DragonFly source pin, review `native/dragonfly-tcplay/lurker.patch`
+and verify every source hash in `native/dragonfly-tcplay/sources.json` before rerunning
+native qualification. The package includes the wrapper, provenance and notices.
+At runtime it uses DragonFly's base libraries, vnode and device-mapper facilities,
+and FAT32 tools. It needs no separately installed VeraCrypt application.
+
 Use `pkg add` and `pkg delete` on FreeBSD and DragonFly. Use `pkg_add` and
 `pkg_delete` on NetBSD and OpenBSD. OpenBSD's distribution policy requires a
 trusted source or signed packages for normal distribution. Use `-Dunsigned`

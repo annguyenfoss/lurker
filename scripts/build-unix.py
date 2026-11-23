@@ -68,8 +68,7 @@ def supplied_artifacts(values, selected, system, module):
         backend = module.ARTIFACTS[kind]
         if backend not in selected:
             raise ValueError("artifact supplied for an unselected backend: " + kind)
-        if ((system == "Linux" and kind == "veracrypt-bsd")
-                or (system != "Linux" and kind.startswith("veracrypt-") and kind != "veracrypt-bsd")):
+        if backend == "veracrypt" and kind not in module.VERACRYPT_ARTIFACTS.get(system, set()):
             raise ValueError("VeraCrypt artifact does not match the native OS")
         path = Path(directory).expanduser().absolute()
         if path.is_symlink() or not path.is_dir():
@@ -84,6 +83,8 @@ def veracrypt_inputs(system):
     if system == "Linux":
         return ["scripts/build-linux-userspace.py", "scripts/linux_wx.py",
                 "scripts/linux_private_elf.py", "native/linux-userspace", "native/veracrypt"]
+    if system == "DragonFly":
+        return ["scripts/build-dragonfly-tcplay.py", "native/dragonfly-tcplay"]
     return ["scripts/build-bsd-backends.py", "native/bsd-veracrypt", "native/veracrypt"]
 
 
@@ -165,6 +166,10 @@ def recipe(args, system, selected, artifacts, cache, work, module):
                            "--output", str(work / "userspace-artifact-manifest.json")]))
             stages.append(("userspace-envelope", [python, str(Path(__file__).resolve()), "--copy-envelope",
                            str(work / "userspace-artifact-manifest.json"), str(envelope)]))
+        elif system == "DragonFly":
+            native("veracrypt-dragonfly", directory, "dragonfly-tcplay-source.json",
+                   [python, str(scripts / "build-dragonfly-tcplay.py"), "--source-dir", str(directory.parent / "src"),
+                    "--output-dir", str(directory)])
         else:
             native("veracrypt-bsd", directory, "bsd-veracrypt-source.json",
                    [python, str(scripts / "build-bsd-backends.py"), "--source-dir", str(directory.parent / "src"),
@@ -283,6 +288,8 @@ def prerequisites(stages, args):
             tools.update(("gcc", "g++", "make", "wx-config", "pkg-config", "patch", "strip", "flex", "bison", "bc", "perl"))
         elif name == "build-veracrypt-bsd":
             tools.update(("gmake", "c++", "pkg-config", "patch"))
+        elif name == "build-veracrypt-dragonfly":
+            tools.update(("cc", "patch"))
         elif name == "build-gocryptfs":
             tools.update(("git", "go"))
         elif name == "build-cryfs":
@@ -345,6 +352,9 @@ def main():
         if args.jobs < 1 or args.stage_timeout < 1 or args.minimum_free_mib < 1:
             raise ValueError("worker count, stage timeout and free-space floor must be positive")
         selected = set(args.select) or {name for name, systems in module.ALLOW.items() if system in systems}
+        if system == "DragonFly" and not args.select:
+            # FAT32 application and preservation gates are still open.
+            selected.discard("veracrypt")
         if any(system not in module.ALLOW.get(name, ()) for name in selected):
             raise ValueError("selected backend is outside the locked scope for this OS")
         source = module.Source(ROOT, args.source_commit, args.source_manifest)

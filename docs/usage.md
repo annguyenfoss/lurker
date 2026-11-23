@@ -236,6 +236,34 @@ DragonFly LUKS1 cipher and keyslot profiles in
 `DIRECTIVES/LLM/ENCRYPTION.md` and uses a private metadata copy during each
 session. Preserve the complete original container as usual.
 
+### DragonFly BSD VeraCrypt file containers
+
+Packages built with the DragonFly VeraCrypt candidate include `lurker-tcplay`.
+Use the native administrator authorization path for these operations.
+
+```bash
+lurker create --type veracrypt --cipher aes ./vault.hc 1
+mkdir ./vault-mount
+lurker mount ./vault.hc ./vault-mount
+lurker list
+lurker unmount ./vault-mount
+```
+
+For exchange with VeraCrypt on another OS, use a normal file container with
+AES, Serpent, or Twofish, SHA-512, PIM 0, and FAT32 with clusters of at least
+4 KiB and a 4 KiB-aligned data region. The minimum create size is 260 MiB. Use either a password of up to 64 UTF-8 bytes or `--key-file FILE`.
+FAT32 allows files up to 4 GiB minus one byte. Its ownership and permissions
+come from each mount and apply to the invoking user. On DragonFly 6.4.2, use
+portable ASCII filenames. Native FAT32 rejects directory `fsync` and lacks the
+locking SQLite needs, so application durability qualification remains open.
+DragonFly VeraCrypt rejects `--readonly` before attaching the container.
+
+Close a busy mount after stopping its users. If an operation is interrupted,
+retry `lurker unmount` by source or mountpoint to let Lurker check and release
+the journaled resources. After an interrupted create, close by the original
+destination and inspect the staging path reported by Lurker. Filesystem repair
+uses the native FAT32 tools on a retained copy.
+
 OpenBSD RAID1C is an explicit two-file mirror. Size is per member.
 
 ```bash
