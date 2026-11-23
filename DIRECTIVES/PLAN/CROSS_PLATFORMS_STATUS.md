@@ -37,11 +37,18 @@ The aligned candidate `5786867a17252ea95059c3922944de8a8ac9c773`
 passed `cargo check --workspace --locked` and
 `cargo test --release --workspace --locked` on `dragonflybsd-core-01`
 in run `20261123T121207Z-42cce614`. The test run passed 96 cases with four
-ignored. The
-packaging checks passed 50 tests. The fault harness passed 36 tests after
-supplying the guest's separately packaged Python SQLite extension.
+ignored. The packaging checks passed 50 tests. The fault harness passed 36
+tests with the guest's separately packaged Python SQLite extension.
 
-Its CLI and desktop package SHA-256 was
+The separate stock 6.4.2 UFS clone `dfvcsize20261123` passed
+`cargo test --workspace --locked --offline` in the unoptimized profile at
+`c1110cbd28bf880005cec63595c541db5ae150be`. The run passed 97 tests,
+including the new FAT32 geometry regression, with four ignored. It ran as
+UID 1300 with Rust 1.98.1, debuginfo and incremental compilation disabled.
+The receipt is `target/dragonfly-tcplay/evidence/size-clone-cargo-workspace-debug.log`
+with SHA-256 `0a0a0b61044dcd3f909580d314ac922ccc21fe453369c91c51881c86651d062d`.
+
+The aligned candidate's CLI and desktop package SHA-256 was
 `95e384feb463fb9387da5ea1a757c7e11b29a116221aeb7e602bd21559aecc10`.
 An isolated DragonFly clone installed it offline and verified its package
 inventory and base-library resolution. The clone stopped returning SSH
