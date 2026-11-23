@@ -214,9 +214,9 @@ lurker unmount ./profile-mount
 
 Directory create takes no size, `--cipher` or replacement flag. Select `cryfs`,
 `cryptomator` or FreeBSD `pefs` in the same form where the approved matrix allows
-it. Backend builds and host prerequisites are separate; do not infer support from
-an executable compiling. macOS directory qualification requires a compatible
-separately installed macFUSE; the tested FUSE-T routes failed SQLite WAL checks.
+it. Packaged gocryptfs and CryFS on macOS require a compatible separately
+installed macFUSE. The experimental FUSE-T FSKit builds have separate CLI
+results. [macOS qualification](macos-backends.md#cryfs-and-gocryptfs-fuse-t-fskit-experiment)
 
 Native BSD defaults are GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD), softraid CRYPTO/FFS
 (OpenBSD), and LUKS1/UFS (DragonFly). Native containers take `<file> <size-gb>` and

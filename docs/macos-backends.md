@@ -149,6 +149,51 @@ run on that DMG. Buran retained its boot identity and the tests left no
 active mounts, journals, attached images, volumes or helper processes.
 The replay receipts are in the `full-replay/` subdirectory.
 
+## CryFS and gocryptfs FUSE-T FSKit experiment
+
+Buran ran the experiment on macOS 27.2.1 arm64 with FUSE-T 1.2.9 and SQLite
+3.53.1. CryFS 1.0.3 passed WAL, a FULL commit, second-connection reads,
+checkpointing, and file and database persistence on FSKit. The same CryFS
+binary mounted through NFS with default options and SQLite returned
+`delete` for `PRAGMA journal_mode=WAL`. gocryptfs v2.7.0 used an opt-in
+Go-FUSE transport. Its first FSKit build reproduced a rename I/O error
+because the helper sent the compatibility request after extended rename
+negotiation. The corrected build passed both rename layouts and the direct
+file and SQLite workload.
+[CryFS experiment](../native/macos/README.md) ·
+[gocryptfs experiment](../native/macos/GOCRYPTFS_FUSE_T.md)
+
+The first CLI replay also exposed transient busy errors during CryFS
+initialization and immediate close. The verified FUSE-T FSKit retry now
+performs one ordinary unmount retry after rechecking the recorded source
+and mount identities. The patched CLI built from `9f80e1483937a3740e630147501fa03cdf961f73`
+with SHA-256 `67b09c7a418c2e213befa278fdd88f9ced6c8a08656a01add722c37041e00d78`.
+On Buran, workspace check passed and workspace tests reported 104 passed
+and nine ignored in run `20261123T074557Z-38db421e`.
+
+| Backend | Explicit CLI | Auto CLI | Experimental engine SHA-256 |
+| --- | ---: | ---: | --- |
+| CryFS | 33 passed | 33 passed | `06328620bcc9289cd4bf5285489c95bdcf69fe5ab249cc66cc3a97919c331890` |
+| gocryptfs | 33 passed | 33 passed | `8fb29f2cc8460308beacb610474a060c666d123916a420dd1fd2e7e7085512e5` |
+
+All four CLI cases verified the actual FSKit mount rows, WAL and integrity,
+all five payload hashes over repeated reopens, busy-close refusal, six rapid
+close cycles, and read-only access. The packaged macFUSE controls at
+`c997d6a` each passed 21 checks across the same two backends and detection
+modes. The harness passed its 27 Python tests on Buran.
+
+A separate coordinated test held both FSKit volumes open together, verified
+distinct session identities and data, closed CryFS while gocryptfs stayed
+mounted, and verified both vaults again after reopening. The final audit
+found no owned mounts, helpers, active journals, or FSKit session records
+and verified the same boot identity. Receipts are under
+`target/goal-validation/macos-folder-fuse-t/`, including `final-audit.json`
+and `coexistence.json`.
+
+This verification covers direct experimental engines and the native CLI.
+The existing packaged CLI and desktop results use the macFUSE baseline.
+[Evaluation plan](../DIRECTIVES/PLAN/MACOS_FOLDER_FUSE_T.md)
+
 ## Earlier macOS 27.2.1 arm64 results
 
 The `8aac707` artifact is a functional baseline. Later fault testing exposed

@@ -8,6 +8,9 @@ lifecycle baseline for comparison.
 [macOS runtime policy](../LLM/CIPHER.md) ·
 [Buran qualification results](../../docs/macos-backends.md)
 
+The direct, CLI, and coexistence results are recorded in the
+[macOS FUSE-T FSKit experiment](../../docs/macos-backends.md#cryfs-and-gocryptfs-fuse-t-fskit-experiment).
+
 ## Ownership and test order
 
 - Assign one subagent to CryFS and one to gocryptfs. They can review source,
