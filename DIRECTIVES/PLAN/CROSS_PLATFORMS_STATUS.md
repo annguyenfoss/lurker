@@ -41,6 +41,11 @@ against a named gate. Repeat a build or test only for a changed input, failed
 case, or unresolved concern affecting that gate. New optional qualification
 work belongs in a later round unless it is required by the approved plan.
 
+Compare OpenBSD VeraCrypt with the unmodified upstream app at the pinned
+version on the same guest. Run equivalent lifecycle and persistence checks.
+Record limitations reproduced upstream and require Lurker to match the
+operations upstream passes. Record the inner filesystem for each result.
+
 The round is complete when every gate passes. An upstream or host defect that
 prevents a gate from passing remains an explicit blocker with a reproducer and
 the affected route. Reporting that blocker does not establish completion.
@@ -61,7 +66,7 @@ OS and are recorded with each receipt.
 | FreeBSD | The exact `16aa1f4` installer passed 260 checks across 20 variants, all 11 mounted reboot fixtures, four installed-helper callbacks, and X11. | gocryptfs requires explicit journal reconciliation after a reboot with an active mount. Legacy journals with a changed device number require manual recovery. |
 | NetBSD | The exact `16aa1f4` TGZ passed 26 CGD lifecycle checks, nine capacity checks, two mounted reboot fixtures, the login-user desktop callback, and X11. | The package was installed under a private destination. The earlier abrupt power-loss WAL result remains open. |
 | DragonFly BSD | The exact `16aa1f4` installer passed 117 LUKS1 lifecycle checks, nine capacity checks, X11, and the login-user installed-helper callback. All six mounted cipher and credential profiles reopened after an orderly reboot. | Earlier abrupt power-loss durability remains open. |
-| OpenBSD | The `16aa1f4` TGZ passed 212 checks across 16 CLI variants, 27 capacity checks, three login-user installed-helper callbacks, and X11. CRYPTO and RAID1C passed an ordinary reboot. With `999eced`, two mounted VeraCrypt FFS vaults reopened writable after an ordinary reboot without a shutdown hook, matching the outcome of upstream VeraCrypt's default FAT vault. | A busy FFS mount can prevent an orderly close. |
+| OpenBSD | The `999eced` TGZ passed 212 checks across 16 CLI variants, 27 capacity checks, three login-user installed-helper callbacks, and X11. Both mounted VeraCrypt FFS vaults reopened writable after an ordinary reboot without a shutdown hook, matching the outcome of upstream VeraCrypt's default FAT vault. CRYPTO and RAID1C passed the mounted reboot on the prior installer. | A busy FFS mount can prevent an orderly close. |
 | macOS | The exact `c997d6a` DMG passed 320 checks across all 20 CLI profiles, 35 Cryptomator rapid closes, busy refusal, JVM crash recovery, five desktop callbacks, and 75 Firefox checks. | The macOS tests issued no reboot. The final DMG was verified after Buran's separately requested restart. |
 
 All ten KVM guests ran workspace checks and passed 1,234 Rust tests on

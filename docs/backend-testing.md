@@ -454,6 +454,12 @@ hashes. A new synced write survived another close and reopen in each.
 Package and reboot receipts are in
 `target/goal-validation/ssh-matrix-20261122/openbsd-vc-ffs-parity/`.
 
+The same installer passed all 212 CLI checks across 16 variants and all 27
+capacity checks. X11 and all three storage callbacks through the installed
+helper passed as the login user. The restored inventories confirmed
+package removal and cleanup. The workspace passed 112 tests, with 19
+ignored, and 52 builder and staging tests passed.
+
 ### NetBSD and DragonFly reboot with encrypted mounts active
 
 NetBSD 11.1 exercised the `14ede46` package with two CGD fixtures,
