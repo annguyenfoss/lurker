@@ -10,7 +10,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Encryption support
 
-✅ Available in the CLI · — Unavailable · † See the DragonFly LUKS1 limitations below.
+✅ Available in the CLI · — Unavailable · † Recent writes may be lost after a sudden power cut.
 
 | Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
