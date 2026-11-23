@@ -7,27 +7,24 @@ writable support across multiple OSes. See the
 [OS filesystem survey](filesystem-support-matrix.md) for driver sources,
 version restrictions, and the broader inventory.
 
-**C** means create or format. **RW** means open and mount read/write.
-**Native** uses host facilities. **Package** requires a separately installed
-driver or tools. **Candidate** requires native qualification on the listed
-driver and volume type. **Paid** means a supported commercial driver is
-required. A dash leaves the OS/filesystem pair outside the proposed scope.
-An **Open source** line names the native implementation or an alternative
-with a write path. Under a dash, it records a research option. Windows
-targets use drivers and tools that run directly on Windows.
+**C** = create or format. **RW** = mount read/write. **Package** = install
+separately. **Paid** = commercial driver. A named driver alongside **Paid**
+is an open-source alternative. **—** = outside the plan. Third-party
+drivers and cells marked **Candidate** or **Target** still need Lurker
+testing on the target OS. Windows routes run directly on Windows.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW<br>Open source: Linux ext4 + e2fsprogs | Candidate C/RW, paid option<br>Open source: Ext4Kit (beta C/RW), xlinuxfs (RW) | Candidate native RW subset<br>Open source: ext2fs | — | —<br>Open source: fuse-ext2 (experimental RW) | — | Candidate RW, paid option<br>Open source: Ext4Windows, Ext4Fsd |
-| **Btrfs** | Native C/RW<br>Open source: Linux Btrfs + btrfs-progs | —<br>Open source: xlinuxfs (RW) | —<br>Open source: fusefs-lkl (older kernel) | — | — | — | Candidate C/RW<br>Open source: WinBtrfs |
-| **XFS** | Native C/RW<br>Open source: Linux XFS + xfsprogs | —<br>Open source: xlinuxfs (RW) | —<br>Open source: fusefs-lkl (older kernel) + xfsprogs | — | — | — | — |
-| **APFS** | Candidate RW, paid option<br>Open source: linux-apfs-rw (experimental) | Native C/RW | — | — | — | — | Candidate RW, paid option<br>Open source: winapfs (experimental) |
-| **UFS1 / FFSv1** | —<br>Open source: Linux UFS (experimental RW, select variants) | — | Native C/RW<br>Open source: FreeBSD UFS1 + newfs | Native C/RW<br>Open source: OpenBSD FFS1 + newfs | Native C/RW<br>Open source: NetBSD FFSv1 + newfs | Native C/RW<br>Open source: DragonFly UFS1 + newfs | —<br>Open source: UFS2Tool + Dokan (limited image RW) |
-| **UFS2 / FFSv2** | —<br>Open source: Linux UFS or fuse-ufs (experimental RW) | — | Native C/RW<br>Open source: FreeBSD UFS2 + newfs | Native C/RW<br>Open source: OpenBSD FFS2 + newfs | Native C/RW<br>Open source: NetBSD FFSv2 and FFSv2ea + newfs | C/RW target, driver and formatter need qualification<br>Open-source port candidate: fuse-ufs | —<br>Open source: UFS2Tool + Dokan (limited image RW) |
-| **HAMMER2** | —<br>Open source: linux_hammer2 (development RW) | — | —<br>Open source: freebsd_hammer2 (experimental RW) | —<br>Open source: openbsd_hammer2 (development port) | —<br>Open source: netbsd_hammer2 (development port) | Native C/RW<br>Open source: DragonFly HAMMER2 | — |
-| **NTFS** | Native RW, formatter package C<br>Open source: ntfs or ntfs3, NTFS-3G + mkntfs | Candidate RW, paid option<br>Open source: NTFSTool, NTFS4Mac, NTFS-3G via FUSE-T | Candidate RW<br>Open source: NTFS-3G | Candidate RW<br>Open source: NTFS-3G | Candidate RW<br>Open source: NTFS-3G | —<br>Open source: NTFS-3G (needs working FUSE) | Native C/RW |
-| **exFAT** | Native C/RW<br>Open source: Linux exFAT + exfatprogs | Native C/RW<br>Open source: legacy fuse-exfat (outside macOS runtime scope) | Package C/RW<br>Open source: fuse-exfat + exFAT utilities | Package C/RW<br>Open source: exfat-fuse + exFAT utilities | Package C/RW<br>Open source: fuse-exfat + exFAT utilities | Candidate C/RW once release FUSE works<br>Open source: fusefs-exfat + exfat-utils | Native C/RW |
-| **OpenZFS** | Package pool and dataset C/RW<br>Open source: OpenZFS | Candidate pool and dataset C/RW<br>Open source: OpenZFS on macOS | Native pool and dataset C/RW<br>Open source: base OpenZFS | — | Candidate pool and dataset C/RW<br>Open source: NetBSD ZFS port | — | —<br>Open source: OpenZFS on Windows (release candidate) |
+| **ext4** | Native C/RW | Paid C/RW | Candidate RW (subset) | — | — | — | Paid RW / Ext4Fsd RW (subset) |
+| **Btrfs** | Native C/RW | — | — | — | — | — | WinBtrfs C/RW |
+| **XFS** | Native C/RW | — | — | — | — | — | — |
+| **APFS** | Paid RW | Native C/RW | — | — | — | — | Paid RW |
+| **UFS1 / FFSv1** | — | — | Native C/RW | Native C/RW | Native C/RW | Native C/RW | — |
+| **UFS2 / FFSv2** | — | — | Native C/RW | Native C/RW | Native C/RW | Target C/RW | — |
+| **HAMMER2** | — | — | — | — | — | Native C/RW | — |
+| **NTFS** | Native RW + formatter package | Paid RW / NTFSTool RW (26+) | Package RW | Package RW | Package RW | — | Native C/RW |
+| **exFAT** | Native C/RW | Native C/RW | Package C/RW | Package C/RW | Package C/RW | Target C/RW | Native C/RW |
+| **OpenZFS** | Package C/RW | Candidate C/RW | Native C/RW | — | Candidate C/RW | — | — |
 
 ## Integration priorities
 
@@ -42,14 +39,12 @@ targets use drivers and tools that run directly on Windows.
    gives Windows and Linux a journaled alternative. WinBtrfs is the
    Windows route to qualify for existing Linux Btrfs containers.
 3. **Additional writable imports.** Qualify compatible ext4 on FreeBSD
-   against its journal and feature limitations. On Windows, evaluate
-   Ext4Windows through WinFsp and Ext4Fsd as free ext4 candidates alongside
-   the paid option. Verify current Linux formatter defaults, journal
-   recovery, and writable mounts on the actual partition and unlocked
-   container device. Keep third-party APFS, ext4, and NTFS drivers optional.
-   On macOS, evaluate Ext4Kit for ext4 writes and NTFSTool or NTFS4Mac for
-   NTFS. APFS write candidates on Linux and Windows
-   are experimental and require validation against macOS-created volumes.
+   against its journal and feature limitations. Test Ext4Fsd on Windows
+   against current Linux formatter defaults, journal recovery, and writable
+   mounts on partitions and unlocked containers. Test NTFSTool on macOS 26
+   or later, including writable mounts of unlocked containers. Keep
+   third-party APFS, ext4, and NTFS drivers optional. See the OS filesystem
+   survey for beta and experimental drivers.
 4. **OpenZFS pools.** Add FreeBSD and Linux first as a distinct single-device
    pool workflow. Qualify pool creation or import, dataset mount, and clean
    export before offering it. Use common feature flags when testing exchange.
