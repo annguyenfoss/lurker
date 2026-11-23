@@ -404,6 +404,22 @@ shutdown hook and shows that the signal phase provides no reliable close
 order. The test installation and fixtures were removed. Receipts are in
 `target/goal-validation/ssh-matrix-20261122/openbsd-stock-signal/`.
 
+#### OpenBSD shutdown replay on November 23
+
+The same `16aa1f4` native package was retested on `openbsd-core-01`.
+CRYPTO, RAID1C, and VeraCrypt all remained mounted when the guest requested
+`shutdown -r now`. The guest had no shutdown hook and the test added no
+close process. The boot identity changed from `1795398790` to `1795401057`.
+CRYPTO and RAID1C reopened normally and matched all five file hashes.
+VeraCrypt again refused writable reopen because FFS was unclean.
+
+The guest's `rc`, `rc.conf`, `shutdown`, and `reboot` bytes matched
+the local OpenBSD 8.0 amd64 installation ISO. The booted kernel hash
+matched the guest's record for its normal kernel relink. The replay
+preserved the shutdown configuration and restored the fixture storage
+inventory. Receipts are in
+`target/goal-validation/ssh-matrix-20261122/openbsd-user-shutdown-replay/`.
+
 ### NetBSD and DragonFly reboot with encrypted mounts active
 
 NetBSD 11.1 exercised the `14ede46` package with two CGD fixtures,
