@@ -17,24 +17,164 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-<!-- Soft breaks let labels wrap. Nested subscript and superscript center the compact status icons. -->
+<!-- Soft breaks let labels wrap. Row heights leave room for two lines. -->
 
-| E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;i&#8203;o&#8203;n | <samp>L&#8203;i&#8203;n&#8203;u&#8203;x</samp> | <samp>M&#8203;a&#8203;c&#8203;O&#8203;S</samp> | <samp>F&#8203;r&#8203;e&#8203;e&#8203;B&#8203;S&#8203;D</samp> | <samp>O&#8203;p&#8203;e&#8203;n&#8203;B&#8203;S&#8203;D</samp> | <samp>N&#8203;e&#8203;t&#8203;B&#8203;S&#8203;D</samp> | <samp>D&#8203;r&#8203;a&#8203;g&#8203;o&#8203;n&#8203;F&#8203;l&#8203;y B&#8203;S&#8203;D</samp> | <samp>W&#8203;i&#8203;n&#8203;d&#8203;o&#8203;w&#8203;s</samp> |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| L&#8203;U&#8203;K&#8203;S&#8203;1 | <sub><sup>🧅</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🧅</sup></sub> <sup>🛈</sup> | <sup>—</sup> |
-| L&#8203;U&#8203;K&#8203;S&#8203;2 | <sub><sup>🧅</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sup>—</sup> |
-| A&#8203;p&#8203;p&#8203;l&#8203;e E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d<br>D&#8203;i&#8203;s&#8203;k I&#8203;m&#8203;a&#8203;g&#8203;e | <sup>—</sup> | <sub><sup>🧅</sup></sub> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| A&#8203;P&#8203;F&#8203;S<br>E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d | <sup>—</sup> | <sub><sup>🍆</sup></sub> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| G&#8203;E&#8203;L&#8203;I | <sup>—</sup> | <sup>—</sup> | <sub><sup>🧅</sup></sub> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| P&#8203;E&#8203;F&#8203;S | <sup>—</sup> | <sup>—</sup> | <sub><sup>🧅</sup></sub> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d<br>C&#8203;R&#8203;Y&#8203;P&#8203;T&#8203;O | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sub><sup>🧅</sup></sub> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d<br>R&#8203;A&#8203;I&#8203;D&#8203;1&#8203;C | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sub><sup>🧅</sup></sub> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| C&#8203;G&#8203;D | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sub><sup>🧅</sup></sub> | <sup>—</sup> | <sup>—</sup> |
-| V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t | <sub><sup>🥑</sup></sub> | <sub><sup>🥑</sup></sub> | <sub><sup>🥑</sup></sub> | <sub><sup>🥑</sup></sub> | <sub><sup>🍆</sup></sub> | <sub><sup>🍆</sup></sub> | <sub><sup>🍰</sup></sub> |
-| g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s | <sub><sup>🥑</sup></sub> | <sub><sup>🥑</sup></sub> | <sub><sup>🥑</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sup>—</sup> | <sub><sup>🍰</sup></sub> |
-| C&#8203;r&#8203;y&#8203;F&#8203;S | <sub><sup>🥑</sup></sub> | <sub><sup>🥑</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sup>—</sup> | <sub><sup>🍰</sup></sub> |
-| C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r | <sub><sup>🥑</sup></sub> | <sub><sup>🥑</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sup>—</sup> | <sub><sup>🍰</sup></sub> |
-| s&#8203;e&#8203;c&#8203;u&#8203;r&#8203;e&#8203;f&#8203;s | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sub><sup>🍰</sup></sub> | <sup>—</sup> | <sub><sup>🍰</sup></sub> |
+<table>
+  <thead>
+    <tr>
+      <th scope="col" align="left">E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;i&#8203;o&#8203;n</th>
+      <th scope="col"><samp>L&#8203;i&#8203;n&#8203;u&#8203;x</samp></th>
+      <th scope="col"><samp>M&#8203;a&#8203;c&#8203;O&#8203;S</samp></th>
+      <th scope="col"><samp>F&#8203;r&#8203;e&#8203;e&#8203;B&#8203;S&#8203;D</samp></th>
+      <th scope="col"><samp>O&#8203;p&#8203;e&#8203;n&#8203;B&#8203;S&#8203;D</samp></th>
+      <th scope="col"><samp>N&#8203;e&#8203;t&#8203;B&#8203;S&#8203;D</samp></th>
+      <th scope="col"><samp>D&#8203;r&#8203;a&#8203;g&#8203;o&#8203;n&#8203;F&#8203;l&#8203;y B&#8203;S&#8203;D</samp></th>
+      <th scope="col"><samp>W&#8203;i&#8203;n&#8203;d&#8203;o&#8203;w&#8203;s</samp></th>
+    </tr>
+  </thead>
+  <tbody align="center" valign="middle">
+    <tr height="60">
+      <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;1</td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"> <sup>🛈</sup></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">A&#8203;p&#8203;p&#8203;l&#8203;e E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d<br>D&#8203;i&#8203;s&#8203;k I&#8203;m&#8203;a&#8203;g&#8203;e</td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">A&#8203;P&#8203;F&#8203;S<br>E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d</td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/eggplant.png" width="24" align="absmiddle" alt="In progress"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">G&#8203;E&#8203;L&#8203;I</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">P&#8203;E&#8203;F&#8203;S</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d<br>C&#8203;R&#8203;Y&#8203;P&#8203;T&#8203;O</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d<br>R&#8203;A&#8203;I&#8203;D&#8203;1&#8203;C</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">C&#8203;G&#8203;D</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+    </tr>
+    <tr height="60">
+      <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/eggplant.png" width="24" align="absmiddle" alt="In progress"></td>
+      <td><img src="extras/assets/status/eggplant.png" width="24" align="absmiddle" alt="In progress"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+    </tr>
+    <tr height="60">
+      <td align="left">g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s</td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+    </tr>
+    <tr height="60">
+      <td align="left">C&#8203;r&#8203;y&#8203;F&#8203;S</td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+    </tr>
+    <tr height="60">
+      <td align="left">C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r</td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+    </tr>
+    <tr height="60">
+      <td align="left">s&#8203;e&#8203;c&#8203;u&#8203;r&#8203;e&#8203;f&#8203;s</td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
+    </tr>
+  </tbody>
+</table>
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
