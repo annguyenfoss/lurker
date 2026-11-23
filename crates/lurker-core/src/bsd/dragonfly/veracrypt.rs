@@ -16,6 +16,7 @@ const SECTOR: u64 = 512;
 const MIB: u64 = 1024 * 1024;
 const MIN_CREATE_MIB: u64 = 260;
 const ALIGNED_SECTORS: u64 = 8;
+const FAT32_ENTRY_BYTES: u64 = 4;
 const RESERVED: u64 = 128 * 1024;
 const MAX_KEYFILE: u64 = 1024 * 1024;
 const MAX_PASSWORD: usize = 64;
@@ -368,15 +369,12 @@ pub(in crate::bsd) fn make_filesystem(
     size: u64,
 ) -> AppResult<()> {
     mapping_name(mapped)?;
-    // Stock tcplay lost data on 512-byte clusters after a normal reopen.
-    // Keep the data region and every cluster aligned to 4 KiB or larger.
-    let cluster = match size / MIB {
-        0..=8191 => "8",
-        8192..=16383 => "16",
-        16384..=32767 => "32",
-        _ => "64",
-    };
-    let mut options = args(&["-A", "-F", "32", "-c", cluster, "-u", "63", "-h", "255"]);
+    let (cluster, fat_sectors) = fat32_create_geometry(size)?;
+    let cluster = cluster.to_string();
+    let fat_sectors = fat_sectors.to_string();
+    let mut options = args(&[
+        "-A", "-F", "32", "-c", &cluster, "-a", &fat_sectors, "-u", "63", "-h", "255",
+    ]);
     options.push(mapped.into());
     exec_dragonfly_locked(
         registry,
@@ -386,6 +384,22 @@ pub(in crate::bsd) fn make_filesystem(
         COMMAND_TIMEOUT,
     )?;
     Ok(())
+}
+
+fn fat32_create_geometry(size: u64) -> AppResult<(u64, u64)> {
+    let sectors = payload_sectors(size)?;
+    // Stock tcplay lost data on 512-byte clusters after a normal reopen.
+    // Keep the data region and every cluster aligned to 4 KiB or larger.
+    let cluster = match size / MIB {
+        0..=8191 => ALIGNED_SECTORS,
+        8192..=16383 => 16,
+        16384..=32767 => 32,
+        _ => 64,
+    };
+    // DragonFly's formatter can leave a cluster without a FAT entry. Bound
+    // the data clusters by the whole provider and include the two reserved entries.
+    let fat_sectors = ((sectors / cluster + 2) * FAT32_ENTRY_BYTES).div_ceil(SECTOR);
+    Ok((cluster, fat_sectors))
 }
 
 fn fat32(boot: &[u8; 512], payload: u64) -> bool {
@@ -422,7 +436,7 @@ fn fat32(boot: &[u8; 512], payload: u64) -> bool {
     }
     let clusters = (total - overhead) / cluster;
     (65525..=0x0ffffff5).contains(&clusters)
-        && fat * SECTOR / 4 >= clusters + 2
+        && fat * SECTOR / FAT32_ENTRY_BYTES >= clusters + 2
         && (2..=clusters + 1).contains(&long(44))
 }
 
@@ -489,7 +503,15 @@ pub(in crate::bsd) fn verify_access(target: &Path, owner: Owner) -> AppResult<()
 
 #[cfg(test)]
 mod tests {
-    use super::fat32;
+    use super::{fat32, fat32_create_geometry, MIB};
+
+    #[test]
+    fn fat32_create_provisions_tables_at_formatter_rounding_boundaries() {
+        // The stock formatter chooses 756 and 1780 sectors per FAT at these
+        // sizes. Both layouts need one more FAT entry than the formatter supplies.
+        assert_eq!(fat32_create_geometry(379 * MIB).unwrap(), (8, 758));
+        assert_eq!(fat32_create_geometry(892 * MIB).unwrap(), (8, 1784));
+    }
 
     #[test]
     fn fat32_requires_four_kibibyte_clusters_and_data_alignment() {
