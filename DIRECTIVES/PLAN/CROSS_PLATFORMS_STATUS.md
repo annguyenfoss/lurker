@@ -103,7 +103,14 @@ baseline. An ASCII file `fsync` succeeded. Directory `fsync` returned `EINVAL`
 and SQLite 3.54.1 returned `SQLITE_IOERR_LOCK` in both WAL and rollback-journal
 mode. The required power-loss workload could not be armed. The receipts are
 `archive-installed-import-rejections.log` and `archive-installed-login-helper.log`
-under `target/dragonfly-tcplay/evidence/`. The Slint callback test is still open.
+under `target/dragonfly-tcplay/evidence/`.
+
+The installed Slint desktop opened a 1280 × 860 software-rendered X11 window
+as UID 1300 using the verified Xvfb archive. The first probe lacked `xdpyinfo`
+and stopped before launch. The retry with the offline X11 test tools captured
+the window and reaped its processes. The receipt is
+`target/dragonfly-tcplay/evidence/archive-installed-desktop-window.json`.
+The desktop storage callbacks still need an end-to-end GUI test.
 
 ## Measurable completion criteria for the active implementation round
 
