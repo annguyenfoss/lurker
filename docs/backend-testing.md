@@ -420,6 +420,22 @@ preserved the shutdown configuration and restored the fixture storage
 inventory. Receipts are in
 `target/goal-validation/ssh-matrix-20261122/openbsd-user-shutdown-replay/`.
 
+#### Upstream VeraCrypt comparison on OpenBSD
+
+VeraCrypt 1.26.31 was built from its pinned upstream source without
+Lurker patches. Its default FAT vault on `/dev/vnd0c` stayed mounted
+through an ordinary reboot and reopened writable with all five file
+hashes intact. The boot identity changed from `1795401057` to
+`1795401940`.
+
+A second test used the same upstream binary with native synchronous
+FFSv2 on `/dev/vnd0a`, matching Lurker's inner filesystem and partition
+layout. Normal close and reopen passed before reboot. The boot identity
+changed to `1795402087`, and writable reopen refused the unclean FFS.
+Neither run added a shutdown hook. The receipts and exact upstream
+binary digest are in
+`target/goal-validation/ssh-matrix-20261122/openbsd-upstream-veracrypt/`.
+
 ### NetBSD and DragonFly reboot with encrypted mounts active
 
 NetBSD 11.1 exercised the `14ede46` package with two CGD fixtures,
