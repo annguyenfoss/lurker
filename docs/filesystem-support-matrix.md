@@ -6,6 +6,9 @@ BSD, and Windows. It includes maintained native formats, optional open-source
 drivers, experimental ports, commercial tools, and compatibility formats.
 A separate inventory records specialized and legacy paths.
 
+The [filesystem integration matrix](filesystem-integration-matrix.md) selects
+writable formats from this survey for Lurker.
+
 **exFAT is the modern interchange choice.** Linux, macOS, and Windows have
 native read/write drivers. FreeBSD, NetBSD, and OpenBSD have packaged exFAT
 drivers. DragonFly BSD has packages too, but stock 6.4.2 omits the kernel FUSE
@@ -47,7 +50,7 @@ mount or write tests were run for this survey.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ext4** | Native C/RW | Paid C/RW<br>FSKit beta C/RW | Native RW subset<br>Package C | Native R subset<br>Package C | Native R subset<br>Package C<br>Experimental FUSE RW | Native R subset<br>Package C<br>RW on current ext4 profiles unverified | Paid RW<br>WSL2 C/RW<br>Janus or FsRover R | L1, M2, M5, F1, O2, N2, D4, W4, W5, X7 |
 | **Btrfs** | Native C/RW | Experimental R via btrfs4mac | Package RW via old LKL port | — | — | — | WinBtrfs C/RW<br>Paid or FsRover R | L1, F4, W5, W6, X6–X7 |
-| **XFS** | Native C/RW | Experimental FUSE R/RW | Package RW via old LKL port<br>Separate package C | — | — | — | Paid or FsRover R | L1, F4, W5, X6–X7 |
+| **XFS** | Native C/RW | Experimental FUSE R/RW | Package RW via old LKL port<br>Separate package C | — | — | — | Paid R, vendor RW claims conflict<br>FsRover R | L1, F4, W5, X6–X7 |
 | **F2FS** | Native C/RW | — | — | — | — | — | FsRover R | L1, X7 |
 | **bcachefs** | Package C/RW via upstream DKMS on current kernels | — | — | — | — | — | — | L6 |
 | **ZFS / OpenZFS** | Package C/RW | Package C/RW, version and architecture dependent | Native C/RW | — | Native module C/RW, port-specific feature set | — | Experimental C/RW, release-candidate driver | Z1–Z4 |
@@ -223,8 +226,11 @@ They carry lower priority for new general-purpose volumes.
 - WinBtrfs provides an optional Windows mount driver and `mkbtrfs`.
   Check driver signing and the exact Windows build. Windows also has a
   release-candidate OpenZFS port. Paragon's Linux File Systems for Windows
-  gives ext4 read/write and XFS/Btrfs read-only access. The APFS and HFS+
-  products use separate drivers, with APFS volume-type restrictions.
+  gives ext4 read/write and Btrfs read-only access. Its product page
+  advertises XFS write access, while the vendor's product documentation
+  describes XFS as read-only. Confirm the installed version before counting
+  Windows as a writable XFS target. The APFS and HFS+ products use separate
+  drivers, with APFS volume-type restrictions.
   [W5–W6, X2–X3, Z4]
 - WSL2 provides Linux-side ext4 access on supported attachments. Windows
   can access those files through the WSL share. Passing a disk into WSL
@@ -292,7 +298,7 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **W2** Microsoft filesystem feature comparison and exFAT specification. https://learn.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison · https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
 - **W3** Microsoft ReFS and Windows 11 Dev Drive. https://learn.microsoft.com/en-us/windows-server/storage/refs/refs-overview · https://learn.microsoft.com/en-us/windows/dev-drive/
 - **W4** Microsoft WSL2 disk attachment and driver projects. https://learn.microsoft.com/en-us/windows/wsl/wsl2-mount-disk · https://github.com/SuperCoolPencil/janus · https://github.com/winfsp/winfsp · https://github.com/dokan-dev/dokany
-- **W5** Paragon Linux File Systems for Windows. https://www.paragon-software.com/home/linuxfs-windows/
+- **W5** Paragon Linux File Systems for Windows product page and product brief. https://www.paragon-software.com/home/linuxfs-windows/ · https://dl.paragon-software.com/doc/Linux_File_Systems_for_Windows_OP.pdf
 - **W6** WinBtrfs driver and formatter. https://github.com/maharmstone/btrfs
 - **W7** Microsoft in-box filesystem driver overview. https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/about-file-system-drivers
 
