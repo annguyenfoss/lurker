@@ -1,4 +1,5 @@
 """Conformance harness invariants; no real encryption, mount or device operation."""
+import errno
 import importlib.util
 import json
 import os
@@ -110,6 +111,27 @@ class HarnessTests(unittest.TestCase):
         self.assertTrue(result["retained"])
         mount.assert_not_called()
         self.assertTrue((suite.root / "result.json").exists())
+
+    def test_application_io_records_independent_failures(self):
+        suite = harness.Suite(self.options())
+        invalid = OSError(errno.EINVAL, "Invalid argument")
+        lock_error = harness.sqlite3.OperationalError("disk I/O error")
+        lock_error.sqlite_errorname = "SQLITE_IOERR_LOCK"
+        with mock.patch.object(suite, "write_profile_file", side_effect=invalid), \
+             mock.patch.object(suite, "sync_dir", side_effect=invalid) as sync, \
+             mock.patch.object(suite, "write_sqlite_workload", side_effect=lock_error):
+            with self.assertRaisesRegex(AssertionError, "utf8-file-fsync.*sqlite-full-wal"):
+                suite.case("application-io", suite.write_workload)
+        self.assertEqual((suite.mountpoint / "atomic.data").read_bytes(), b"initial")
+        self.assertEqual(sync.call_args_list, [mock.call(suite.mountpoint)] * 2)
+        case = json.loads((suite.root / "result.json").read_text())["cases"][-1]
+        self.assertEqual(case["status"], "failed")
+        checks = {check["name"]: check for check in case["io_checks"]}
+        self.assertEqual(checks["atomic-rename-and-truncate"]["status"], "passed")
+        self.assertEqual(checks["utf8-file-fsync"]["errno"], errno.EINVAL)
+        self.assertEqual(checks["rename-directory-fsync"]["errno"], errno.EINVAL)
+        self.assertEqual(checks["application-directory-fsync"]["errno"], errno.EINVAL)
+        self.assertEqual(checks["sqlite-full-wal"]["sqlite_error"], "SQLITE_IOERR_LOCK")
 
     def test_successful_cli_without_mount_is_not_a_pass(self):
         suite = harness.Suite(self.options())

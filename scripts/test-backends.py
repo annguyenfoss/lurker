@@ -520,18 +520,46 @@ class Suite:
             raise AssertionError("Rejected create modified the existing source")
 
     def write_workload(self):
+        checks = [
+            ("utf8-file-fsync", self.write_profile_file),
+            ("atomic-rename-and-truncate", self.atomic_workload),
+            ("rename-directory-fsync", lambda: self.sync_dir(self.mountpoint)),
+            ("sqlite-full-wal", self.write_sqlite_workload),
+            ("application-directory-fsync", lambda: self.sync_dir(self.mountpoint)),
+        ]
+        results = self.result["cases"][-1]["io_checks"] = []
+        failures = []
+        for name, check in checks:
+            record = {"name": name, "status": "passed"}
+            try:
+                check()
+            except (AssertionError, OSError, sqlite3.Error) as error:
+                record.update(status="failed", diagnostic=str(error))
+                if isinstance(error, OSError):
+                    record["errno"] = error.errno
+                if isinstance(error, sqlite3.Error):
+                    record["sqlite_error"] = getattr(error, "sqlite_errorname", None)
+                failures.append(name)
+            results.append(record)
+        if failures:
+            raise AssertionError("Application I/O checks failed for " + ", ".join(failures))
+
+    def write_profile_file(self):
         payload = self.mountpoint / "profile 密碼.bin"
         with payload.open("xb") as stream:
             stream.write(self.payload)
             stream.flush()
             os.fsync(stream.fileno())
-        self.atomic_workload()
+
+    def write_sqlite_workload(self):
         db = sqlite3.connect(self.mountpoint / "browser-profile.sqlite")
         try:
             mode = db.execute("PRAGMA journal_mode=WAL").fetchone()[0]
             if mode.lower() != "wal":
                 raise AssertionError("SQLite did not enable WAL mode")
             db.execute("PRAGMA synchronous=FULL")
+            if db.execute("PRAGMA synchronous").fetchone() != (2,):
+                raise AssertionError("SQLite did not enable FULL sync")
             db.execute("CREATE TABLE profile (key TEXT PRIMARY KEY, value BLOB)")
             db.execute("INSERT INTO profile VALUES (?, ?)", ("密碼", self.payload))
             db.commit()
@@ -544,7 +572,6 @@ class Suite:
             db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         finally:
             db.close()
-        self.sync_dir(self.mountpoint)
 
     def atomic_workload(self):
         temporary = self.mountpoint / "atomic.tmp"
@@ -560,7 +587,6 @@ class Suite:
             os.fsync(stream.fileno())
         if published.read_bytes() != b"initial":
             raise AssertionError("Atomic rename/truncation workload did not persist bytes")
-        self.sync_dir(self.mountpoint)
 
     @staticmethod
     def sync_dir(directory):

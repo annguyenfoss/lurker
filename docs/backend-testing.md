@@ -153,6 +153,11 @@ fails the suite. The script never supplies sudo/administrator passwords. Native 
 suites outside macOS require running the suite with administrator privileges;
 userspace directory engines must run as the login user.
 
+The application workload records UTF-8 file sync, atomic rename and truncation,
+directory syncs, and the SQLite FULL/WAL transaction independently in `io_checks`
+in the case record. The suite retains the fixture and fails the case if any of
+those checks fails.
+
 Add `--firefox /absolute/path/to/firefox` to verify a real browser profile
 on the encrypted mount. For supported privileged Linux and BSD routes, run
 the suite through sudo or doas from the login account. The fixture uses
