@@ -15,21 +15,25 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 |
-| LUKS2 | 🧅 | — | — | — | — | — |
-| Apple Encrypted Disk Image | — | 🧅 | — | — | — | — |
-| APFS Encrypted | — | 🧅 | — | — | — | — |
-| GELI | — | — | 🧅 | — | — | — |
-| PEFS | — | — | 🧅 | — | — | — |
-| softraid CRYPTO | — | — | — | 🧅 | — | — |
-| softraid RAID1C | — | — | — | 🧅 | — | — |
-| CGD | — | — | — | — | 🧅 | — |
-| VeraCrypt | 🥑 | 🥑 | 🥑 | 🥑 | — | — |
-| gocryptfs | 🥑 | 🥑 | 🥑 | — | — | — |
-| CryFS | 🥑 | 🥑 | — | — | — | — |
-| Cryptomator | 🥑 | 🥑 | — | — | — | — |
+| Encryption | Linux | MacOS | Windows | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| LUKS1 | 🧅 | — | — | — | — | — | 🧅 🛈 |
+| LUKS2 | 🧅 | — | — | — | — | — | — |
+| Apple Encrypted Disk Image | — | 🧅 | — | — | — | — | — |
+| APFS Encrypted | — | 🧅 | — | — | — | — | — |
+| BitLocker / BitLocker To Go | — | — | PLANNED | — | — | — | — |
+| EFS | — | — | PLANNED | — | — | — | — |
+| GELI | — | — | — | 🧅 | — | — | — |
+| PEFS | — | — | — | 🧅 | — | — | — |
+| softraid CRYPTO | — | — | — | — | 🧅 | — | — |
+| softraid RAID1C | — | — | — | — | 🧅 | — | — |
+| CGD | — | — | — | — | — | 🧅 | — |
+| VeraCrypt | 🥑 | 🥑 | PLANNED | 🥑 | 🥑 | PLANNED | PLANNED |
+| gocryptfs | 🥑 | 🥑 | PLANNED (cppcryptfs) | 🥑 | — | — | — |
+| CryFS | 🥑 | 🥑 | — | — | — | — | — |
+| Cryptomator | 🥑 | 🥑 | PLANNED | — | — | — | — |
+| securefs | — | — | PLANNED | — | — | — | — |
+| DiskCryptor | — | — | PLANNED | — | — | — | — |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
