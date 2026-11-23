@@ -62,7 +62,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 
 ## Core Invariants
 
-- The approved six-OS matrix in `ENCRYPTION.md` defines backend scope and current support. Physical-device setup is in scope on all six OSes where feasible. The current device-create implementation is Linux-only. BSD and macOS disk-container workflows currently use file-backed devices.
+- The matrix in `ENCRYPTION.md` defines approved backend scope and current support. Physical-device setup is in scope on Linux, macOS, and the four BSDs where feasible. The current device-create implementation is Linux-only. BSD and macOS disk-container workflows currently use file-backed devices.
 - Container defaults: Linux `luks` (LUKS2), macOS `apple`, FreeBSD `geli`, NetBSD `cgd`, OpenBSD `softraid`, DragonFly `luks1`. Explicit Linux `luks1` preserves its compatible PBKDF2 profile. Directory backends are explicit selections with no size or generic cipher option.
 - Apple encryption is AES-256 at the disk-image layer, with APFS inside; it is not system FileVault or APFS filesystem encryption.
 - Supported create ciphers: `aes`, `serpent`, `twofish`.
