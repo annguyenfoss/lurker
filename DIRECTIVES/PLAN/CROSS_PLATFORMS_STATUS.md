@@ -208,8 +208,18 @@ inode and bytes, an unrelated committed file survived, and the staging and
 session inventories returned to baseline. Freeing the filler allowed fully
 allocated creation and a synced payload survived close and reopen. A write
 that would grow the FAT32 file past 4294967295 bytes returned `EFBIG` and
-preserved the payload. Acceptance at the maximum file size remains to be
-verified. The receipt is `target/dragonfly-tcplay/evidence/archive-outer-capacity.log`.
+preserved the payload. The receipt is
+`target/dragonfly-tcplay/evidence/archive-outer-capacity.log`.
+
+A separate UFS-backed clone with an 8 GiB fixture disk installed the same
+offline package and created a fully allocated 4.5 GiB AES image. FAT32 wrote
+and synced a 4294967295-byte file. A one-byte append returned `EFBIG`. The
+installed CLI closed the vault, reopened through Auto, and read the entire
+file back with the same size and SHA-256
+`c3fd0d0de3685ca66b9380b150335a4f2ba4b09153f3a25df3206abe0f5603c3`.
+The container closed and the dedicated UFS fixture unmounted cleanly.
+The receipts are `size-clone-{offline-install,fixture,max-file,cleanup}.log`
+under `target/dragonfly-tcplay/evidence/`.
 
 ## Measurable completion criteria for the active implementation round
 

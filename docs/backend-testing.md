@@ -79,6 +79,12 @@ workload. Preserve failures in the application and capacity checks. Require the
 file and directory syncs and SQLite FULL/WAL commit to be acknowledged before a
 power cut. [Power-loss runbook](vm-powerloss-testing.md)
 
+Use a separate, empty fixture disk for the full FAT32 file-size boundary.
+An 8 GiB UFS fixture fits a fully allocated 4.5 GiB VeraCrypt image and
+provides enough space to distinguish the file-size limit from exhaustion.
+Write and sync exactly 4294967295 bytes, check `EFBIG` on a one-byte append,
+and read the entire file after close and reopen to compare its size and hash.
+
 For interruption checks on an isolated guest, use the installed CLI with a
 fresh disposable destination and a separate fixture for reopen and close.
 Derive the phase stop points from the exact executable's disassembly. On
