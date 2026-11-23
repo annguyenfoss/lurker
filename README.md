@@ -48,6 +48,23 @@ Some encryption methods ship with the OS. Lurker wraps the tools below.
 
 For methods marked 📦, the goal is one Lurker install with the engine and runtime included.
 
+| Encryption | Platform | Runtime dependencies today |
+| :--- | :--- | :--- |
+| VeraCrypt | Linux | Btrfs tools. Administrator mounts use `cryptsetup` and disk and mount utilities. Login-user mounts use FUSE 3 (`fusermount3`). |
+| VeraCrypt | macOS | Install FUSE-T 1.2.9 or later. |
+| VeraCrypt | FreeBSD | OS-provided `fusefs` and disk tools. Lurker bundles the FUSE library. |
+| VeraCrypt | OpenBSD | OS-provided FUSE and disk tools. |
+| gocryptfs | Linux | `fusermount` or `fusermount3` from your distro. |
+| gocryptfs | macOS | Install macFUSE. |
+| gocryptfs | FreeBSD | OS-provided `fusefs` and `mount_fusefs`, with `/dev/fuse` access and user mounts enabled. |
+| CryFS | Linux | FUSE 2 library and `fusermount` from your distro. |
+| CryFS | macOS | Install macFUSE. |
+| PEFS | FreeBSD | `pefs-kmod` provides the `pefs` tool and kernel module. It must match the running kernel. |
+| Cryptomator | Linux | FUSE 3 library and `fusermount3` from your distro. Lurker bundles Java. |
+| Cryptomator | macOS | Install FUSE-T and enable its FSKit extension. Lurker bundles Java. |
+
+See [Linux and BSD packaging](docs/unix-packaging.md) for shared system and desktop dependencies.
+
 ## Create. Unlock. Lock.
 
 ```bash
