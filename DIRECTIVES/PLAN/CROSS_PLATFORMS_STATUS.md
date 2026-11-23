@@ -202,6 +202,18 @@ The receipts are `archive-desktop-callback*.log` under
 primary CLI matrix receipt with 12 recorded steps in its AES/password case.
 The complete installed matrix remains the one from the UFS clone.
 
+The hash-verified packaged desktop also completed the lifecycle through its
+visible winit controls on a private X11 display as UID 1300. It created an
+owned AES image, refused read-only and wrong-passphrase opens with the same
+ciphertext hash and idle devices, mounted through Auto, and listed the volume
+as writable. A login-user file was synced and a working-directory holder
+kept the vault mounted through a busy close attempt. After releasing the
+holder, the desktop closed, reopened, and closed it again. The payload hash
+matched and final native inventories were idle. The candidate displayed
+error notifications, with their detailed reasons clipped at the window edge.
+The screenshots and inventories are under
+`target/dragonfly-tcplay/evidence/desktop-input/`.
+
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
 digest, the sample ciphertext and the native storage inventories matched
