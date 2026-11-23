@@ -120,6 +120,20 @@ cleanly. This receipt covers ordinary file persistence. SQLite durability
 remains blocked by the FAT32 locking failure. Receipts are
 `target/dragonfly-tcplay/evidence/archive-ordinary-*.log`.
 
+The installed CLI opened AES and Serpent vaults concurrently. While both
+were mounted, a replacement at the AES source path caused close by source
+and by mountpoint to refuse cleanup. The vnode display followed the renamed
+file and retained its device and inode. Both sessions remained usable. After
+restoring the path, closing AES left Serpent mounted, and both vaults later
+reopened with matching marker hashes. The original fixture digests and final
+native inventories matched baseline. The receipt is
+`target/dragonfly-tcplay/evidence/archive-concurrent-replacement-normalized.log`.
+
+LUKS1 Auto detection on the same installed CLI passed all 13 conformance
+checks with stock `cryptsetup` 1.1.2. Final mounts, mappings and vnode
+inventories were clean. The receipt is
+`target/dragonfly-tcplay/evidence/archive-luks1-auto-regression.json`.
+
 ## Measurable completion criteria for the active implementation round
 
 The target is one verified final candidate covering the 16 approved non-macOS
