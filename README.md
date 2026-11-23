@@ -10,25 +10,32 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Encryption support
 
-✅ Available in the CLI · — Unavailable · † Limited power-loss resilience.
+- ✅ Available in the CLI with OS-provided encryption tools
+- 📦 Available in the CLI with software outside the base OS
+- — Unavailable · † Limited power-loss resilience
 
 | Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | LUKS2 | ✅ | — | — | — | — | — |
 | LUKS1 | ✅ | — | — | — | — | ✅† |
-| VeraCrypt | ✅ | ✅ | ✅ | ✅ | — | — |
 | Apple encrypted disk images | — | ✅ | — | — | — | — |
 | GELI | — | — | ✅ | — | — | — |
 | CGD | — | — | — | — | ✅ | — |
 | softraid CRYPTO | — | — | — | ✅ | — | — |
 | softraid RAID1C | — | — | — | ✅ | — | — |
-| gocryptfs | ✅ | ✅ | ✅ | — | — | — |
-| CryFS | ✅ | ✅ | — | — | — | — |
-| PEFS | — | — | ✅ | — | — | — |
-| Cryptomator | ✅ | ✅ | — | — | — | — |
+| VeraCrypt | 📦 | 📦 | 📦 | 📦 | — | — |
+| gocryptfs | 📦 | 📦 | 📦 | — | — | — |
+| CryFS | 📦 | 📦 | — | — | — | — |
+| PEFS | — | — | 📦 | — | — | — |
+| Cryptomator | 📦 | 📦 | — | — | — | — |
 
-The macOS developer package includes VeraCrypt, gocryptfs, CryFS and
-Cryptomator. Install FUSE-T separately for VeraCrypt and Cryptomator, and
+Linux LUKS1 and LUKS2 use the distro's `cryptsetup` command. The native Lurker
+package declares it as a dependency, so the package manager can install it on
+images where it is missing, such as Debian GenericCloud and Fedora Cloud Base.
+
+Lurker packages bundle VeraCrypt, gocryptfs, CryFS and Cryptomator on the
+platforms shown. FreeBSD PEFS needs the `pefs-kmod` package matching the running
+kernel. On macOS, install FUSE-T separately for VeraCrypt and Cryptomator, and
 macFUSE separately for gocryptfs and CryFS. The [macOS build guide](docs/macos-backends.md)
 records the tested versions and package requirements.
 
