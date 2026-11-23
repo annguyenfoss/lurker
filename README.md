@@ -18,20 +18,20 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 | Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | <sup>🧅</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>🧅&nbsp;🛈</sup> |
-| LUKS2 | <sup>🧅</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> |
+| LUKS1 | <sup>🧅</sup> | PLANNED | PLANNED | PLANNED | PLANNED | <sup>🧅&nbsp;🛈</sup> |
+| LUKS2 | <sup>🧅</sup> | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |
 | Apple&nbsp;Encrypted&nbsp;Disk&nbsp;Image | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| APFS&nbsp;Encrypted | <sup>—</sup> | <sup>PLANNED</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| APFS&nbsp;Encrypted | <sup>—</sup> | PLANNED | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
 | GELI | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
 | PEFS | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
 | softraid&nbsp;CRYPTO | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
 | softraid&nbsp;RAID1C | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
 | CGD | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> |
-| VeraCrypt | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> |
-| gocryptfs | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>—</sup> |
-| CryFS | <sup>🥑</sup> | <sup>🥑</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>—</sup> |
-| Cryptomator | <sup>🥑</sup> | <sup>🥑</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>—</sup> |
-| securefs | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>PLANNED</sup> | <sup>—</sup> |
+| VeraCrypt | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED |
+| gocryptfs | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | <sup>—</sup> |
+| CryFS | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | PLANNED | <sup>—</sup> |
+| Cryptomator | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | PLANNED | <sup>—</sup> |
+| securefs | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED | <sup>—</sup> |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
