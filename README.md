@@ -16,33 +16,31 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD | Windows |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 | — |
-| LUKS2 | 🧅 | — | — | — | — | — | — |
-| Apple Encrypted Disk Image | — | 🧅 | — | — | — | — | — |
-| APFS Encrypted | — | 🍰 | — | — | — | — | — |
-| BitLocker / BitLocker To Go | 🍰 | 🍰 | 🍰 | — | — | — | 🍰 |
-| EFS | — | — | — | — | — | — | 🍰 |
-| GELI | — | — | 🧅 | — | — | — | — |
-| PEFS | — | — | 🧅 | — | — | — | — |
-| softraid CRYPTO | — | — | — | 🧅 | — | — | — |
-| softraid RAID1C | — | — | — | 🧅 | — | — | — |
-| CGD | — | — | — | — | 🧅 | — | — |
-| VeraCrypt | 🥑 | 🥑 | 🥑 | 🥑 | 🍰 | 🍰 | 🍰 |
-| gocryptfs | 🥑 | 🥑 | 🥑 | — | — | — | 🍰 |
-| CryFS | 🥑 | 🥑 | — | — | — | — | 🍰 |
-| Cryptomator | 🥑 | 🥑 | — | — | — | — | 🍰 |
-| securefs | 🍰 | 🍰 | 🍰 | — | — | — | 🍰 |
+| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 |
+| LUKS2 | 🧅 | — | — | — | — | — |
+| Apple Encrypted Disk Image | — | 🧅 | — | — | — | — |
+| APFS Encrypted | — | 🍰 | — | — | — | — |
+| BitLocker / BitLocker To Go | 🍰 | 🍰 | 🍰 | — | — | — |
+| GELI | — | — | 🧅 | — | — | — |
+| PEFS | — | — | 🧅 | — | — | — |
+| softraid CRYPTO | — | — | — | 🧅 | — | — |
+| softraid RAID1C | — | — | — | 🧅 | — | — |
+| CGD | — | — | — | — | 🧅 | — |
+| VeraCrypt | 🥑 | 🥑 | 🥑 | 🥑 | 🍰 | 🍰 |
+| gocryptfs | 🥑 | 🥑 | 🥑 | — | — | — |
+| CryFS | 🥑 | 🥑 | — | — | — | — |
+| Cryptomator | 🥑 | 🥑 | — | — | — | — |
+| securefs | 🍰 | 🍰 | 🍰 | — | — | — |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
 ### Planned integration batches
 
-1. VeraCrypt on DragonFly BSD, APFS Encrypted on MacOS, and securefs on Linux, MacOS, and FreeBSD.
-2. VeraCrypt on NetBSD.
-3. Windows support for BitLocker / BitLocker To Go, EFS, VeraCrypt, gocryptfs via `cppcryptfs`, CryFS, Cryptomator, and securefs.
-4. BitLocker / BitLocker To Go on Linux, MacOS, and FreeBSD. Open existing volumes, with read/write access where validated.
+- **Batch 1** — VeraCrypt on DragonFly BSD, APFS Encrypted on MacOS, and securefs on Linux, MacOS, and FreeBSD.
+- **Batch 2** — VeraCrypt on NetBSD.
+- **Batch 4** — BitLocker / BitLocker To Go on Linux, MacOS, and FreeBSD. Open existing volumes, with read/write access where validated.
 
 ## Dependencies
 

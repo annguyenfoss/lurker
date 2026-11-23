@@ -6,25 +6,24 @@ Use this file as the source of truth for selected encryption backends and create
 
 ✅ implemented with packaged native CLI lifecycle coverage; 🟦 selected, native qualification incomplete; — outside approved scope. These are backend/format names, not cipher algorithms. A tick does not establish desktop, security-audit or complete fault/release qualification; exact tested revisions and limits are in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`.
 
-| Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD | Windows |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Apple Encrypted Disk Image | ✅ | — | — | — | — | — | — |
-| APFS Encrypted | 🟦 | — | — | — | — | — | — |
-| Startup-volume FileVault management | 🟦 | — | — | — | — | — | — |
-| LUKS2 | — | ✅ | — | — | — | — | — |
-| VeraCrypt | ✅ | ✅ | ✅ | 🟦 | 🟦 | ✅ | 🟦 |
-| CryFS stable 1.x | ✅ | ✅ | — | — | — | — | 🟦 |
-| gocryptfs | ✅ | ✅ | ✅ | — | — | — | 🟦 |
-| GELI | — | — | ✅ | — | — | — | — |
-| CGD | — | — | — | — | ✅ | — | — |
-| softraid CRYPTO | — | — | — | — | — | ✅ | — |
-| softraid RAID1C | — | — | — | — | — | ✅ | — |
-| PEFS | — | — | ✅ | — | — | — | — |
-| Cryptomator | ✅ | ✅ | — | — | — | — | 🟦 |
-| LUKS1 | — | ✅ | — | ✅ | — | — | — |
-| BitLocker / BitLocker To Go | 🟦 | 🟦 | 🟦 | — | — | — | 🟦 |
-| EFS | — | — | — | — | — | — | 🟦 |
-| securefs | 🟦 | 🟦 | 🟦 | — | — | — | 🟦 |
+| Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD |
+| --- | --- | --- | --- | --- | --- | --- |
+| Apple Encrypted Disk Image | ✅ | — | — | — | — | — |
+| APFS Encrypted | 🟦 | — | — | — | — | — |
+| Startup-volume FileVault management | 🟦 | — | — | — | — | — |
+| LUKS2 | — | ✅ | — | — | — | — |
+| VeraCrypt | ✅ | ✅ | ✅ | 🟦 | 🟦 | ✅ |
+| CryFS stable 1.x | ✅ | ✅ | — | — | — | — |
+| gocryptfs | ✅ | ✅ | ✅ | — | — | — |
+| GELI | — | — | ✅ | — | — | — |
+| CGD | — | — | — | — | ✅ | — |
+| softraid CRYPTO | — | — | — | — | — | ✅ |
+| softraid RAID1C | — | — | — | — | — | ✅ |
+| PEFS | — | — | ✅ | — | — | — |
+| Cryptomator | ✅ | ✅ | — | — | — | — |
+| LUKS1 | — | ✅ | — | ✅ | — | — |
+| BitLocker / BitLocker To Go | 🟦 | 🟦 | 🟦 | — | — | — |
+| securefs | 🟦 | 🟦 | 🟦 | — | — | — |
 
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, encrypted archives, backups and rclone crypt are excluded. LUKS still uses dm-crypt internally. Research availability is not approval to integrate.
 - age/rage is excluded: Lurker targets writable encrypted disks, filesystems and directories unlocked for use during a session. age/rage encrypts files/streams; rage-mount provides only read-only archive access, not writable directory encryption.
@@ -35,10 +34,13 @@ Use this file as the source of truth for selected encryption backends and create
 
 ## Planned integration batches
 
-1. DragonFly BSD VeraCrypt file containers via the [native `tcplay` and device-mapper route](../PLAN/DRAGONFLY_VERACRYPT.md), macOS APFS Encrypted data volumes via `diskutil`, and securefs on Linux, macOS, and FreeBSD.
-2. VeraCrypt on NetBSD.
-3. Windows support for native BitLocker / BitLocker To Go setup and unlock, native EFS, VeraCrypt, gocryptfs via `cppcryptfs`, stable CryFS 1.x, Cryptomator, and securefs.
-4. BitLocker / BitLocker To Go on Linux, macOS, and FreeBSD. Open existing volumes only. Qualify writable access for each supported filesystem.
+- **Batch 1** — DragonFly BSD VeraCrypt file containers via the [native `tcplay` and device-mapper route](../PLAN/DRAGONFLY_VERACRYPT.md), macOS APFS Encrypted data volumes via `diskutil`, and securefs on Linux, macOS, and FreeBSD.
+- **Batch 2** — VeraCrypt on NetBSD.
+- **Batch 4** — BitLocker / BitLocker To Go on Linux, macOS, and FreeBSD. Open existing volumes only. Qualify writable access for each supported filesystem.
+
+### Windows integration postponed indefinitely
+
+Windows platform support and all integrations formerly in Batch 3 are postponed indefinitely. This includes native BitLocker / BitLocker To Go setup and unlock, native EFS, VeraCrypt, gocryptfs via `cppcryptfs`, stable CryFS 1.x, Cryptomator, and securefs.
 
 ## Physical-device setup scope
 
