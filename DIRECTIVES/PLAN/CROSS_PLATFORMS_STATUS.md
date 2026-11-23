@@ -117,6 +117,9 @@ The installed CLI rejected the eight incompatible inputs above and a
 compatible AES header with unqualified FAT32 geometry. Each of the nine
 fixtures was tested with explicit VeraCrypt and Auto open. All 18 rejections
 preserved the source digests and restored the native inventories.
+Opening without a credential or controlling terminal also failed in both
+modes with the source digest and native inventory intact. The receipt is
+`target/dragonfly-tcplay/evidence/archive-missing-credential-retry.log`.
 
 The installed helper ran as login UID 1300 through scoped sudo authorization.
 It created an invoking-user-owned image, refused read-only before attachment,
@@ -136,6 +139,13 @@ and stopped before launch. The retry with the offline X11 test tools captured
 the window and reaped its processes. The receipt is
 `target/dragonfly-tcplay/evidence/archive-installed-desktop-window.json`.
 The desktop storage callbacks still need an end-to-end GUI test.
+
+Package removal deleted the candidate CLI, helper, desktop, wrapper and
+manifest. The other package rows, the guest's original package database
+digest, the sample ciphertext and the native storage inventories matched
+their pre-uninstall values. Reinstalling the same offline archive restored
+the previous package inventory and passed file and dependency checks. The
+receipt is `target/dragonfly-tcplay/evidence/archive-package-uninstall.log`.
 
 The isolated UFS-backed guest performed an ordinary shutdown and reboot
 with a candidate vault mounted. The guest reported a new boot time and
