@@ -38,7 +38,7 @@ This planning snapshot records the starting integration state: ✅ existing work
 | Cryptomator | 🟦 | 🟦 | — | — | — | — |
 | LUKS1 | — | 🟦 | — | 🟦 | — | — |
 
-Do not expand this matrix implicitly while solving packaging problems. Windows, VeraCrypt on NetBSD/DragonFly and other exploratory ports are outside this plan. EncFS, securefs, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, age/rage, encrypted archives, backup tools and rclone crypt remain excluded. LUKS may use dm-crypt internally.
+Do not expand this matrix implicitly while solving packaging problems. The DragonFly VeraCrypt file-container route is covered by the dedicated plan above. Windows, VeraCrypt on NetBSD and other exploratory ports are outside this plan. EncFS, securefs, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, age/rage, encrypted archives, backup tools and rclone crypt remain excluded. LUKS may use dm-crypt internally.
 
 Physical-device encryption setup is in scope wherever feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. The current product implements device creation on Linux. Qualify native device setup separately for each applicable backend and OS before exposing it.
 

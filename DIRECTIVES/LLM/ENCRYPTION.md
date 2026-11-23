@@ -12,7 +12,7 @@ Use this file as the source of truth for selected encryption backends and create
 | APFS Encrypted | 🟦 | — | — | — | — | — |
 | Startup-volume FileVault management | 🟦 | — | — | — | — | — |
 | LUKS2 | — | ✅ | — | — | — | — |
-| VeraCrypt | ✅ | ✅ | ✅ | — | — | ✅ |
+| VeraCrypt | ✅ | ✅ | ✅ | 🟦 | — | ✅ |
 | CryFS stable 1.x | ✅ | ✅ | — | — | — | — |
 | gocryptfs | ✅ | ✅ | ✅ | — | — | — |
 | GELI | — | — | ✅ | — | — | — |
@@ -25,7 +25,7 @@ Use this file as the source of truth for selected encryption backends and create
 
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, securefs, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, encrypted archives, backups and rclone crypt are excluded. LUKS still uses dm-crypt internally. Research availability is not approval to integrate.
 - age/rage is excluded: Lurker targets writable encrypted disks, filesystems and directories unlocked for use during a session. age/rage encrypts files/streams; rage-mount provides only read-only archive access, not writable directory encryption.
-- VeraCrypt on NetBSD/DragonFly remains an exploratory port outside approved integration scope.
+- DragonFly BSD VeraCrypt file containers are selected for implementation through the native `tcplay` and device-mapper route in `DIRECTIVES/PLAN/DRAGONFLY_VERACRYPT.md`. Native package and release qualification are pending. VeraCrypt on NetBSD remains exploratory.
 - macOS runtime policy: VeraCrypt uses FUSE-T 1.2.9 or later via SMB loopback. gocryptfs, CryFS and Cryptomator use FUSE-T FSKit. The full bundle requires the qualified FUSE-T 1.2.9 helper for gocryptfs. Exact macOS package results are in `docs/macos-backends.md`.
 - Planned support requires native validation: gocryptfs macOS is beta and FreeBSD is basic; VeraCrypt targets FreeBSD x86-64 14+ and OpenBSD x86-64 7.8+, subject to inner-filesystem support. CryFS 2.0 alpha is excluded.
 - Prefer LUKS2 for new Linux volumes; LUKS1 adds compatibility and the DragonFly native path. Do not apply LUKS2/Argon2id format arguments to LUKS1. Qualify DragonFly cryptsetup versions, patches, profiles and disk/file-container behavior before release; selection is not security approval. PEFS needs a matching FreeBSD kernel module. Cryptomator requires create/mount/credential API and application-filesystem validation.
