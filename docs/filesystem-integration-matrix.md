@@ -16,14 +16,14 @@ Windows targets use drivers and tools that run directly on Windows.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Candidate paid C/RW | Candidate native RW for compatible profiles | — | — | — | Candidate Ext4Windows or Ext4Fsd RW, paid RW alternative |
+| **ext4** | Native C/RW | Candidate Ext4Kit or paid C/RW | Candidate native RW for compatible profiles | — | — | — | Candidate Ext4Windows or Ext4Fsd RW, paid RW alternative |
 | **Btrfs** | Native C/RW | — | — | — | — | — | Candidate WinBtrfs C/RW |
 | **XFS** | Native C/RW | — | — | — | — | — | — |
-| **APFS** | Candidate paid RW | Native C/RW | — | — | — | — | Candidate paid RW for supported volumes |
+| **APFS** | Candidate experimental `linux-apfs-rw` or paid RW | Native C/RW | — | — | — | — | Candidate experimental `winapfs` or paid RW for supported volumes |
 | **UFS1 / FFSv1** | — | — | Native UFS1 C/RW | Native FFS1 C/RW | Native FFSv1 C/RW | Native UFS1 C/RW | — |
 | **UFS2 / FFSv2** | — | — | Native UFS2 C/RW | Native FFS2 C/RW | Native FFSv2 and FFSv2ea C/RW | Target C/RW, needs a qualified driver and formatter | — |
 | **HAMMER2** | — | — | — | — | — | Native C/RW | — |
-| **NTFS** | Native RW, formatter package C | Candidate paid RW | Candidate NTFS-3G RW | Candidate NTFS-3G RW | Candidate NTFS-3G RW | — | Native C/RW |
+| **NTFS** | Native RW, formatter package C | Candidate FSKit or paid RW | Candidate NTFS-3G RW | Candidate NTFS-3G RW | Candidate NTFS-3G RW | — | Native C/RW |
 | **exFAT** | Native C/RW | Native C/RW | Package C/RW | Package C/RW | Package C/RW | Candidate C/RW once release FUSE works | Native C/RW |
 | **OpenZFS** | Package pool and dataset workflow | Candidate package pool and dataset workflow | Native pool and dataset workflow | — | Candidate pool and dataset workflow | — | — |
 
@@ -45,6 +45,9 @@ Windows targets use drivers and tools that run directly on Windows.
    the paid option. Verify current Linux formatter defaults, journal
    recovery, and writable mounts on the actual partition and unlocked
    container device. Keep third-party APFS, ext4, and NTFS drivers optional.
+   On macOS, evaluate Ext4Kit for ext4 writes and NTFSTool or NTFS4Mac for
+   NTFS. APFS write candidates on Linux and Windows
+   are experimental and require validation against macOS-created volumes.
 4. **OpenZFS pools.** Add FreeBSD and Linux first as a distinct single-device
    pool workflow. Qualify pool creation or import, dataset mount, and clean
    export before offering it. Use common feature flags when testing exchange.

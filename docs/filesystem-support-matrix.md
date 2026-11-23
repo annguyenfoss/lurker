@@ -54,9 +54,9 @@ mount or write tests were run for this survey.
 | **F2FS** | Native C/RW | — | — | — | — | — | FsRover R | L1, X7 |
 | **bcachefs** | Package C/RW via upstream DKMS on current kernels | — | — | — | — | — | — | L6 |
 | **ZFS / OpenZFS** | Package C/RW | Package C/RW, version and architecture dependent | Native C/RW | — | Native module C/RW, port-specific feature set | — | Experimental C/RW, release-candidate driver | Z1–Z4 |
-| **APFS** | FUSE R, experimental kernel RW<br>Paid RW | Native C/RW | Experimental R port | — | — | — | Paid RW subset<br>FsRover R | M1, X1–X2, X7 |
+| **APFS** | FUSE R, experimental kernel RW<br>Paid RW | Native C/RW | Experimental R port | — | — | — | Paid RW subset<br>Experimental WinFsp RW<br>FsRover R | M1, X1–X2, X7–X8 |
 | **HFS+ / HFSX** | Native RW subset<br>Paid RW | Native C/RW, including journaled HFS+ | Package R | Experimental FUSE R | Native R | Package R requires working FUSE | Paid RW<br>FsRover R | L1, M1, M6, F1, N1, D2–D3, X3, X7 |
-| **NTFS** | Native `ntfs3` or `ntfs` RW<br>Package C and NTFS-3G RW | Native R<br>Paid C/RW | Package C/RW | Native R<br>Package C/RW | Native R and limited overwrite<br>Package C/RW | Native R<br>FUSE package C/RW requires working FUSE | Native C/RW | L2–L4, M3, F1, O3, N3, D2–D3, W1 |
+| **NTFS** | Native `ntfs3` or `ntfs` RW<br>Package C and NTFS-3G RW | Native R<br>Open-source FSKit RW, experimental C<br>NTFS-3G with FUSE-T RW<br>Paid C/RW | Package C/RW | Native R<br>Package C/RW | Native R and limited overwrite<br>Package C/RW | Native R<br>FUSE package C/RW requires working FUSE | Native C/RW | L2–L4, M3, M7, F1, O3, N3, D2–D3, W1 |
 | **ReFS** | Experimental OpenRefs R<br>Paid RW on vendor-supported versions | Experimental FUSE R | Experimental FUSE R candidate | Experimental FUSE R candidate | Experimental FUSE R candidate | Experimental FUSE R candidate where FUSE works | Native C/RW on supported Windows edition and volume type | W1, W3, X4–X5 |
 | **exFAT** | Native C/RW | Native C/RW | Package C/RW via exFAT FUSE and utilities | Package C/RW via exFAT FUSE | Package C/RW via exFAT FUSE | Package C<br>RW requires working FUSE | Native C/RW | L5, M1, F1–F2, O3, N3, D2–D3, W1 |
 | **FAT12/16/32** | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | L1, M1, F1, O1, N1, D1, W1–W2 |
@@ -154,6 +154,11 @@ They carry lower priority for new general-purpose volumes.
   writable mounts and a formatter. FSKit is an OS framework. The selected
   provider determines which on-disk format and operations it implements.
   [M2, M3, M5]
+- NTFSTool's open-source edition offers writable NTFS mounts through FSKit.
+  NTFS4Mac uses FSKit and libntfs-3g and adds formatting. Its published
+  tests cover Intel Mac RAM disks, with Apple Silicon and Windows-formatted
+  disks still pending in the project README. An NTFS-3G fork also targets
+  FUSE-T. [M7]
 - OpenZFS on macOS ships separately and has OS/architecture-specific builds.
   Pool compatibility with Linux and FreeBSD depends on the feature flags
   supported by the installed builds. [Z1, Z3]
@@ -256,6 +261,12 @@ They carry lower priority for new general-purpose volumes.
   experimental. `apfs-fuse` offers a separate read-only route. Paragon offers a
   commercial Linux read/write driver and a separate Windows driver with
   volume-type restrictions. [X1–X2]
+- The open-source Windows `winapfs` beta reuses the Linux APFS driver in
+  userspace over WinFsp. Its first public release describes writes as
+  experimental and marks validation with Apple's `fsck_apfs` as pending.
+  The separate `apfs_for_windows` project offers writable WinFsp mounts
+  for selected unencrypted, unsealed volumes and documents directory size
+  and depth limits for writes. [X8]
 - HAMMER2 has separate FreeBSD, NetBSD, and OpenBSD work. The current FreeBSD
   port marks write support experimental. NetBSD and OpenBSD have development
   ports. Linux has an out-of-tree kernel project with formatting and write
@@ -299,6 +310,7 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **M3** Paragon and Tuxera NTFS for Mac. https://www.paragon-software.com/home/ntfs-mac/ · https://ntfsformac.tuxera.com/
 - **M5** Apple FSKit and ext4 provider examples. https://developer.apple.com/documentation/FSKit · https://github.com/kthchew/ExtendFS · https://github.com/rayhanadev/Ext4Kit
 - **M6** Apple filesystem details, including UDF and optical filesystems. https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/FileSystemDetails/FileSystemDetails.html
+- **M7** Open-source macOS NTFS drivers through FSKit and FUSE-T. https://github.com/ntfstool/ntfstool · https://github.com/vahidzekic/ntfs4mac · https://github.com/macos-fuse-t/ntfs-3g
 - **W1** Microsoft Windows format command. https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/format
 - **W2** Microsoft filesystem feature comparison and exFAT specification. https://learn.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison · https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
 - **W3** Microsoft ReFS and Windows 11 Dev Drive. https://learn.microsoft.com/en-us/windows-server/storage/refs/refs-overview · https://learn.microsoft.com/en-us/windows/dev-drive/
@@ -352,6 +364,7 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **X5** Paragon commercial ReFS read/write driver for Linux. https://www.paragon-software.com/us/business/refs-linux/ · https://www.paragon-drivers.com/en/refslin/
 - **X6** macOS community Btrfs and XFS drivers. https://github.com/gereoffy/btrfs4mac · https://github.com/karan-vk/fuse-xfs · https://sourceforge.net/p/fusexfs/wiki/Home/
 - **X7** FsRover format and read-only mount support. https://a1ive.github.io/FsRover/ · https://github.com/a1ive/FsRover
+- **X8** Windows open-source APFS write paths and release limits. https://github.com/christofilojohn/winapfs/releases · https://github.com/RandyNorthrup/apfs_for_windows#supported-scope
 - **S1** EROFS and SquashFS projects, plus current NetBSD tools catalog. https://erofs.docs.kernel.org/en/latest/ · https://github.com/plougher/squashfs-tools · https://wwwcdn.netbsd.org/pub/pkgsrc/current/pkgsrc/filesystems/index.html
 - **S2** Linux shared disk and cluster documentation. https://docs.kernel.org/filesystems/gfs2/index.html · https://docs.kernel.org/filesystems/ocfs2.html
 - **S3** Veritas InfoScale and VxFS support. https://www.veritas.com/support/en_US/doc/infoscale_scl_91_lin · https://www.veritas.com/content/support/en_US/doc/79722584-170945085-0/v41267960-170945085
