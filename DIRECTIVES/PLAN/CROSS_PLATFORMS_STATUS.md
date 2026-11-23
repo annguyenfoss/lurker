@@ -251,6 +251,21 @@ The installer receipts are under `target/dragonfly-tcplay/rebuild-a366506c712a/`
 and the installed tests are `rebuild-installed-*.log` and
 `desktop-input/rebuilt-*` under `target/dragonfly-tcplay/evidence/`.
 
+The rebuilt opt-in package repeated the installed CLI matrix with short
+mountpoint paths on the isolated UFS fixture. All six cipher and credential
+pairs passed the lifecycle. The 121 steps verified all 30 expected payload
+hashes and restored the native inventories. Mount-root `fsync` still failed
+for every pair. The first run used mountpoints that exceeded DragonFly's
+native limit. The final receipt `rebuild-installed-opt-in-matrix.json` has
+SHA-256 `9633ea02b486d129a40af24bcfb560aac2b5ad7178c46c7d8f34a96af794c246`.
+
+The same package rejected a separately formatted UFS filesystem inside an
+authenticated VeraCrypt container in both explicit and Auto opens. A native
+read-only UFS mount confirmed the fixture's filesystem. Both Lurker opens
+reported the aligned FAT32 requirement, preserved the ciphertext digest and
+restored the device inventories. See `rebuild-storage-first.log` under
+`target/dragonfly-tcplay/evidence/`.
+
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
 digest, the sample ciphertext and the native storage inventories matched
