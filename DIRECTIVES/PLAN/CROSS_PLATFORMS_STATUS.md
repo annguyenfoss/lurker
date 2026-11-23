@@ -138,7 +138,18 @@ as UID 1300 using the verified Xvfb archive. The first probe lacked `xdpyinfo`
 and stopped before launch. The retry with the offline X11 test tools captured
 the window and reaped its processes. The receipt is
 `target/dragonfly-tcplay/evidence/archive-installed-desktop-window.json`.
-The desktop storage callbacks still need an end-to-end GUI test.
+
+The native desktop callback test recovered from a read-only copy of the
+primary guest ran as UID 1300 against the same installed package helper.
+It exercised the Slint create and manage callbacks, authorized list and
+mount, a synced 1 MiB write, close, reopen, and payload verification. The
+test passed and cleanup removed the temporary authorization and native
+storage resources. The test executable SHA-256 is
+`7f1b75cae2435267f32ddd97529df1d12011562d6af99e3b0589eac016434a54`.
+The receipts are `archive-desktop-callback*.log` under
+`target/dragonfly-tcplay/evidence/`. The same read-only copy held a partial
+primary CLI matrix receipt with 12 recorded steps in its AES/password case.
+The complete installed matrix remains the one from the UFS clone.
 
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
