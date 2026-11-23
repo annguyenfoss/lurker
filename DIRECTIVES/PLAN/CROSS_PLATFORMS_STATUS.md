@@ -266,6 +266,16 @@ reported the aligned FAT32 requirement, preserved the ciphertext digest and
 restored the device inventories. See `rebuild-storage-first.log` under
 `target/dragonfly-tcplay/evidence/`.
 
+On the rebuilt opt-in package, the same application workload passed on the
+guest's UFS and hit the known failures inside a VeraCrypt FAT32 vault.
+Mount-root `fsync`, UTF-8 filename creation, and POSIX byte-range locking
+returned `EINVAL`. SQLite 3.54.1 returned `SQLITE_IOERR_LOCK` before
+committing a WAL transaction. File and subdirectory `fsync` succeeded, and
+the renamed payload matched after close and reopen. The UFS control reopened
+the committed WAL rows and passed `integrity_check`. All inventories returned
+to baseline.
+The receipt is `target/dragonfly-tcplay/evidence/rebuild-application-gates.log`.
+
 Package removal deleted the candidate CLI, helper, desktop, wrapper and
 manifest. The other package rows, the guest's original package database
 digest, the sample ciphertext and the native storage inventories matched
