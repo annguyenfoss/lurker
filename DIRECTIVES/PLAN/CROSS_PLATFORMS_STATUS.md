@@ -5,6 +5,34 @@ results and remaining release gates apply to this round. Earlier checkpoints
 retain their original dates and source revisions. The approved profiles are
 in `DIRECTIVES/LLM/ENCRYPTION.md`.
 
+## DragonFly VeraCrypt candidate, 2026-11-23
+
+Qualification started on `dragonflybsd-core-01` with DragonFly 6.4.2 x86-64.
+Stock `tcplay` 3.3 created, opened, wrote and reopened disposable AES/SHA512-VC
+images with a password and a binary keyfile. Its root version probe changed
+`kern.cryptodevallowsoft` from `0` to `1`. The test restored `0`. The private
+userspace wrapper left the value at `0` through its six cipher and credential
+round trips.
+
+The initial offline CLI package `46e13649a466c56da85728fbd616a1164195a515`
+(`3a9f3e34c9bf018b30fea7336d2661e01dd291245d92a71486f59b7bb241276b`)
+installed and verified its package files. Its 512-byte FAT32 cluster layout
+returned different payload bytes after an ordinary close and reopen in all
+six cipher and credential cases. A matched stock `tcplay` control reproduced
+the mismatch with and without a synchronous mount. Plain FAT32 retained the
+expected bytes in both modes. The stock `tcplay` 4 KiB cluster controls both
+preserved the four test payload files across close and reopen. The candidate
+now requires FAT32 clusters of at least 4 KiB and a 4 KiB-aligned data region.
+
+On DragonFly 6.4.2, both plain FAT32 and a stock `tcplay` FAT32 mapping accepted
+file `fsync`, rejected directory `fsync` with `EINVAL`, and failed SQLite WAL
+and rollback-journal mode with `SQLITE_IOERR_LOCK`. A native linear mapper
+created with `--readonly` accepted a direct write and changed the backing
+image digest. The candidate rejects VeraCrypt read-only requests before vnode
+attachment. The application and power-loss gates remain open and release
+support remains planned. Test receipts and disposable fixture locations are
+under `target/dragonfly-tcplay/evidence/`.
+
 ## Measurable completion criteria for the active implementation round
 
 The target is one verified final candidate covering the 16 approved non-macOS
