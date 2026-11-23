@@ -12,11 +12,12 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 - 🧅 Wraps an encryption tool on your system
 - 🥑 Encryption engine included with Lurker
-- — Unavailable · † Limited power-loss resilience
+- — Unavailable
+- ℹ️ Limited power-loss resilience
 
 | Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | 🧅 | — | — | — | — | 🧅† |
+| LUKS1 | 🧅 | — | — | — | — | 🧅 ℹ️ |
 | LUKS2 | 🧅 | — | — | — | — | — |
 | Apple encrypted disk images | — | 🧅 | — | — | — | — |
 | GELI | — | — | 🧅 | — | — | — |
@@ -29,7 +30,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | CryFS | 🥑 | 🥑 | — | — | — | — |
 | Cryptomator | 🥑 | 🥑 | — | — | — | — |
 
-† [DragonFly LUKS1 qualification](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
+ℹ️ [DragonFly LUKS1 qualification](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
 
 ### Encryption wrappers
 
