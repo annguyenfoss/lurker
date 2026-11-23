@@ -37,6 +37,14 @@
 +
 --- a/lib/libtcplay/tcplay.c
 +++ b/lib/libtcplay/tcplay.c
-@@ -491 +491 @@
+@@ -454,0 +455,3 @@
++		/* The private Lurker build qualifies only the normal SHA512-VC profile. */
++		if (strcmp(pbkdf_prf_algos[i].name, "SHA512-VC") != 0)
++			continue;
+@@ -477,0 +481,3 @@
++			if (tc_cipher_chains[j]->next != NULL ||
++			    tc_cipher_chains[j]->cipher->klen != 64)
++				continue;
+@@ -491 +497 @@
 -			if (verify_hdr(dhdr, &pbkdf_prf_algos[i])) {
 +			if (verify_hdr(dhdr, &pbkdf_prf_algos[i]) && dhdr->sec_sz != 0) {
