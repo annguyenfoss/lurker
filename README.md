@@ -29,17 +29,31 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | PEFS | — | — | 📦 | — | — | — |
 | Cryptomator | 📦 | 📦 | — | — | — | — |
 
-Linux LUKS1 and LUKS2 use the distro's `cryptsetup` command. The native Lurker
-package declares it as a dependency, so the package manager can install it on
-images where it is missing, such as Debian GenericCloud and Fedora Cloud Base.
+### OS-provided encryption
+
+Lurker uses your OS's tools for the methods marked ✅.
+
+| Platform | Encryption | System tools |
+| :--- | :--- | :--- |
+| Linux | LUKS1 and LUKS2 | `cryptsetup`, Btrfs tools, and disk and mount utilities from your distro |
+| macOS | Apple encrypted disk images | `hdiutil`, included with macOS |
+| FreeBSD | GELI | `geli` and GEOM, plus `mdconfig`, `newfs`, and mount utilities |
+| OpenBSD | softraid CRYPTO and RAID1C | `bioctl` and softraid, plus `vnconfig`, `disklabel`, `newfs`, and mount utilities |
+| NetBSD | CGD | `cgdconfig` and CGD, plus `vnconfig`, `newfs`, and mount utilities |
+| DragonFly BSD | LUKS1 | `cryptsetup` and `dmsetup`, plus `vnconfig`, `kldload`, `newfs`, and mount utilities |
+
+The BSD tools ship with the OS. On Linux, the native Lurker package declares
+the required tools so your package manager can install any that are missing.
+
+DragonFly's LUKS1 developer builds passed normal vault operations. Public release qualification still requires the base `cryptsetup` parser fix or equivalent reviewed protection. Abrupt power-cut tests also lost acknowledged writes. See the [validation results](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md) for the tested routes and recovery limits.
+
+### Other encryption methods
 
 Lurker packages bundle VeraCrypt, gocryptfs, CryFS and Cryptomator on the
 platforms shown. FreeBSD PEFS needs the `pefs-kmod` package matching the running
 kernel. On macOS, install FUSE-T separately for VeraCrypt and Cryptomator, and
 macFUSE separately for gocryptfs and CryFS. The [macOS build guide](docs/macos-backends.md)
 records the tested versions and package requirements.
-
-DragonFly's LUKS1 developer builds passed normal vault operations. Public release qualification still requires the base `cryptsetup` parser fix or equivalent reviewed protection. Abrupt power-cut tests also lost acknowledged writes. See the [validation results](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md) for the tested routes and recovery limits.
 
 ## Create. Unlock. Lock.
 
