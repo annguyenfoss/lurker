@@ -17,22 +17,24 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
+<!-- Soft breaks let names and status labels wrap when the table gets narrow. -->
+
+| E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;i&#8203;o&#8203;n | L&#8203;i&#8203;n&#8203;u&#8203;x | M&#8203;a&#8203;c&#8203;O&#8203;S | F&#8203;r&#8203;e&#8203;e&#8203;B&#8203;S&#8203;D | O&#8203;p&#8203;e&#8203;n&#8203;B&#8203;S&#8203;D | N&#8203;e&#8203;t&#8203;B&#8203;S&#8203;D | D&#8203;r&#8203;a&#8203;g&#8203;o&#8203;n&#8203;F&#8203;l&#8203;y B&#8203;S&#8203;D |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| LUKS1 | <sup>🧅</sup> | PLANNED | PLANNED | PLANNED | PLANNED | <sup>🧅&nbsp;🛈</sup> |
-| LUKS2 | <sup>🧅</sup> | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |
-| Apple&nbsp;Encrypted&nbsp;Disk&nbsp;Image | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| APFS&nbsp;Encrypted | <sup>—</sup> | <sup>🍆</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| GELI | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| PEFS | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
-| softraid&nbsp;CRYPTO | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
-| softraid&nbsp;RAID1C | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
-| CGD | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> |
-| VeraCrypt | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🍆</sup> | <sup>🍆</sup> |
-| gocryptfs | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | <sup>—</sup> |
-| CryFS | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | PLANNED | <sup>—</sup> |
-| Cryptomator | <sup>🥑</sup> | <sup>🥑</sup> | PLANNED | PLANNED | PLANNED | <sup>—</sup> |
-| securefs | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED | <sup>—</sup> |
+| L&#8203;U&#8203;K&#8203;S&#8203;1 | <sup>🧅</sup> | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | <sup>🧅 🛈</sup> |
+| L&#8203;U&#8203;K&#8203;S&#8203;2 | <sup>🧅</sup> | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D |
+| A&#8203;p&#8203;p&#8203;l&#8203;e E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d D&#8203;i&#8203;s&#8203;k I&#8203;m&#8203;a&#8203;g&#8203;e | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| A&#8203;P&#8203;F&#8203;S E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d | <sup>—</sup> | <sup>🍆</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| G&#8203;E&#8203;L&#8203;I | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| P&#8203;E&#8203;F&#8203;S | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> |
+| s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d C&#8203;R&#8203;Y&#8203;P&#8203;T&#8203;O | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
+| s&#8203;o&#8203;f&#8203;t&#8203;r&#8203;a&#8203;i&#8203;d R&#8203;A&#8203;I&#8203;D&#8203;1&#8203;C | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> | <sup>—</sup> |
+| C&#8203;G&#8203;D | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>—</sup> | <sup>🧅</sup> | <sup>—</sup> |
+| V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🍆</sup> | <sup>🍆</sup> |
+| g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s | <sup>🥑</sup> | <sup>🥑</sup> | <sup>🥑</sup> | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | <sup>—</sup> |
+| C&#8203;r&#8203;y&#8203;F&#8203;S | <sup>🥑</sup> | <sup>🥑</sup> | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | <sup>—</sup> |
+| C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r | <sup>🥑</sup> | <sup>🥑</sup> | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | <sup>—</sup> |
+| s&#8203;e&#8203;c&#8203;u&#8203;r&#8203;e&#8203;f&#8203;s | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | P&#8203;L&#8203;A&#8203;N&#8203;N&#8203;E&#8203;D | <sup>—</sup> |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
