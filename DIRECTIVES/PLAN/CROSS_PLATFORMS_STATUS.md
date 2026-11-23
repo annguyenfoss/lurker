@@ -34,8 +34,10 @@ support remains planned. Test receipts and disposable fixture locations are
 under `target/dragonfly-tcplay/evidence/`.
 
 The aligned candidate `5786867a17252ea95059c3922944de8a8ac9c773`
-passed `cargo check --workspace --locked` and 96 workspace tests with four
-ignored on `dragonflybsd-core-01` in run `20261123T121207Z-42cce614`. The
+passed `cargo check --workspace --locked` and
+`cargo test --release --workspace --locked` on `dragonflybsd-core-01`
+in run `20261123T121207Z-42cce614`. The test run passed 96 cases with four
+ignored. The
 packaging checks passed 50 tests. The fault harness passed 36 tests after
 supplying the guest's separately packaged Python SQLite extension.
 
@@ -139,6 +141,21 @@ The worker exited without a readiness record. The harness uses 260 MiB for
 DragonFly VeraCrypt to satisfy the aligned FAT32 minimum. All 36 harness
 unit checks passed on the guest. The receipts are `archive-powerloss-arming.log`
 and `archive-powerloss-worker-failure.log` under `target/dragonfly-tcplay/evidence/`.
+
+The same installed package and worker on a separately mounted HAMMER2
+backing fixture also exited at directory `fsync` with `EINVAL`, after
+syncing and renaming the file. Both workers stopped before the readiness
+record required for a power cut. The HAMMER2 fixture and vault closed with
+idle storage inventories. The receipts are `hammer2-readiness-*.log` and
+`hammer2-readiness-guest.json` under `target/dragonfly-tcplay/evidence/`.
+
+The standard VeraCrypt conformance suite passed create, no-overwrite, and
+unlock. Its application case failed with `EINVAL` on creation of a UTF-8
+filename. The suite retained the test mount and an explicit CLI close
+restored the native inventories. The receipts are
+`archive-veracrypt-conformance.json` and
+`archive-veracrypt-conformance-cleanup.log` under
+`target/dragonfly-tcplay/evidence/`.
 
 The installed Slint desktop opened a 1280 × 860 software-rendered X11 window
 as UID 1300 using the verified Xvfb archive. The first probe lacked `xdpyinfo`
