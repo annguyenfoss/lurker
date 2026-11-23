@@ -864,8 +864,12 @@ def guest_setup(args):
         os.fsync(output.fileno())
     source, mountpoint = directory / "encrypted data", directory / "open data"
     size_gb = None
-    if args.backend not in ("gocryptfs", "cryfs", "cryptomator", "pefs"):
-        size_gb = "0.125" if (args.backend in ("geli", "cgd", "softraid", "raid1c") or platform.system() == "DragonFly") else "0.35"
+    if args.backend not in DIRECTORIES:
+        if platform.system() == "DragonFly":
+            # The aligned FAT32 create profile needs at least 260 MiB.
+            size_gb = "0.25390625" if args.backend == "veracrypt" else "0.125"
+        else:
+            size_gb = "0.125" if args.backend in {"geli", "cgd", "softraid", "raid1c"} else "0.35"
     mountpoint.mkdir(mode=0o700)
     manifest = {"schema": 1, "run": args.run, "cli": str(cli), "source_commit": args.commit,
                 "cli_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(), "backend": args.backend,

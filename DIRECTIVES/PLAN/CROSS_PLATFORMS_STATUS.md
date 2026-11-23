@@ -133,6 +133,13 @@ mode. The required power-loss workload could not be armed. The receipts are
 `archive-installed-import-rejections.log` and `archive-installed-login-helper.log`
 under `target/dragonfly-tcplay/evidence/`.
 
+The standard power-loss worker on the UFS-backed clone reached the same
+directory `fsync` failure after writing and syncing its file and renaming it.
+The worker exited without a readiness record. The harness uses 260 MiB for
+DragonFly VeraCrypt to satisfy the aligned FAT32 minimum. All 36 harness
+unit checks passed on the guest. The receipts are `archive-powerloss-arming.log`
+and `archive-powerloss-worker-failure.log` under `target/dragonfly-tcplay/evidence/`.
+
 The installed Slint desktop opened a 1280 × 860 software-rendered X11 window
 as UID 1300 using the verified Xvfb archive. The first probe lacked `xdpyinfo`
 and stopped before launch. The retry with the offline X11 test tools captured
