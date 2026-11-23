@@ -282,11 +282,26 @@ VeraCrypt vault, unlocked it with Auto detection, closed it, reopened it,
 and closed it again. The login user synced a 64 KiB payload and verified
 the same SHA-256 after reopen. The read-only request displayed the native
 mapper limitation and preserved the vault's ciphertext and the resource
-inventory. The mounted detail still labels the filesystem value `msdos`
-as the cipher. Teardown removed temporary authorization, uninstalled the
+inventory. That package labeled the filesystem value `msdos` as the cipher.
+Teardown removed temporary authorization, uninstalled the
 private package, restored the mount inventory, and verified the original
 system package database and CLI digests. See `prefill-desktop-*.log` and
 `desktop-input/protocol2-*` in `target/dragonfly-tcplay/evidence/`.
+
+The full `63b82f5` desktop package has SHA-256
+`299d30446f889bf6b75d8a69a500758125c90b1d7248b28765bef9c455c55194`.
+It passed offline native install and package checks. The installed desktop
+ran as UID 1300 on X11 and created a private, 260 MiB AES volume with a
+binary keyfile through the installed helper. Auto unlock mounted it with
+login-user ownership and mode `0700`. The authenticated device had a
+520-sector FAT and a 4 KiB-aligned data region. The desktop displayed
+`msdos` under the corrected `filesystem` label. An attempted read-only
+open preserved ciphertext and storage inventories. Holding a working
+directory inside the volume produced a busy-close message and preserved
+the mount, vnode, mapper and payload. After releasing it, the desktop
+closed and reopened the vault and the synced 64 KiB payload matched.
+Final close and uninstall restored the initial inventories and system
+package digests. See `target/dragonfly-tcplay/evidence/fat32-explicit-desktop/`.
 
 The optimized default package also passed offline installation, file and
 dependency checks. Its CLI refused VeraCrypt create before staging or device
