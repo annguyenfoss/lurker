@@ -169,6 +169,14 @@ has no advisory-lock handler and uses the default handler that returns
 `EINVAL`. The receipts are `size-clone-fat-locale-probe.log` and
 `size-clone-fat-locale-ondisk.log` under `target/dragonfly-tcplay/evidence/`.
 
+A separate bare FAT32 test localized the directory sync error to the root
+of the mount. The mount root returned `EINVAL` before and after a file
+rename. Both of its tested subdirectories acknowledged `fsync` before and
+after the rename. This matches the 6.4.2 FAT metadata update path, which
+returns `EINVAL` for the filesystem root. The standard power-loss worker
+syncs that root and SQLite also requires the unavailable file locks. The
+receipt is `target/dragonfly-tcplay/evidence/archive-fat-directory-scope.log`.
+
 The installed Slint desktop opened a 1280 × 860 software-rendered X11 window
 as UID 1300 using the verified Xvfb archive. The first probe lacked `xdpyinfo`
 and stopped before launch. The retry with the offline X11 test tools captured
