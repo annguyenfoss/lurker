@@ -1,0 +1,398 @@
+# Experimental Darwin FUSE-T adapter for the exact Go-FUSE 2d50fff207d7 pin.
+# Transport precedent is the FUSE-T maintainers' Go-FUSE fork.
+# https://github.com/macos-fuse-t/go-fuse/tree/37474d962a878555599c596487277ad7b1266a70
+diff --git a/fuse/api.go b/fuse/api.go
+index a6d1d30d00db6975379b0abdd6410aecd730ac8d..8975b6fa7dce5382a8ac3aed90fac2101f41db34 100644
+--- a/fuse/api.go
++++ b/fuse/api.go
+@@ -161 +161,3 @@ type MountOptions struct {
+-	AllowOther bool
++	// fuseTRelease is set only by the experimental Darwin stream mount.
++	fuseTRelease func()
++	AllowOther   bool
+diff --git a/fuse/fusefd.go b/fuse/fusefd.go
+index bb11b2ca5ce9a9d7bcb67e1b165937ab32c461cd..60376c697dc5cbe0609c9b00605b58060d587995 100644
+--- a/fuse/fusefd.go
++++ b/fuse/fusefd.go
+@@ -7,0 +8,2 @@ import (
++	"encoding/binary"
++	"io"
+@@ -33,0 +36,5 @@ type fuseFD struct {
++	// A FUSE-T socket carries a byte stream, unlike a kernel FUSE device.
++	// Readers and writers serialize independently to preserve frame boundaries.
++	streamReadMu  sync.Mutex
++	streamWriteMu sync.Mutex
++
+@@ -88,0 +96,13 @@ func (r *fuseFD) writevFD(iov [][]byte) (int, error) {
++	if r.server.opts.fuseTRelease != nil {
++		r.streamWriteMu.Lock()
++		defer r.streamWriteMu.Unlock()
++		var written int
++		for _, part := range iov {
++			count, err := r.file.Write(part)
++			written += count
++			if err != nil {
++				return written, err
++			}
++		}
++		return written, nil
++	}
+@@ -115,10 +135 @@ func (r *fuseFD) readRequest() (req *requestAlloc, code Status) {
+-	var n int
+-	err := handleEINTR(func() error {
+-		var err error
+-		if cerr := r.withFD(func(fd int) {
+-			n, err = syscall.Read(fd, dest)
+-		}); cerr != nil {
+-			return cerr
+-		}
+-		return err
+-	})
++	n, err := r.readFrame(dest)
+@@ -162,0 +174,36 @@ func (r *fuseFD) readRequest() (req *requestAlloc, code Status) {
++func (r *fuseFD) readFrame(dest []byte) (n int, err error) {
++	if r.server.opts.fuseTRelease == nil {
++		err = handleEINTR(func() error {
++			var readErr error
++			if connErr := r.withFD(func(fd int) {
++				n, readErr = syscall.Read(fd, dest)
++			}); connErr != nil {
++				return connErr
++			}
++			return readErr
++		})
++		return n, err
++	}
++	r.streamReadMu.Lock()
++	defer r.streamReadMu.Unlock()
++	return readFuseTFrame(r.file, dest)
++}
++
++func readFuseTFrame(stream io.Reader, dest []byte) (int, error) {
++	const lengthSize = 4
++	if _, err := io.ReadFull(stream, dest[:lengthSize]); err != nil {
++		if err == io.EOF {
++			return 0, syscall.ENODEV
++		}
++		return 0, syscall.EIO
++	}
++	size := int(binary.LittleEndian.Uint32(dest[:lengthSize]))
++	if size < int(unsafe.Sizeof(InHeader{})) || size > len(dest) {
++		return 0, syscall.EPROTO
++	}
++	if _, err := io.ReadFull(stream, dest[lengthSize:size]); err != nil {
++		return 0, syscall.EIO
++	}
++	return size, nil
++}
++
+@@ -222 +269,5 @@ func (r *fuseFD) close() error {
+-	return r.file.Close()
++	err := r.file.Close()
++	if release := r.server.opts.fuseTRelease; release != nil {
++		release()
++	}
++	return err
+diff --git a/fuse/fuset_rename_darwin_test.go b/fuse/fuset_rename_darwin_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..a173db358369a0cd993486578b006b6c92ed1976
+--- /dev/null
++++ b/fuse/fuset_rename_darwin_test.go
+@@ -0,0 +1,53 @@
++//go:build lurkerfuset
++
++package fuse
++
++import (
++	"encoding/binary"
++	"testing"
++	"unsafe"
++
++	"github.com/hanwen/go-fuse/v2/internal/renameat"
++)
++
++func TestFuseTRenameLayout(t *testing.T) {
++	for _, scenario := range []struct {
++		name       string
++		negotiated uint64
++		flags      uint32
++	}{
++		{"compatibility", 0, 0},
++		{"extended", CAP_RENAME_SWAP, renameat.RENAME_EXCHANGE},
++	} {
++		t.Run(scenario.name, func(t *testing.T) {
++			size := compatRenameInSize
++			if scenario.negotiated != 0 {
++				size = int(unsafe.Sizeof(RenameIn{}))
++			}
++			packet := make([]byte, size)
++			binary.LittleEndian.PutUint32(packet[4:], _OP_RENAME)
++			binary.LittleEndian.PutUint64(packet[compatRenameInSize-8:], 2)
++			if scenario.negotiated != 0 {
++				binary.LittleEndian.PutUint32(packet[compatRenameInSize:], scenario.flags)
++			}
++			packet = append(packet, []byte("scratch\x00payload\x00")...)
++			binary.LittleEndian.PutUint32(packet, uint32(len(packet)))
++			req := &requestAlloc{}
++			req.setInput(packet)
++
++			handler, inputSize, _, _, status := parseRequest(req.inputBuf, scenario.negotiated)
++			if status != OK || inputSize != size {
++				t.Fatalf("parse returned status %v and size %d; want OK and %d", status, inputSize, size)
++			}
++			if status := req.splitPayload(inputSize, int(handler.InputSize)); status != OK {
++				t.Fatalf("split returned status %v", status)
++			}
++			oldName, newName, status := req.filenames()
++			input := (*RenameIn)(req.inData())
++			if status != OK || oldName != "scratch" || newName != "payload" ||
++				input.Newdir != 2 || input.Flags != scenario.flags {
++				t.Fatalf("rename fields are %v, %q, %q, %#v", status, oldName, newName, input)
++			}
++		})
++	}
++}
+diff --git a/fuse/mount_darwin.go b/fuse/mount_darwin.go
+index 1e733aede1b82b25cc17551c704dccf673ae50c6..03e22ca66b2174a8e40601d88247676d788e3228 100644
+--- a/fuse/mount_darwin.go
++++ b/fuse/mount_darwin.go
+@@ -4,0 +5,2 @@
++//go:build !lurkerfuset
++
+diff --git a/fuse/mount_fuset_darwin.go b/fuse/mount_fuset_darwin.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..15b642fb6f392874163203e37782b2d6c8651cb3
+--- /dev/null
++++ b/fuse/mount_fuset_darwin.go
+@@ -0,0 +1,182 @@
++//go:build lurkerfuset
++
++// Copyright 2016-2026 the Go-FUSE Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package fuse
++
++import (
++	"encoding/binary"
++	"fmt"
++	"io"
++	"net"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"sync"
++	"syscall"
++	"time"
++)
++
++const (
++	fuseTHelper  = "/Library/Application Support/fuse-t/bin/go-nfsv4-1.2.9"
++	mountTimeout = 20 * time.Second
++	closeTimeout = 5 * time.Second
++)
++
++func getMaxWrite() int {
++	return 1 << 20
++}
++
++// FUSE-T launch uses two local Unix sockets. The server exchanges FUSE
++// messages on fd 3 and accepts a separate native mount request on fd 4.
++func mount(point string, opts *MountOptions, ready chan<- error) (int, error) {
++	if opts.AllowOther {
++		return -1, fmt.Errorf("allow_other is unavailable in the FUSE-T experiment")
++	}
++	// The pinned FUSE-T helper advertises extended rename support but
++	// sends the compatibility request. Negotiate the compatibility layout.
++	opts.DisabledCapabilities |= CAP_RENAME_SWAP
++	transport := os.Getenv("LURKER_EXPERIMENT_FUSE_T_TRANSPORT")
++	switch transport {
++	case "fskit", "smb", "nfs":
++	default:
++		return -1, fmt.Errorf("select an explicit FUSE-T transport with LURKER_EXPERIMENT_FUSE_T_TRANSPORT")
++	}
++	data, err := fuseTSocketPair()
++	if err != nil {
++		return -1, err
++	}
++	defer syscall.Close(data[0])
++	dataChild := os.NewFile(uintptr(data[1]), "fuse-t data peer")
++	defer dataChild.Close()
++
++	control, err := fuseTSocketPair()
++	if err != nil {
++		return -1, err
++	}
++	controlParent := os.NewFile(uintptr(control[0]), "fuse-t control")
++	defer controlParent.Close()
++	controlChild := os.NewFile(uintptr(control[1]), "fuse-t control peer")
++	defer controlChild.Close()
++	monitor, err := net.FileConn(controlParent)
++	if err != nil {
++		return -1, err
++	}
++
++	serverFD, err := duplicateFuseTFD(data[0])
++	if err != nil {
++		monitor.Close()
++		return -1, err
++	}
++	watchFD, err := duplicateFuseTFD(data[0])
++	if err != nil {
++		syscall.Close(serverFD)
++		monitor.Close()
++		return -1, err
++	}
++
++	args := []string{
++		"--backend", transport, "--dontbrowse=true",
++		"--volname", filepath.Base(point),
++		fmt.Sprintf("--rwsize=%d", opts.MaxWrite),
++	}
++	if opts.containsOption("ro") {
++		args = append(args, "-r")
++	}
++	args = append(args, point)
++	helper := exec.Command(fuseTHelper, args...)
++	helper.ExtraFiles = []*os.File{dataChild, controlChild}
++	helper.Env = append(os.Environ(), "_FUSE_COMMFD=3", "_FUSE_MONFD=4", "_FUSE_COMMVERS=2", "_FUSE_DAEMON_PATH="+os.Args[0])
++	helper.Stderr = os.Stderr
++	if err := helper.Start(); err != nil {
++		syscall.Close(serverFD)
++		syscall.Close(watchFD)
++		monitor.Close()
++		return -1, fmt.Errorf("launch FUSE-T: %w", err)
++	}
++
++	done := make(chan struct{})
++	go func() {
++		defer close(done)
++		if err := helper.Wait(); err != nil {
++			opts.Logger.Printf("FUSE-T helper exited: %v", err)
++		}
++	}()
++
++	var once sync.Once
++	opts.fuseTRelease = func() {
++		once.Do(func() {
++			monitor.SetWriteDeadline(time.Now().Add(closeTimeout))
++			io.WriteString(monitor, "unmount")
++			monitor.Close()
++			select {
++			case <-done:
++			case <-time.After(closeTimeout):
++				opts.Logger.Printf("FUSE-T helper %d still running after close", helper.Process.Pid)
++			}
++		})
++	}
++
++	go func() {
++		defer close(ready)
++		defer syscall.Close(watchFD)
++		err := awaitFuseTMount(monitor)
++		if err != nil {
++			// Unblock INIT even if the helper opened but then failed to mount.
++			syscall.Shutdown(watchFD, syscall.SHUT_RDWR)
++			opts.fuseTRelease()
++			opts.Logger.Printf("FUSE-T %s: %v", transport, err)
++		}
++		ready <- err
++	}()
++	return serverFD, nil
++}
++
++func awaitFuseTMount(monitor net.Conn) error {
++	if err := monitor.SetDeadline(time.Now().Add(mountTimeout)); err != nil {
++		return err
++	}
++	if _, err := io.WriteString(monitor, "mount"); err != nil {
++		return err
++	}
++	var status [4]byte
++	if _, err := io.ReadFull(monitor, status[:]); err != nil {
++		return err
++	}
++	if errno := int32(binary.LittleEndian.Uint32(status[:])); errno != 0 {
++		return fmt.Errorf("mount helper reported status %d", errno)
++	}
++	return monitor.SetDeadline(time.Time{})
++}
++
++func fuseTSocketPair() ([2]int, error) {
++	syscall.ForkLock.RLock()
++	defer syscall.ForkLock.RUnlock()
++	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
++	if err != nil {
++		return fds, err
++	}
++	for _, fd := range fds {
++		syscall.CloseOnExec(fd)
++		syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, 4*1024*1024)
++		syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, 4*1024*1024)
++	}
++	return fds, nil
++}
++
++func duplicateFuseTFD(fd int) (int, error) {
++	syscall.ForkLock.RLock()
++	defer syscall.ForkLock.RUnlock()
++	copy, err := syscall.Dup(fd)
++	if err != nil {
++		return -1, err
++	}
++	syscall.CloseOnExec(copy)
++	return copy, nil
++}
++
++func unmount(dir string, opts *MountOptions) error {
++	return syscall.Unmount(dir, 0)
++}
+diff --git a/fuse/protocol-server.go b/fuse/protocol-server.go
+index 5f0851d1526d3e4c544302359e0f0874eb076c87..a6a0372da77496fcca4ad751bd113f412001269f 100644
+--- a/fuse/protocol-server.go
++++ b/fuse/protocol-server.go
+@@ -326 +326 @@ func (ps *ProtocolServer) HandleRequest(in [][]byte, out [][]byte) (int, Status)
+-	h, inSize, outSize, outPayloadSize, code := parseRequest(req.smallInputBuf[:n], &ps.kernelSettings, ps.negotiatedFlags)
++	h, inSize, outSize, outPayloadSize, code := parseRequest(req.smallInputBuf[:n], ps.negotiatedFlags)
+diff --git a/fuse/request.go b/fuse/request.go
+index e4a68f45bebedb58d8026e8ca8476c77ff5ce33f..b87aad2e3a4cf237c5731900b97fcfdb573d17d4 100644
+--- a/fuse/request.go
++++ b/fuse/request.go
+@@ -275 +275 @@ func (r *request) inData() unsafe.Pointer {
+-func parseRequest(in []byte, kernelSettings *InitIn, negotiated uint64) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
++func parseRequest(in []byte, negotiated uint64) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
+@@ -292 +292 @@ func parseRequest(in []byte, kernelSettings *InitIn, negotiated uint64) (h *oper
+-		inSize = renameInSize(kernelSettings)
++		inSize = renameInSize(negotiated)
+diff --git a/fuse/server.go b/fuse/server.go
+index fc9a6f4eb62030f4d5124d861cd488532a96d167..2fb8ee62e016526697688c900db896f8c446f68f 100644
+--- a/fuse/server.go
++++ b/fuse/server.go
+@@ -253,0 +254,3 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
++		if release := o.fuseTRelease; release != nil {
++			release()
++		}
+@@ -488 +491 @@ func (ms *Server) handleRequest(req *requestAlloc) Status {
+-	h, inSize, outSize, outPayloadSize, code := parseRequest(req.inputBuf, &ms.kernelSettings, ms.negotiatedFlags)
++	h, inSize, outSize, outPayloadSize, code := parseRequest(req.inputBuf, ms.negotiatedFlags)
+@@ -817,6 +819,0 @@ func (in *InitIn) SupportsNotify(notifyType int) bool {
+-// supportsRenameSwap returns whether the kernel supports the
+-// renamex_np(2) syscall. This is only supported on OS X.
+-func (in *InitIn) supportsRenameSwap() bool {
+-	return in.Flags&CAP_RENAME_SWAP != 0
+-}
+-
+@@ -830,0 +828,4 @@ func (ms *Server) WaitMount() error {
++	if ms.opts.fuseTRelease != nil {
++		// The FUSE-T monitor acknowledges completion of the native mount.
++		return nil
++	}
+diff --git a/fuse/types.go b/fuse/types.go
+index dde862045f01bd7cd74c312990b198996d760208..559772b2754506cac3173de7d5bd84adc01114b1 100644
+--- a/fuse/types.go
++++ b/fuse/types.go
+@@ -113,2 +113,2 @@ const compatRenameInSize = int(unsafe.Sizeof(InHeader{})) + 8
+-func renameInSize(kernelSettings *InitIn) int {
+-	if !kernelSettings.supportsRenameSwap() {
++func renameInSize(negotiated uint64) int {
++	if negotiated&CAP_RENAME_SWAP == 0 {
