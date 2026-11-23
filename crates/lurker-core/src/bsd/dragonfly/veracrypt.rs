@@ -473,3 +473,33 @@ pub(in crate::bsd) fn verify_access(target: &Path, owner: Owner) -> AppResult<()
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::fat32;
+
+    #[test]
+    fn fat32_requires_four_kibibyte_clusters_and_data_alignment() {
+        // Geometry produced by the DragonFly formatter for a 260 MiB vault.
+        let mut boot = [0; 512];
+        boot[11..13].copy_from_slice(&512_u16.to_le_bytes());
+        boot[13] = 8;
+        boot[14..16].copy_from_slice(&34_u16.to_le_bytes());
+        boot[16] = 2;
+        boot[32..36].copy_from_slice(&531_968_u32.to_le_bytes());
+        boot[36..40].copy_from_slice(&519_u32.to_le_bytes());
+        boot[44..48].copy_from_slice(&2_u32.to_le_bytes());
+        boot[510..].copy_from_slice(&[0x55, 0xaa]);
+        assert!(fat32(&boot, 531_968));
+        assert!(!fat32(&boot, 531_967));
+
+        boot[14..16].copy_from_slice(&35_u16.to_le_bytes());
+        assert!(!fat32(&boot, 531_968));
+        boot[13] = 1;
+        // Recalculate the FAT lengths and the alignment so only the cluster
+        // size makes this otherwise valid FAT32 format unusable.
+        boot[14..16].copy_from_slice(&32_u16.to_le_bytes());
+        boot[36..40].copy_from_slice(&4_096_u32.to_le_bytes());
+        assert!(!fat32(&boot, 531_968));
+    }
+}
