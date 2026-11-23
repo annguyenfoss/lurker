@@ -32,25 +32,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
-### Encryption wrappers
-
-Lurker uses built-in tools or installed dependencies for these methods.
-
-- Linux — LUKS1 and LUKS2
-- macOS — Apple encrypted disk images
-- FreeBSD — GELI and PEFS (requires `pefs-kmod`)
-- OpenBSD — softraid CRYPTO and RAID1C
-- NetBSD — CGD
-- DragonFly BSD — LUKS1
-
-### Lurker-bundled encryption
-
-- VeraCrypt — Linux, macOS, FreeBSD, OpenBSD
-- gocryptfs — Linux, macOS, FreeBSD
-- CryFS — Linux, macOS
-- Cryptomator — Linux, macOS
-
-## Encryption dependencies
+## Dependencies
 
 Install the dependencies for the backends you use. Built-in tools are the executables Lurker uses from the base OS. Linux package names follow Arch Linux.
 
