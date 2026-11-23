@@ -10,22 +10,22 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Encryption support
 
-✅ Available in the CLI · — Unavailable · † Developer builds pending release qualification.
+✅ Available in the CLI · — Unavailable · † See the DragonFly LUKS1 limitations below.
 
 | Encryption | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | LUKS2 | ✅ | — | — | — | — | — |
 | LUKS1 | ✅ | — | — | — | — | ✅† |
-| VeraCrypt | ✅ | ✅† | ✅ | ✅ | — | — |
+| VeraCrypt | ✅ | ✅ | ✅ | ✅ | — | — |
 | Apple encrypted disk images | — | ✅ | — | — | — | — |
 | GELI | — | — | ✅ | — | — | — |
 | CGD | — | — | — | — | ✅ | — |
 | softraid CRYPTO | — | — | — | ✅ | — | — |
 | softraid RAID1C | — | — | — | ✅ | — | — |
-| gocryptfs | ✅ | ✅† | ✅ | — | — | — |
-| CryFS | ✅ | ✅† | — | — | — | — |
+| gocryptfs | ✅ | ✅ | ✅ | — | — | — |
+| CryFS | ✅ | ✅ | — | — | — | — |
 | PEFS | — | — | ✅ | — | — | — |
-| Cryptomator | ✅ | ✅† | — | — | — | — |
+| Cryptomator | ✅ | ✅ | — | — | — | — |
 
 The macOS developer package includes VeraCrypt, gocryptfs, CryFS and
 Cryptomator. Install FUSE-T separately for VeraCrypt and Cryptomator, and
