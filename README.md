@@ -13,7 +13,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - 🧅 Wraps an encryption tool on your system
 - 🥑 Encryption engine included with Lurker
 - 🍆 Integration in progress
-- 🍰 On the roadmap
+- 🍰 On the roadmap ("The cake is a lie")
 - — Unavailable
 - 🛈 See note below
 
