@@ -20,7 +20,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 |
 | LUKS2 | 🧅 | — | — | — | — | — |
 | Apple Encrypted Disk Image | — | 🧅 | — | — | — | — |
-| APFS Encrypted | — | Supported by OS 🛈 | — | — | — | — |
+| APFS Encrypted | — | 🧅 | — | — | — | — |
 | GELI | — | — | 🧅 | — | — | — |
 | PEFS | — | — | 🧅 | — | — | — |
 | softraid CRYPTO | — | — | — | 🧅 | — | — |
@@ -32,8 +32,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | Cryptomator | 🥑 | 🥑 | — | — | — | — |
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
-
-🛈 Lurker integration for APFS Encrypted is planned.
 
 ## Dependencies
 
