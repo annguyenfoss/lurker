@@ -23,7 +23,7 @@ class KeyfileSuite(conformance.Suite):
         for path in [self.keyfile, self.wrong_keyfile]:
             descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, "wb") as stream:
-                stream.write(b"\0\xff" + os.urandom(254))
+                stream.write(b"\0\xff\n\r" + os.urandom(252))
         self.result["authentication"] = "binary_keyfile_only"
         self.result["limitations"] = [item.replace("keyfile, ", "") for item in self.result["limitations"]]
         self.save()

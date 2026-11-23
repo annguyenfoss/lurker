@@ -42,7 +42,7 @@ LOGIN_BACKENDS = {"gocryptfs", "cryfs", "cryptomator"}
 ALLOWED = {"Linux": {"luks", "luks1", "veracrypt", "gocryptfs", "cryfs", "cryptomator"},
            "FreeBSD": {"geli", "veracrypt", "pefs", "gocryptfs"},
            "NetBSD": {"cgd"}, "OpenBSD": {"softraid", "raid1c", "veracrypt"},
-           "DragonFly": {"luks1"}}
+           "DragonFly": {"luks1", "veracrypt"}}
 
 
 def validate_guest_route(backend, unprivileged, cipher, system=None, uid=None):

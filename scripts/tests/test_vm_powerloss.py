@@ -397,6 +397,7 @@ class GuestFixture(unittest.TestCase):
                 VM.validate_guest_route(backend, unprivileged, "aes", system, uid)
         self.assertEqual(VM.validate_guest_route("veracrypt", True, "twofish", "Linux", 1000), "login-user")
         self.assertEqual(VM.validate_guest_route("raid1c", False, "aes", "OpenBSD", 0), "native-root")
+        self.assertEqual(VM.validate_guest_route("veracrypt", False, "serpent", "DragonFly", 0), "native-root")
         with self.assertRaises(RuntimeError):
             VM.validate_guest_route("raid1c", False, "serpent", "OpenBSD", 0)
 
