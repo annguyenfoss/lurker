@@ -254,6 +254,16 @@ See `fat32-explicit-capacity/native-installed-geometry-retry.log` and
 `primary-ssh-recheck/formatter-*-sweep.json` under
 `target/dragonfly-tcplay/evidence/`.
 
+The same `63b82f5` installer created a 379 MiB AES/keyfile vault for a
+Linux round trip. Upstream VeraCrypt 1.26.31 on Arch Linux authenticated
+the image, verified the 758-sector FAT and aligned data region, read the
+DragonFly marker, and wrote a synced marker through `vfat`. The returned
+ciphertext matched the Linux digest. DragonFly reopened it through Auto
+and verified both marker hashes. Both hosts restored their mapper, device,
+and mount inventories. The Linux console SHA-256 is
+`ed01a2348e21d3b760fe35564338a98160db427e610379088f715c90f7a37eaf`.
+See `target/dragonfly-tcplay/evidence/fat32-explicit-exchange/`.
+
 The full opt-in desktop package built from the same `aa34ed3` source has
 SHA-256 `bab5a95e1b56f9243ad2fc992cf0e91757870d8151c87c307bbf006f46c2eb4d`.
 It passed offline native installation and package checks in a private root
