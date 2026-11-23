@@ -22,7 +22,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | LUKS2 | 🧅 | — | — | — | — | — |
 | Apple Encrypted Disk Image | — | 🧅 | — | — | — | — |
 | APFS Encrypted | — | 🍰 | — | — | — | — |
-| BitLocker / BitLocker To Go | 🍰 | 🍰 | 🍰 | — | — | — |
 | GELI | — | — | 🧅 | — | — | — |
 | PEFS | — | — | 🧅 | — | — | — |
 | softraid CRYPTO | — | — | — | 🧅 | — | — |
@@ -40,7 +39,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 - **Batch 1** — VeraCrypt on DragonFly BSD, APFS Encrypted on MacOS, and securefs on Linux, MacOS, and FreeBSD.
 - **Batch 2** — VeraCrypt on NetBSD.
-- **Batch 4** — BitLocker / BitLocker To Go on Linux, MacOS, and FreeBSD. Open existing volumes, with read/write access where validated.
 
 ## Dependencies
 

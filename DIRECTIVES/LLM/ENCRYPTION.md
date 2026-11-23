@@ -22,7 +22,6 @@ Use this file as the source of truth for selected encryption backends and create
 | PEFS | — | — | ✅ | — | — | — |
 | Cryptomator | ✅ | ✅ | — | — | — | — |
 | LUKS1 | — | ✅ | — | ✅ | — | — |
-| BitLocker / BitLocker To Go | 🟦 | 🟦 | 🟦 | — | — | — |
 | securefs | 🟦 | 🟦 | 🟦 | — | — | — |
 
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, encrypted archives, backups and rclone crypt are excluded. LUKS still uses dm-crypt internally. Research availability is not approval to integrate.
@@ -36,11 +35,10 @@ Use this file as the source of truth for selected encryption backends and create
 
 - **Batch 1** — DragonFly BSD VeraCrypt file containers via the [native `tcplay` and device-mapper route](../PLAN/DRAGONFLY_VERACRYPT.md), macOS APFS Encrypted data volumes via `diskutil`, and securefs on Linux, macOS, and FreeBSD.
 - **Batch 2** — VeraCrypt on NetBSD.
-- **Batch 4** — BitLocker / BitLocker To Go on Linux, macOS, and FreeBSD. Open existing volumes only. Qualify writable access for each supported filesystem.
 
 ### Windows integration postponed indefinitely
 
-Windows platform support and all integrations formerly in Batch 3 are postponed indefinitely. This includes native BitLocker / BitLocker To Go setup and unlock, native EFS, VeraCrypt, gocryptfs via `cppcryptfs`, stable CryFS 1.x, Cryptomator, and securefs.
+Windows platform support and all integrations formerly in Batch 3 are postponed indefinitely. This includes native BitLocker / BitLocker To Go setup and unlock, native EFS, VeraCrypt, gocryptfs via `cppcryptfs`, stable CryFS 1.x, Cryptomator, and securefs. The former Batch 4 for opening existing BitLocker / BitLocker To Go volumes on Linux, macOS, and FreeBSD is also postponed indefinitely.
 
 ## Physical-device setup scope
 
