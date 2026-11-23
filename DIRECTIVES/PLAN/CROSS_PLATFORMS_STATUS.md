@@ -167,6 +167,16 @@ Its worker outcome and cleanup are unverified. The receipts are
 `stock-readiness-ufs-*.log`, `stock-readiness-hammer2.log`, and the retained
 console capture under `target/dragonfly-tcplay/evidence/`.
 
+A fresh archive clone repeated the fully allocated stock-engine setup with
+HAMMER2 mounted directly on its dedicated 1 GiB VirtIO disk. Stock `tcplay`
+started full initialization and stopped reporting progress before mapper
+activation and worker startup. The disk counters stopped at 80,150,528
+bytes written, and a console `ps` stalled in the `newbuf` wait channel while
+SSH timed out before its banner. Allocation completion, readiness and cleanup
+remain unverified for this case. No power cut was performed. See
+`hammer2-stock-dedicated-*.log` and `hammer2-stock-dedicated-ps.png` under
+`target/dragonfly-tcplay/evidence/`.
+
 The standard VeraCrypt conformance suite passed create, no-overwrite, and
 unlock. Its application case failed with `EINVAL` on creation of a UTF-8
 filename. The suite retained the test mount and an explicit CLI close
