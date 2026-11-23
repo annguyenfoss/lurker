@@ -16,7 +16,9 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - — Unavailable
 - 🛈 See note below
 
-| Encryption | Linux | MacOS | FreeBSD | OpenBSD | NetBSD | DragonFly&nbsp;BSD |
+<!-- OS headers use 13 monospace characters to keep their columns equally wide. -->
+
+| Encryption | <samp>&nbsp;&nbsp;&nbsp;&nbsp;Linux&nbsp;&nbsp;&nbsp;&nbsp;</samp> | <samp>&nbsp;&nbsp;&nbsp;&nbsp;MacOS&nbsp;&nbsp;&nbsp;&nbsp;</samp> | <samp>&nbsp;&nbsp;&nbsp;FreeBSD&nbsp;&nbsp;&nbsp;</samp> | <samp>&nbsp;&nbsp;&nbsp;OpenBSD&nbsp;&nbsp;&nbsp;</samp> | <samp>&nbsp;&nbsp;&nbsp;NetBSD&nbsp;&nbsp;&nbsp;&nbsp;</samp> | <samp>DragonFly&nbsp;BSD</samp> |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | LUKS1 | 🧅 | 🍰 | 🍰 | 🍰 | 🍰 | 🧅 🛈 |
 | LUKS2 | 🧅 | 🍰 | 🍰 | 🍰 | 🍰 | 🍰 |
