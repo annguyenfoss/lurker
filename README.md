@@ -163,16 +163,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
     </tr>
-    <tr height="60">
-      <td align="left">s&#8203;e&#8203;c&#8203;u&#8203;r&#8203;e&#8203;f&#8203;s</td>
-      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
-      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
-      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
-      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
-      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
-      <td><sup>—</sup></td>
-      <td><img src="extras/assets/status/cake.png" width="24" align="absmiddle" alt="Planned"></td>
-    </tr>
   </tbody>
 </table>
 
