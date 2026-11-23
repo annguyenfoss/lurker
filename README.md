@@ -36,15 +36,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
-### Planned integration batches
-
-- **Batch 1** — VeraCrypt on DragonFly BSD, APFS Encrypted on MacOS, and securefs on Linux, MacOS, and FreeBSD.
-- **Batch 2** — VeraCrypt on NetBSD.
-- **Batch 3**
-  - LUKS1 and LUKS2 on MacOS, FreeBSD, OpenBSD, and NetBSD, plus LUKS2 on DragonFly BSD.
-  - gocryptfs and securefs on OpenBSD and NetBSD.
-  - CryFS and Cryptomator on FreeBSD, OpenBSD, and NetBSD.
-
 ## Dependencies
 
 <table width="100%">
