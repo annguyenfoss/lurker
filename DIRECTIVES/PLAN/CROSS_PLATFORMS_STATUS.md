@@ -424,6 +424,24 @@ and `0x5ad1a` in phase order. The receipt records the resolved addresses and
 observed journal and device state. See
 `target/dragonfly-tcplay/evidence/archive-interruptions.json`.
 
+The installed `aa34ed3` CLI passed four interruption cases during random
+initialization on an isolated HAMMER2 fixture. GDB stopped the exact optimized
+CLI at `0x21647`, just after a successful staged-file write. In each case,
+the first 8 KiB contained random data, the next 8 KiB remained zero, and
+the creation journal identified the private staging inode. The vnode,
+mapper, and mount inventories still matched baseline. `SIGINT` and `SIGKILL`
+both preserved an existing vault's inode and ciphertext and left a new
+destination absent. Normal CLI recovery closed each journal. The existing
+vault reopened through Auto with the expected payload.
+
+The first clean retry hit ENOSPC on the 512 MiB HAMMER2 fixture after the
+reference image was removed. After two native `hammer2 bulkfree` passes on
+that fixture, create and Auto reopen succeeded at the formerly interrupted
+destination. Final inventories matched baseline. The raw debugger receipt
+and traces are under `target/dragonfly-tcplay/evidence/prefill-interruptions/`.
+The retry receipt is `prefill-interruptions-retry-bulkfree.log` in the same
+evidence directory.
+
 LUKS1 Auto detection on the same installed CLI passed all 13 conformance
 checks with stock `cryptsetup` 1.1.2. Final mounts, mappings and vnode
 inventories were clean. The receipt is
