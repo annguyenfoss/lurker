@@ -48,7 +48,7 @@ mount or write tests were run for this survey.
 
 | File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Paid C/RW<br>FSKit beta C/RW | Native RW subset<br>Package C | Native R subset<br>Package C | Native R subset<br>Package C<br>Experimental FUSE RW | Native R subset<br>Package C<br>RW on current ext4 profiles unverified | Paid RW<br>WSL2 C/RW<br>Janus or FsRover R | L1, M2, M5, F1, O2, N2, D4, W4, W5, X7 |
+| **ext4** | Native C/RW | Paid C/RW<br>FSKit beta C/RW | Native RW subset<br>Package C | Native R subset<br>Package C | Native R subset<br>Package C<br>Experimental FUSE RW | Native R subset<br>Package C<br>RW on current ext4 profiles unverified | Open-source driver RW on supported profiles<br>Paid RW<br>WSL2 C/RW<br>Janus or FsRover R | L1, M2, M5, F1, O2, N2, D4, W4–W5, W8–W9, X7 |
 | **Btrfs** | Native C/RW | Experimental R via btrfs4mac | Package RW via old LKL port | — | — | — | WinBtrfs C/RW<br>Paid or FsRover R | L1, F4, W5, W6, X6–X7 |
 | **XFS** | Native C/RW | Experimental FUSE R/RW | Package RW via old LKL port<br>Separate package C | — | — | — | Paid R, vendor RW claims conflict<br>FsRover R | L1, F4, W5, X6–X7 |
 | **F2FS** | Native C/RW | — | — | — | — | — | FsRover R | L1, X7 |
@@ -235,9 +235,18 @@ They carry lower priority for new general-purpose volumes.
 - WSL2 provides Linux-side ext4 access on supported attachments. Windows
   can access those files through the WSL share. Passing a disk into WSL
   has administrative, in-use-disk, whole-disk, and removable-device
-  constraints. A Windows drive-letter workflow needs a Windows driver, such
-  as WinBtrfs or a compatible commercial driver. Janus implements
-  experimental read-only ext4 through WinFsp. [W4–W6]
+  constraints. Janus implements experimental read-only ext4 through
+  WinFsp. [W4]
+- Ext4Fsd is a free Windows ext4 kernel driver. Upstream documents
+  writable support for metadata checksums and 64-bit block numbers.
+  Features such as `bigalloc` and `verity` force read-only access.
+  Features such as `casefold` and `inline_data` prevent mounting.
+  Its journal support is limited to internal journal replay. [W8]
+- Ext4Windows uses WinFsp and lwext4 for writable Windows drive-letter
+  mounts of raw ext4 images and partitions. Pengwin and
+  `ext4-win-driver` provide separate WinFsp implementations with write
+  paths documented upstream. Qualify container-backed virtual devices
+  separately from physical partitions and raw images. [W9]
 
 ### Experimental ports and recovery tools
 
@@ -301,6 +310,8 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **W5** Paragon Linux File Systems for Windows product page and product brief. https://www.paragon-software.com/home/linuxfs-windows/ · https://dl.paragon-software.com/doc/Linux_File_Systems_for_Windows_OP.pdf
 - **W6** WinBtrfs driver and formatter. https://github.com/maharmstone/btrfs
 - **W7** Microsoft in-box filesystem driver overview. https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/about-file-system-drivers
+- **W8** Ext4Fsd writable features and signed Windows release. https://github.com/bobranten/Ext4Fsd · https://github.com/bobranten/Ext4Fsd/releases/tag/v0.71
+- **W9** WinFsp ext4 write paths. https://github.com/Mateuscruz19/Ext4Windows · https://github.com/althk/pengwin · https://github.com/antimatter-studios/ext4-win-driver
 
 ### BSDs and sharing families
 

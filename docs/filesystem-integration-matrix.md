@@ -15,7 +15,7 @@ required. A dash leaves the OS/filesystem pair outside the proposed scope.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Candidate paid C/RW | Candidate native RW for compatible profiles | — | — | — | Candidate paid RW |
+| **ext4** | Native C/RW | Candidate paid C/RW | Candidate native RW for compatible profiles | — | — | — | Candidate free driver RW or paid RW |
 | **Btrfs** | Native C/RW | — | — | — | — | — | Candidate WinBtrfs C/RW |
 | **XFS** | Native C/RW | — | — | — | — | — | — |
 | **APFS** | Candidate paid RW | Native C/RW | — | — | — | — | Candidate paid RW for supported volumes |
@@ -39,10 +39,11 @@ required. A dash leaves the OS/filesystem pair outside the proposed scope.
    gives Windows and Linux a journaled alternative. WinBtrfs is the
    Windows route to qualify for existing Linux Btrfs containers.
 3. **Additional writable imports.** Qualify compatible ext4 on FreeBSD
-   against its journal and feature limitations. Test separately installed
-   paid APFS, ext4, and NTFS drivers against the actual partition or
-   container-backed device and supported feature profile. Keep these
-   routes optional.
+   against its journal and feature limitations. On Windows, evaluate
+   Ext4Windows through WinFsp and Ext4Fsd as free ext4 candidates alongside
+   the paid option. Verify current Linux formatter defaults, journal
+   recovery, and writable mounts on the actual partition and unlocked
+   container device. Keep third-party APFS, ext4, and NTFS drivers optional.
 4. **OpenZFS pools.** Add FreeBSD and Linux first as a distinct single-device
    pool workflow. Qualify pool creation or import, dataset mount, and clean
    export before offering it. Use common feature flags when testing exchange.
