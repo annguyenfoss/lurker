@@ -51,16 +51,56 @@ Lurker wraps the platform's tools for these methods.
 
 ## Encryption dependencies
 
-Install the dependencies for the backends you use. Lurker uses executables from the base OS and bundles the app runtimes listed here. Linux package names follow Arch Linux.
+Install the dependencies for the backends you use. Built-in tools are the executables Lurker uses from the base OS. Linux package names follow Arch Linux.
 
-| OS | Dependencies | OS utilities | App runtimes |
-| :--- | :--- | :--- | :--- |
-| Linux | `btrfs-progs`<br>`cryptsetup`<br>`fuse2`<br>`fuse3`<br>`util-linux` |  | Java for Cryptomator |
-| macOS | <code>FUSE-&#8288;T&gt;=1.2.9</code><br>`macFUSE` | `hdiutil`, `diskutil` | Java for Cryptomator |
-| FreeBSD | `pefs-kmod` | `geli`, `geom`, `mdconfig`, `newfs`, `mount`, `umount`, `mount_fusefs`, `sysctl` | FUSE library for VeraCrypt |
-| OpenBSD | — | `bioctl`, `vnconfig`, `disklabel`, `newfs`, `mount`, `umount`, `sysctl` | — |
-| NetBSD | — | `cgdconfig`, `vndconfig`, `newfs`, `mount`, `umount` | — |
-| DragonFly&nbsp;BSD | — | `cryptsetup`, `dmsetup`, `vnconfig`, `kldload`, `newfs`, `mount`, `umount` | — |
+<table>
+  <thead>
+    <tr>
+      <th align="left">OS</th>
+      <th align="left" width="180">Dependencies</th>
+      <th align="left" width="180">Built-in tools</th>
+      <th align="left" width="180">Bundled runtimes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Linux</td>
+      <td><code>btrfs-progs</code><br><code>cryptsetup</code><br><code>fuse2</code><br><code>fuse3</code><br><code>util-linux</code></td>
+      <td></td>
+      <td>Java for Cryptomator</td>
+    </tr>
+    <tr>
+      <td>macOS</td>
+      <td><code>FUSE-&#8288;T&gt;=1.2.9</code><br><code>macFUSE</code></td>
+      <td><code>hdiutil</code>, <code>diskutil</code></td>
+      <td>Java for Cryptomator</td>
+    </tr>
+    <tr>
+      <td>FreeBSD</td>
+      <td><code>pefs-kmod</code></td>
+      <td><code>geli</code>, <code>geom</code>, <code>mdconfig</code>, <code>newfs</code>, <code>mount</code>, <code>umount</code>, <code>mount_fusefs</code>, <code>sysctl</code></td>
+      <td>FUSE library for VeraCrypt</td>
+    </tr>
+    <tr>
+      <td>OpenBSD</td>
+      <td>—</td>
+      <td><code>bioctl</code>, <code>vnconfig</code>, <code>disklabel</code>, <code>newfs</code>, <code>mount</code>, <code>umount</code>, <code>sysctl</code></td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>NetBSD</td>
+      <td>—</td>
+      <td><code>cgdconfig</code>, <code>vndconfig</code>, <code>newfs</code>, <code>mount</code>, <code>umount</code></td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>DragonFly&nbsp;BSD</td>
+      <td>—</td>
+      <td><code>cryptsetup</code>, <code>dmsetup</code>, <code>vnconfig</code>, <code>kldload</code>, <code>newfs</code>, <code>mount</code>, <code>umount</code></td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Create. Unlock. Lock.
 
