@@ -4,7 +4,7 @@ This completed evaluation tested each backend independently on Buran.
 Candidates had to mount through FUSE-T and preserve application data
 across close and reopen. The `c997d6a` DMG was the historical lifecycle
 control.
-[macOS runtime policy](../LLM/CIPHER.md) ·
+[macOS runtime policy](../LLM/ENCRYPTION.md) ·
 [Buran qualification results](../../docs/macos-backends.md)
 
 The direct, CLI, and coexistence results are recorded in the

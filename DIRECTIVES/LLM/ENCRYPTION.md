@@ -1,4 +1,4 @@
-# Lurker Cipher Directive
+# Lurker Encryption Scope and Profiles
 
 Use this file as the source of truth for selected encryption backends and create-time cipher policy.
 
@@ -8,8 +8,8 @@ Use this file as the source of truth for selected encryption backends and create
 
 | Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD |
 | --- | --- | --- | --- | --- | --- | --- |
-| Apple encrypted disk images | ✅ | — | — | — | — | — |
-| Native APFS volume encryption | 🟦 | — | — | — | — | — |
+| Apple Encrypted Disk Image | ✅ | — | — | — | — | — |
+| APFS Encrypted | 🟦 | — | — | — | — | — |
 | Startup-volume FileVault management | 🟦 | — | — | — | — | — |
 | LUKS2 | — | ✅ | — | — | — | — |
 | VeraCrypt | ✅ | ✅ | ✅ | — | — | ✅ |
@@ -35,7 +35,7 @@ Use this file as the source of truth for selected encryption backends and create
 
 - Support physical-device encryption setup where feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. Qualify each backend and device type on its native OS before advertising support.
 - Lurker currently supports physical-device creation on Linux. The current macOS and BSD disk-container workflows use file-backed storage.
-- The planned macOS workflows use `diskutil` for native APFS data-volume setup and `fdesetup` with native authorization for supported startup-volume FileVault management. The existing `hdiutil` backend handles encrypted disk images.
+- The APFS Encrypted scope covers native data-volume setup and unlocking, mounting, and locking existing encrypted APFS volumes via `diskutil`. Apple Encrypted Disk Image uses the existing `hdiutil` backend. Startup-volume FileVault management uses `fdesetup` and native authorization.
 
 ## Create Profile Scope
 
@@ -199,7 +199,7 @@ If cipher choices change, also update:
 - `apps/lurker-desktop/src/logic.rs`
 - `apps/lurker-desktop/ui/app-window.slint`
 
-## Apple Disk Images (macOS)
+## Apple Encrypted Disk Image (macOS)
 
 - Create defaults to `apple` on macOS; Linux defaults to `luks`.
 - `hdiutil create -type UDIF -fs APFS -volname Lurker -encryption AES-256 -stdinpass`.

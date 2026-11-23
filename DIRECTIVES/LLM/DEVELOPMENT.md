@@ -3,7 +3,7 @@
 ## Development cycle
 
 1. Read the relevant project directives and inspect the working tree and
-   index. Use [CIPHER.md](CIPHER.md) to identify the approved routes and
+   index. Use [ENCRYPTION.md](ENCRYPTION.md) to identify the approved routes and
    supported create options, then compare them with the code and available
    native receipts. Define the affected platforms, entry points, checks,
    and success criteria. Use day-to-day Arch Linux LUKS2 with elevation and
@@ -116,7 +116,7 @@ checks. Keep a staged or development binary's results identified separately
 from an installed package's results.
 
 1. For full qualification, enumerate the supported create variations from
-   [CIPHER.md](CIPHER.md), including ciphers, password or keyfile, privilege
+   [ENCRYPTION.md](ENCRYPTION.md), including ciphers, password or keyfile, privilege
    routes, and applicable options. Use representative sizes and boundaries
    for numeric inputs. Use fixture-owned loop devices for Linux device tests
    and the approved file-backed routes on BSD and macOS. Where supported,

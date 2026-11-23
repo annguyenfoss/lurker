@@ -61,7 +61,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 
 ## Core Invariants
 
-- The approved six-OS matrix in `CIPHER.md` defines backend scope and current support. Physical-device setup is in scope on all six OSes where feasible. The current device-create implementation is Linux-only. BSD and macOS disk-container workflows currently use file-backed devices.
+- The approved six-OS matrix in `ENCRYPTION.md` defines backend scope and current support. Physical-device setup is in scope on all six OSes where feasible. The current device-create implementation is Linux-only. BSD and macOS disk-container workflows currently use file-backed devices.
 - Container defaults: Linux `luks` (LUKS2), macOS `apple`, FreeBSD `geli`, NetBSD `cgd`, OpenBSD `softraid`, DragonFly `luks1`. Explicit Linux `luks1` preserves its compatible PBKDF2 profile. Directory backends are explicit selections with no size or generic cipher option.
 - Apple encryption is AES-256 at the disk-image layer, with APFS inside; it is not system FileVault or APFS filesystem encryption.
 - Supported create ciphers: `aes`, `serpent`, `twofish`.
@@ -70,7 +70,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 - Linux Btrfs mounts use `compress=zstd`.
 - OpenBSD mounts writable FFS synchronously on CRYPTO, RAID1C, and VeraCrypt. Filesystem repair remains a manual native operation.
 - VeraCrypt tags are unsupported.
-- Do not implement VeraCrypt authentication requiring a password and keyfile together: losing either required credential can lose access to the data. This decision does not prohibit keyfile-only authentication; see the authentication decision in `CIPHER.md`.
+- Do not implement VeraCrypt authentication requiring a password and keyfile together: losing either required credential can lose access to the data. This decision does not prohibit keyfile-only authentication; see the authentication decision in `ENCRYPTION.md`.
 - The desktop app never invokes the installed CLI binary. Check helper capability flags before sending keyfile or keyslot requests so older helpers cannot ignore credential fields.
 - The helper is an implementation detail for desktop privilege escalation. Protocol 3 adds directory-backend capability negotiation; directory engines run as the login user even when an older request supplies the default privileged mode. Privileged operations require the protocol-3 trusted-tool capability, including plain password requests. Protocol 2 remains accepted only for compatible login-session credential operations. Additive capabilities require supervised directory lifecycle (`folder_supervision_protocol: 1`), owned Linux loop leases (`linux_loop_lease_protocol: 1`), OpenBSD mirror members (`raid1c_members`), authorized BSD native discovery (`native_volume_listing: 1`), and macOS Cryptomator underlay fencing (`cryptomator_fence_protocol: 1`). The Cryptomator fence contract also gates every macOS Auto request so source/session detection cannot bypass an older helper's missing protection. Older helpers must fail before receiving unsupported requests.
 - File-backed create uses same-directory temp files, atomic no-clobber publication without force, and atomic rename with force.
@@ -98,7 +98,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 - Change desktop validation/form semantics in `apps/lurker-desktop/src/logic.rs` and `ui/app-window.slint`.
 - Change desktop helper lookup/spawn behavior in `apps/lurker-desktop/src/helper.rs`.
 - Change desktop privilege escalation behavior in `crates/lurker-helper/src/main.rs`.
-- Change cipher profiles only after reading `DIRECTIVES/LLM/CIPHER.md`.
+- Change cipher profiles only after reading `DIRECTIVES/LLM/ENCRYPTION.md`.
 
 ## UI Rules
 
@@ -114,7 +114,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 When changing create cipher profiles or create-time crypto defaults, update all of:
 
 - `crates/lurker-core/src/workflow.rs`
-- `DIRECTIVES/LLM/CIPHER.md`
+- `DIRECTIVES/LLM/ENCRYPTION.md`
 - `README.md` if user-visible behavior changed
 
 If you add or remove a supported create cipher, also update:

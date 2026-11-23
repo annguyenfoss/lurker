@@ -1,6 +1,6 @@
 # Cross-platform implementation plan
 
-Status: implementation plan, recorded 2026-11-14. This document records the approved scope and acceptance gates. Current implementation and qualification results are tracked in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`; the baseline below is historical. `DIRECTIVES/LLM/CIPHER.md` remains authoritative for backend selection and crypto profiles.
+Status: implementation plan, recorded 2026-11-14. This document records the approved scope and acceptance gates. Current implementation and qualification results are tracked in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`; the baseline below is historical. `DIRECTIVES/LLM/ENCRYPTION.md` remains authoritative for backend selection and crypto profiles.
 
 ## 1. Required outcome
 
@@ -20,7 +20,7 @@ This changes the future dependency policy, not the approved cipher profiles. Bef
 
 ## 2. Approved backend and physical-device scope
 
-This planning snapshot records the starting integration state: ✅ existing workflow; 🟦 selected for implementation; — outside approved scope. Current packaged CLI qualification is recorded in `DIRECTIVES/LLM/CIPHER.md`, not this historical table.
+This planning snapshot records the starting integration state: ✅ existing workflow; 🟦 selected for implementation; — outside approved scope. Current packaged CLI qualification is recorded in `DIRECTIVES/LLM/ENCRYPTION.md`, not this historical table.
 
 | Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ Do not expand this matrix implicitly while solving packaging problems. Windows, 
 
 Physical-device encryption setup is in scope wherever feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. The current product implements device creation on Linux. Qualify native device setup separately for each applicable backend and OS before exposing it.
 
-On macOS, the scope includes native APFS data-volume setup via `diskutil` and supported startup-volume FileVault management via `fdesetup` and native authorization. The existing `hdiutil` encrypted-image workflow remains a separate backend. See the current scope in `DIRECTIVES/LLM/CIPHER.md`.
+On macOS, the scope includes native APFS data-volume setup via `diskutil` and supported startup-volume FileVault management via `fdesetup` and native authorization. The existing `hdiutil` encrypted-image workflow remains a separate backend. See the current scope in `DIRECTIVES/LLM/ENCRYPTION.md`.
 
 ## 3. Baseline before this implementation
 
@@ -52,7 +52,7 @@ On macOS, the scope includes native APFS data-volume setup via `diskutil` and su
 | macOS VeraCrypt | Discovers `VeraCrypt.app` or an executable on PATH | Prefer the bundled native backend and private libraries; require only the separately installed compatible FUSE runtime |
 | macOS Apple images | Uses OS `hdiutil`/`diskutil` | Retain native wrappers |
 | New directory backends | Not integrated | Add shared backend capabilities, lifecycle handling and packaged runtimes |
-| BSDs | Selected scope exists in the cipher directive; application integration remains planned | Qualify native core/CLI builds, OS adapters, dependencies and desktop separately |
+| BSDs | Selected scope exists in the encryption directive; application integration remains planned | Qualify native core/CLI builds, OS adapters, dependencies and desktop separately |
 | Release builds | Linux native-helper builder and macOS DMG builder cover different parts of the product | Introduce a complete per-platform build/staging workflow; a bare Cargo build is not a complete bundled release |
 
 Relevant existing files:
@@ -345,7 +345,7 @@ Use only dedicated disposable devices or test images for destructive tests, incl
 
 ## 10. Documentation and completion checklist
 
-Update implementation and documentation together in small coherent commits. Keep `DIRECTIVES/LLM/CIPHER.md` authoritative for selected scope/profiles, `DIRECTIVES/LLM/CODEBASE.md` accurate for shipped architecture, and `README.md` accurate for runtime/build/install requirements. Where profile behavior changes, update `workflow.rs`, relevant platform adapters, archival CLI profile references where applicable, and user-facing documentation coherently.
+Update implementation and documentation together in small coherent commits. Keep `DIRECTIVES/LLM/ENCRYPTION.md` authoritative for selected scope/profiles, `DIRECTIVES/LLM/CODEBASE.md` accurate for shipped architecture, and `README.md` accurate for runtime/build/install requirements. Where profile behavior changes, update `workflow.rs`, relevant platform adapters, archival CLI profile references where applicable, and user-facing documentation coherently.
 
 The first required milestone is complete only when Linux and macOS releases run their supported VeraCrypt operations without any separately installed VeraCrypt, while macOS FUSE remains an explicit separately installed dependency. Finishing unrelated future backends is not a prerequisite for delivering that milestone.
 

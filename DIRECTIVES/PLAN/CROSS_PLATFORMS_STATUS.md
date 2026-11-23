@@ -3,7 +3,7 @@
 Active non-macOS qualification, 2026-11-20. The coordinated native package
 results and remaining release gates apply to this round. Earlier checkpoints
 retain their original dates and source revisions. The approved profiles are
-in `DIRECTIVES/LLM/CIPHER.md`.
+in `DIRECTIVES/LLM/ENCRYPTION.md`.
 
 ## Measurable completion criteria for the active implementation round
 

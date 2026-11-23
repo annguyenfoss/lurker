@@ -233,7 +233,7 @@ preallocation, new images use sparse files.
 
 DragonFly uses the stock `dm_target_linear` module. Unlock accepts the
 DragonFly LUKS1 cipher and keyslot profiles in
-`DIRECTIVES/LLM/CIPHER.md` and uses a private metadata copy during each
+`DIRECTIVES/LLM/ENCRYPTION.md` and uses a private metadata copy during each
 session. Preserve the complete original container as usual.
 
 OpenBSD RAID1C is an explicit two-file mirror. Size is per member.
@@ -306,9 +306,9 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - `create` defaults to `luks` on Linux and `apple` on macOS. Use `--type veracrypt` or `createvc` for VeraCrypt creation.
 - `create` defaults to `--cipher aes`. The only supported single-cipher create profiles are `aes`, `serpent`, and `twofish`.
 - The create profiles are intentionally hardcoded and opinionated. They are defined in the code, not in an external config file.
-- AES uses the updated LUKS2 + Argon2id profile from `CIPHER.md`.
-- Serpent uses the heavier Argon2id profile from `CIPHER.md`.
-- Twofish uses the `CIPHER.md` sector-size tuning and automatically applies the documented open-time perf flags when a Twofish LUKS header is detected.
+- AES uses the updated LUKS2 + Argon2id profile from `ENCRYPTION.md`.
+- Serpent uses the heavier Argon2id profile from `ENCRYPTION.md`.
+- Twofish uses the `ENCRYPTION.md` sector-size tuning and automatically applies the documented open-time perf flags when a Twofish LUKS header is detected.
 - VeraCrypt create supports the same three single-cipher choices and keeps `SHA-512` fixed. Device creation uses the full device size detected by VeraCrypt, with quick format.
 - On Linux, `mount` recognizes LUKS metadata first; other sources are authenticated as VeraCrypt when opening. Encrypted VeraCrypt headers cannot be identified without the unlock credential. `unmount` reads the active mapper type. Use `--type` to pin the format.
 - Privileged Linux VeraCrypt mounts use `cryptsetup --type tcrypt --veracrypt`, with the same `lurker_*` mapper naming, active-volume listing, filesystem handling, and cleanup as LUKS. Unprivileged mode uses the file-only userspace helpers.
@@ -381,7 +381,7 @@ This project is licensed under the GNU General Public License v3.0 only. See [LI
 ### Cross-platform backend development
 
 The approved backend matrix and implementation plan are in
-`DIRECTIVES/LLM/CIPHER.md` and `DIRECTIVES/PLAN/CROSS_PLATFORMS.md`.
+`DIRECTIVES/LLM/ENCRYPTION.md` and `DIRECTIVES/PLAN/CROSS_PLATFORMS.md`.
 Native qualification and remaining limits are recorded in
 `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`. CLI directory creation uses
 `create --type gocryptfs|cryfs|cryptomator|pefs <directory>` without a size or

@@ -28,7 +28,7 @@ The DragonFly KVM guest reports `v6.4.2-RELEASE` and base
 Lurker invokes that base tool over a file-backed vnode disk and formats UFS
 inside the mapping. The approved AES, Serpent and Twofish profiles use
 XTS/plain64, 512-bit combined keys and PBKDF2/SHA-256. See the
-[cipher directive](../DIRECTIVES/LLM/CIPHER.md) for the complete profiles.
+[encryption directive](../DIRECTIVES/LLM/ENCRYPTION.md) for the complete profiles.
 
 The upstream release tree records a 1.1.2 import and local changes for libdm,
 memory locking, LibreSSL compatibility, and an encrypted-disk I/O hang in

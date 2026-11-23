@@ -5,7 +5,7 @@
 // Directory engines use fixed upstream authenticated formats: gocryptfs
 // AES-GCM/EME+scryptN16, CryFS AES-GCM/16KiB, Cryptomator format8 SIV_GCM.
 // Native FreeBSD PEFS uses AES-256-XTS/PBKDF2-600000 and verifier-chain metadata.
-// CIPHER.md records the complete profiles; generic --cipher is container-only.
+// ENCRYPTION.md records the complete profiles; generic --cipher is container-only.
 // Newly formatted Linux/BSD filesystems initialize a private root for the
 // authorized invoking user. Unlocking existing filesystems preserves ownership.
 use crate::model::CreateCipher;
