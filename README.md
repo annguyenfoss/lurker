@@ -51,9 +51,9 @@ Lurker wraps the platform's tools for these methods.
 
 ## Encryption dependencies
 
-Install the dependencies for the backends you use. Built-in tools are the executables Lurker uses from the base OS. Linux package names follow Arch Linux.
+Install the dependencies for the backends you use. Lurker uses executables from the base OS and bundles the app runtimes listed here. Linux package names follow Arch Linux.
 
-| OS | Dependencies | Built-in tools | Bundled runtimes |
+| OS | Dependencies | OS utilities | App runtimes |
 | :--- | :--- | :--- | :--- |
 | Linux | `btrfs-progs`<br>`cryptsetup`<br>`fuse2`<br>`fuse3`<br>`util-linux` |  | Java for Cryptomator |
 | macOS | <code>FUSE-&#8288;T&gt;=1.2.9</code><br>`macFUSE` | `hdiutil`, `diskutil` | Java for Cryptomator |
