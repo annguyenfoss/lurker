@@ -254,6 +254,15 @@ See `fat32-explicit-capacity/native-installed-geometry-retry.log` and
 `primary-ssh-recheck/formatter-*-sweep.json` under
 `target/dragonfly-tcplay/evidence/`.
 
+The same `63b82f5` installer passed the full six-pair CLI lifecycle on the
+stock clone using 260 MiB vaults. The 121 recorded steps covered explicit
+and Auto open, credential refusals, aliases, busy close, and close by source
+and mountpoint. All 30 standard payload SHA-256 values matched the earlier
+matrix after reopen. All six write traces returned `EINVAL` at mount-root
+directory `fsync`. Uninstall restored the storage and package inventories.
+The receipt `target/dragonfly-tcplay/evidence/fat32-explicit-matrix/native-matrix.json`
+has SHA-256 `463deca44d6aff57e02447a6534ef30e4c4fce9cec9734d40df6610958a731d0`.
+
 The same `63b82f5` installer created a 379 MiB AES/keyfile vault for a
 Linux round trip. Upstream VeraCrypt 1.26.31 on Arch Linux authenticated
 the image, verified the 758-sector FAT and aligned data region, read the
