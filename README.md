@@ -34,8 +34,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Dependencies
 
-Install the dependencies for the backends you use. Built-in tools are the executables Lurker uses from the base OS. Linux package names follow Arch Linux.
-
 <table width="100%">
   <thead>
     <tr>
