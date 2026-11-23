@@ -19,7 +19,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | LUKS1 | 🧅 | — | — | — | — | 🧅 🛈 |
 | LUKS2 | 🧅 | — | — | — | — | — |
-| Apple encrypted disk images | — | 🧅 | — | — | — | — |
+| Apple Encrypted Disk Image | — | 🧅 | — | — | — | — |
+| APFS Encrypted | — | Planned | — | — | — | — |
 | GELI | — | — | 🧅 | — | — | — |
 | PEFS | — | — | 🧅 | — | — | — |
 | softraid CRYPTO | — | — | — | 🧅 | — | — |
