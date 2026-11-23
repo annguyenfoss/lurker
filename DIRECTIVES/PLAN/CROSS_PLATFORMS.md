@@ -18,7 +18,7 @@ The broader distribution policy is:
 
 This changes the future dependency policy, not the approved cipher profiles. Before code changes adopt bundled discovery, update the current system-binary rules in `AGENTS.md` and `DIRECTIVES/LLM/CODEBASE.md` to describe the new architecture accurately. Preserve current runtime behavior until each replacement passes its acceptance gates.
 
-## 2. Locked backend scope
+## 2. Approved backend and physical-device scope
 
 This planning snapshot records the starting integration state: ✅ existing workflow; 🟦 selected for implementation; — outside approved scope. Current packaged CLI qualification is recorded in `DIRECTIVES/LLM/CIPHER.md`, not this historical table.
 
@@ -38,7 +38,9 @@ This planning snapshot records the starting integration state: ✅ existing work
 
 Do not expand this matrix implicitly while solving packaging problems. Windows, VeraCrypt on NetBSD/DragonFly and other exploratory ports are outside this plan. EncFS, securefs, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, age/rage, encrypted archives, backup tools and rclone crypt remain excluded. LUKS may use dm-crypt internally.
 
-Apple images mean the existing `hdiutil` backend, not FileVault or general native APFS-encryption management. macOS remains file-container/directory oriented; physical-device creation stays Linux-only in the product. BSD disk-encryption adapters must initially use disposable file-backed devices; selecting a native disk format does not authorize exposing destructive BSD physical-device creation.
+Physical-device encryption setup is in scope wherever feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. The current product implements device creation on Linux. Qualify native device setup separately for each applicable backend and OS before exposing it.
+
+On macOS, the scope includes native APFS data-volume setup via `diskutil` and supported startup-volume FileVault management via `fdesetup` and native authorization. The existing `hdiutil` encrypted-image workflow remains a separate backend. See the current scope in `DIRECTIVES/LLM/CIPHER.md`.
 
 ## 3. Baseline before this implementation
 
@@ -330,7 +332,7 @@ For every backend/OS pair that will be advertised:
 
 Additional macOS gates: verify the final signed app and DMG, nested library signatures, minimum deployment target, architecture slices, Gatekeeper/notarization for public releases, and failure with missing/incompatible FUSE. FSKit's flush/fsync/close behavior must be tested against the selected runtime and OS version, especially for SQLite/browser profiles; the existence of an FSKit backend is not evidence of matching durability semantics.
 
-Use only dedicated test images/devices for destructive tests. Native BSD physical-device creation remains outside product scope. No repair or forced detach of unrelated host/guest storage is part of this plan.
+Use only dedicated disposable devices or test images for destructive tests, including qualification of physical-device setup. Preserve unrelated host and guest storage, including its mounts and filesystem state.
 
 ## 9. Security, licensing and maintenance gates
 

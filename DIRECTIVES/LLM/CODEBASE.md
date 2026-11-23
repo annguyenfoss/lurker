@@ -61,7 +61,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 
 ## Core Invariants
 
-- The approved six-OS matrix in `CIPHER.md` controls backend dispatch. Physical-device creation remains Linux-only; BSD native creation uses dedicated file-backed devices. macOS operations are file-backed virtual disks or selected directory backends.
+- The approved six-OS matrix in `CIPHER.md` defines backend scope and current support. Physical-device setup is in scope on all six OSes where feasible. The current device-create implementation is Linux-only. BSD and macOS disk-container workflows currently use file-backed devices.
 - Container defaults: Linux `luks` (LUKS2), macOS `apple`, FreeBSD `geli`, NetBSD `cgd`, OpenBSD `softraid`, DragonFly `luks1`. Explicit Linux `luks1` preserves its compatible PBKDF2 profile. Directory backends are explicit selections with no size or generic cipher option.
 - Apple encryption is AES-256 at the disk-image layer, with APFS inside; it is not system FileVault or APFS filesystem encryption.
 - Supported create ciphers: `aes`, `serpent`, `twofish`.
@@ -104,7 +104,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 
 - Keep the desktop app narrow: create, mount, unmount, active volumes and LUKS credentials. Linux Privileged mode exposes the LUKS keys screen; other modes hide it.
 - Hide hardcoded expert defaults instead of exposing more knobs.
-- Derive create choices from the core's approved OS matrix and use the native OS default. Directory targets hide size and generic cipher fields; fixed native profiles hide alternate ciphers. Show keyfiles only for backends that support them. Physical-device creation remains Linux-only.
+- Derive create choices from the core's implemented capabilities and use the native OS default. Directory targets hide size and generic cipher fields; fixed native profiles hide alternate ciphers. Show keyfiles and physical-device creation only where the backend supports them.
 - Linux offers Privileged/Unprivileged in the main header. Unprivileged offers VeraCrypt files and portable directory engines, hides LUKS/devices, and cannot unmount privileged rows. Each row retains its own backend mode across selector changes. BSD/macOS hide the Linux selector and keyslot screen.
 - Keep the custom Slint controls unless you re-verify text zoom behavior.
 - `apps/lurker-desktop/build.rs` intentionally uses Slint `material`; `fluent` previously broke runtime text zoom/layout in this app.
@@ -139,7 +139,7 @@ If you add or remove a supported create cipher, also update:
 - Prefer the packaged native VeraCrypt backend under `Contents/Helpers` or the private CLI layout. macOS VeraCrypt must use FUSE-T only; do not build or fall back to a macFUSE variant. macFUSE is reserved for gocryptfs/CryFS. Cryptomator requires a qualified FUSE-T or native no-FUSE provider. Diagnose the missing backend-specific prerequisite rather than substituting another runtime.
 - Passphrases travel over stdin only. hdiutil uses a NUL terminator; VeraCrypt uses a newline. Reject embedded NUL/newline characters and preserve spaces.
 - The desktop still invokes lurker-helper, never the CLI; macOS helper requests run in the login user session without Linux escalation.
-- Reject LUKS and physical devices on macOS, and reject Apple images on Linux with platform-specific errors.
+- Reject LUKS on macOS and Apple images on Linux with platform-specific errors. The current macOS create routes accept files or directories. Planned native APFS setup uses `/usr/sbin/diskutil`, with `/usr/bin/fdesetup` for supported startup-volume FileVault management.
 - Mac create stages in a private same-directory folder, publishes atomically, and refuses to overwrite attached images.
 - macOS active volume listing includes attached encrypted images belonging to the current user and VeraCrypt volumes, including those mounted outside Lurker. Unmount is always scoped to one identified encrypted container.
 - Run the opt-in native suite with `cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1`; it creates only disposable file containers.

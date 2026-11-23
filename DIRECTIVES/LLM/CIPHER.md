@@ -9,6 +9,8 @@ Use this file as the source of truth for selected encryption backends and create
 | Backend / format | macOS | Linux | FreeBSD | DragonFly BSD | NetBSD | OpenBSD |
 | --- | --- | --- | --- | --- | --- | --- |
 | Apple encrypted disk images | ✅ | — | — | — | — | — |
+| Native APFS volume encryption | 🟦 | — | — | — | — | — |
+| Startup-volume FileVault management | 🟦 | — | — | — | — | — |
 | LUKS2 | — | ✅ | — | — | — | — |
 | VeraCrypt | ✅ | ✅ | ✅ | — | — | ✅ |
 | CryFS stable 1.x | ✅ | ✅ | — | — | — | — |
@@ -23,11 +25,17 @@ Use this file as the source of truth for selected encryption backends and create
 
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, securefs, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, encrypted archives, backups and rclone crypt are excluded. LUKS still uses dm-crypt internally. Research availability is not approval to integrate.
 - age/rage is excluded: Lurker targets writable encrypted disks, filesystems and directories unlocked for use during a session. age/rage encrypts files/streams; rage-mount provides only read-only archive access, not writable directory encryption.
-- Apple disk images are the existing hdiutil backend, not FileVault/native APFS-encryption management. VeraCrypt on NetBSD/DragonFly remains an exploratory port outside approved integration scope.
+- VeraCrypt on NetBSD/DragonFly remains an exploratory port outside approved integration scope.
 - macOS runtime policy: VeraCrypt uses FUSE-T 1.2.9 or later, without a macFUSE build or fallback. macFUSE is reserved for gocryptfs/CryFS. The packaged Cryptomator FUSE-T FSKit provider passed CLI lifecycle, rapid close, and owned backend recovery checks. Exact macOS package results are in `docs/macos-backends.md`.
 - Planned support requires native validation: gocryptfs macOS is beta and FreeBSD is basic; VeraCrypt targets FreeBSD x86-64 14+ and OpenBSD x86-64 7.8+, subject to inner-filesystem support. CryFS 2.0 alpha is excluded.
 - Prefer LUKS2 for new Linux volumes; LUKS1 adds compatibility and the DragonFly native path. Do not apply LUKS2/Argon2id format arguments to LUKS1. Qualify DragonFly cryptsetup versions, patches, profiles and disk/file-container behavior before release; selection is not security approval. PEFS needs a matching FreeBSD kernel module. Cryptomator requires create/mount/credential API and application-filesystem validation.
 - Existing profiles below remain authoritative. Select and document profiles for new backends during implementation; do not apply LUKS/VeraCrypt cipher options to folder backends automatically.
+
+## Physical-device setup scope
+
+- Support physical-device encryption setup where feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. Qualify each backend and device type on its native OS before advertising support.
+- Lurker currently supports physical-device creation on Linux. The current macOS and BSD disk-container workflows use file-backed storage.
+- The planned macOS workflows use `diskutil` for native APFS data-volume setup and `fdesetup` with native authorization for supported startup-volume FileVault management. The existing `hdiutil` backend handles encrypted disk images.
 
 ## Create Profile Scope
 
@@ -96,7 +104,7 @@ Use this file as the source of truth for selected encryption backends and create
 - OpenBSD softraid CRYPTO and RAID1C: native AES-XTS and password KDF with FFS inside. Both are password-only. Native keydisks differ from regular keyfiles. RAID1C creates a mirror of two independent regular files and publishes a `.raid1c.json` descriptor after both members. Explicit degraded recovery can unlock an existing array from one surviving member. Both formats refuse read-only crypto attachment.
 - DragonFly LUKS1: AES/Serpent/Twofish XTS/plain64 with 512-bit keys, PBKDF2/SHA-256 and 5000 ms iteration time, native UFS inside. Accepts either a password or a binary keyfile. Its cryptsetup 1.1.2-derived implementation has different compatibility constraints from modern Linux; native functional tests do not replace security/maintenance qualification.
 - DragonFly unlock validates the LUKS1 header and keyslot geometry for those profiles. It copies at most 16 MiB of metadata into the root-private session registry. The stock `dm_target_linear` module presents that metadata to cryptsetup while the payload stays in the original file. Existing images keep their ownership and on-disk layout.
-- Native BSD disk adapters initially accept regular file containers only, through root-authorized native file devices. No physical-device creation or automatic filesystem repair.
+- Current native BSD disk adapters accept regular file containers through root-authorized native file devices. Filesystem repair remains manual.
 
 ## Directory create profiles
 

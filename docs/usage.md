@@ -220,9 +220,9 @@ results. [macOS qualification](macos-backends.md#cryfs-and-gocryptfs-fuse-t-fski
 
 Native BSD defaults are GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD), softraid CRYPTO/FFS
 (OpenBSD), and LUKS1/UFS (DragonFly). Native containers take `<file> <size-gb>` and
-administrator authorization. BSD physical-device creation is excluded. Keep
-NetBSD `.cgdparams` and PEFS `.pefs.conf`/`.pefs.db` metadata with their encrypted
-data. OpenBSD CRYPTO and RAID1C refuse read-only attachment.
+administrator authorization. The current BSD workflows create file-backed vaults.
+Keep NetBSD `.cgdparams` and PEFS `.pefs.conf`/`.pefs.db` metadata with their
+encrypted data. OpenBSD CRYPTO and RAID1C refuse read-only attachment.
 See `docs/backend-testing.md` for the exact tested revisions and remaining gates.
 
 For a new FreeBSD GELI image, plan for the full requested size on the backing
