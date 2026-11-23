@@ -16,7 +16,7 @@ Host packages depend on the backends you use. Linux package names follow Arch Li
 | :--- | :--- | :--- |
 | Linux | `btrfs-progs`<br>`cryptsetup`<br>`fuse2`<br>`fuse3`<br>`util-linux` | VeraCrypt, gocryptfs, CryFS, and Cryptomator with its Java runtime. |
 | macOS | `FUSE-T>=1.2.9`<br>`macFUSE` | VeraCrypt, gocryptfs, CryFS, and Cryptomator with its Java runtime. |
-| FreeBSD | `pefs-kmod` (matching kernel) | VeraCrypt with its FUSE library, and gocryptfs. |
+| FreeBSD | `pefs-kmod` | VeraCrypt with its FUSE library, and gocryptfs. |
 | OpenBSD | — | VeraCrypt. |
 | NetBSD | — | — |
 | DragonFly BSD | — | — |
