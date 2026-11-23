@@ -53,13 +53,13 @@ Lurker wraps the platform's tools for these methods.
 
 Install the dependencies for the backends you use. Built-in tools are the executables Lurker uses from the base OS. Linux package names follow Arch Linux.
 
-<table>
+<table width="100%">
   <thead>
     <tr>
-      <th align="left">OS</th>
-      <th align="left" width="180">Dependencies</th>
-      <th align="left" width="180">Built-in tools</th>
-      <th align="left" width="180">Bundled runtimes</th>
+      <th align="left" width="22%">OS</th>
+      <th align="left" width="26%">Dependencies</th>
+      <th align="left" width="26%">Built-in tools</th>
+      <th align="left" width="26%">Bundled runtimes</th>
     </tr>
   </thead>
   <tbody>
