@@ -237,6 +237,14 @@ Interrupted creates preserved the destination inode and bytes. Recovery
 closed the owned state, reopens matched the original payload hash, and the
 final inventories matched baseline.
 
+In a separate mapper-removal interruption, the isolated guest reused the
+recorded vnode for an unrelated file after `SIGKILL`. The installed CLI
+refused to detach it and preserved the journal and both file digests.
+Reattaching the original vault to the same vnode let the CLI finish close.
+The vault reopened with its expected payload hash, and native inventories
+returned to baseline. The receipt is
+`target/dragonfly-tcplay/evidence/archive-vnode-reuse-retry.log`.
+
 The CLI SHA-256 is
 `65f25054610b3309f8308bcae350f7834b9b26a98fbcb6f2c57d4f04c35c51ae`.
 The executable-relative stop offsets
