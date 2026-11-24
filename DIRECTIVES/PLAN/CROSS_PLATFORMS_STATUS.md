@@ -154,6 +154,21 @@ both an open file and its working directory there. An explicit close first
 returned `Device busy` and preserved the mount, mapper, and vnode. After reboot
 the busy-test marker and earlier committed SQLite row survived, and normal
 close restored the inventory.
+
+The exact `9384bad` package also passed forced native dismount recovery with
+one 260 MiB AES vault per filesystem on a private tmpfs in an isolated
+DragonFly 6.4.2 clone. Each worker synced a new 64 KiB file and held it open.
+The HAMMER2 worker also committed a SQLite FULL/WAL transaction and kept a
+second transaction open. Ordinary native `umount` returned `Device busy` and
+preserved the worker, mount, mapper, vnode and session in each case. Native
+`umount -f` killed both holders and detached each filesystem. Lurker closed
+the remaining journaled resources by source for HAMMER2 and by mountpoint
+for FAT32. Auto reopen matched the previously recorded file digest for each
+vault. HAMMER2 also passed `integrity_check` and retained exactly the committed
+row and its original bytes. Final close restored the device and session
+inventories. The guest stayed running throughout the test. Receipts are under
+`target/dragonfly-veracrypt-batch/forced-dismount/`.
+
 The package also passed all 14 interruption cases using `SIGINT` and `SIGKILL`
 at the seven journaled boundaries. The test driver initially treated an
 omitted creation-target field as a failure. The exact package recovered that

@@ -66,6 +66,17 @@ duplicate opens, busy close, invalid credentials, and read-only refusal.
 With `--native-dismount`, it issues a native unmount, closes the remaining
 journaled resources through the CLI, and checks payload contents after reopen.
 
+For forced native dismount, run a separate test in an isolated clone. Keep
+the supervising process outside the owned mount and start a worker that
+fsyncs a file and holds its descriptor open. On HAMMER2, also commit a
+SQLite FULL/WAL transaction and leave a second transaction open. Save the
+expected file hash and committed row outside the vault. Confirm ordinary
+`umount` returns `Device busy` and compare the live mount and storage
+inventories. DragonFly's `umount -f` can kill the worker. After the forced
+dismount, use normal Lurker close and Auto reopen. Check file bytes, SQLite
+integrity and rollback of the uncommitted row, then confirm the inventory
+returned to baseline after close.
+
 Use a separate disposable container for the payload lifecycle if the conformance
 suite stops at its application workload. Create one 0.5 GiB image per cipher and
 credential pair. Use a 64-byte UTF-8 password in one boundary case and a binary
