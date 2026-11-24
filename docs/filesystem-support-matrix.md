@@ -27,6 +27,8 @@ FFSv2 on NetBSD and OpenBSD, and HAMMER2 or UFS on DragonFly BSD.
 - **Package** uses a separately installed open-source driver, kernel module,
   or FUSE package. **Experimental** identifies a development, preview,
   restricted, or unqualified port. **Paid** identifies a commercial path.
+  **OEM** identifies a closed-source implementation licensed for product
+  integration.
 - **C** means a formatter or pool creator exists. **RW** means read/write
   mounting. **R** means read-only mounting. **Image** means offline image
   creation. **Subset** identifies a feature, release, or media restriction.
@@ -56,12 +58,12 @@ mount or write tests were run for this survey.
 | **ZFS / OpenZFS** | Package C/RW | Package C/RW, version and architecture dependent | Native C/RW | — | Native module C/RW, port-specific feature set | — | Experimental C/RW, release-candidate driver | Z1–Z4 |
 | **APFS** | FUSE R, experimental kernel RW<br>Paid RW | Native C/RW | Experimental R port | — | — | — | Paid RW subset<br>Experimental WinFsp RW<br>FsRover R | M1, X1–X2, X7–X8 |
 | **HFS+ / HFSX** | Native RW subset<br>Paid RW | Native C/RW, including journaled HFS+ | Package R | Experimental FUSE R | Native R | Package R requires working FUSE | Paid RW<br>FsRover R | L1, M1, M6, F1, N1, D2–D3, X3, X7 |
-| **NTFS** | Native `ntfs3` or `ntfs` RW<br>Package C and NTFS-3G RW | Native R<br>Open-source FSKit RW, experimental C<br>NTFS-3G with FUSE-T RW<br>Paid C/RW | Package C/RW | Native R<br>Package C/RW | Native R and limited overwrite<br>Package C/RW | Native R<br>FUSE package C/RW requires working FUSE | Native C/RW | L2–L4, M3, M7, F1, O3, N3, D2–D3, W1 |
+| **NTFS** | Native `ntfs3` or `ntfs` RW<br>Package C and NTFS-3G RW<br>Tuxera OEM RW (embedded) | Native R<br>Open-source FSKit RW, experimental C<br>NTFS-3G with FUSE-T RW<br>Paid C/RW | Package C/RW | Native R<br>Package C/RW | Native R and limited overwrite<br>Package C/RW | Native R<br>FUSE package C/RW requires working FUSE | Native C/RW | L2–L4, M3, M7, F1, O3, N3, D2–D3, W1, X9 |
 | **ReFS** | Experimental OpenRefs R<br>Paid RW on vendor-supported versions | Experimental FUSE R | Experimental FUSE R candidate | Experimental FUSE R candidate | Experimental FUSE R candidate | Experimental FUSE R candidate where FUSE works | Native C/RW on supported Windows edition and volume type | W1, W3, X4–X5 |
-| **exFAT** | Native C/RW | Native C/RW<br>Legacy fuse-exfat C/RW with its documented runtime | Package C/RW via exFAT FUSE and utilities | Package C/RW via exFAT FUSE | Package C/RW via exFAT FUSE | Package C<br>RW requires working FUSE | Native C/RW | L5, M1, F1–F2, O3, N3, D2–D3, W1 |
+| **exFAT** ([OEM libraries](#oem-licensed-drivers-and-libraries)) | Native C/RW<br>Tuxera OEM RW (embedded) | Native C/RW<br>Legacy fuse-exfat C/RW with its documented runtime | Package C/RW via exFAT FUSE and utilities | Package C/RW via exFAT FUSE | Package C/RW via exFAT FUSE | Package C<br>RW requires working FUSE | Native C/RW | L5, M1, F1–F2, O3, N3, D2–D3, W1, X9–X10 |
 | **FAT12/16/32** | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | L1, M1, F1, O1, N1, D1, W1–W2 |
-| **UFS1 / FFSv1** | Native R<br>Experimental writes for select variants | Experimental image creation | Native C/RW | Native C/RW | Native C/RW | Native C/RW for DragonFly's UFS format | UFS2Tool C and limited image RW via Dokan<br>FsRover R | U1–U3, F1, O1, N1, D1, X7 |
-| **UFS2 / FFSv2** | Native R<br>Experimental writes for select variants | Experimental image creation | Native C/RW | Native C/RW | Native C/RW | — | UFS2Tool C and limited image RW via Dokan<br>FsRover R | U1–U3, F1, O1, N1, D1, X7 |
+| **UFS1 / FFSv1** | Native R<br>Experimental writes for select variants | Offline image tools | Native C/RW | Native C/RW | Native C/RW | Native C/RW for DragonFly's UFS format | UFS2Tool C and limited image RW via Dokan<br>FsRover R | U1–U3, F1, O1, N1, D1, X7 |
+| **UFS2 / FFSv2** | Native R<br>Experimental writes for select variants | Offline image tools | Native C/RW | Native C/RW | Native C/RW | — | UFS2Tool C and limited image RW via Dokan<br>FsRover R | U1–U3, F1, O1, N1, D1, X7 |
 | **HAMMER2** | Experimental kernel C/RW<br>Userspace image tools | — | Package C/R on supported releases<br>Experimental RW | Experimental kernel port | Experimental kernel port | Native C/RW | — | D1, H1–H3 |
 | **HAMMER** | — | — | — | — | — | Native C/RW, predecessor to HAMMER2 | — | D1 |
 | **BSD LFS** | — | — | — | — | Native C/RW | — | — | N4 |
@@ -370,7 +372,7 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **D5** DragonFly compatibility mounts. https://man.dragonflybsd.org/?command=mount_ntfs&section=8 · https://man.dragonflybsd.org/?command=mount_udf&section=8 · https://man.dragonflybsd.org/?command=mount_hpfs&section=8
 - **U1** Linux UFS variants and experimental write configuration. https://docs.kernel.org/admin-guide/ufs.html · https://github.com/torvalds/linux/blob/v7.2/fs/ufs/Kconfig
 - **U2** FreeBSD UFS formatter and the DragonFly UFS definition. https://man.freebsd.org/cgi/man.cgi?query=newfs&sektion=8 · https://www.dragonflybsd.org/docs/handbook/Installation/ · https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/ufs/fs.h
-- **U3** FreeBSD UFS images with Windows Dokan mounts. https://github.com/SvenGDK/UFS2Tool
+- **U3** FreeBSD UFS image creation and editing, plus Windows Dokan mounts. https://github.com/SvenGDK/UFS2Tool · https://github.com/SvenGDK/UFS2Tool/blob/main/macOS.md
 
 ### Optional, enterprise, and recovery paths
 
