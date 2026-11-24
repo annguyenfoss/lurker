@@ -5,6 +5,11 @@ mount tag, and mount access in that order. Assess formatting and mounting
 independently for partitions and images. An image attached as a virtual block
 device counts as image support.
 
+Mount access requires a mount point or drive letter where ordinary apps can
+open files directly and save changes when the mount supports writes. Exclude
+workflows that require a filesystem-specific tool to extract and reinsert
+individual files. A formatter can still qualify on its own with `NM`.
+
 ## Prefixes
 
 | Prefix | Meaning |
@@ -49,8 +54,7 @@ is confirmed, record the uncertainty in a note. Reserve `NF` and `NM` for known
 absence of support. Use `—` when no qualifying solution has been found.
 
 Note specific limits such as `overwrite only`, required OS builds or kernel
-modules, and supported on-disk features beside the affected line. Record
-offline editing and repair in notes below the matrix.
+modules, and supported on-disk features beside the affected line.
 
 ## Examples
 
