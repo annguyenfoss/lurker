@@ -111,6 +111,18 @@ at the seven journaled boundaries. The test driver initially treated an
 omitted creation-target field as a failure. The exact package recovered that
 mount by source, and the corrected driver passed all six mount and close cases.
 
+The same package passed the native ownership checks on HAMMER2. Two vaults
+opened concurrently. Replacing one source path caused both close entry points
+to refuse while keeping both mounts and their session records intact. After
+the original path was restored, each vault closed independently and reopened
+with its synced marker. Another case preserved an unrelated mapper during
+ordinary close, then refused close when a foreign mapper reused the recorded
+name. After interruption just past native mapper removal, the CLI also
+refused to detach a reused vnode that pointed at a different file. Restoring
+each owned device allowed normal close. The foreign data hashes and native
+inventories matched baseline. Receipts are under
+`target/dragonfly-veracrypt-batch/ownership-B/`.
+
 The installed desktop rendered a 1280 × 860 X11 window as UID 1300 on a
 private Xvfb display, with 1,216 sampled colors and clean display teardown.
 Offline remove and reinstall in the same private prefix verified package
