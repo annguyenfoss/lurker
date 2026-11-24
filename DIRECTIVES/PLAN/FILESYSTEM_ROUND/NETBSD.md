@@ -26,4 +26,4 @@ Use /tmp/lurker-filesystem-round-<os>-<run> remotely, existing per-user caches f
 
 ## Checkpoint
 
-Not started. Owner updates result note with exact commits, active job handle, receipts and next action; do not paste transcripts. Reviewer records review commits and outcomes after implementation closes.
+Implementation complete. Exact source `58c97b0188ee2d604a094acb9ffe0e10ce84de23`: seven CGD/filesystem payload pairs passed (49 CLI operations), native core/CLI/helper checks passed (69 tests, 4 ignored). All jobs terminal; native mounts/devices/pools/session registry clean. Read `NETBSD_RESULTS.md` and `target/goal-validation/filesystem-round/netbsd/summary.json` before review. Reviewer records review commits and outcomes after implementation closes.
