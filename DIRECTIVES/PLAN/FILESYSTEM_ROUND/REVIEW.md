@@ -1,0 +1,15 @@
+# Independent OS review and serious-gap patch pass
+
+Read README.md, your OS plan and OS_RESULTS.md. Start only after the implementation agent has finished and released the host. Root provides the implementation commit/report location. One reviewer per OS, no nested delegation. Keep the same scope and code ownership; Linux covers six distributions. Root coordinates shared-file changes.
+
+## Review checklist
+
+1. Compare all ten filesystem rows and the actual currently integrated encryption routes against the native receipts. Require independent receipts for each of six Linux distributions. Do not count a raw native probe, compile or tool installation as an encrypted CLI lifecycle pass.
+2. For each feasible writable pair, verify fresh file-container creation through Lurker CLI, PDF/text writes, ordinary close/reopen, byte/hash comparison, append/add file, final ordinary reopen and cleanup. For directory engines, separate backing-filesystem cases from block-container cases. For fixed-format native APFS, explain inapplicable alternate filesystems. Read-only-only imports cannot count as writable support.
+3. Check claimed dependencies against installed versions and selected native driver. Prefer one adequate suite; a supplementary formatter is fine for a material gap. Confirm an unavailable route was actually assessed with a bounded package/release/source attempt where applicable. Do not demand upstream repairs or broaden the user scope.
+4. Review default compatibility, explicit unsupported errors, selected formatter/mount handling, preservation of existing filesystem ownership and normal cleanup ordering. No silent fallback to a different selected filesystem. Inspect actual artifact/source identities and result counts. This is a correctness review, not a security audit.
+5. Patch serious Lurker or harness gaps in owned files; coordinate shared changes through root/FreeBSD common owner. Run appropriate remote compile/unit checks and only the affected missing/failing payload cases. No blanket rerun of already verified matrices unless shared behavior changed. No GUI, physical storage, SQLite, failure injection, forced close or power-cut work.
+6. Inspect final owned mount/device/process inventory and reconcile with the baseline through normal Lurker close. Never destroy failure evidence or force-detach to make cleanup pass. Preserve an upstream-stuck fixture and report it honestly.
+7. Commit each coherent reviewed fix with its necessary tests after remote checks and diff review. Append a concise review section to OS_RESULTS.md: commits, artifacts, coverage verified, fixes/reruns, remaining upstream/prerequisite limits, resource cleanup and exact evidence locations. Finish with <=250 words to root. Do not silently declare missing evidence passed.
+
+The completion gate is best-effort installed dependencies plus correct Lurker integration and the requested simple native payload coverage, with explicit unavailable/blocked/inapplicable rows. It is not complete filesystem feature parity or release/durability qualification.
