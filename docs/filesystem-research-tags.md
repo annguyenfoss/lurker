@@ -11,8 +11,8 @@ The README and planning summary use the following compact notation. The older de
 - **Limited features** — Important filesystem features are missing; normal file R/W remains available. Unresolved completeness must be identified explicitly, as in note ².
 - **Beta** — Experimental maturity. Without “Limited features”, the implementation is fully or largely implemented for the stated use case and awaits production maturity.
 - **Legacy** — Legacy or outdated implementation.
-- **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access; **Create only** means creation without a qualifying mount.
-- **—** — No qualifying route found.
+- **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access, whether or not formatting is available.
+- **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
 - **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
 - **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel.

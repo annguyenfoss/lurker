@@ -6,13 +6,13 @@ This planning summary follows the stated use case: format a decrypted physical p
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | ✅ | ☑️ Limited features | ☑️ Legacy | ❗Create + R/O | ☑️ Limited features; beta | ❗Create + R/O | ☑️ Limited features |
+| **ext4** | ✅ | ☑️ Limited features | ☑️ Legacy | ❗R/O | ☑️ Limited features; beta | ❗R/O | ☑️ Limited features |
 | **Btrfs** | ✅ | ❗R/W; limited features; beta¹ | ☑️ Legacy | — | — | — | ☑️ Limited features |
 | **XFS** | ✅ | ☑️ Limited features | ☑️ Legacy | ❗R/O | — | ❗R/O³ | ❗R/O |
 | **APFS** | ☑️ Limited features; beta | ✅ | ❗R/O | ❗R/O | — | ❗R/O³ | ❗R/W; limited features; beta¹ |
-| **UFS1 / FFSv1** | ☑️ Limited features; beta | ❗Create only | ✅ | ✅ | ✅ | ✅ | ❗Create + R/O |
-| **UFS2 / FFSv2** | ☑️ Limited features; beta | ❗Create + R/O; legacy | ✅ | ✅ | ✅ | ❗Create only | ❗Create + R/O |
-| **HAMMER2** | ☑️ Beta | — | ☑️ Limited features; beta² | ☑️ Limited features; beta | ☑️ Limited features; beta | ✅ | ❗Create only |
+| **UFS1 / FFSv1** | ☑️ Limited features; beta | — | ✅ | ✅ | ✅ | ✅ | ❗R/O |
+| **UFS2 / FFSv2** | ☑️ Limited features; beta | ❗R/O; legacy | ✅ | ✅ | ✅ | — | ❗R/O |
+| **HAMMER2** | ☑️ Beta | — | ☑️ Limited features; beta² | ☑️ Limited features; beta | ☑️ Limited features; beta | ✅ | — |
 | **NTFS** | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features³ | ✅ |
 | **exFAT** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅³ | ✅ |
 | **ZFS / OpenZFS** | ✅ | ✅ | ✅ | — | ☑️ Limited features | — | ☑️ Beta |
@@ -24,8 +24,8 @@ This planning summary follows the stated use case: format a decrypted physical p
 - **Limited features** — Important filesystem features are missing; normal file R/W remains available. Unresolved completeness must be identified explicitly, as in note ².
 - **Beta** — Experimental maturity. Without “Limited features”, the implementation is fully or largely implemented for the stated use case and awaits production maturity.
 - **Legacy** — Legacy or outdated implementation.
-- **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access; **Create only** means creation without a qualifying mount.
-- **—** — No qualifying route found.
+- **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access, whether or not formatting is available.
+- **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
 - **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
 - **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel.
