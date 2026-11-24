@@ -48,7 +48,7 @@ filesystem repair, stop and retain the concrete boot failure for characterizatio
 Run one copy/clone workload at a time. Stage the exact candidate package and
 record its source revision and binary hashes. All encrypted data must live under
 the guest's persistent `$HOME/.cache/lurker/fault-RUN`, with ownership and marker
-checks; `/tmp` may be tmpfs. A durability workload must confirm individual file
+checks. `/tmp` may be tmpfs. The application workload checks individual file
 fsync, atomic rename plus directory fsync, and SQLite `WAL`/`synchronous=FULL`
 commit while keeping its connection open. Do not call global `sync` or cleanly
 unmount before cutting power. Reopen through the candidate CLI and verify only
@@ -96,6 +96,14 @@ mount the published vault, and start the same worker. Use `--filesystem hammer2`
 at setup to explicitly select the DragonFly VeraCrypt application
 profile. The host must retain the worker's readiness and verify its liveness
 before cutting power to the owned clone.
+
+Use `--filesystem fat32` to test the DragonFly VeraCrypt exchange profile.
+Setup publishes two synced files and closes the vault. The worker later
+overwrites one file, creates a new file, and fsyncs each. Its `ready.json`
+records both successful file syncs and all three expected SHA-256 values
+under `marker_sha256`. After a cut, `guest-verify` reports each file's result
+under `fat32_recovery` and records whether native close succeeded even when
+a file is missing or reverted.
 
 A completed daemon-owned copy can be mode 0600 and unreadable to the coordinator.
 `finish-copy-boot DIRECTORY` resumes only when the retained copy log confirms

@@ -39,6 +39,8 @@ UEFI_VARS = "/usr/share/edk2/x64/OVMF_VARS.4m.fd"
 
 DIRECTORIES = {"gocryptfs", "cryfs", "cryptomator", "pefs"}
 LOGIN_BACKENDS = {"gocryptfs", "cryfs", "cryptomator"}
+FAT32_MARKERS = {"anchor.bin": 4096, "old.bin": 65536, "new.bin": 65536}
+FAT32_SYNCS = ("existing-file-fsync", "new-file-fsync")
 ALLOWED = {"Linux": {"luks", "luks1", "veracrypt", "gocryptfs", "cryfs", "cryptomator"},
            "FreeBSD": {"geli", "veracrypt", "pefs", "gocryptfs"},
            "NetBSD": {"cgd"}, "OpenBSD": {"softraid", "raid1c", "veracrypt"},
@@ -896,6 +898,18 @@ def guest_setup(args):
                 "mount_table": run(["mount"]), "repair": False}
     write_json(directory / "guest.json", manifest)
     guest_cli(directory, guest_volume_arguments("create", manifest), secret)
+    if args.filesystem == "fat32":
+        guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
+        try:
+            require_fat32_mount(mountpoint)
+            manifest["fat32_baseline"] = {
+                name: write_fat32_marker(mountpoint / name, FAT32_MARKERS[name], "xb")
+                for name in ("anchor.bin", "old.bin")
+            }
+        finally:
+            guest_cli(directory, ["unmount", str(source)], secret)
+        require(not os.path.ismount(mountpoint), "FAT32 baseline remained mounted after close")
+        write_json(directory / "guest.json", manifest)
     if args.netbsd_allocated_diagnostic:
         manifest["netbsd_allocated_diagnostic"] = netbsd_allocated_diagnostic(source)
         write_json(directory / "guest.json", manifest)
@@ -922,6 +936,8 @@ def arm_guest_workload(directory, manifest, secret, *, netbsd_sync=False, openbs
     with (directory / "worker.log").open("xb") as output:
         guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
         require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
+        if manifest.get("create_filesystem") == "fat32":
+            require_fat32_mount(mountpoint)
         if netbsd_sync:
             manifest["netbsd_sync_diagnostic"] = netbsd_sync_diagnostic(mountpoint)
             write_json(directory / "guest.json", manifest)
@@ -955,12 +971,69 @@ def guest_arm(run_id):
     return arm_guest_workload(directory, manifest, (directory / "test-password").read_text())
 
 
+def require_fat32_mount(mountpoint):
+    entries = [line.split("\t") for line in run(["/sbin/mount", "-p"]).splitlines()]
+    require(os.path.ismount(mountpoint) and any(
+        fields[1:2] == [str(mountpoint)] and fields[2].startswith("msdos rw")
+        for fields in entries if len(fields) >= 3
+    ), "Expected native writable FAT32 mount")
+
+
+def write_fat32_marker(path, size, mode):
+    payload = secrets.token_bytes(size)
+    with path.open(mode) as stream:
+        require(stream.write(payload) == size, "Short FAT32 marker write")
+        stream.flush()
+        os.fsync(stream.fileno())
+    return hashlib.sha256(payload).hexdigest()
+
+
+def fat32_recovery(mountpoint, expected, baseline):
+    outcomes = {}
+    for name, expected_digest in expected.items():
+        try:
+            with (mountpoint / name).open("rb") as stream:
+                data = stream.read(FAT32_MARKERS[name] + 1)
+            digest = hashlib.sha256(data).hexdigest()
+            if len(data) == FAT32_MARKERS[name] and digest == expected_digest:
+                status = "matched"
+            elif len(data) == FAT32_MARKERS[name] and digest == baseline.get(name):
+                status = "pre-workload"
+            else:
+                status = "changed"
+            outcomes[name] = {"status": status, "sha256": digest}
+        except FileNotFoundError:
+            outcomes[name] = {"status": "missing"}
+        except OSError as error:
+            outcomes[name] = {"status": "unreadable", "error": str(error)}
+    return outcomes
+
+
+def fat32_workload(directory, mountpoint, manifest):
+    baseline = manifest.get("fat32_baseline", {})
+    require(set(baseline) == {"anchor.bin", "old.bin"}, "Publish the FAT32 baseline with guest-setup")
+    observed = fat32_recovery(mountpoint, baseline, {})
+    require(all(marker["status"] == "matched" for marker in observed.values()), "FAT32 baseline changed")
+    expected = {"anchor.bin": baseline["anchor.bin"],
+                "old.bin": write_fat32_marker(mountpoint / "old.bin", FAT32_MARKERS["old.bin"], "r+b"),
+                "new.bin": write_fat32_marker(mountpoint / "new.bin", FAT32_MARKERS["new.bin"], "xb")}
+    write_json(directory / "ready.json", {"status": "ready-for-abrupt-poweroff", "schema": 1,
+               "run": manifest["run"], "filesystem": "fat32", "durable": list(FAT32_SYNCS),
+               "marker_sha256": expected, "global_sync": False, "clean_unmount": False,
+               "created_ns": time.time_ns()})
+    while True:
+        time.sleep(1)
+
+
 def guest_worker(run_id):
     directory = guest_directory(run_id)
     manifest = json.loads((directory / "guest.json").read_text())
     mountpoint = Path(manifest["mountpoint"])
     require(mountpoint == directory / "open data", "Mountpoint ownership changed")
     require(os.path.ismount(mountpoint), "Workload must execute inside the encrypted mount")
+    if manifest.get("create_filesystem") == "fat32":
+        require_fat32_mount(mountpoint)
+        return fat32_workload(directory, mountpoint, manifest)
     payload = secrets.token_bytes(65536)
     temporary = mountpoint / "atomic.tmp"
     with temporary.open("wb") as output:
@@ -1041,6 +1114,12 @@ def guest_verify(run_id):
     manifest = json.loads((directory / "guest.json").read_text())
     ready = json.loads((directory / "ready.json").read_text())
     require(ready["status"] == "ready-for-abrupt-poweroff" and ready["run"] == run_id, "No durable acknowledgement")
+    fat32 = manifest.get("create_filesystem") == "fat32"
+    if fat32:
+        require(ready.get("filesystem") == "fat32" and ready.get("durable") == list(FAT32_SYNCS)
+                and set(ready.get("marker_sha256", {})) == set(FAT32_MARKERS)
+                and ready.get("global_sync") is False and ready.get("clean_unmount") is False,
+                "Incomplete FAT32 acknowledgement")
     secret = (directory / "test-password").read_text()
     source, mountpoint = Path(manifest["source"]), Path(manifest["mountpoint"])
     require(source == directory / "encrypted data" and mountpoint == directory / "open data", "Fixture paths changed")
@@ -1056,23 +1135,34 @@ def guest_verify(run_id):
         phase = "reopen-through-candidate-cli"
         guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
         require(os.path.ismount(mountpoint), "Recovery CLI did not expose the encrypted filesystem")
-        phase = "capture-raw-WAL-evidence"
-        evidence = directory / "recovered-evidence"
-        evidence.mkdir(mode=0o700)
-        for name in ("profile.sqlite", "profile.sqlite-wal", "profile.sqlite-shm"):
-            path = mountpoint / name
-            if path.exists():
-                shutil.copyfile(path, evidence / name)
-        phase = "durable-record-and-SQLite-recovery"
-        recovery = result["application_recovery"] = application_recovery(mountpoint, ready["sha256"])
-        if "uncommitted_row_visible" in recovery["sqlite"]:
-            result["uncommitted_row_visible"] = recovery["sqlite"]["uncommitted_row_visible"]
-        result["unacknowledged_file_size"] = (mountpoint / "unacknowledged writes").stat().st_size if (mountpoint / "unacknowledged writes").exists() else None
-        failures = [f'{kind}: {check["error"]}' for kind, check in recovery.items() if check["status"] == "failed"]
-        require(not failures, " | ".join(failures))
+        if fat32:
+            phase = "fat32-marker-recovery"
+            require_fat32_mount(mountpoint)
+            recovery = result["fat32_recovery"] = fat32_recovery(mountpoint, ready["marker_sha256"],
+                                                                manifest["fat32_baseline"])
+        else:
+            phase = "capture-raw-WAL-evidence"
+            evidence = directory / "recovered-evidence"
+            evidence.mkdir(mode=0o700)
+            for name in ("profile.sqlite", "profile.sqlite-wal", "profile.sqlite-shm"):
+                path = mountpoint / name
+                if path.exists():
+                    shutil.copyfile(path, evidence / name)
+            phase = "durable-record-and-SQLite-recovery"
+            recovery = result["application_recovery"] = application_recovery(mountpoint, ready["sha256"])
+            if "uncommitted_row_visible" in recovery["sqlite"]:
+                result["uncommitted_row_visible"] = recovery["sqlite"]["uncommitted_row_visible"]
+            result["unacknowledged_file_size"] = (mountpoint / "unacknowledged writes").stat().st_size if (mountpoint / "unacknowledged writes").exists() else None
+            failures = [f'{kind}: {check["error"]}' for kind, check in recovery.items() if check["status"] == "failed"]
+            require(not failures, " | ".join(failures))
         phase = "normal-cli-close"
         guest_cli(directory, ["unmount", str(mountpoint)], secret)
         require(not os.path.ismount(mountpoint), "Recovery CLI reported close while the mount remains attached")
+        if fat32:
+            result["native_close"] = "passed"
+            phase = "fat32-marker-recovery"
+            failures = [f'{name}: {marker["status"]}' for name, marker in recovery.items() if marker["status"] != "matched"]
+            require(not failures, " | ".join(failures))
         result.update(status="passed", checks=5)
     except Exception as error:
         result.update(status="failed", failed_stage=phase, error=str(error).replace(secret, "<redacted>")[:2048])

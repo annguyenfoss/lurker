@@ -335,6 +335,28 @@ class Ownership(unittest.TestCase):
 
 
 class GuestFixture(unittest.TestCase):
+    def test_fat32_recovery_distinguishes_missing_overwritten_and_control_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mountpoint = Path(directory)
+            old = b"a" * VM.FAT32_MARKERS["old.bin"]
+            anchor = b"b" * VM.FAT32_MARKERS["anchor.bin"]
+            new = b"c" * VM.FAT32_MARKERS["new.bin"]
+            baseline = {"old.bin": hashlib.sha256(old).hexdigest(),
+                        "anchor.bin": hashlib.sha256(anchor).hexdigest()}
+            expected = {**baseline, "old.bin": hashlib.sha256(new).hexdigest(),
+                        "new.bin": hashlib.sha256(new).hexdigest()}
+            (mountpoint / "anchor.bin").write_bytes(anchor)
+            (mountpoint / "old.bin").write_bytes(old)
+            checks = VM.fat32_recovery(mountpoint, expected, baseline)
+            self.assertEqual(checks["anchor.bin"]["status"], "matched")
+            self.assertEqual(checks["old.bin"]["status"], "pre-workload")
+            self.assertEqual(checks["new.bin"]["status"], "missing")
+
+            (mountpoint / "old.bin").write_bytes(new)
+            (mountpoint / "new.bin").write_bytes(new)
+            checks = VM.fat32_recovery(mountpoint, expected, baseline)
+            self.assertTrue(all(check["status"] == "matched" for check in checks.values()))
+
     def test_power_cut_records_database_recovery_even_when_the_file_is_lost(self):
         with tempfile.TemporaryDirectory() as directory:
             mountpoint = Path(directory)
