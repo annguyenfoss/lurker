@@ -1217,6 +1217,14 @@ fn mount_open_mapper(
 
     ctx.output
         .msg2(&format!("Mounting filesystem at {}", mountpoint.display()));
+    if filesystem_type.as_deref() == Some("apfs")
+        && readonly
+        && !Path::new("/sys/module/apfs").exists()
+    {
+        if let Ok(driver) = crate::trusted_system_executable("apfs-fuse") {
+            return mount_fuse_filesystem(ctx, &driver, &mapper_path, mountpoint, true);
+        }
+    }
     let mut args = Vec::new();
     let mut options: Vec<String> = Vec::new();
     if filesystem_type
@@ -1251,6 +1259,7 @@ fn mount_open_mapper(
         let probe = ctx.capture_command(
             &blkid,
             &[
+                "-p".into(),
                 "-o".into(),
                 "value".into(),
                 "-s".into(),
@@ -1263,7 +1272,12 @@ fn mount_open_mapper(
         )?;
         match trim_stdout(&probe).as_str() {
             "1" => options.push("ufstype=44bsd".into()),
-            "2" => options.push("ufstype=ufs2".into()),
+            "2" => {
+                if let Ok(driver) = crate::trusted_system_executable("fuse-ufs") {
+                    return mount_fuse_filesystem(ctx, &driver, &mapper_path, mountpoint, readonly);
+                }
+                options.push("ufstype=ufs2".into());
+            }
             _ => {
                 return Err(AppError::new(
                     "Cannot identify a supported UFS1/UFS2 variant; mount refused.",
@@ -1681,6 +1695,38 @@ fn format_filesystem(
     if filesystem == CreateFilesystem::Zfs {
         return create_zfs(ctx, device_path, owner);
     }
+    if filesystem == CreateFilesystem::Ufs2 {
+        let seed = EmptyFilesystemRoot::new(owner)?;
+        let blockdev = crate::trusted_system_executable("blockdev")?;
+        let size = ctx.capture_command(
+            &blockdev,
+            &["--getsize64".into(), device_path.as_os_str().to_os_string()],
+            true,
+            "Inspect new UFS2 device size",
+        )?;
+        let bytes = trim_stdout(&size)
+            .parse::<u64>()
+            .map_err(|_| AppError::new("Cannot determine new UFS2 device size."))?;
+        let formatter = ctx.formatter_path()?.to_path_buf();
+        return ctx.run_command(
+            &formatter,
+            &[
+                "-t".into(),
+                "ffs".into(),
+                "-B".into(),
+                "little".into(),
+                "-o".into(),
+                "version=2,bsize=32768,fsize=4096".into(),
+                "-s".into(),
+                bytes.to_string().into(),
+                device_path.as_os_str().to_os_string(),
+                seed.descriptor_path().into_os_string(),
+            ],
+            true,
+            false,
+            "Create new UFS2 filesystem",
+        );
+    }
     let mut args = crate::system::linux_format_args(filesystem, owner);
     // Seed/prototype initialization sets ownership only for newly created roots;
     // ordinary unlock never alters an existing filesystem's metadata.
@@ -1743,6 +1789,59 @@ fn format_filesystem(
         _ => {}
     }
     Ok(())
+}
+
+// Native FUSE imports retain the same mapper/source and mount identity guards.
+// fsname binds the mount table back to the exact mapper rather than a generic
+// driver label, so ordinary unmount resolution cannot select another device.
+fn mount_fuse_filesystem(
+    ctx: &mut AppContext,
+    driver: &Path,
+    mapper: &Path,
+    mountpoint: &Path,
+    readonly: bool,
+) -> AppResult<()> {
+    let options = format!(
+        "{},allow_other,fsname={}",
+        if readonly { "ro" } else { "rw" },
+        mapper.display()
+    );
+    ctx.run_command(
+        driver,
+        &[
+            "-o".into(),
+            options.into(),
+            mapper.as_os_str().to_os_string(),
+            mountpoint.as_os_str().to_os_string(),
+        ],
+        true,
+        false,
+        "Start native filesystem driver",
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(mount) = read_mountinfo()?
+            .into_iter()
+            .find(|m| m.mount_point == mountpoint)
+        {
+            if mount
+                .source
+                .as_deref()
+                .map(crate::linux::canonical_device_path)
+                != Some(crate::linux::canonical_device_path(mapper))
+                || (readonly && !mount.readonly)
+            {
+                return Err(AppError::new("Native filesystem driver published an unexpected mount identity; preserving it."));
+            }
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(AppError::new(
+                "Native filesystem driver did not publish its mount.",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
 }
 
 // ZFS is an inner filesystem here: encryption remains the surrounding mapper.

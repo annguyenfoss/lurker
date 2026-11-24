@@ -351,6 +351,9 @@ impl ToolPaths {
                 ..
             }) => {
                 tools.formatter = Some(require_command(linux_formatter(*filesystem)?)?);
+                if *filesystem == Some(crate::api::CreateFilesystem::Ufs2) {
+                    crate::trusted_system_executable("fuse-ufs")?;
+                }
                 if *source_kind == SourceKind::Block && tools.lsblk.is_none() {
                     tools.lsblk = Some(require_command("lsblk")?);
                 }
@@ -387,8 +390,9 @@ pub(crate) fn linux_formatter(
         Zfs => Ok("zpool"),
         Apfs => Ok("mkapfs"),
         Hammer2 => Ok("newfs_hammer2"),
+        Ufs2 => Ok("makefs"),
         other => Err(AppError::new(format!(
-            "Linux cannot create {} through this container adapter. Supported: btrfs, ext4, xfs, ntfs, exfat, fat32, zfs, apfs, hammer2.",
+            "Linux cannot create {} through this container adapter. Supported: btrfs, ext4, xfs, ntfs, exfat, fat32, zfs, apfs, hammer2, ufs2.",
             other.as_str()
         ))),
     }
@@ -664,9 +668,16 @@ fn find_executable_with_path(name: &str, paths: Option<OsString>) -> Option<Path
         .into_iter()
         .flat_map(|p| env::split_paths(&p).collect::<Vec<_>>())
         .chain(
-            ["/usr/local/sbin", "/usr/sbin", "/sbin", "/usr/bin", "/bin"]
-                .into_iter()
-                .map(PathBuf::from),
+            [
+                "/usr/local/sbin",
+                "/usr/local/bin",
+                "/usr/sbin",
+                "/sbin",
+                "/usr/bin",
+                "/bin",
+            ]
+            .into_iter()
+            .map(PathBuf::from),
         )
     {
         let candidate = dir.join(name);
