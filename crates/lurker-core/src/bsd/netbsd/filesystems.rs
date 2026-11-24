@@ -343,7 +343,7 @@ pub(in super::super) fn mount_filesystem(
         }
         _ => return Err(AppError::new("Unsupported NetBSD inner filesystem.")),
     };
-    argv.extend([device.into(), target.as_os_str().into()]);
+    argv.extend([device.as_str().into(), target.as_os_str().into()]);
     if kind == "ntfs" {
         // NetBSD's libperfuse NTFS daemon retains inherited output descriptors.
         // Pipes would keep exec's drain threads blocked until filesystem close.
