@@ -142,6 +142,19 @@ Auto reopen matched the entire file's size and SHA-256
 The storage and session inventories matched baseline in all three cases.
 Receipts are under `target/dragonfly-veracrypt-batch/capacity-B/`.
 
+The explicit FAT32 profile also failed an abrupt power-cut test with the same
+package on outer UFS. The fully allocated vault first closed with a synced
+control file and a synced 64 KiB file. A later mount confirmed `msdos rw,sync`
+and acknowledged both an overwrite of the existing file and the creation of
+a second 64 KiB file after ordinary file fsyncs. The cut completed 354 ms
+after the host observed the live worker. A verified copy retained the
+pre-workload ciphertext digest. A native read-only mount on scratch and the
+normal writable Lurker reopen both found the original file contents and the
+unchanged control file. The newly created file was missing in both. The
+read-only mount rejected a write with `EROFS`. Both opened without repair
+and restored the storage inventory.
+Receipts are under `target/dragonfly-veracrypt-batch/fat32-power-cut/ufs/`.
+
 The rebuilt package authenticated a 260 MiB stock VeraCrypt AES image with
 inner HAMMER2 and only about 20 MiB allocated. Identical starting ciphertext
 was tested on UFS and HAMMER2 backing. The two cuts completed 349 ms and
