@@ -155,6 +155,16 @@ read-only mount rejected a write with `EROFS`. Both opened without repair
 and restored the storage inventory.
 Receipts are under `target/dragonfly-veracrypt-batch/fat32-power-cut/ufs/`.
 
+The same FAT32 workload on outer HAMMER2 reproduced the loss. The cut
+completed 352 ms after the host observed both fsync acknowledgements. The
+verified copy retained the pre-workload ciphertext digest. The saved host
+acknowledgement supplied the expected hashes because the on-guest receipt
+was missing. The native read-only and normal writable mounts both reopened
+without repair, retained the control file and original contents of the
+overwritten file, and lacked the new file. The read-only write probe returned
+`EROFS`, and both paths restored the storage inventory. Receipts are under
+`target/dragonfly-veracrypt-batch/fat32-power-cut/hammer2/`.
+
 The rebuilt package authenticated a 260 MiB stock VeraCrypt AES image with
 inner HAMMER2 and only about 20 MiB allocated. Identical starting ciphertext
 was tested on UFS and HAMMER2 backing. The two cuts completed 349 ms and
