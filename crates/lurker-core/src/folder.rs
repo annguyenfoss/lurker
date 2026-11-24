@@ -818,6 +818,13 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
     secure_dir(&staging)?;
     let result = (|| {
         if c.volume_type == VolumeType::Cryfs {
+            // fusermount rejects plaintext mountpoints on some otherwise
+            // usable encrypted backing filesystems (e.g. APFS/HAMMER2).
+            #[cfg(target_os = "linux")]
+            let mp = runtime
+                .path
+                .join(format!("initialize-{}-{}", std::process::id(), nonce()));
+            #[cfg(not(target_os = "linux"))]
             let mp = target.join(".lurker-initial-mount");
             secure_dir(&mp)?;
             mount_inner(

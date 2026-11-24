@@ -224,6 +224,8 @@ def main():
     parser.add_argument("--backend", required=True)
     parser.add_argument("--filesystem", help="Create selection; backing-store label only for directory engines")
     parser.add_argument("--root", type=Path, default=Path(tempfile.gettempdir()))
+    parser.add_argument("--mount-root", type=Path,
+                        help="Separate plaintext mount parent for directory backing-store tests")
     parser.add_argument("--size-gb", default="0.5")
     parser.add_argument("--commit", required=True)
     parser.add_argument("--pdf", type=Path)
@@ -234,8 +236,13 @@ def main():
     parent = args.root.resolve(strict=True)
     directory = Path(tempfile.mkdtemp(prefix="lurker-fs-cli-", dir=parent))
     directory.chmod(0o700)
-    mountpoint = directory / "mount"
-    mountpoint.mkdir(mode=0o700)
+    if args.mount_root:
+        mountpoint = Path(tempfile.mkdtemp(
+            prefix="lurker-fs-mount-", dir=args.mount_root.resolve(strict=True)))
+        mountpoint.chmod(0o700)
+    else:
+        mountpoint = directory / "mount"
+        mountpoint.mkdir(mode=0o700)
     source = directory / ("encrypted" if args.backend in DIRECTORIES else "vault.img")
     peer = directory / "peer.img"
     # Meet ordinary host password policies without changing their settings.
