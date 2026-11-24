@@ -68,6 +68,30 @@ class HarnessTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.options("--skip-readonly", "  ")
 
+    def test_dragonfly_fat32_continues_lifecycle_after_skipping_application_io(self):
+        args = ["--binary", str(self.binary), "--root", str(self.root), "--backend", "veracrypt",
+                "--filesystem", "fat32", "--native-dismount"]
+        with mock.patch.object(harness.os, "geteuid", return_value=0), \
+             mock.patch.object(harness.platform, "system", return_value="DragonFly"):
+            suite = harness.Suite(harness.parse_args(args))
+        self.assertEqual(suite.create_args()[-2:], ["--filesystem", "fat32"])
+        self.assertNotIn("--filesystem", suite.args("mount", suite.source, suite.mountpoint))
+        self.assertTrue(suite.options.expect_readonly_unsupported)
+        operations = ("create", "no_overwrite", "mount", "write_workload", "write_lifecycle_file",
+                      "duplicate", "aliased_duplicate", "busy", "close", "incorrect", "verify",
+                      "readonly_unsupported", "native_dismount", "verify_native_dismount", "native_inventory")
+        with mock.patch.multiple(suite, **dict.fromkeys(operations, mock.DEFAULT)) as calls:
+            calls["native_inventory"].return_value = []
+            result = suite.run()
+        self.assertEqual(result["status"], "passed")
+        cases = {case["name"]: case["status"] for case in result["cases"]}
+        self.assertEqual(cases["application-io"], "skipped")
+        self.assertEqual(cases["native-dismount"], "passed")
+        self.assertEqual(cases["persistence-after-native-dismount"], "passed")
+        self.assertEqual(cases["readonly"], "passed")
+        calls["write_workload"].assert_not_called()
+        calls["write_lifecycle_file"].assert_called_once_with()
+
     def test_full_storage_requires_a_bounded_file_container(self):
         with self.assertRaises(SystemExit):
             self.options("--full-storage")

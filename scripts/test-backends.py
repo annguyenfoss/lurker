@@ -396,6 +396,7 @@ class Suite:
         self.mounted = False
         self.result = {"schema": SCHEMA, "suite": "native-cli-conformance", "status": "running",
                        "backend": options.backend, "cipher": options.cipher,
+                       "create_filesystem": getattr(options, "filesystem", None),
                        "detection_mode": "auto" if options.auto_detect else "explicit",
                        "readonly_expectation": "unsupported" if options.expect_readonly_unsupported else ("skipped" if options.skip_readonly else "supported"),
                        "host": platform.node(), "os": platform.system(), "release": platform.release(),
@@ -453,6 +454,8 @@ class Suite:
             args.append(self.options.size_gb)
             if self.options.cipher:
                 args.extend(["--cipher", self.options.cipher])
+            if filesystem := getattr(self.options, "filesystem", None):
+                args.extend(["--filesystem", filesystem])
         return args
 
     def mount(self, password=None, readonly=False, target=None, expected=True):
@@ -466,11 +469,31 @@ class Suite:
                 raise AssertionError("CLI succeeded without a mount at the owned mountpoint")
             self.mounted = target == self.mountpoint
 
-    def close(self):
-        self.cli(self.close_args())
+    def close(self, *, by_source=False):
+        self.cli(self.args("unmount", self.source) if by_source else self.close_args())
         if os.path.ismount(self.mountpoint):
             raise AssertionError("CLI reported success but owned mount remains attached")
         self.mounted = False
+
+    def native_inventory(self):
+        commands = [["/sbin/mount", "-p"], ["/usr/sbin/vnconfig", "-l"],
+                    ["/sbin/dmsetup", "ls"], [self.options.binary, "--color=never", "list"]]
+        return [sorted(subprocess.run(command, check=True, capture_output=True, text=True,
+                                      timeout=self.options.timeout).stdout.splitlines())
+                for command in commands]
+
+    def native_dismount(self):
+        if not os.path.ismount(self.mountpoint):
+            raise AssertionError("Native dismount requires the owned encrypted mount")
+        self.write_lifecycle_file("dismount.bin")
+        subprocess.run(["/sbin/umount", self.mountpoint], check=True, timeout=self.options.timeout)
+        if os.path.ismount(self.mountpoint):
+            raise AssertionError("Native dismount left the owned filesystem attached")
+
+    def verify_native_dismount(self):
+        self.verify()
+        if (self.mountpoint / "dismount.bin").read_bytes() != self.payload:
+            raise AssertionError("The last synced file changed after native dismount")
 
     def payload_phase(self, phase):
         record = self.result["cases"][-1]
@@ -543,6 +566,12 @@ class Suite:
             results.append(record)
         if failures:
             raise AssertionError("Application I/O checks failed for " + ", ".join(failures))
+
+    def write_lifecycle_file(self, filename="lifecycle.bin"):
+        with (self.mountpoint / filename).open("xb") as stream:
+            stream.write(self.payload)
+            stream.flush()
+            os.fsync(stream.fileno())
 
     def write_profile_file(self):
         payload = self.mountpoint / "profile 密碼.bin"
@@ -632,6 +661,10 @@ class Suite:
             child.wait(timeout=10)
 
     def verify(self):
+        if getattr(self.options, "filesystem", None) == "fat32":
+            if (self.mountpoint / "lifecycle.bin").read_bytes() != self.payload:
+                raise AssertionError("Synced FAT32 lifecycle file did not survive")
+            return
         if (self.mountpoint / "profile 密碼.bin").read_bytes() != self.payload:
             raise AssertionError("Durably written profile bytes did not survive")
         db = sqlite3.connect(self.mountpoint / "browser-profile.sqlite")
@@ -805,10 +838,23 @@ class Suite:
                                           "uid": browser.uid}
             hook = getattr(self.options, "session_close", False)
             payload = getattr(self.options, "payload", None)
+            fat32 = getattr(self.options, "filesystem", None) == "fat32"
+            dismount = getattr(self.options, "native_dismount", False)
+            baseline = self.native_inventory() if dismount else None
             self.result["close_command"] = "session-close" if hook else "unmount"
+            for name, function in [("create", self.create), ("no-overwrite", self.no_overwrite),
+                                   ("unlock", self.mount)]:
+                self.case(name, function)
+            if fat32:
+                self.case("application-io", skip="FAT32 exchange profile uses the synced ASCII file workload")
+                self.case("file-io", self.write_lifecycle_file)
+            else:
+                self.case("application-io", self.write_workload)
+                if browser:
+                    self.case("firefox-profile-write", lambda: browser.exercise("write"))
+                if payload:
+                    self.case("payload-write", lambda: self.payload_phase("write"))
             for name, function in [
-                ("create", self.create), ("no-overwrite", self.no_overwrite),
-                ("unlock", self.mount), ("application-io", self.write_workload),
                 ("duplicate", self.duplicate), ("aliased-duplicate", self.aliased_duplicate), ("busy", self.busy),
                 ("close", self.close), ("wrong-password", self.incorrect),
                 ("reopen", self.mount), ("persistence", self.verify), ("reclose", self.close),
@@ -819,11 +865,8 @@ class Suite:
                 if (hook and name == "busy" and platform.system() == "Linux"
                         and self.options.backend not in DIRECTORIES and not self.options.unprivileged):
                     self.case("replaced-source", self.replaced_source)
-                if browser and name in {"application-io", "persistence"}:
-                    phase = "write" if name == "application-io" else "read"
-                    self.case(f"firefox-profile-{phase}", lambda: browser.exercise(phase))
-                if payload and name == "application-io":
-                    self.case("payload-write", lambda: self.payload_phase("write"))
+                if browser and name == "persistence":
+                    self.case("firefox-profile-read", lambda: browser.exercise("read"))
                 if payload and name == "persistence":
                     self.case("payload-append", lambda: self.payload_phase("append"))
             if payload:
@@ -833,6 +876,15 @@ class Suite:
                     self.case(f"{label}-close", self.close)
             self.case("readonly", self.readonly_unsupported if self.options.expect_readonly_unsupported else self.readonly,
                       skip=self.options.skip_readonly)
+            if dismount:
+                self.case("dismount-open", self.mount)
+                self.case("native-dismount", self.native_dismount)
+                self.case("close-after-native-dismount", self.close)
+                self.case("reopen-after-native-dismount", self.mount)
+                self.case("persistence-after-native-dismount", self.verify_native_dismount)
+                self.case("close-reopened-by-source", lambda: self.close(by_source=True))
+                if self.native_inventory() != baseline:
+                    raise AssertionError("Native storage inventory changed after dismount recovery")
             self.result["status"] = "passed"
         except Exception as error:
             self.result.update(status="failed", diagnostic=str(error))
@@ -848,6 +900,10 @@ def parse_args(argv=None):
     parser.add_argument("--binary", type=Path, required=True, help="Exact CLI artifact; never search PATH")
     parser.add_argument("--backend", choices=sorted(BACKENDS), required=True)
     parser.add_argument("--cipher", choices=["aes", "serpent", "twofish"])
+    parser.add_argument("--filesystem", choices=["hammer2", "fat32"],
+                        help="Select the DragonFly VeraCrypt create profile. FAT32 tests synced ASCII files.")
+    parser.add_argument("--native-dismount", action="store_true",
+                        help="Exercise recovery after a native unmount of the owned DragonFly VeraCrypt fixture")
     parser.add_argument("--root", default="/tmp", help="Existing parent; a new private child is always allocated")
     parser.add_argument("--size-gb", default="0.25")
     parser.add_argument("--timeout", type=float, default=240)
@@ -867,6 +923,15 @@ def parse_args(argv=None):
     readonly.add_argument("--expect-readonly-unsupported", action="store_true",
                           help="Execute read-only mount and require rejection without any attached storage")
     options = parser.parse_args(argv)
+    if (options.filesystem or options.native_dismount) and not (
+            platform.system() == "DragonFly" and options.backend == "veracrypt" and not options.unprivileged):
+        parser.error("--filesystem and --native-dismount require native DragonFly VeraCrypt")
+    if options.filesystem == "fat32" and (options.firefox or options.payload or options.full_storage):
+        parser.error("The FAT32 exchange suite uses its own file workload")
+    if options.native_dismount and (options.full_storage or options.session_close):
+        parser.error("Native dismount recovery requires the ordinary lifecycle suite")
+    if platform.system() == "DragonFly" and options.backend == "veracrypt" and not options.skip_readonly:
+        options.expect_readonly_unsupported = True
     validate_full_storage(parser, options)
     if options.session_close and platform.system() == "Darwin":
         parser.error("--session-close is available on Linux and BSD")

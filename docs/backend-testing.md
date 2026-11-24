@@ -55,9 +55,16 @@ and devices are gone before starting the next case.
 
 ```sh
 python3 "scripts/$SUITE" --binary "$CLI" --backend veracrypt \
-  --cipher "$CIPHER" --size-gb 0.5 --root "$FIXTURE_PARENT" \
+  --cipher "$CIPHER" --filesystem hammer2 --size-gb 0.5 --root "$FIXTURE_PARENT" \
+  --native-dismount \
   --commit "$COMMIT" --expect-readonly-unsupported
 ```
+
+Replay with `--filesystem fat32` for the exchange profile. The suite records
+its skipped application workload and tests synced ASCII-file persistence,
+duplicate opens, busy close, invalid credentials, and read-only refusal.
+With `--native-dismount`, it issues a native unmount, closes the remaining
+journaled resources through the CLI, and checks payload contents after reopen.
 
 Use a separate disposable container for the payload lifecycle if the conformance
 suite stops at its application workload. Create one 0.5 GiB image per cipher and
@@ -74,7 +81,7 @@ rejection. Verify the original credential still opens the image.
 The 6.4.2 controls rejected directory `fsync` and SQLite locking on bare FAT32
 and on stock `tcplay` FAT32. The candidate also rejects read-only opens before
 attachment because the native read-only mapper control accepted writes. Pass
-`--full-storage` to `test-backends.py` for the separate 0.5 GiB inner capacity
+`--full-storage` to `test-backends.py` for the separate 0.5 GiB HAMMER2 capacity
 workload. Preserve failures in the application and capacity checks. Require the
 file and directory syncs and SQLite FULL/WAL commit to be acknowledged before a
 power cut. [Power-loss runbook](vm-powerloss-testing.md)
