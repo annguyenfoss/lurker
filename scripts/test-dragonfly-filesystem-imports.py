@@ -28,6 +28,7 @@ def main():
     p.add_argument("--commit", required=True)
     p.add_argument("--filesystem", choices=["ext4", "ntfs"], action="append")
     args = p.parse_args()
+    failed = False
     for fs in args.filesystem or ["ext4", "ntfs"]:
         directory = Path(tempfile.mkdtemp(prefix="import-" + fs + "-", dir=args.root))
         directory.chmod(0o700)
@@ -122,8 +123,10 @@ def main():
                 run(["/usr/sbin/vnconfig", "-u", vnode])
             result["mount_remaining"] = os.path.ismount(mountpoint)
             payload.atomic_json(directory / "result.json", result)
+        failed |= result["status"] != "passed" or result["mount_remaining"]
         print(json.dumps({"filesystem": fs, "status": result["status"], "receipt": str(directory / "result.json")}))
+    return int(failed)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
