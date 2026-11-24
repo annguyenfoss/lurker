@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+mod filesystems;
 mod staging;
 
 #[cfg(target_os = "freebsd")]
@@ -76,7 +77,9 @@ impl Identity {
     }
 
     fn from_file(file: &File) -> AppResult<Self> {
-        let m = file.metadata().map_err(|e| AppError::io("Inspect open BSD file identity", e))?;
+        let m = file
+            .metadata()
+            .map_err(|e| AppError::io("Inspect open BSD file identity", e))?;
         Self::from_metadata(&m)
     }
 
@@ -506,6 +509,7 @@ fn params_path(path: &Path) -> PathBuf {
 fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     let owner = crate::new_filesystem::invoking_owner()?;
     let backend = check_backend(c.volume_type)?;
+    filesystems::validate(c.filesystem, backend)?;
     if c.source_kind != SourceKind::File {
         return Err(AppError::new(
             "BSD native creation supports file containers only.",
@@ -536,7 +540,9 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     }
     #[cfg(target_os = "netbsd")]
     if target.exists() || params_path(&target).exists() {
-        return Err(AppError::new("CGD replacement is refused: its image and required parameters must be published together to a new path."));
+        return Err(AppError::new(
+            "CGD replacement is refused: its image and required parameters must be published together to a new path.",
+        ));
     }
     let registry = Registry::open()?;
     registry.ensure_unused(&target)?;
@@ -573,7 +579,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         let file = stage.create_image()?;
         #[cfg(not(target_os = "dragonfly"))]
         crate::new_filesystem::assign_file(&file, owner)?;
-        file.set_len(size).map_err(|e| AppError::io("Size staged container", e))?;
+        file.set_len(size)
+            .map_err(|e| AppError::io("Size staged container", e))?;
         let identity = Identity::from_file(&file)?;
         Ok((file, identity))
     })();
@@ -637,7 +644,13 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
                 &managed_veracrypt(&registry)?,
             )?);
             capture_veracrypt_recovery(&registry, &mut session)?;
-            initialize_acquired_mapping(&registry, &session, veracrypt::make_filesystem)?;
+            initialize_acquired_mapping(&registry, &session, |mapped| {
+                if c.filesystem.is_none() {
+                    veracrypt::make_filesystem(mapped)
+                } else {
+                    filesystems::format(mapped, c.filesystem)
+                }
+            })?;
             initialize_new_filesystem_owner(&registry, &mut session, owner)?;
             return Ok(());
         }
@@ -661,7 +674,13 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         let backing = session.backing.as_deref().unwrap();
         #[cfg(target_os = "netbsd")]
         let params = {
-            let formatted = native::format(backing, c.cipher, &credential, &params_path(&source));
+            let formatted = native::format(
+                backing,
+                c.cipher,
+                &credential,
+                &params_path(&source),
+                c.filesystem,
+            );
             let params = stage.capture_params();
             formatted?;
             let params = params?;
@@ -693,7 +712,10 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
             initialize_acquired_mapping(&registry, &session, |mapped| {
                 dragonfly_vc::make_filesystem(&registry, mapped, size, vc_filesystem)
             })?;
-            if vc_filesystem == crate::CreateFilesystem::Hammer2 {
+            if matches!(
+                vc_filesystem,
+                crate::CreateFilesystem::Hammer2 | crate::CreateFilesystem::Ufs1
+            ) {
                 initialize_new_filesystem_owner(&registry, &mut session, owner)?;
             }
             return Ok(());
@@ -702,12 +724,17 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         {
             native::format(backing, c.cipher, &credential)?;
             session.mapped = Some(dragonfly::linear::activate(
-                &registry, &mut session, false, &credential,
+                &registry,
+                &mut session,
+                false,
+                &credential,
             )?);
         }
         // Persist every acquired crypto device before filesystem work. Failed
         // or interrupted newfs must leave an explicitly recoverable mapping.
-        initialize_acquired_mapping(&registry, &session, native::make_filesystem)?;
+        initialize_acquired_mapping(&registry, &session, |mapped| {
+            filesystems::format(mapped, c.filesystem)
+        })?;
         #[cfg(target_os = "netbsd")]
         crate::new_filesystem::assign_file(&params, owner)?;
         initialize_new_filesystem_owner(&registry, &mut session, owner)?;
@@ -788,7 +815,7 @@ fn initialize_new_filesystem_owner(
     let matches = match session.backend {
         #[cfg(target_os = "dragonfly")]
         VolumeType::Veracrypt => dragonfly_vc::matches_mount(session, &mounted),
-        _ => mounted.source == Path::new(&mapped) && mounted.filesystem == filesystem() && !mounted.readonly,
+        _ => filesystems::matches_mount(&mapped, &mounted) && !mounted.readonly,
     };
     if !matches {
         return Err(AppError::new(
@@ -808,7 +835,10 @@ fn initialize_new_filesystem_owner(
             "New filesystem mount changed before ownership initialization.",
         ));
     }
-    crate::new_filesystem::assign_root(&directory, owner)
+    if native::filesystem_has_posix_ownership(&mapped)? {
+        crate::new_filesystem::assign_root(&directory, owner)?;
+    }
+    Ok(())
 }
 
 fn remove_initialization_directory(registry: &Registry, session: &mut Session) -> AppResult<()> {
@@ -1073,7 +1103,10 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         let matches = match session.backend {
             #[cfg(target_os = "dragonfly")]
             VolumeType::Veracrypt => dragonfly_vc::matches_mount(&session, mounted),
-            _ => mounted.source == Path::new(session.mapped.as_deref().unwrap()) && mounted.readonly == c.readonly,
+            _ => {
+                filesystems::matches_mount(session.mapped.as_deref().unwrap(), mounted)
+                    && mounted.readonly == c.readonly
+            }
         };
         if !matches {
             return Err(AppError::new(
@@ -1130,7 +1163,10 @@ fn create_pefs(c: CreateCommand, output: Output) -> AppResult<()> {
         .create(&target)
         .map_err(|e| AppError::io("Reserve new private PEFS directory", e))?;
     if let Err(error) = pefs::initialize(&target, c.cipher, &credential) {
-        return Err(AppError::new(format!("{error}; incomplete private PEFS directory retained at {}. Inspect it before retrying.", target.display())));
+        return Err(AppError::new(format!(
+            "{error}; incomplete private PEFS directory retained at {}. Inspect it before retrying.",
+            target.display()
+        )));
     }
     let database = OpenOptions::new()
         .read(true)
@@ -1261,11 +1297,7 @@ fn filesystem() -> &'static str {
 }
 
 fn mount_filesystem(mapped: &str, target: &Path, readonly: bool) -> AppResult<()> {
-    let mut argv = args(&["-t", filesystem(), "-o", mount_options(readonly)]);
-    argv.push(mapped.into());
-    argv.push(target.as_os_str().to_owned());
-    exec("/sbin/mount", &argv, None)?;
-    Ok(())
+    filesystems::mount(mapped, target, readonly)
 }
 
 fn mount_options(readonly: bool) -> &'static str {
@@ -1285,7 +1317,7 @@ fn require_write_journal(_mounted: &Mounted) -> AppResult<()> {
     // A NetBSD kernel without WAPBL can silently clear the requested flag.
     // Plain FFS fsync does not flush the cache of the underlying CGD device.
     #[cfg(target_os = "netbsd")]
-    if !_mounted.readonly && !_mounted.journaled {
+    if _mounted.filesystem == "ffs" && !_mounted.readonly && !_mounted.journaled {
         return Err(AppError::new(
             "NetBSD CGD writable mounts require active FFS journaling (WAPBL).",
         ));
@@ -1436,7 +1468,9 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     if s.mounted.is_none() {
         if let Some(target) = &s.intended_mountpoint {
             if mounts()?.iter().any(|m| &m.target == target) {
-                return Err(AppError::new("An unrecorded mount occupies the intended target; preserve this session for explicit recovery."));
+                return Err(AppError::new(
+                    "An unrecorded mount occupies the intended target; preserve this session for explicit recovery.",
+                ));
             }
         }
     }
@@ -1451,7 +1485,13 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
             let argv = [recorded.target.as_os_str().to_owned()];
             #[cfg(target_os = "dragonfly")]
             if s.backend == VolumeType::Veracrypt {
-                exec_dragonfly_locked(registry, Path::new("/sbin/umount"), &argv, None, Duration::from_secs(300))?;
+                exec_dragonfly_locked(
+                    registry,
+                    Path::new("/sbin/umount"),
+                    &argv,
+                    None,
+                    Duration::from_secs(300),
+                )?;
             } else {
                 exec("/sbin/umount", &argv, None)?;
             }
@@ -1468,12 +1508,13 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
             if s.backend == VolumeType::Veracrypt {
                 return dragonfly_vc::mount_uses_mapper(m, mapped);
             }
-            m.source == Path::new(mapped)
+            filesystems::matches_mount(mapped, m)
         }) {
             return Err(AppError::new(
                 "The crypto device still has a mounted filesystem; leave session recoverable.",
             ));
         }
+        native::close_filesystem(mapped)?;
         #[cfg(target_os = "netbsd")]
         {
             s.netbsd_detach = Some(netbsd::DetachIntent::Cgd);
@@ -1552,7 +1593,9 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     }
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
     if s.backend == VolumeType::Veracrypt && s.mapped.is_none() && veracrypt::attached(&s.source)? {
-        return Err(AppError::new("A VeraCrypt attachment exists without a recorded device identity; preserve this session for explicit recovery."));
+        return Err(AppError::new(
+            "A VeraCrypt attachment exists without a recorded device identity; preserve this session for explicit recovery.",
+        ));
     }
     remove_initialization_directory(registry, s)?;
     registry.remove(s)
@@ -2223,10 +2266,12 @@ mod tests {
         .unwrap();
         assert!(!record_path.exists());
         let staged_path = source.to_string_lossy();
-        assert!(messages
-            .entries()
-            .iter()
-            .any(|entry| entry.message.contains(staged_path.as_ref())));
+        assert!(
+            messages
+                .entries()
+                .iter()
+                .any(|entry| entry.message.contains(staged_path.as_ref()))
+        );
         assert!(native::verify_mapping(&mapped, session.backing.as_deref().unwrap()).is_err());
         assert!(native::verify_backing(session.backing.as_deref().unwrap(), &source).is_err());
         assert!(session.identity.matches(&source));
@@ -2315,19 +2360,23 @@ mod tests {
             assert_eq!(fs::read(&marker).unwrap(), b"durably committed Auto data");
             close();
             let before = digest(&source);
-            assert!(mount(
-                mount_request(&source, "incorrect Auto credential"),
-                Output::silent()
-            )
-            .is_err());
+            assert!(
+                mount(
+                    mount_request(&source, "incorrect Auto credential"),
+                    Output::silent()
+                )
+                .is_err()
+            );
             assert_eq!(digest(&source), before);
             assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
-            assert!(!Registry::open()
-                .unwrap()
-                .records()
-                .unwrap()
-                .iter()
-                .any(|s| s.source == source));
+            assert!(
+                !Registry::open()
+                    .unwrap()
+                    .records()
+                    .unwrap()
+                    .iter()
+                    .any(|s| s.source == source)
+            );
         }
         let unknown = directory.join("random unknown image");
         let mut random = File::open("/dev/urandom").unwrap();
@@ -2348,12 +2397,14 @@ mod tests {
         assert!(mount(mount_request(&unknown, passphrase), Output::silent()).is_err());
         assert_eq!(digest(&unknown), before);
         assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
-        assert!(!Registry::open()
-            .unwrap()
-            .records()
-            .unwrap()
-            .iter()
-            .any(|s| s.source == unknown));
+        assert!(
+            !Registry::open()
+                .unwrap()
+                .records()
+                .unwrap()
+                .iter()
+                .any(|s| s.source == unknown)
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -2423,17 +2474,20 @@ mod tests {
             before
         );
         assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
-        assert!(!Registry::open()
-            .unwrap()
-            .records()
-            .unwrap()
-            .iter()
-            .any(|s| s.identity.dev == identity.dev && s.identity.ino == identity.ino));
-        assert!(!fs::read_dir(&directory).unwrap().any(|e| e
-            .unwrap()
-            .file_name()
-            .to_string_lossy()
-            .starts_with(".lurker-bsd-")));
+        assert!(
+            !Registry::open()
+                .unwrap()
+                .records()
+                .unwrap()
+                .iter()
+                .any(|s| s.identity.dev == identity.dev && s.identity.ino == identity.ino)
+        );
+        assert!(!fs::read_dir(&directory).unwrap().any(|e| {
+            e.unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".lurker-bsd-")
+        }));
         // The rejected operations must leave the original external attachment
         // intact. Its fixture owner closes it explicitly after verification.
         veracrypt::verify_mapping(&source, &external).unwrap();
@@ -2520,12 +2574,14 @@ mod tests {
             )
             .unwrap();
         }
-        assert!(!Registry::open()
-            .unwrap()
-            .records()
-            .unwrap()
-            .iter()
-            .any(|s| s.source.starts_with(&directory)));
+        assert!(
+            !Registry::open()
+                .unwrap()
+                .records()
+                .unwrap()
+                .iter()
+                .any(|s| s.source.starts_with(&directory))
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 }

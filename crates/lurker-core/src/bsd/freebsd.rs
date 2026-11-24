@@ -33,8 +33,8 @@ pub(super) enum DetachIntent {
 
 /// Reserve storage before the kernel creates a new GELI provider.
 pub(super) fn allocate_image(file: &fs::File, size: u64) -> AppResult<()> {
-    let length =
-        libc::off_t::try_from(size).map_err(|_| AppError::new("GELI container size is too large."))?;
+    let length = libc::off_t::try_from(size)
+        .map_err(|_| AppError::new("GELI container size is too large."))?;
     loop {
         // SAFETY: The staging descriptor remains open and writable throughout.
         let error = unsafe { libc::posix_fallocate(file.as_raw_fd(), 0, length) };
@@ -318,13 +318,17 @@ fn mapping_is_absent(mapped: &str, backing: &str) -> AppResult<bool> {
     let listing = exec("/sbin/geom", &args(&["eli", "status", "-s"]), None)?;
     // A capped subprocess transcript cannot prove a provider absent.
     if listing.len() >= 1024 * 1024 {
-        return Err(AppError::new("FreeBSD GELI inventory is too large; preserving the journal."));
+        return Err(AppError::new(
+            "FreeBSD GELI inventory is too large; preserving the journal.",
+        ));
     }
     let mut found = false;
     for line in listing.trim().lines() {
         let row = line.split_whitespace().collect::<Vec<_>>();
         if row.len() != 3 || !row[0].ends_with(".eli") {
-            return Err(AppError::new("Unrecognized FreeBSD GELI inventory; preserving the journal."));
+            return Err(AppError::new(
+                "Unrecognized FreeBSD GELI inventory; preserving the journal.",
+            ));
         }
         found |= row[0] == provider;
     }
@@ -338,7 +342,8 @@ pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> Ap
     let conflict = || {
         AppError::new("FreeBSD detach intent conflicts with its session; preserving the journal.")
     };
-    if session.backend != VolumeType::Geli || session.mounted.is_some()
+    if session.backend != VolumeType::Geli
+        || session.mounted.is_some()
         || !session.identity.matches(&session.source)
     {
         return Err(conflict());
@@ -351,7 +356,10 @@ pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> Ap
             if !mapping_is_absent(mapped, backing)? {
                 return Ok(());
             }
-            if super::mounts()?.iter().any(|mount| mount.source == Path::new(mapped)) {
+            if super::mounts()?
+                .iter()
+                .any(|mount| mount.source == Path::new(mapped))
+            {
                 return Err(conflict());
             }
             session.mapped = None;
@@ -481,7 +489,10 @@ mod tests {
         let work = std::env::temp_dir().join(format!("lurker-freebsd-detach-{}", unique_id()));
         fs::DirBuilder::new().mode(0o700).create(&work).unwrap();
         let source = work.join("owned.img");
-        fs::File::create(&source).unwrap().set_len(128 * 1024 * 1024).unwrap();
+        fs::File::create(&source)
+            .unwrap()
+            .set_len(128 * 1024 * 1024)
+            .unwrap();
         let keyfile = work.join("owned.key");
         fs::write(&keyfile, [0xa3; 64]).unwrap();
         let credential = Credential::Keyfile(keyfile);
@@ -535,7 +546,10 @@ mod tests {
         assert!(cleanup(&registry, &mut without_intent).is_err());
 
         let replacement = work.join("replacement.img");
-        fs::File::create(&replacement).unwrap().set_len(128 * 1024 * 1024).unwrap();
+        fs::File::create(&replacement)
+            .unwrap()
+            .set_len(128 * 1024 * 1024)
+            .unwrap();
         let mut argv = args(&["-a", "-t", "vnode", "-u", md_unit(&backing).unwrap(), "-f"]);
         argv.push(replacement.as_os_str().to_owned());
         exec(MDCONFIG, &argv, None).unwrap();
@@ -709,4 +723,30 @@ mod tests {
             "md42"
         ));
     }
+}
+
+mod filesystems;
+pub(super) fn validate_filesystem(
+    selected: Option<crate::CreateFilesystem>,
+    backend: VolumeType,
+) -> AppResult<()> {
+    filesystems::validate(selected, backend)
+}
+pub(super) fn make_selected_filesystem(
+    mapped: &str,
+    selected: Option<crate::CreateFilesystem>,
+) -> AppResult<()> {
+    filesystems::format(mapped, selected)
+}
+pub(super) fn mount_filesystem(mapped: &str, target: &Path, readonly: bool) -> AppResult<()> {
+    filesystems::mount(mapped, target, readonly)
+}
+pub(super) fn matches_filesystem_mount(mapped: &str, mounted: &super::Mounted) -> bool {
+    filesystems::matches_mount(mapped, mounted)
+}
+pub(super) fn filesystem_has_posix_ownership(mapped: &str) -> AppResult<bool> {
+    filesystems::posix(mapped)
+}
+pub(super) fn close_filesystem(mapped: &str) -> AppResult<()> {
+    filesystems::close(mapped)
 }
