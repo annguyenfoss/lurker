@@ -293,6 +293,14 @@ They carry lower priority for new general-purpose volumes.
   through WinFsp or Dokany and on Linux through FUSE. Its documented formats
   include ext4, XFS, Btrfs, F2FS, APFS, UFS, JFS, ReiserFS, and ReFS. [X7]
 
+### OEM-licensed drivers and libraries
+
+Tuxera licenses closed-source read/write NTFS and exFAT drivers for
+embedded Linux products. SEGGER emFile, Embedded Access, and eSOL PrFILE2
+offer licensed exFAT implementations as libraries or middleware for
+embedded products. The latter vendors publish integration APIs and target
+platforms for embedded development. [X9–X10]
+
 ### Network, virtual, and archive filesystems
 
 SMB, NFS, WebDAV, SSHFS, CephFS, Lustre, BeeGFS, and other network or
@@ -381,6 +389,8 @@ partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
 - **X6** macOS community Btrfs and XFS drivers. https://github.com/gereoffy/btrfs4mac · https://github.com/karan-vk/fuse-xfs · https://sourceforge.net/p/fusexfs/wiki/Home/
 - **X7** FsRover format and read-only mount support. https://a1ive.github.io/FsRover/ · https://github.com/a1ive/FsRover
 - **X8** Windows open-source APFS write paths and release limits. https://github.com/christofilojohn/winapfs/releases · https://github.com/RandyNorthrup/apfs_for_windows#supported-scope
+- **X9** Tuxera OEM drivers for NTFS and exFAT. https://www.tuxera.com/products/ntfs-by-tuxera/ · https://www.tuxera.com/products/microsoft-exfat/
+- **X10** Embedded exFAT implementations. https://www.segger.com/news/pr-241009-emfile-exfat/ · https://embedded-access.com/exfat-file-system/ · https://www.esol.com/embedded/product/prfile2-exfat.html
 - **S1** EROFS and SquashFS projects, plus current NetBSD tools catalog. https://erofs.docs.kernel.org/en/latest/ · https://github.com/plougher/squashfs-tools · https://wwwcdn.netbsd.org/pub/pkgsrc/current/pkgsrc/filesystems/index.html
 - **S2** Linux shared disk and cluster documentation. https://docs.kernel.org/filesystems/gfs2/index.html · https://docs.kernel.org/filesystems/ocfs2.html
 - **S3** Veritas InfoScale and VxFS support. https://www.veritas.com/support/en_US/doc/infoscale_scl_91_lin · https://www.veritas.com/content/support/en_US/doc/79722584-170945085-0/v41267960-170945085
