@@ -8,18 +8,84 @@ package catalogs. Platform and release prerequisites are listed with the
 relevant solutions. The [solution key](#solution-key) names the entries in
 their cell order.
 
-| Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | F M R/W<br>NF M R | NF M R/W<br>NF M R/W<br>NF MP R/W<br>NF M R<br>Beta F M R/W<br>Beta F M R/W<br>Paid FP MP R/W (1)<br>Paid FP MP R/W (2) | F M R/W<br>Beta F M R/W<br>Outdated NF M R/W | F M R | F M R<br>Beta NF M R/W | F M R | F NM<br>F NM<br>FP NM<br>NF M R/W<br>NF M R<br>NF MP R<br>Paid FP MP R/W (3)<br>Paid NF MP R/W (4)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
-| **Btrfs** | F M R/W<br>NF M R | NF M R/W<br>NF M R/W<br>NF MP R/W<br>Beta NF M R<br>Paid FP MP R/W | Outdated NF M R/W | — | — | — | F M R/W<br>NF M R<br>NF MP R<br>Paid NF MP R (3)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
-| **XFS** | F M R/W<br>NF M R | NF M R/W<br>NF M R/W<br>NF MP R/W<br>Beta F M R/W<br>Paid FP MP R/W | F NM<br>Beta NF M R<br>Outdated NF M R/W | Beta NF M R | — | — | NF M R<br>NF MP R<br>Paid NF MP R/W (3)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
-| **APFS** | NF M R<br>Beta F M R/W<br>Beta NF M R<br>NF M R<br>Paid NF MP R/W | F M R/W | Beta NF M R | Beta NF M R | — | — | NF M R<br>NF MP R<br>Beta NF M R/W<br>Beta NF MP R/LW<br>Paid NF MP LR/W (7)<br>Paid MP R/W (8)<br>Paid NF MP R (6)<br>Paid FP MP R (13) |
-| **UFS1 / FFSv1** | FI M R<br>Beta FI M R/W<br>Outdated FI NM<br>NF M R | Outdated FI NM | F M R/W | F M R/W | F M R/W | F M R/W | Outdated F MI R/LW<br>NF M R |
-| **UFS2 / FFSv2** | FI M R<br>Beta FI M R/W<br>Outdated FI NM<br>Beta NF M R/W<br>NF M R | Outdated FI NM | F M R/W<br>Beta NF M R/W | F M R/W<br>Beta NF M R/W | F M R/W | FI NM | Outdated F MI R/LW<br>NF M R |
-| **HAMMER2** | Beta F M R/W<br>Beta NF M R<br>FI NM | — | Beta F M R/W<br>Beta NF M R<br>FI NM | FI NM | FI NM | F M R/W | FI NM |
-| **NTFS** | F M R/W<br>F M R/W<br>NF M R<br>NF M R/W<br>Paid F M R/W | NF M R<br>NF MP R/W<br>NF MP R/W<br>NF MP R/W<br>F M R/W<br>NF M R/W<br>NF M R/W<br>Beta F M R/W<br>NF MP R<br>Paid FP MP R/W (9)<br>Paid F M R/W (10)<br>Paid FP MP R/W (11)<br>Paid FP MP R/W (2)<br>Paid FP MP R/W (12)<br>Paid NF MP R/W (14)<br>Paid FP MP R/W (15) | F M R/W<br>Beta NF M R | NF M R<br>F M R/W<br>Beta NF M R | Beta NF M R/LW<br>F M R/W | Outdated NF M R<br>F NM | F M R/W<br>NF M R |
-| **exFAT** | F M R/W<br>F M R/W<br>NF M R | F M R/W<br>Paid FP MP R/W | F M R/W | F M R/W | F M R/W | F NM | F M R/W<br>NF M R |
-| **ZFS / OpenZFS** | F M R/W<br>NF M R | F M R/W<br>NF M R/W | F M R/W | — | F M R/W | — | Beta F M R/W<br>NF M R<br>Paid NF MP R |
+```text
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|Filesystem   |Linux         |macOS              |FreeBSD          |OpenBSD      |NetBSD        |DragonFly BSD  |Windows            |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|ext4         |F M R/W       |NF M R/W           |F M R/W          |F M R        |F M R         |F M R          |F NM               |
+|             |NF M R        |NF M R/W           |Beta F M R/W     |             |Beta NF M R/W |               |F NM               |
+|             |              |NF MP R/W          |Outdated NF M R/W|             |              |               |FP NM              |
+|             |              |NF M R             |                 |             |              |               |NF M R/W           |
+|             |              |Beta F M R/W       |                 |             |              |               |NF M R             |
+|             |              |Beta F M R/W       |                 |             |              |               |NF MP R            |
+|             |              |Paid FP MP R/W (1) |                 |             |              |               |Paid FP MP R/W (3) |
+|             |              |Paid FP MP R/W (2) |                 |             |              |               |Paid NF MP R/W (4) |
+|             |              |                   |                 |             |              |               |Paid FP MP R/W (5) |
+|             |              |                   |                 |             |              |               |Paid NF MP R (6)   |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|Btrfs        |F M R/W       |NF M R/W           |Outdated NF M R/W|—            |—             |—              |F M R/W            |
+|             |NF M R        |NF M R/W           |                 |             |              |               |NF M R             |
+|             |              |NF MP R/W          |                 |             |              |               |NF MP R            |
+|             |              |Beta NF M R        |                 |             |              |               |Paid NF MP R (3)   |
+|             |              |Paid FP MP R/W     |                 |             |              |               |Paid FP MP R/W (5) |
+|             |              |                   |                 |             |              |               |Paid NF MP R (6)   |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|XFS          |F M R/W       |NF M R/W           |F NM             |Beta NF M R  |—             |—              |NF M R             |
+|             |NF M R        |NF M R/W           |Beta NF M R      |             |              |               |NF MP R            |
+|             |              |NF MP R/W          |Outdated NF M R/W|             |              |               |Paid NF MP R/W (3) |
+|             |              |Beta F M R/W       |                 |             |              |               |Paid FP MP R/W (5) |
+|             |              |Paid FP MP R/W     |                 |             |              |               |Paid NF MP R (6)   |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|APFS         |NF M R        |F M R/W            |Beta NF M R      |Beta NF M R  |—             |—              |NF M R             |
+|             |Beta F M R/W  |                   |                 |             |              |               |NF MP R            |
+|             |Beta NF M R   |                   |                 |             |              |               |Beta NF M R/W      |
+|             |NF M R        |                   |                 |             |              |               |Beta NF MP R/LW    |
+|             |Paid NF MP R/W|                   |                 |             |              |               |Paid NF MP LR/W (7)|
+|             |              |                   |                 |             |              |               |Paid MP R/W (8)    |
+|             |              |                   |                 |             |              |               |Paid NF MP R (6)   |
+|             |              |                   |                 |             |              |               |Paid FP MP R (13)  |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|UFS1 / FFSv1 |FI M R        |Outdated FI NM     |F M R/W          |F M R/W      |F M R/W       |F M R/W        |Outdated F MI R/LW |
+|             |Beta FI M R/W |                   |                 |             |              |               |NF M R             |
+|             |Outdated FI NM|                   |                 |             |              |               |                   |
+|             |NF M R        |                   |                 |             |              |               |                   |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|UFS2 / FFSv2 |FI M R        |Outdated FI NM     |F M R/W          |F M R/W      |F M R/W       |FI NM          |Outdated F MI R/LW |
+|             |Beta FI M R/W |                   |Beta NF M R/W    |Beta NF M R/W|              |               |NF M R             |
+|             |Outdated FI NM|                   |                 |             |              |               |                   |
+|             |Beta NF M R/W |                   |                 |             |              |               |                   |
+|             |NF M R        |                   |                 |             |              |               |                   |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|HAMMER2      |Beta F M R/W  |—                  |Beta F M R/W     |FI NM        |FI NM         |F M R/W        |FI NM              |
+|             |Beta NF M R   |                   |Beta NF M R      |             |              |               |                   |
+|             |FI NM         |                   |FI NM            |             |              |               |                   |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|NTFS         |F M R/W       |NF M R             |F M R/W          |NF M R       |Beta NF M R/LW|Outdated NF M R|F M R/W            |
+|             |F M R/W       |NF MP R/W          |Beta NF M R      |F M R/W      |F M R/W       |F NM           |NF M R             |
+|             |NF M R        |NF MP R/W          |                 |Beta NF M R  |              |               |                   |
+|             |NF M R/W      |NF MP R/W          |                 |             |              |               |                   |
+|             |Paid F M R/W  |F M R/W            |                 |             |              |               |                   |
+|             |              |NF M R/W           |                 |             |              |               |                   |
+|             |              |NF M R/W           |                 |             |              |               |                   |
+|             |              |Beta F M R/W       |                 |             |              |               |                   |
+|             |              |NF MP R            |                 |             |              |               |                   |
+|             |              |Paid FP MP R/W (9) |                 |             |              |               |                   |
+|             |              |Paid F M R/W (10)  |                 |             |              |               |                   |
+|             |              |Paid FP MP R/W (11)|                 |             |              |               |                   |
+|             |              |Paid FP MP R/W (2) |                 |             |              |               |                   |
+|             |              |Paid FP MP R/W (12)|                 |             |              |               |                   |
+|             |              |Paid NF MP R/W (14)|                 |             |              |               |                   |
+|             |              |Paid FP MP R/W (15)|                 |             |              |               |                   |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|exFAT        |F M R/W       |F M R/W            |F M R/W          |F M R/W      |F M R/W       |F NM           |F M R/W            |
+|             |F M R/W       |Paid FP MP R/W     |                 |             |              |               |NF M R             |
+|             |NF M R        |                   |                 |             |              |               |                   |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+|ZFS / OpenZFS|F M R/W       |F M R/W            |F M R/W          |—            |F M R/W       |—              |Beta F M R/W       |
+|             |NF M R        |NF M R/W           |                 |             |              |               |NF M R             |
+|             |              |                   |                 |             |              |               |Paid NF MP R       |
++-------------+--------------+-------------------+-----------------+-------------+--------------+---------------+-------------------+
+```
 
 **Legend.** `F` formats both partitions and images, `FP` partitions, `FI` images,
 `NF` neither. `M` mounts both targets, `MP` partitions, `MI` images, `NM` neither.
