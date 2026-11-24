@@ -5,7 +5,12 @@
 //! elevated cgdconfig. Device allocation uses the kernel's exclusive configure
 //! operation and never clears a device it did not successfully configure.
 use super::{args, exec, Credential, Registry, Session};
-use crate::{AppError, AppResult, CreateCipher};
+use crate::{AppError, AppResult, CreateCipher, CreateFilesystem};
+mod filesystems;
+pub(super) use filesystems::{
+    close_filesystem, filesystem_has_posix_ownership, make_selected_filesystem,
+    matches_filesystem_mount, mount_filesystem, validate_filesystem,
+};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -56,6 +61,7 @@ pub(super) fn format(
     cipher: CreateCipher,
     credential: &Credential,
     params: &Path,
+    filesystem: Option<CreateFilesystem>,
 ) -> AppResult<()> {
     if cipher != CreateCipher::Aes {
         return Err(AppError::new("CGD creation supports AES-XTS only."));
@@ -69,6 +75,14 @@ pub(super) fn format(
     )?;
     // Salt generation stays in the native tool; KDF costs are fixed policy.
     let normalized = normalize_generated(&generated)?;
+    let normalized = if matches!(
+        filesystem,
+        None | Some(CreateFilesystem::Ufs1 | CreateFilesystem::Ufs2)
+    ) {
+        normalized
+    } else {
+        normalized.replace("verify_method ffs;", "verify_method disklabel;")
+    };
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -237,7 +251,10 @@ pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> Ap
             if listing.trim() != format!("{raw}: not in use") {
                 return Ok(());
             }
-            if super::mounts()?.iter().any(|mount| mount.source == Path::new(mapped)) {
+            if super::mounts()?
+                .iter()
+                .any(|mount| mount.source == Path::new(mapped))
+            {
                 return Err(conflict());
             }
             session.mapped = None;
@@ -376,7 +393,12 @@ fn normalize_generated(value: &str) -> AppResult<String> {
     {
         return Err(AppError::new("Unexpected native CGD parameter output."));
     }
-    let result = format!("algorithm aes-xts;\niv-method encblkno1;\nkeylength 512;\nverify_method ffs;\nkeygen argon2id {{\n iterations 3;\n memory 262144;\n parallelism 2;\n version 19;\n salt {};\n}};\n", tokens[19]);
+    let verifier = match tokens.get(7).copied() {
+        Some("ffs") => "ffs",
+        Some("disklabel") => "disklabel",
+        _ => return Err(AppError::new("Unsupported CGD verification method.")),
+    };
+    let result = format!("algorithm aes-xts;\niv-method encblkno1;\nkeylength 512;\nverify_method {verifier};\nkeygen argon2id {{\n iterations 3;\n memory 262144;\n parallelism 2;\n version 19;\n salt {};\n}};\n", tokens[19]);
     validate_params(&result)?;
     Ok(result)
 }
@@ -390,6 +412,11 @@ fn tokens(value: &str) -> Vec<&str> {
 
 fn validate_params(value: &str) -> AppResult<()> {
     let parts = tokens(value);
+    let verifier = match parts.get(7).copied() {
+        Some("ffs") => "ffs",
+        Some("disklabel") => "disklabel",
+        _ => return Err(AppError::new("Unsupported CGD verification method.")),
+    };
     let expected = [
         "algorithm",
         "aes-xts",
@@ -398,7 +425,7 @@ fn validate_params(value: &str) -> AppResult<()> {
         "keylength",
         "512",
         "verify_method",
-        "ffs",
+        verifier,
         "keygen",
         "argon2id",
         "iterations",
@@ -449,7 +476,7 @@ mod tests {
         let backing = attach_file(&source, false).unwrap();
         let params = work.join("owned.img.cgdparams");
         let credential = Credential::Password(b"disposable NetBSD detach fixture".to_vec());
-        format(&backing, CreateCipher::Aes, &credential, &params).unwrap();
+        format(&backing, CreateCipher::Aes, &credential, &params, None).unwrap();
         let mapped = unlock_initial(&backing, &credential, &params).unwrap();
         let mut session = Session {
             version: 1,
@@ -506,6 +533,22 @@ mod tests {
         assert!(validate_params(&params.replace("memory 262144", "memory 1")).is_err());
         assert!(normalize_generated(&PARAMS.replace("argon2id", "shell_cmd")).is_err());
     }
+    #[test]
+    fn non_ffs_verifier_preserves_only_the_safe_disklabel_profile() {
+        let params = normalize_generated(PARAMS)
+            .unwrap()
+            .replace("verify_method ffs", "verify_method disklabel");
+        assert_eq!(normalize_generated(&params).unwrap(), params);
+        assert!(validate_params(&params).is_ok());
+        for verifier in ["none", "mbr", "re-enter", "shell_cmd"] {
+            assert!(validate_params(&params.replace(
+                "verify_method disklabel",
+                &format!("verify_method {verifier}")
+            ))
+            .is_err());
+        }
+    }
+
     #[test]
     fn allocation_and_device_names_do_not_accept_unrelated_devices() {
         assert_eq!(
