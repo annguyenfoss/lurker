@@ -52,6 +52,17 @@ filesystem metadata. The encrypted cases retained the pre-workload ciphertext
 digest. The contribution of additional layers to those losses remains open.
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
 
+A separate plain HAMMER2 control tested a synchronous mount. The stock
+`mount_hammer2` command rejected `-o sync`. The native mount syscall accepted
+`MNT_SYNCHRONOUS`, which `statfs` and the mount table both confirmed before
+the workload started. An abrupt cut 340 ms after the host observed the live
+worker acknowledgement again lost the file and SQLite directory entries.
+A `qemu-img compare`-verified copy opened read-only without repair, rejected
+writes with `EROFS`, and retained its device digest. The raw scan located the
+exact 65,536-byte file payload at offset 79,691,776. The synchronous mount
+still failed to preserve the acknowledged directory entries. Receipts are
+under `target/dragonfly-veracrypt-batch/plain/sync-*`.
+
 The optimized `9384badb34f909887c85ebccc7dbe145b01c9794` package
 (`c98b150a8dd600b9559f5b92652b342d4e73324fa0ad2f2177b5bf4a93be35d0`)
 passed the native workspace check and tests in run
