@@ -10,6 +10,12 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Encryption support
 
+- 🧅 Wraps an encryption tool on your system
+- 🥑 Encryption engine included with Lurker
+- 🛈 See note below
+- WIP — Planned or integration in progress
+- — Unavailable
+
 <table width="100%">
   <thead>
     <tr>
