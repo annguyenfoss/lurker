@@ -353,8 +353,7 @@ fn fuse_t_load_failed(result: &ProcessOutput) -> bool {
         .and_then(|name| name.to_str());
     loader.starts_with("dyld[")
         && filename.is_some_and(|name| {
-            name == "libfuse-t.dylib"
-                || name.starts_with("libfuse-t-") && name.ends_with(".dylib")
+            name == "libfuse-t.dylib" || name.starts_with("libfuse-t-") && name.ends_with(".dylib")
         })
 }
 
@@ -571,6 +570,17 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     if size < 32 {
         return Err(AppError::new("macOS containers must be at least 32 MiB."));
     }
+    // Validate the inner filesystem before prompting or allocating a staging image.
+    let mut arguments = if c.volume_type == VolumeType::Apple {
+        crate::workflow::macos_apple_create_args(size, c.filesystem)?
+    } else {
+        crate::workflow::macos_veracrypt_create_args(
+            c.cipher,
+            size,
+            c.keyfile.as_deref(),
+            c.filesystem,
+        )?
+    };
     let target = target_path(&c.target)?;
     if let Some(keyfile) = c.keyfile.as_deref() {
         crate::credentials::ensure_distinct_target(&target, keyfile)?;
@@ -582,9 +592,10 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     let attached_image = c.force && images()?.iter().any(|i| same_path(&i.path, &target));
     let check_veracrypt = c.force || c.volume_type == VolumeType::Veracrypt;
     if attached_image
-        || check_veracrypt && vera_volumes()?
-            .iter()
-            .any(|v| same_path(&v.source, &target))
+        || check_veracrypt
+            && vera_volumes()?
+                .iter()
+                .any(|v| same_path(&v.source, &target))
     {
         return Err(AppError::new(
             "Refusing to overwrite an attached container. Unmount it first.",
@@ -602,18 +613,12 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         secret(c.passphrase.as_deref(), true)?
     };
     output.msg2(&format!("Creating {} container", c.volume_type));
-    let (program, mut arguments) = if c.volume_type == VolumeType::Apple {
+    let program = if c.volume_type == VolumeType::Apple {
         pass.push(0);
-        (
-            PathBuf::from(HDIUTIL),
-            crate::workflow::macos_apple_create_args(size),
-        )
+        PathBuf::from(HDIUTIL)
     } else {
         pass.push(b'\n');
-        (
-            require_veracrypt()?,
-            crate::workflow::macos_veracrypt_create_args(c.cipher, size, c.keyfile.as_deref())?,
-        )
+        require_veracrypt()?
     };
     arguments.push(temp.as_os_str().into());
     checked(&program, &arguments, Some(&pass))?;
@@ -928,7 +933,8 @@ mod tests {
             stderr: b"dyld[123]: Library not loaded: /usr/local/lib/libfuse-t.dylib\n".to_vec(),
         };
         assert!(fuse_t_load_failed(&result));
-        result.stderr = b"dyld[123]: Library not loaded: @loader_path/libfuse-t-1.2.9.dylib\n".to_vec();
+        result.stderr =
+            b"dyld[123]: Library not loaded: @loader_path/libfuse-t-1.2.9.dylib\n".to_vec();
         assert!(fuse_t_load_failed(&result));
         result.stderr = b"dyld[123]: Library not loaded: @loader_path/libwx.dylib\n".to_vec();
         assert!(!fuse_t_load_failed(&result));
