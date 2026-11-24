@@ -127,13 +127,22 @@ pub struct CreateCommand {
 
 impl CreateCommand {
     pub fn validate_filesystem(&self, os: &str) -> crate::AppResult<()> {
-        if self.filesystem.is_some()
-            && (os != "dragonfly"
-                || self.volume_type != VolumeType::Veracrypt
-                || self.source_kind != SourceKind::File)
+        if self.filesystem.is_none() {
+            return Ok(());
+        }
+        if !matches!(
+            os,
+            "linux" | "macos" | "freebsd" | "openbsd" | "netbsd" | "dragonfly"
+        ) || self.source_kind != SourceKind::File
+            || self.volume_type.is_directory()
         {
             return Err(crate::AppError::new(
-                "Filesystem selection is available for DragonFly VeraCrypt file creation only.",
+                "Filesystem selection requires an encrypted file container on a supported OS.",
+            ));
+        }
+        if self.volume_type == VolumeType::Apfs && self.filesystem != Some(CreateFilesystem::Apfs) {
+            return Err(crate::AppError::new(
+                "Native APFS encryption requires the APFS filesystem.",
             ));
         }
         Ok(())
@@ -143,16 +152,50 @@ impl CreateCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CreateFilesystem {
+    Ext4,
+    Btrfs,
+    Xfs,
+    Apfs,
+    Ufs1,
+    Ufs2,
     Hammer2,
+    Ntfs,
+    Exfat,
+    Zfs,
     Fat32,
 }
 
 impl CreateFilesystem {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
+            "ext4" => Some(Self::Ext4),
+            "btrfs" => Some(Self::Btrfs),
+            "xfs" => Some(Self::Xfs),
+            "apfs" => Some(Self::Apfs),
+            "ufs1" | "ffs1" => Some(Self::Ufs1),
+            "ufs2" | "ffs2" => Some(Self::Ufs2),
             "hammer2" => Some(Self::Hammer2),
+            "ntfs" => Some(Self::Ntfs),
+            "exfat" => Some(Self::Exfat),
+            "zfs" | "openzfs" => Some(Self::Zfs),
             "fat32" => Some(Self::Fat32),
             _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ext4 => "ext4",
+            Self::Btrfs => "btrfs",
+            Self::Xfs => "xfs",
+            Self::Apfs => "apfs",
+            Self::Ufs1 => "ufs1",
+            Self::Ufs2 => "ufs2",
+            Self::Hammer2 => "hammer2",
+            Self::Ntfs => "ntfs",
+            Self::Exfat => "exfat",
+            Self::Zfs => "zfs",
+            Self::Fat32 => "fat32",
         }
     }
 }
