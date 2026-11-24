@@ -100,7 +100,7 @@ pub(in crate::bsd) fn mount_filesystem(
 
 pub(in crate::bsd) fn matches_filesystem_mount(mapped: &str, mounted: &Mounted) -> bool {
     match mounted.filesystem.as_str() {
-        "hammer2" => mounted.source == Path::new(&format!("{mapped}@DATA")),
+        "hammer2" => super::veracrypt::mount_uses_mapper(mounted, mapped),
         "ufs" => mounted.source == Path::new(mapped),
         "ext2fs" | "ntfs" => mounted.source == Path::new(mapped),
         _ => false,
