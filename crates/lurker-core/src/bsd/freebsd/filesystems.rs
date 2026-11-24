@@ -93,14 +93,11 @@ fn probe(mapped: &str) -> AppResult<String> {
     if bytes[..8] == [0x11, 0x20, 0x17, 0x05, 0x32, 0x4d, 0x41, 0x48] {
         return Ok("hammer2".into());
     }
+    // GELI enforces its 4096-byte sector geometry, including probe reads.
     file.seek(SeekFrom::Start(65536))
-        .and_then(|_| file.read_exact(&mut bytes[..8]))
+        .and_then(|_| file.read_exact(&mut bytes))
         .map_err(|e| AppError::io("Probe Btrfs superblock", e))?;
-    // Btrfs magic is 64 bytes into its first superblock.
-    file.seek(SeekFrom::Start(65536 + 64))
-        .and_then(|_| file.read_exact(&mut bytes[..8]))
-        .map_err(|e| AppError::io("Probe Btrfs signature", e))?;
-    if &bytes[..8] == b"_BHRfS_M" {
+    if &bytes[64..72] == b"_BHRfS_M" {
         return Ok("btrfs".into());
     }
     let value = exec("/usr/sbin/fstyp", &args(&[mapped]), None)?;
