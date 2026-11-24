@@ -2,6 +2,8 @@
 
 User-authorized scope, 2026-11-25. Baseline: 671fa06 (native macOS APFS is already implemented). This round overrides broader historical release/fault-test requirements where they exceed the user's explicit scope.
 
+See [round results](RESULTS.md) for the observed matrix, individual OS reports, independent reviews and remaining upstream or prerequisite limits.
+
 ## Outcome and boundaries
 
 Cover Linux (Arch, Debian, Ubuntu, Fedora, openSUSE, Gentoo), macOS, FreeBSD, OpenBSD, NetBSD and DragonFly. Windows is excluded. Assess ext4, Btrfs, XFS, APFS, UFS1/FFSv1, UFS2/FFSv2, HAMMER2, NTFS, exFAT, ZFS/OpenZFS for each OS. README entries are research promises, not proof of installed/runtime support. Keep unavailable and read-only cells explicit.
