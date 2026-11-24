@@ -1,9 +1,11 @@
 # OS / Filesystem Research tags
 
-Use one line per solution in each cell. Write the prefix, formatting tag,
-mount tag, and mount access in that order. Assess formatting and mounting
-independently for partitions and images. An image attached as a virtual block
-device counts as image support.
+Each cell contains only tags, with one line per solution. Write the prefix,
+formatting tag, mount tag, and mount access in that order. List solution
+names in the notes in the same order as the cell.
+
+Assess formatting and mounting independently for partitions and images. An
+image attached as a virtual block device counts as image support.
 
 ## Research bar
 
@@ -64,7 +66,7 @@ is confirmed, record the uncertainty in a note. Reserve `NF` and `NM` for known
 absence of support. Use `—` when no qualifying solution has been found.
 
 Note specific limits such as `overwrite only`, required OS builds or kernel
-modules, and supported on-disk features beside the affected line.
+modules, and supported on-disk features in the notes for that solution.
 
 ## Examples
 

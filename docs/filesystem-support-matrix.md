@@ -5,20 +5,21 @@ images. Each line describes one publicly obtainable solution on the OS in that
 column. The [research bar and full tag definitions](filesystem-research-tags.md)
 apply to every cell. This audit uses OS and driver documentation, source, and
 package catalogs. Platform and release prerequisites are listed with the
-relevant solutions.
+relevant solutions. The [solution key](#solution-key) names the entries in
+their cell order.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | F M R/W · ext4 + e2fsprogs<br>NF M R · FsRover | NF M R/W · xlinuxfs<br>NF M R/W · anylinuxfs<br>NF MP R/W · PolyDrive Disk<br>NF M R · ExtendFS<br>Beta F M R/W · Ext4Kit<br>Beta F M R/W · open_ext4_for_mac<br>Paid FP MP R/W (1)<br>Paid FP MP R/W (2) | F M R/W · ext2fs + e2fsprogs<br>Beta F M R/W · fusefs-ext2<br>Outdated NF M R/W · fusefs-lkl | F M R · ext2fs + e2fsprogs | F M R · ext2fs + e2fsprogs<br>Beta NF M R/W · fuse-ext2 | F M R · ext2fs + e2fsprogs-core | F NM · DiskInternals Ext4 Formatter<br>F NM · DiskGenius Free<br>FP NM · MiniTool Partition Wizard Free<br>NF M R/W · Ext4Fsd<br>NF M R · FsRover<br>NF MP R · CrossDriver Free<br>Paid FP MP R/W (3)<br>Paid NF MP R/W (4)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
-| **Btrfs** | F M R/W · Btrfs + btrfs-progs<br>NF M R · FsRover | NF M R/W · xlinuxfs<br>NF M R/W · anylinuxfs<br>NF MP R/W · PolyDrive Disk<br>Beta NF M R · btrfs4mac<br>Paid FP MP R/W · vmount Pro | Outdated NF M R/W · fusefs-lkl | — | — | — | F M R/W · WinBtrfs<br>NF M R · FsRover<br>NF MP R · CrossDriver Free<br>Paid NF MP R (3)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
-| **XFS** | F M R/W · XFS + xfsprogs<br>NF M R · FsRover | NF M R/W · xlinuxfs<br>NF M R/W · anylinuxfs<br>NF MP R/W · PolyDrive Disk<br>Beta F M R/W · fuse-xfs<br>Paid FP MP R/W · vmount Pro | F NM · xfsprogs<br>Beta NF M R · libfsxfs<br>Outdated NF M R/W · fusefs-lkl | Beta NF M R · libfsxfs | — | — | NF M R · FsRover<br>NF MP R · CrossDriver Free<br>Paid NF MP R/W (3)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
-| **APFS** | NF M R · apfs-fuse<br>Beta F M R/W · linux-apfs-rw + apfsprogs<br>Beta NF M R · libfsapfs<br>NF M R · FsRover<br>Paid NF MP R/W · Paragon APFS for Linux | F M R/W · Disk Utility / APFS | Beta NF M R · libfsapfs | Beta NF M R · libfsapfs | — | — | NF M R · FsRover<br>NF MP R · CrossDriver for Mac Disks Free<br>Beta NF M R/W · winapfs<br>Beta NF MP R/LW · apfs_for_windows<br>Paid NF MP LR/W (7)<br>Paid MP R/W (8)<br>Paid NF MP R (6)<br>Paid FP MP R (13) |
-| **UFS1 / FFSv1** | FI M R · makefs + Linux UFS<br>Beta FI M R/W · Linux UFS write option + makefs<br>Outdated FI NM · UFS2Tool<br>NF M R · FsRover | Outdated FI NM · UFS2Tool | F M R/W · UFS1 | F M R/W · FFSv1 | F M R/W · FFSv1 | F M R/W · DragonFly UFS | Outdated F MI R/LW · UFS2Tool<br>NF M R · FsRover |
-| **UFS2 / FFSv2** | FI M R · makefs + Linux UFS<br>Beta FI M R/W · Linux UFS write option + makefs<br>Outdated FI NM · UFS2Tool<br>Beta NF M R/W · fuse-ufs<br>NF M R · FsRover | Outdated FI NM · UFS2Tool | F M R/W · UFS2<br>Beta NF M R/W · fuse-ufs | F M R/W · FFSv2<br>Beta NF M R/W · fuse-ufs | F M R/W · FFSv2 | FI NM · portable makefs | Outdated F MI R/LW · UFS2Tool<br>NF M R · FsRover |
-| **HAMMER2** | Beta F M R/W · linux_hammer2 + hammer2-utils<br>Beta NF M R · hammer2-fuse<br>FI NM · portable makefs | — | Beta F M R/W · hammer2 port<br>Beta NF M R · hammer2-fuse<br>FI NM · portable makefs | FI NM · portable makefs | FI NM · portable makefs | F M R/W · HAMMER2 | FI NM · portable makefs (Cygwin) |
-| **NTFS** | F M R/W · kernel NTFS + mkntfs<br>F M R/W · NTFS-3G<br>NF M R · FsRover<br>NF M R/W · Paragon NTFS for Linux Free<br>Paid F M R/W · Paragon NTFS for Linux Professional | NF M R · macOS<br>NF MP R/W · PolyDrive Disk<br>NF MP R/W · NTFSTool<br>NF MP R/W · TT NTFS Native<br>F M R/W · NTFS-3G + macFUSE<br>NF M R/W · NTFS-3G for FUSE-T<br>NF M R/W · anylinuxfs<br>Beta F M R/W · NTFS4Mac<br>NF MP R · CrossDriver Free<br>Paid FP MP R/W (9)<br>Paid F M R/W (10)<br>Paid FP MP R/W (11)<br>Paid FP MP R/W (2)<br>Paid FP MP R/W (12)<br>Paid NF MP R/W (14)<br>Paid FP MP R/W (15) | F M R/W · NTFS-3G<br>Beta NF M R · libfsntfs | NF M R · mount_ntfs<br>F M R/W · ntfs-3g<br>Beta NF M R · libfsntfs | Beta NF M R/LW · mount_ntfs<br>F M R/W · fuse-ntfs-3g + ntfsprogs | Outdated NF M R · mount_ntfs<br>F NM · packaged mkntfs | F M R/W · Windows NTFS<br>NF M R · FsRover |
-| **exFAT** | F M R/W · exFAT + exfatprogs<br>F M R/W · exfat-fuse + exfat-utils<br>NF M R · FsRover | F M R/W · Disk Utility / exFAT<br>Paid FP MP R/W · vmount Pro | F M R/W · fusefs-exfat + formatter | F M R/W · exfat-fuse | F M R/W · fuse-exfat | F NM · exfat-utils | F M R/W · Windows exFAT<br>NF M R · FsRover |
-| **ZFS / OpenZFS** | F M R/W · OpenZFS<br>NF M R · FsRover | F M R/W · OpenZFS on OS X<br>NF M R/W · anylinuxfs | F M R/W · OpenZFS | — | F M R/W · base ZFS | — | Beta F M R/W · OpenZFS on Windows<br>NF M R · FsRover<br>Paid NF MP R · DiskInternals Linux Reader Pro |
+| **ext4** | F M R/W<br>NF M R | NF M R/W<br>NF M R/W<br>NF MP R/W<br>NF M R<br>Beta F M R/W<br>Beta F M R/W<br>Paid FP MP R/W (1)<br>Paid FP MP R/W (2) | F M R/W<br>Beta F M R/W<br>Outdated NF M R/W | F M R | F M R<br>Beta NF M R/W | F M R | F NM<br>F NM<br>FP NM<br>NF M R/W<br>NF M R<br>NF MP R<br>Paid FP MP R/W (3)<br>Paid NF MP R/W (4)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
+| **Btrfs** | F M R/W<br>NF M R | NF M R/W<br>NF M R/W<br>NF MP R/W<br>Beta NF M R<br>Paid FP MP R/W | Outdated NF M R/W | — | — | — | F M R/W<br>NF M R<br>NF MP R<br>Paid NF MP R (3)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
+| **XFS** | F M R/W<br>NF M R | NF M R/W<br>NF M R/W<br>NF MP R/W<br>Beta F M R/W<br>Paid FP MP R/W | F NM<br>Beta NF M R<br>Outdated NF M R/W | Beta NF M R | — | — | NF M R<br>NF MP R<br>Paid NF MP R/W (3)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
+| **APFS** | NF M R<br>Beta F M R/W<br>Beta NF M R<br>NF M R<br>Paid NF MP R/W | F M R/W | Beta NF M R | Beta NF M R | — | — | NF M R<br>NF MP R<br>Beta NF M R/W<br>Beta NF MP R/LW<br>Paid NF MP LR/W (7)<br>Paid MP R/W (8)<br>Paid NF MP R (6)<br>Paid FP MP R (13) |
+| **UFS1 / FFSv1** | FI M R<br>Beta FI M R/W<br>Outdated FI NM<br>NF M R | Outdated FI NM | F M R/W | F M R/W | F M R/W | F M R/W | Outdated F MI R/LW<br>NF M R |
+| **UFS2 / FFSv2** | FI M R<br>Beta FI M R/W<br>Outdated FI NM<br>Beta NF M R/W<br>NF M R | Outdated FI NM | F M R/W<br>Beta NF M R/W | F M R/W<br>Beta NF M R/W | F M R/W | FI NM | Outdated F MI R/LW<br>NF M R |
+| **HAMMER2** | Beta F M R/W<br>Beta NF M R<br>FI NM | — | Beta F M R/W<br>Beta NF M R<br>FI NM | FI NM | FI NM | F M R/W | FI NM |
+| **NTFS** | F M R/W<br>F M R/W<br>NF M R<br>NF M R/W<br>Paid F M R/W | NF M R<br>NF MP R/W<br>NF MP R/W<br>NF MP R/W<br>F M R/W<br>NF M R/W<br>NF M R/W<br>Beta F M R/W<br>NF MP R<br>Paid FP MP R/W (9)<br>Paid F M R/W (10)<br>Paid FP MP R/W (11)<br>Paid FP MP R/W (2)<br>Paid FP MP R/W (12)<br>Paid NF MP R/W (14)<br>Paid FP MP R/W (15) | F M R/W<br>Beta NF M R | NF M R<br>F M R/W<br>Beta NF M R | Beta NF M R/LW<br>F M R/W | Outdated NF M R<br>F NM | F M R/W<br>NF M R |
+| **exFAT** | F M R/W<br>F M R/W<br>NF M R | F M R/W<br>Paid FP MP R/W | F M R/W | F M R/W | F M R/W | F NM | F M R/W<br>NF M R |
+| **ZFS / OpenZFS** | F M R/W<br>NF M R | F M R/W<br>NF M R/W | F M R/W | — | F M R/W | — | Beta F M R/W<br>NF M R<br>Paid NF MP R |
 
 **Legend.** `F` formats both partitions and images, `FP` partitions, `FI` images,
 `NF` neither. `M` mounts both targets, `MP` partitions, `MI` images, `NM` neither.
@@ -31,13 +32,15 @@ unverified, the notes identify the limitation and the line omits an
 unverified tag. Formatting and mounting are independent, including when
 a formatter is combined with a separate mount driver.
 
-**Paid key.** (1) Paragon extFS for Mac. (2) vmount Pro. (3) Paragon Linux File
+## Paid products
+
+(1) Paragon extFS for Mac. (2) vmount Pro. (3) Paragon Linux File
 Systems for Windows. (4) DiskInternals Linux Writer Pro. (5) CrossDriver for
 Linux Disks Pro. (6) DiskInternals Linux Reader Pro. (7) Paragon APFS for
 Windows. (8) OWC MacDrive 12. (9) Paragon NTFS for Mac. (10) Tuxera NTFS for
 Mac. (11) iBoysoft NTFS for Mac. (12) CrossDriver NTFS for Mac Pro.
 (13) CrossDriver for Mac Disks Pro. (14) EaseUS NTFS for Mac. (15) NTFSTool
-Pro. In a cell with one paid solution, its name appears on the line.
+Pro.
 
 ## Research notes and sources
 
@@ -362,3 +365,88 @@ Pro. In a cell with one paid solution, its name appears on the line.
   https://github.com/openzfsonwindows/openzfs/releases ·
   https://github.com/openzfsonwindows/openzfs/blob/development/module/zfs/vdev_file.c ·
   https://www.diskinternals.com/linux-reader/
+
+## Solution key
+
+Names follow the top-to-bottom order of each cell.
+
+### Linux
+
+- **ext4** — ext4 + e2fsprogs, FsRover.
+- **Btrfs** — Btrfs + btrfs-progs, FsRover.
+- **XFS** — XFS + xfsprogs, FsRover.
+- **APFS** — apfs-fuse, linux-apfs-rw + apfsprogs, libfsapfs, FsRover, Paragon APFS for Linux.
+- **UFS1 / FFSv1** — makefs + Linux UFS, Linux UFS write option + makefs, UFS2Tool, FsRover.
+- **UFS2 / FFSv2** — makefs + Linux UFS, Linux UFS write option + makefs, UFS2Tool, fuse-ufs, FsRover.
+- **HAMMER2** — linux_hammer2 + hammer2-utils, hammer2-fuse, portable makefs.
+- **NTFS** — kernel NTFS + mkntfs, NTFS-3G, FsRover, Paragon NTFS for Linux Free, Paragon NTFS for Linux Professional.
+- **exFAT** — exFAT + exfatprogs, exfat-fuse + exfat-utils, FsRover.
+- **ZFS / OpenZFS** — OpenZFS, FsRover.
+
+### macOS
+
+- **ext4** — xlinuxfs, anylinuxfs, PolyDrive Disk, ExtendFS, Ext4Kit, open_ext4_for_mac, Paragon extFS for Mac, vmount Pro.
+- **Btrfs** — xlinuxfs, anylinuxfs, PolyDrive Disk, btrfs4mac, vmount Pro.
+- **XFS** — xlinuxfs, anylinuxfs, PolyDrive Disk, fuse-xfs, vmount Pro.
+- **APFS** — Disk Utility / APFS.
+- **UFS1 / FFSv1** — UFS2Tool.
+- **UFS2 / FFSv2** — UFS2Tool.
+- **NTFS** — macOS, PolyDrive Disk, NTFSTool, TT NTFS Native, NTFS-3G + macFUSE, NTFS-3G for FUSE-T, anylinuxfs, NTFS4Mac, CrossDriver Free, Paragon NTFS for Mac, Tuxera NTFS for Mac, iBoysoft NTFS for Mac, vmount Pro, CrossDriver NTFS for Mac Pro, EaseUS NTFS for Mac, NTFSTool Pro.
+- **exFAT** — Disk Utility / exFAT, vmount Pro.
+- **ZFS / OpenZFS** — OpenZFS on OS X, anylinuxfs.
+
+### FreeBSD
+
+- **ext4** — ext2fs + e2fsprogs, fusefs-ext2, fusefs-lkl.
+- **Btrfs** — fusefs-lkl.
+- **XFS** — xfsprogs, libfsxfs, fusefs-lkl.
+- **APFS** — libfsapfs.
+- **UFS1 / FFSv1** — UFS1.
+- **UFS2 / FFSv2** — UFS2, fuse-ufs.
+- **HAMMER2** — hammer2 port, hammer2-fuse, portable makefs.
+- **NTFS** — NTFS-3G, libfsntfs.
+- **exFAT** — fusefs-exfat + formatter.
+- **ZFS / OpenZFS** — OpenZFS.
+
+### OpenBSD
+
+- **ext4** — ext2fs + e2fsprogs.
+- **XFS** — libfsxfs.
+- **APFS** — libfsapfs.
+- **UFS1 / FFSv1** — FFSv1.
+- **UFS2 / FFSv2** — FFSv2, fuse-ufs.
+- **HAMMER2** — portable makefs.
+- **NTFS** — mount_ntfs, ntfs-3g, libfsntfs.
+- **exFAT** — exfat-fuse.
+
+### NetBSD
+
+- **ext4** — ext2fs + e2fsprogs, fuse-ext2.
+- **UFS1 / FFSv1** — FFSv1.
+- **UFS2 / FFSv2** — FFSv2.
+- **HAMMER2** — portable makefs.
+- **NTFS** — mount_ntfs, fuse-ntfs-3g + ntfsprogs.
+- **exFAT** — fuse-exfat.
+- **ZFS / OpenZFS** — base ZFS.
+
+### DragonFly BSD
+
+- **ext4** — ext2fs + e2fsprogs-core.
+- **UFS1 / FFSv1** — DragonFly UFS.
+- **UFS2 / FFSv2** — portable makefs.
+- **HAMMER2** — HAMMER2.
+- **NTFS** — mount_ntfs, packaged mkntfs.
+- **exFAT** — exfat-utils.
+
+### Windows
+
+- **ext4** — DiskInternals Ext4 Formatter, DiskGenius Free, MiniTool Partition Wizard Free, Ext4Fsd, FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, DiskInternals Linux Writer Pro, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
+- **Btrfs** — WinBtrfs, FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
+- **XFS** — FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
+- **APFS** — FsRover, CrossDriver for Mac Disks Free, winapfs, apfs_for_windows, Paragon APFS for Windows, OWC MacDrive 12, DiskInternals Linux Reader Pro, CrossDriver for Mac Disks Pro.
+- **UFS1 / FFSv1** — UFS2Tool, FsRover.
+- **UFS2 / FFSv2** — UFS2Tool, FsRover.
+- **HAMMER2** — portable makefs (Cygwin).
+- **NTFS** — Windows NTFS, FsRover.
+- **exFAT** — Windows exFAT, FsRover.
+- **ZFS / OpenZFS** — OpenZFS on Windows, FsRover, DiskInternals Linux Reader Pro.
