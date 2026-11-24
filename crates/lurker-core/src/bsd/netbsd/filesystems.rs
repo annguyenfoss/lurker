@@ -234,6 +234,7 @@ pub(in super::super) fn mount_filesystem(
             "/sbin/mount_msdos"
         }
         "hammer2" => {
+            argv = args(&["-o", mode]);
             argv.extend([format!("{device}@DATA").into(), target.as_os_str().into()]);
             exec("/usr/local/sbin/mount_hammer2", &argv, None)?;
             return Ok(());
