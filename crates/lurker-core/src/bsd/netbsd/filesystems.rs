@@ -172,7 +172,9 @@ fn pool_name(device: &str) -> AppResult<String> {
         .first()
         .copied()
         .filter(|s| {
-            s.starts_with("lurker_") && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            s.starts_with("lurker_")
+                && s.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
         })
         .ok_or_else(|| AppError::new("ZFS import requires a Lurker-owned pool name."))?;
     if names.iter().any(|n| *n != name) {
@@ -181,10 +183,14 @@ fn pool_name(device: &str) -> AppResult<String> {
     Ok(name.to_owned())
 }
 fn verify_pool(pool: &str, device: &str) -> AppResult<()> {
-    let status = exec("/sbin/zpool", &args(&["status", "-P", pool]), None)?;
+    let status = exec("/usr/sbin/zdb", &args(&["-C", pool]), None)?;
     let paths: Vec<_> = status
-        .split_whitespace()
-        .filter(|s| s.starts_with("/dev/"))
+        .lines()
+        .filter_map(|l| {
+            l.trim()
+                .strip_prefix("path: '")
+                .and_then(|s| s.strip_suffix('\''))
+        })
         .collect();
     if paths != [device] {
         return Err(AppError::new(
@@ -248,7 +254,7 @@ pub(in super::super) fn mount_filesystem(
                 &args(&[
                     "import",
                     "-d",
-                    &device,
+                    "/dev",
                     "-N",
                     "-o",
                     "cachefile=none",
@@ -292,16 +298,21 @@ pub(in super::super) fn matches_filesystem_mount(mapped: &str, mounted: &Mounted
                 && verify_pool(&pool, &device).is_ok()
         });
     }
-    let source_matches =
-        mounted.source == Path::new(&device) || mounted.source == Path::new(&raw(&device));
+    if matches!(kind.as_str(), "exfat" | "ntfs" | "ext2fs") {
+        // librefuse records the source in f_fstypename; f_mntfromname is
+        // always /dev/puffs. Match both fields, including the exact CGD slice.
+        return mounted.source == Path::new("/dev/puffs")
+            && mounted.filesystem == format!("puffs|{device}");
+    }
+    let source_matches = mounted.source == Path::new(&device)
+        || mounted.source == Path::new(&raw(&device))
+        || (kind == "hammer2" && mounted.source == Path::new(&format!("{device}@DATA")));
     let expected = match kind.as_str() {
         "ufs" | "ffs" => "ffs",
-        "exfat" | "ntfs" | "ext2fs" => "puffs",
+        "msdosfs" => "msdos",
         other => other,
     };
-    source_matches
-        && (mounted.filesystem == expected
-            || mounted.filesystem.starts_with(&format!("{expected}|")))
+    source_matches && mounted.filesystem == expected
 }
 pub(in super::super) fn filesystem_has_posix_ownership(mapped: &str) -> AppResult<bool> {
     Ok(!matches!(
