@@ -281,7 +281,13 @@ def terminal(args, password, timeout, log):
     """
     pid, master = pty.fork()
     if pid == 0:
-        os.execv(args[0], args)
+        try:
+            os.execv(args[0], args)
+        except OSError as error:
+            try:
+                os.write(2, f"Cannot execute CLI: {error.strerror}\n".encode())
+            finally:
+                os._exit(127)
     transcript = bytearray()
     consumed = 0
     prompts = 0

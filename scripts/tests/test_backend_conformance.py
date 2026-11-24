@@ -77,10 +77,11 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(suite.create_args()[-2:], ["--filesystem", "fat32"])
         self.assertNotIn("--filesystem", suite.args("mount", suite.source, suite.mountpoint))
         self.assertTrue(suite.options.expect_readonly_unsupported)
-        operations = ("create", "no_overwrite", "mount", "write_workload", "write_lifecycle_file",
+        operations = ("no_overwrite", "mount", "write_workload", "write_lifecycle_file",
                       "duplicate", "aliased_duplicate", "busy", "close", "incorrect", "verify",
                       "readonly_unsupported", "native_dismount", "verify_native_dismount", "native_inventory")
-        with mock.patch.multiple(suite, **dict.fromkeys(operations, mock.DEFAULT)) as calls:
+        with mock.patch.object(suite, "create"), \
+             mock.patch.multiple(suite, **dict.fromkeys(operations, mock.DEFAULT)) as calls:
             calls["native_inventory"].return_value = []
             result = suite.run()
         self.assertEqual(result["status"], "passed")
@@ -202,6 +203,13 @@ sys.exit(0 if a == b and a.startswith('  ') and a.endswith('  ') else 1)
         self.assertEqual(result["exit_code"], 1)
         self.assertEqual(result["prompts"], 0)
         self.assertIn(diagnostic, log.read_text())
+
+    def test_exec_failure_stays_in_the_child_process(self):
+        log = self.root / "exec-failure.log"
+        result = harness.terminal([str(self.binary)], None, 5, log)
+        self.assertEqual(result["exit_code"], 127)
+        self.assertFalse(result["timed_out"])
+        self.assertIn("Cannot execute CLI", log.read_text())
 
     def test_prompt_before_delayed_noecho_and_flush_preserves_both_inputs(self):
         self.binary.write_text("""import sys, termios, time
