@@ -8,7 +8,12 @@ use std::{
     path::Path,
 };
 
-pub(super) fn validate(selected: Option<CreateFilesystem>, _backend: VolumeType) -> AppResult<()> {
+pub(super) fn validate(selected: Option<CreateFilesystem>, backend: VolumeType) -> AppResult<()> {
+    if selected == Some(CreateFilesystem::Xfs) && backend == VolumeType::Geli {
+        return Err(AppError::new(
+            "FreeBSD's packaged LKL driver requires 512-byte providers; the GELI profile uses 4096-byte sectors, so XFS creation is unavailable.",
+        ));
+    }
     match selected {
         None
         | Some(
@@ -35,7 +40,15 @@ pub(super) fn format(mapped: &str, selected: Option<CreateFilesystem>) -> AppRes
         CreateFilesystem::Ext4 => exec("/usr/local/sbin/mkfs.ext4", &args(&["-F", mapped]), None)?,
         CreateFilesystem::Xfs => exec("/usr/local/sbin/mkfs.xfs", &args(&["-f", mapped]), None)?,
         CreateFilesystem::Ntfs => {
-            exec("/usr/local/sbin/mkntfs", &args(&["-F", "-Q", mapped]), None)?
+            // ntfs-3g's FreeBSD formatter otherwise assumes 512-byte sectors,
+            // which cannot be written through the fixed 4096-byte GELI profile.
+            let info = exec("/usr/sbin/diskinfo", &args(&[mapped]), None)?;
+            let sector = sector_size(mapped, &info)?;
+            exec(
+                "/usr/local/sbin/mkntfs",
+                &args(&["-F", "-Q", "-s", &sector.to_string(), mapped]),
+                None,
+            )?
         }
         CreateFilesystem::Exfat => exec("/usr/local/sbin/mkexfatfs", &args(&[mapped]), None)?,
         CreateFilesystem::Hammer2 => exec(
@@ -100,7 +113,13 @@ fn probe(mapped: &str) -> AppResult<String> {
     if &bytes[64..72] == b"_BHRfS_M" {
         return Ok("btrfs".into());
     }
-    let value = exec("/usr/sbin/fstyp", &args(&[mapped]), None)?;
+    let value = match exec("/usr/sbin/fstyp", &args(&[mapped]), None) {
+        Ok(value) => value,
+        // fstyp's ZFS recognizer issues 512-byte reads on FreeBSD. zdb uses
+        // native aligned label I/O, including GELI's 4096-byte providers.
+        Err(_) if pool_name(mapped).is_ok() => return Ok("zfs".into()),
+        Err(error) => return Err(error),
+    };
     match value.trim() {
         "ufs" | "zfs" | "hammer2" => Ok(value.trim().into()),
         _ => Err(AppError::new("Unsupported FreeBSD inner filesystem.")),
@@ -108,7 +127,7 @@ fn probe(mapped: &str) -> AppResult<String> {
 }
 
 fn pool_name(mapped: &str) -> AppResult<String> {
-    let labels = exec("/sbin/zdb", &args(&["-l", mapped]), None)?;
+    let labels = exec("/usr/sbin/zdb", &args(&["-l", mapped]), None)?;
     let names: std::collections::HashSet<&str> = labels
         .lines()
         .filter_map(|line| {
@@ -180,10 +199,18 @@ pub(super) fn mount(mapped: &str, target: &Path, readonly: bool) -> AppResult<()
                 mapped,
             ]),
         ),
-        "xfs" | "btrfs" => (
-            "/usr/local/bin/lklfuse",
-            args(&["-o", &format!("{mode},type={fs},fsname={mapped}"), mapped]),
-        ),
+        "xfs" | "btrfs" => {
+            let info = exec("/usr/sbin/diskinfo", &args(&[mapped]), None)?;
+            if sector_size(mapped, &info)? != 512 {
+                return Err(AppError::new(
+                    "FreeBSD's packaged LKL driver cannot mount XFS/Btrfs on a provider with sectors larger than 512 bytes.",
+                ));
+            }
+            (
+                "/usr/local/bin/lklfuse",
+                args(&["-o", &format!("{mode},type={fs},fsname={mapped}"), mapped]),
+            )
+        }
         "zfs" => {
             let pool = pool_name(mapped)?;
             let imported = exec("/sbin/zpool", &args(&["list", "-H", "-o", "name"]), None)?;
@@ -248,4 +275,38 @@ pub(super) fn close(mapped: &str) -> AppResult<()> {
         }
     }
     Ok(())
+}
+
+fn sector_size(mapped: &str, info: &str) -> AppResult<u32> {
+    let mut fields = info.split_whitespace();
+    let source = fields.next();
+    let sector = fields.next().and_then(|s| s.parse::<u32>().ok());
+    match (source, sector) {
+        (Some(source), Some(sector))
+            if source == mapped && (512..=65536).contains(&sector) && sector.is_power_of_two() =>
+        {
+            Ok(sector)
+        }
+        _ => Err(AppError::new(
+            "Unrecognized decrypted device sector geometry.",
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn ntfs_sector_geometry_must_describe_the_exact_decrypted_device() {
+        assert_eq!(
+            sector_size("/dev/md0.eli", "/dev/md0.eli 4096 536866816 131071 0 0").unwrap(),
+            4096
+        );
+        assert_eq!(
+            sector_size("/dev/md0", "/dev/md0 512 536870912 1048576 0 0").unwrap(),
+            512
+        );
+        assert!(sector_size("/dev/md0.eli", "/dev/md1.eli 4096 536866816").is_err());
+        assert!(sector_size("/dev/md0", "/dev/md0 513 536870912").is_err());
+    }
 }
