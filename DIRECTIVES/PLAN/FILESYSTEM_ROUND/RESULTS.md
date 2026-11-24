@@ -1,6 +1,6 @@
 # Filesystem installation and CLI round results
 
-Status: all eleven target installations and six implementation passes are complete. Five independent OS reviews are complete; the Linux reviewer is reconciling final artifacts and rerunning nine cases affected by later initialization checks.
+Status: complete. Best-effort dependency installation, Lurker CLI integration, native payload testing and all six independent OS reviews are complete across eleven targets. Unavailable and limited routes remain explicit below.
 
 ## Scope and interpretation
 
@@ -14,12 +14,12 @@ A passing writable lifecycle means a fresh Lurker CLI container, PDF and UTF-8 t
 
 | Target | Requested create/RW container coverage | Additional import coverage | Directory/backing coverage | Independent review |
 | --- | --- | --- | --- | --- |
-| Arch Linux | 29 pairs across eight writable filesystems | 5 RO: UFS1 with LUKS1/VeraCrypt; HAMMER2 with all three privileged routes | 22/24 | Final targeted review in progress |
-| Debian | 29 pairs across eight writable filesystems | 5 RO, same as Arch | 22/24 | Final targeted review in progress |
-| Ubuntu | 32 pairs across nine writable filesystems, including HAMMER2 | 2 RO: UFS1 with LUKS1/VeraCrypt | 25/27 | Final targeted review in progress |
-| Fedora | 29 pairs across eight writable filesystems | 5 RO, same as Arch | 22/24 | Final targeted review in progress |
-| openSUSE | 26 pairs across seven writable filesystems; ZFS ABI blocked | 5 RO, same as Arch | 19/21 | Final targeted review in progress |
-| Gentoo | 23 pairs across six writable filesystems; APFS/ZFS kernel SDK unavailable | 8 RO: UFS1 with LUKS1/VeraCrypt; APFS/HAMMER2 with all three privileged routes | 16/18 | Final targeted review in progress |
+| Arch Linux | 29 pairs across eight writable filesystems | 5 RO: UFS1 with LUKS1/VeraCrypt; HAMMER2 with all three privileged routes | 22/24 | Passed; ext4/UFS2 rerun |
+| Debian | 29 pairs across eight writable filesystems | 5 RO, same as Arch | 22/24 | Passed; ext4 rerun |
+| Ubuntu | 32 pairs across nine writable filesystems, including HAMMER2 | 2 RO: UFS1 with LUKS1/VeraCrypt | 25/27 | Passed; ext4/HAMMER2 rerun |
+| Fedora | 29 pairs across eight writable filesystems | 5 RO, same as Arch | 22/24 | Passed; ext4 rerun |
+| openSUSE | 26 pairs across seven writable filesystems; ZFS ABI blocked | 5 RO, same as Arch | 19/21 | Passed; ext4/UFS2 rerun |
+| Gentoo | 23 pairs across six writable filesystems; APFS/ZFS kernel SDK unavailable | 8 RO: UFS1 with LUKS1/VeraCrypt; APFS/HAMMER2 with all three privileged routes | 16/18 | Passed; ext4 rerun |
 | FreeBSD | 13 pairs: GELI and VeraCrypt with UFS1, UFS2, ext4, exFAT, HAMMER2 and ZFS; VeraCrypt also creates NTFS | VeraCrypt APFS/Btrfs/XFS RO; GELI NTFS RO and RW import | 12/14: gocryptfs 7/7, PEFS 5/7 | Passed; final-guard VeraCrypt/ZFS case rerun |
 | OpenBSD | 12 pairs: CRYPTO, RAID1C and VeraCrypt with FFSv1, FFSv2, NTFS and exFAT | Three native RO reader controls; CLI crypto RO remains unsupported | No integrated directory engine | Passed |
 | NetBSD | 7 CGD pairs: FFSv1, FFSv2, ext4, exFAT, NTFS, ZFS and HAMMER2 | RO options deliberately unexercised for these RW pairs | No integrated directory engine | Passed |
@@ -50,8 +50,8 @@ Each OS report contains all ten filesystem rows, including unavailable routes an
 
 Detailed receipts, hashes, native controls, installation commands/versions, source pins and cleanup inventories are retained under ignored `target/goal-validation/filesystem-round/<os>/`. `review-index.json` indexes completed review receipts and their hashes. Reports retain original product and harness identities; a later documentation or platform-only commit does not relabel an earlier binary.
 
-Completed independent review commits: DragonFly `2f793f9`, OpenBSD `1fc920a`, macOS `db26c02`, NetBSD `280a9e8`, FreeBSD `8e587b7`. Source comparison in `carried-source-audit.json` verifies unchanged platform dispatch, API/CLI/workflow, native lifecycle and supervisor inputs for carried results. The later CryFS initialization-mount relocation is Linux-only; the Darwin AppleDouble publication fix is separately exercised on Buran.
+Completed independent review commits: DragonFly `2f793f9`, OpenBSD `1fc920a`, macOS `db26c02`, NetBSD `280a9e8`, FreeBSD `8e587b7`, Linux `8431491`. Source comparison in `carried-source-audit.json` verifies unchanged applicable platform dispatch, API/CLI/workflow, native lifecycle and supervisor inputs for carried results. The later CryFS initialization-mount relocation is Linux-only; the Darwin AppleDouble publication fix is separately exercised on Buran. The Linux review reconciled all 342 executed pair receipts, matched 23 retained installed CLI paths and 92 source/harness files to their recorded identities, and passed nine affected initialization replays without increasing distinct pair counts.
 
 Final implementation checks on Arch passed 108 core/CLI/helper tests, with 12 ignored and zero failures, plus scoped Cargo checks and the Python PTY regression. All eleven targets built their native CLI/helper. GUI/workspace bootstrap was deliberately excluded from this CLI-only round; the reports list exact native test counts and artifact identities.
 
-Completed implementation hosts have no owned mounts, mappings, sessions or workers left. Existing system mounts/pools remain intact; FreeBSD's temporary `vfs.usermount` change was restored. Installed dependencies and closed failure fixtures are intentionally retained. The Linux reviewer is checking fresh cleanup inventories after its targeted reruns.
+All eleven hosts have no owned active mounts, mappings, sessions or workers left. Existing system mounts/pools remain intact; FreeBSD's temporary `vfs.usermount` change was restored. Installed dependencies, closed failure fixtures and evidence are intentionally retained. All implementation and review agents have finished and released their hosts.
