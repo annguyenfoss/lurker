@@ -4,6 +4,7 @@ use super::super::Mounted;
 use super::{args, device_number, exec};
 use crate::{AppError, AppResult, CreateFilesystem, VolumeType};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 
 pub(in super::super) fn validate_filesystem(
@@ -348,7 +349,18 @@ pub(in super::super) fn mount_filesystem(
         // NetBSD's libperfuse NTFS daemon retains inherited output descriptors.
         // Pipes would keep exec's drain threads blocked until filesystem close.
         let executable = crate::trusted_privileged_executable(Path::new(tool))?;
-        let status = std::process::Command::new(executable)
+        let mut command = std::process::Command::new(executable);
+        // The daemon must outlive the short-lived CLI's controlling terminal.
+        // SAFETY: setsid is async-signal-safe and touches no shared Rust state.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let status = command
             .args(&argv)
             .env_clear()
             .env(
