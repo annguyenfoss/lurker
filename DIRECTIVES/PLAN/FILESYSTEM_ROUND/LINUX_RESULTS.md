@@ -89,3 +89,54 @@ https://github.com/kusumi/hammer2-utils
 https://github.com/kusumi/hammer2-fuse
 
 https://github.com/openzfs/zfs
+
+## Independent review, 2026-11-25
+
+Reviewed the Linux adapters through `ee3ab7c` and their unchanged native source
+at the review head. No serious product defect required a patch. Reconstructed
+the effective matrix directly from every base, supplement and final/import
+receipt, then compared it with the published effective-pair index: **342
+executed pairs, zero receipt inconsistencies**. Every passing receipt has the
+required successful CLI actions, PDF/text hashes and ordinary close. Read-only
+imports additionally verify both crypto/filesystem RO and unchanged ciphertext.
+
+| Host | Container RW passed | Directory passed / limited | RO passed / limited |
+|---|---:|---:|---:|
+| Arch | 29 | 22 / 2 | 5 / 1 |
+| Debian | 29 | 22 / 2 | 5 / 1 |
+| Ubuntu | 32 | 25 / 2 | 2 / 1 |
+| Fedora | 29 | 22 / 2 | 5 / 1 |
+| openSUSE | 26 | 19 / 2 | 5 / 1 |
+| Gentoo | 23 | 16 / 2 | 8 / 1 |
+| Total | 168 | 126 / 12 | 30 / 6 |
+
+These remain **324 passed, 18 limited failures**, excluding FAT32 and unavailable
+or inapplicable pairs. The six UFS1/default-LUKS2 geometry failures and twelve
+CryFS backing-store failures remain failures; review does not promote them.
+The documented Gentoo SDK, openSUSE ZFS ABI and older-kernel HAMMER2 write
+limits remain unchanged.
+
+Live identity checks matched all **23 retained installed CLI paths** to their
+receipt SHA-256 and administrator ownership. All **92 inspected native adapter
+and harness source files** matched their exact Git inputs: `6d10cfa`, `ec2add1`,
+`c70f8a8` and `ee3ab7c`. Earlier passing receipts retain those original identities.
+The Ubuntu writable HAMMER2 route does not use the later reader-only artifact.
+
+To cover later initialization changes without repeating the matrix, replayed
+LUKS2/ext4 on each guest, LUKS2/HAMMER2 on Ubuntu, and LUKS2/UFS2 on Arch and
+openSUSE using the existing `c70f8a8` artifacts: **9 passed, zero failed**.
+Each completed create and three ordinary mount/close cycles with original,
+appended and added-file hashes; all new roots were `1300:1300`, mode `0700`.
+These replays supplement affected evidence and do not increase the distinct
+pair totals above. No new build or broader workspace bootstrap was necessary.
+
+Ignored local evidence is indexed by
+`target/goal-validation/filesystem-round/linux/review-index.json`, with the
+complete reconciled counts, original identities, input hashes and cleanup in
+`review-receipt.json`. Per-host details are `HOST-review-identities.json`,
+`HOST-review-reruns.json` and `HOST-review-cleanup.json`. Remote replay receipts
+remain under `~/.cache/lurker/filesystem-round-review/`; closed successful review
+images were removed after checking mount/loop inventory. Live final inventory
+on all six guests contains **zero owned mounts, mappers, loop attachments,
+imported pools or workers**. Original failed fixtures, installed providers and
+shared caches remain preserved. All six hosts are released.
