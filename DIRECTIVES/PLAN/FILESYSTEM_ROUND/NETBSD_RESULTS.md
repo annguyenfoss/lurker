@@ -125,3 +125,38 @@ seven full-commit receipts, then rerun only missing/failed meaningful cases.
 Avoid replaying intermediate development failures already resolved. The base
 fstyp limitation and size ioctl behavior require the small HAMMER2 adapter;
 no upstream patch or repair is pending.
+
+## Independent review — 2026-11-25
+
+Review passed without a product or harness fix. Independently reconciled all
+ten rows with the selected archived and loose receipts: seven fresh CGD
+create/write/close/reopen/append/add/reopen payload pairs, 49 successful CLI
+operations, consistent PDF/text hashes and no remaining mounts. The native
+implementation test log independently totals 69 passed, 0 failed, 4 ignored.
+Remote installed CLI/helper and HAMMER2 module hashes match the checkpoint.
+
+Current committed source `9b1bc0d816564b721c730f6e8c43039acc14a201` was archived
+and checked/tested natively as the login user in
+`/tmp/lurker-filesystem-round-netbsd-review-20261125/source/`, reusing the
+existing Cargo cache. `cargo check --offline -p lurker-core -p lurker-cli -p
+lurker-helper` passed; the corresponding `cargo test --offline` passed with
+69 tests and 4 ignored. NetBSD CGD adapters, shared BSD dispatch, model/API and
+CLI inputs are unchanged from the payload-qualified source. No missing or
+affected payload case warranted a rerun. Other owners' uncommitted changes
+are outside this snapshot; root retains final combined-workspace validation.
+
+Fresh remote inspection confirms clean upstream HAMMER2 source at its recorded
+commit, the matching NetBSD 11.1 GENERIC kernel, loaded HAMMER2/ZFS modules,
+and installed package versions. No upstream source change or kernel replacement
+was needed. Btrfs/XFS/APFS remain unavailable; ext4 remains restricted and
+experimental. RO for these writable pairs remains deliberately unexercised.
+CGD is the only implemented route; directory pairs are inapplicable.
+
+Final independent inventory again has only the three preflight mounts, all
+four vnd/eight CGD units unused, no ZFS pool, only the registry lock, and no
+candidate, Cargo or filesystem workers. All review jobs are terminal. Installed
+dependencies/candidate prefix and preserved evidence remain intentionally.
+Concise review receipt: `target/goal-validation/filesystem-round/netbsd/review.json`;
+native logs: sibling `review-check.log` and `review-test.log`; resource evidence:
+`review-inventory.txt` and `review-final-inventory.txt`. The review archive hash
+and original seven receipt identities are recorded in `review.json`.
