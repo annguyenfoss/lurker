@@ -165,6 +165,17 @@ overwritten file, and lacked the new file. The read-only write probe returned
 `EROFS`, and both paths restored the storage inventory. Receipts are under
 `target/dragonfly-veracrypt-batch/fat32-power-cut/hammer2/`.
 
+The file-backed UFS case provided a byte-identical starting vault for a
+direct VirtIO disk control. Stock `tcplay` mapped the 260 MiB disk directly,
+with the same native device mapper and synchronous FAT32 mount options.
+The host completed the cut 343 ms after observing both file fsyncs. The
+verified cut copy contained the overwritten file, the new file, and the
+unchanged control, each with the expected hash. The native read-only mount
+opened without repair, returned `EROFS` on a write probe, and left the cut
+copy's disk digest unchanged. This control bypassed the backing vnode and
+outer filesystem. Receipts are under
+`target/dragonfly-veracrypt-batch/fat32-power-cut/raw-control/`.
+
 The rebuilt package authenticated a 260 MiB stock VeraCrypt AES image with
 inner HAMMER2 and only about 20 MiB allocated. Identical starting ciphertext
 was tested on UFS and HAMMER2 backing. The two cuts completed 349 ms and
