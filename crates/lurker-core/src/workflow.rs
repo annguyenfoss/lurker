@@ -252,7 +252,10 @@ pub(crate) fn macos_apple_create_args(
         "-type",
         "UDIF",
         "-fs",
-        macos_filesystem(filesystem, "APFS")?,
+        match filesystem {
+            Some(crate::CreateFilesystem::Fat32) => "MS-DOS FAT32",
+            _ => macos_filesystem(filesystem, "APFS")?,
+        },
         "-volname",
         "Lurker",
         "-encryption",
