@@ -218,6 +218,19 @@ qualification issue for sparse imports. Receipts are `outer-sparse.jsonl` and
 `outer-held-close.jsonl` under
 `target/dragonfly-veracrypt-batch/hammer2-capacity-B/`.
 
+The outer-capacity failure reproduced on stock DragonFly 6.4.2 using both
+stock `tcplay` with the same sparse ciphertext and plain HAMMER2 on a sparse
+vnode disk. In each control, a direct UFS write returned `ENOSPC` after
+HAMMER2 had acknowledged all twelve 8 MiB files. Native `umount` was observed
+waiting in `h2coll` with the filler still present. In the stock `tcplay`
+control, the original unmount completed after the filler was removed. In the
+plain control, `vnconfig -l vn2` also blocked, so the filler was removed from
+a separate shell. Once the native processes exited, all twelve file hashes
+and the earlier marker matched on reopen in both cases. The storage inventory
+returned to baseline. Native HAMMER2 on a sparse vnode disk is sufficient to
+reproduce the missing application error and stalled dismount. Receipts are
+under `target/dragonfly-veracrypt-batch/outer-stock-control/`.
+
 The same package passed three FAT32 capacity checks on a separate DragonFly
 6.4.2 guest. With 194,928,640 bytes free on a bounded outer UFS filesystem,
 a 260 MiB create with `--force` returned `ENOSPC`. The existing destination's

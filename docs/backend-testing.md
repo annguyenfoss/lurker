@@ -105,10 +105,12 @@ before filling the outer disk with a fixture-owned file. Check physical free
 space including reserved blocks and confirm the inner filesystem still has
 room. Record each write and fsync result while extending the ciphertext.
 Keep diagnostics outside the full disk. Exercise close both after releasing
-the filler and while holding it with a bounded wait. Record whether close
-completed and whether the mount, mapper and vnode remain. Free the filler,
-retry normal close as needed, then verify the old marker, every acknowledged
-file hash, a new synced file, and the final native inventory.
+the filler and while holding it with a bounded wait. Capture the pending
+close's wait channel with `ps` and free the filler from a separate shell.
+Query vnode binding after close exits, since the query can also wait on the
+kernel during backing-store exhaustion. Retry close as needed, then verify
+the old marker, every acknowledged file hash, a new synced file, and the
+final native inventory.
 
 Use a separate, empty fixture disk for the full FAT32 file-size boundary.
 An 8 GiB UFS fixture fits a fully allocated 4.5 GiB VeraCrypt image and
