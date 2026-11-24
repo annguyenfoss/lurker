@@ -233,6 +233,95 @@ lurker unmount vault
 
 Lurker chooses the native format for your OS. Use administrator authorization where required.
 
+## Filesystem PLanning
+
+OS/filesystem capabilities for planning. See the [solution key](docs/filesystem-support-matrix.md#solution-key), [tag system](docs/filesystem-research-tags.md), and [implementation assessments](docs/filesystem-implementation-assessment.md) for individual offerings, limitations and sources.
+
+| Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **ext4** | F M R/W | Partial NF M R/W | Partial F M R/W | Partial F M R | Partial F M R | Partial F M R | Partial* F NM |
+|  | Partial NF M R | Partial* NF M R/W | Beta Partial F M R/W |  | Beta Partial NF M R/W |  | Partial* F NM |
+|  |  | Partial* NF MP R/W | Partial Outdated NF M R/W |  |  |  | Partial* FP NM |
+|  |  | Partial NF M R |  |  |  |  | Partial NF M R/W |
+|  |  | Beta Partial F M R/W |  |  |  |  | Partial NF M R |
+|  |  | Beta Partial F M R/W |  |  |  |  | Partial* NF MP R |
+|  |  | Paid Partial FP MP R/W (1) |  |  |  |  | Paid Partial* FP MP R/W (3) |
+|  |  | Paid Partial* FP MP R/W (2) |  |  |  |  | Paid Partial* NF MP R/W (4) |
+|  |  |  |  |  |  |  | Paid Partial* FP MP R/W (5) |
+|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
+| **Btrfs** | F M R/W | Partial NF M R/W | Partial Outdated NF M R/W | — | — | — | Partial F M R/W |
+|  | Partial NF M R | Partial* NF M R/W |  |  |  |  | Partial NF M R |
+|  |  | Partial* NF MP R/W |  |  |  |  | Partial* NF MP R |
+|  |  | Beta Partial NF M R |  |  |  |  | Paid Partial* NF MP R (3) |
+|  |  | Paid Partial* FP MP R/W |  |  |  |  | Paid Partial* FP MP R/W (5) |
+|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
+| **XFS** | F M R/W | Partial NF M R/W | F NM | Beta Partial NF M R | — | — | Partial NF M R |
+|  | Partial NF M R | Partial* NF M R/W | Beta Partial NF M R |  |  |  | Partial* NF MP R |
+|  |  | Partial* NF MP R/W | Partial Outdated NF M R/W |  |  |  | Paid Partial* NF MP R/W (3) |
+|  |  | Beta Partial F M R/W |  |  |  |  | Paid Partial* FP MP R/W (5) |
+|  |  | Paid Partial* FP MP R/W |  |  |  |  | Paid Partial* NF MP R (6) |
+| **APFS** | Partial NF M R | F M R/W | Beta Partial NF M R | Beta Partial NF M R | — | — | Partial NF M R |
+|  | Beta Partial F M R/W |  |  |  |  |  | Partial* NF MP R |
+|  | Beta Partial NF M R |  |  |  |  |  | Beta Partial NF M R/W |
+|  | Partial NF M R |  |  |  |  |  | Beta Partial NF MP R/LW |
+|  | Paid Partial NF MP R/W |  |  |  |  |  | Paid Partial NF MP LR/W (7) |
+|  |  |  |  |  |  |  | Paid Partial* MP R/W (8) |
+|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
+|  |  |  |  |  |  |  | Paid Partial* FP MP R (13) |
+| **UFS1 / FFSv1** | Partial FI M R | Partial* Outdated FI NM | F M R/W | F M R/W | F M R/W | F M R/W | Partial Outdated F MI R/LW |
+|  | Beta Partial FI M R/W |  |  |  |  |  | Partial NF M R |
+|  | Partial* Outdated FI NM |  |  |  |  |  |  |
+|  | Partial NF M R |  |  |  |  |  |  |
+| **UFS2 / FFSv2** | Partial FI M R | Partial* Outdated FI NM | F M R/W | F M R/W | F M R/W | FI NM | Partial Outdated F MI R/LW |
+|  | Beta Partial FI M R/W |  | Beta Partial NF M R/W | Beta Partial NF M R/W |  |  | Partial NF M R |
+|  | Partial* Outdated FI NM |  |  |  |  |  |  |
+|  | Beta Partial NF M R/W |  |  |  |  |  |  |
+|  | Partial NF M R |  |  |  |  |  |  |
+| **HAMMER2** | Beta F M R/W | — | Beta Partial* F M R/W | FI NM | FI NM | F M R/W | FI NM |
+|  | Beta Partial* NF M R |  | Beta Partial* NF M R |  |  |  |  |
+|  | FI NM |  | FI NM |  |  |  |  |
+| **NTFS** | Partial F M R/W | Partial* NF M R | Partial F M R/W | Partial* NF M R | Beta Partial NF M R/LW | Partial* Outdated NF M R | F M R/W |
+|  | Partial F M R/W | Partial* NF MP R/W | Beta NF M R | Partial F M R/W | Partial F M R/W | F NM | Partial NF M R |
+|  | Partial NF M R | Partial* NF MP R/W |  | Beta NF M R |  |  |  |
+|  | Partial* NF M R/W | Partial NF MP R/W |  |  |  |  |  |
+|  | Paid Partial* F M R/W | Partial F M R/W |  |  |  |  |  |
+|  |  | Partial NF M R/W |  |  |  |  |  |
+|  |  | Partial NF M R/W |  |  |  |  |  |
+|  |  | Beta Partial F M R/W |  |  |  |  |  |
+|  |  | Partial* NF MP R |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (9) |  |  |  |  |  |
+|  |  | Paid Partial* F M R/W (10) |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (11) |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (2) |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (12) |  |  |  |  |  |
+|  |  | Paid Partial* NF MP R/W (14) |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (15) |  |  |  |  |  |
+| **exFAT** | F M R/W | F M R/W | F M R/W | F M R/W | F M R/W | F NM | F M R/W |
+|  | F M R/W | Paid Partial* FP MP R/W |  |  |  |  | NF M R |
+|  | NF M R |  |  |  |  |  |  |
+| **ZFS / OpenZFS** | F M R/W | F M R/W | F M R/W | — | Partial F M R/W | — | Beta Partial* F M R/W |
+|  | Partial NF M R | Partial* NF M R/W |  |  |  |  | Partial NF M R |
+|  |  |  |  |  |  |  | Paid Partial* NF MP R |
+
+**Prefixes:** `Paid` → `Beta` → `Partial` or `Partial*` → `Outdated`.
+Omitted defaults mean free, production, fully/largely implemented, current.
+`Partial` means confirmed important feature gaps; `Partial*` means completeness
+is undetermined and explained in the assessment notes.
+
+**Capabilities:** `F` = format partitions and images; `FP` = partitions;
+`FI` = images; `NF` = no formatting. `M` = mount both targets; `MP` = partitions;
+`MI` = images; `NM` = no mounting. `R` = read-only; `R/W` = read/write;
+`LR`/`LW` = limited reads/writes. Blank rows continue the filesystem above;
+`—` = no qualifying solution found. Formatting and mounting are independent.
+
+**Paid products:** (1) Paragon extFS for Mac. (2) vmount Pro. (3) Paragon Linux File
+Systems for Windows. (4) DiskInternals Linux Writer Pro. (5) CrossDriver for
+Linux Disks Pro. (6) DiskInternals Linux Reader Pro. (7) Paragon APFS for
+Windows. (8) OWC MacDrive 12. (9) Paragon NTFS for Mac. (10) Tuxera NTFS for
+Mac. (11) iBoysoft NTFS for Mac. (12) CrossDriver NTFS for Mac Pro.
+(13) CrossDriver for Mac Disks Pro. (14) EaseUS NTFS for Mac. (15) NTFSTool
+Pro.
+
 ## Get started
 
 [Build & usage](docs/usage.md) · [Linux & BSD packaging](docs/unix-packaging.md) · [MacOS packaging](docs/macos-backends.md) · [Validation results](DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md)
