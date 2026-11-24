@@ -205,3 +205,46 @@ narrow Darwin AppleDouble guard and its native reproduction, verify the five
 requested RW container pair receipts plus NTFS RO import, and retain the explicit
 FSKit, paid-source, UFS/HAMMER2 and KEXT limitations. Broad blocked-case reruns
 need an operator prerequisite change; no GUI/security/signing bypass is allowed.
+
+## Independent review, 2026-11-25
+
+Fresh review completed after implementation released Buran. No serious Lurker
+or harness defect was found; no product patch or unnecessary matrix rerun was
+needed. Reviewed candidate remains `a9aeaa6`, with the original per-fixture
+source identities preserved. The remote `source-verified` tree matches SHA-256
+for all 58 tracked core/CLI/helper source and manifest files at that candidate.
+Committed macOS adapter, folder publication, API/CLI, workflow builder and Cargo
+inputs remain unchanged through review head `9b1bc0d`; later FreeBSD
+code and concurrent Linux/harness work do not replace these native identities.
+
+The reviewer independently checked the remote receipts and action-log presence
+for five requested RW pairs plus two FAT32 regressions, excluding the earlier
+preview and failed Apple FAT32 run. Each accepted receipt contains seven
+successful ordinary CLI actions, original/updated PDF and text hashes, the added
+file, final hash agreement and no remaining mount. The encrypted NTFS import
+contains two successful RO read/normal-close cycles with matching hashes and
+`EROFS` write refusals. All six current-engine directory/backing attempts are
+accounted for separately; none is a payload persistence pass. Retained backend
+diagnostics corroborate disabled FSKit startup and CryFS's existing exFAT
+encrypted-block publication limit. Signed FSKit operator enablement, paid
+xlinuxfs procurement, UFS/HAMMER2 availability and excluded ZFS KEXT setup
+remain exactly the limitations above. No operator prerequisite was bypassed.
+
+The Darwin guard is scoped to ENOENT for a missing `._` companion whose published
+regular file has AppleDouble magic and a published regular-file/directory base;
+other rename failures still abort before configuration publication. Native
+stream-rename reproduction, the focused guard test and both exact-candidate
+gocryptfs/Cryptomator exFAT create regressions support the fix. The actual native
+check log totals 63 passed, 9 ignored, 0 failed; these include ordinary unit/CLI
+checks and one nonignored native validation test, not 63 storage lifecycles.
+The broad ignored native suite remains unexercised. CLI/helper hashes still
+match the final candidate recorded above.
+
+Fresh SSH inventory found zero owned images, mounts, backend/build processes or
+active folder sessions. Failed-session evidence and fixtures remain retained.
+No unrelated sessions were changed. Review evidence is
+`target/goal-validation/filesystem-round/macos/review.json` and
+`review-remote.json`; the latter also remains at
+`/tmp/lurker-filesystem-round-macos-20261125/review-remote.json` on Buran.
+Buran is released. Operator enablement would be required before the blocked
+FSKit cases can acquire lifecycle evidence.
