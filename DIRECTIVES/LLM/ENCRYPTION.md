@@ -53,6 +53,7 @@ Windows packaging and native qualification are planned. Use `cppcryptfs` for the
 ## Create Profile Scope
 
 - Applies to create flows only.
+- `--filesystem` selects the inner filesystem of a file container where supported by the native adapter and installed filesystem tools. It does not select a different encryption engine or alter cipher/KDF profiles. Omitting it preserves existing native defaults. Directory engines do not accept this option; native APFS encryption accepts APFS only. Current installation and CLI payload qualification is recorded under `DIRECTIVES/PLAN/FILESYSTEM_ROUND/`.
 - Supported `--cipher` values: `aes`, `serpent`, `twofish` for LUKS/VeraCrypt. Apple images accept only `aes`.
 - No cascades.
 - No user-tunable low-level crypto knobs.

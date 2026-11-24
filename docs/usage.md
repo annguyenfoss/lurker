@@ -26,6 +26,28 @@ lurker mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>
 lurker unmount [--type TYPE] [-t TAG] <target>
 ```
 
+File-container creation also accepts `--filesystem NAME`. Names are `ext4`,
+`btrfs`, `xfs`, `apfs`, `ufs1`, `ufs2`, `hammer2`, `ntfs`, `exfat`, and `zfs`;
+availability depends on the OS, encryption route and installed formatter/mount
+driver. Unsupported combinations fail explicitly. Omit the option to retain
+the native default. Mounting detects the existing inner filesystem; it does
+not reformat it. Native APFS encryption remains APFS-only, and directory
+encryption engines do not take a filesystem selection.
+
+For example, on a Linux host with the required ext4 tools:
+
+```sh
+lurker create --type luks --filesystem ext4 ./vault.img 1
+lurker mount ./vault.img /mnt/vault
+lurker unmount /mnt/vault
+```
+
+The bounded native filesystem round uses disposable encrypted files and
+PDF/text close-and-reopen checks. Per-OS dependency choices, observed results
+and upstream limitations are recorded in
+`DIRECTIVES/PLAN/FILESYSTEM_ROUND/`. Its results do not establish complete
+filesystem feature parity or power-loss durability.
+
 Build it:
 
 ```bash

@@ -68,7 +68,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 - Apple encryption is AES-256 at the disk-image layer, with APFS inside; it is not system FileVault or APFS filesystem encryption.
 - Supported create ciphers: `aes`, `serpent`, `twofish`.
 - Create cipher matters only on create. Mount/unmount detect existing volumes.
-- Linux create uses `btrfs`; macOS Apple images use APFS and VeraCrypt uses exFAT.
+- Linux create defaults to `btrfs`; macOS Apple images default to APFS and VeraCrypt to exFAT. CLI file-container creation can select an alternate inner filesystem with `--filesystem` where its native adapter and installed tools support it. Native APFS encryption remains APFS-only; directory formats have no inner-filesystem selector.
 - Linux Btrfs mounts use `compress=zstd`.
 - OpenBSD mounts writable FFS synchronously on CRYPTO, RAID1C, and VeraCrypt. Filesystem repair remains a manual native operation.
 - VeraCrypt tags are unsupported.
