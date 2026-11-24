@@ -176,6 +176,16 @@ copy's disk digest unchanged. This control bypassed the backing vnode and
 outer filesystem. Receipts are under
 `target/dragonfly-veracrypt-batch/fat32-power-cut/raw-control/`.
 
+Stock `tcplay` also mapped the same starting ciphertext through a vnode on
+UFS, with the same synchronous FAT32 mount options and file fsync workload.
+The cut completed 361 ms after the host observed the live worker. The
+verified copy kept the pre-workload ciphertext digest. Native read-only
+recovery found the unchanged control and the original contents of the
+overwritten file. The new file was missing. Both stock runs used the same
+engine and FAT32 mount path, which narrows the failure to the native
+file-backed path in these tests. Receipts are under
+`target/dragonfly-veracrypt-batch/fat32-power-cut/stock-file-control/`.
+
 The rebuilt package authenticated a 260 MiB stock VeraCrypt AES image with
 inner HAMMER2 and only about 20 MiB allocated. Identical starting ciphertext
 was tested on UFS and HAMMER2 backing. The two cuts completed 349 ms and
