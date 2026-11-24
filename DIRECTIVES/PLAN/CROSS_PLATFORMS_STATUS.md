@@ -121,6 +121,23 @@ subsequent reopens that verified the five expected SHA-256 values. It passed
 22 rejection checks through explicit VeraCrypt and Auto, including incompatible
 headers, the 80-byte password, old FAT32 geometry, missing credentials, and
 read-only refusal. The source hashes and storage inventories remained intact.
+Two additional authenticated fixtures with inner UFS and a HAMMER2 PFS named
+`WRONG` were rejected through both explicit VeraCrypt and Auto. Their ciphertext
+and the original FAT32 donor remained byte-identical across the rejection
+checks. The package created and reopened a vault with a 64-byte multibyte
+UTF-8 password through explicit and Auto. Both paths rejected 65 bytes and
+retained the original ciphertext. Native traces recorded access to the owned
+file and no `/dev/vn` attachment for either rejection.
+
+The exact rebuilt package and the signed upstream VeraCrypt 1.26.31 console
+completed six writable FAT32 round trips on an isolated Arch guest. Each of
+AES, Serpent and Twofish completed a DragonFly-origin and a Linux-origin
+round trip. Each 379 MiB image retained its 4 KiB-aligned FAT32 geometry.
+The two peers verified the origin marker, then the creator reopened the
+returned image and verified both marker hashes. Both systems restored their
+storage inventories on each visit. The earlier FreeBSD, OpenBSD and macOS
+round trips remain recorded at their original package revision. Windows
+remains unverified.
 
 Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse allocation
 reproduced the abrupt power-loss failure. Release support remains planned.
