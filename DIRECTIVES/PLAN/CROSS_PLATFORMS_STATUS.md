@@ -41,8 +41,8 @@ without repair and contained none of the acknowledged file or SQLite files.
 Close restored the mapper and vnode inventory.
 
 DragonFly 6.4.2's HAMMER2 fsync code leaves synchronization of the volume root
-to the filesystem syncer. A matched stock `tcplay` control is still required to
-distinguish this behavior from losses elsewhere in the storage path.
+to the filesystem syncer. The exact layer responsible for the observed loss
+remains open.
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
 
 The optimized `9384badb34f909887c85ebccc7dbe145b01c9794` package
@@ -50,9 +50,10 @@ The optimized `9384badb34f909887c85ebccc7dbe145b01c9794` package
 passed the native workspace check and tests in run
 `20261124T094631Z-e15acee7`. Its cold HAMMER2 default create, Auto open, native
 dismount, close and reopen passed without starting the cluster service. A
-login-user desktop callback with the previous test executable and the rebuilt
-installed helper also passed. The exact-build callback and full installed matrix
-are running separately.
+login-user desktop callback passed with the exact-build test executable and
+installed helper. All 26 installed result records passed, with 478 checks and
+baseline inventory after each case. The local SSH session ended after the last
+case receipt was saved and before the aggregate completion field was written.
 
 The rebuilt CLI reproduced the power-cut failure with a fully allocated image
 on outer HAMMER2. The host completed the cut 358 ms after observing the live
@@ -63,9 +64,16 @@ HAMMER2 vault without repair, and found an empty filesystem. Lurker close
 restored the native mapper and vnode inventory. The original cut disk remains
 preserved.
 
-Receipts are under `target/dragonfly-veracrypt-batch/`. The sparse-image and
-stock `tcplay` power-loss comparisons remain open. Release support remains
-planned.
+Stock `tcplay` 3.3 created and mapped a fully allocated AES VeraCrypt vault on
+UFS with inner HAMMER2 for the same workload. The host completed the cut
+348 ms after observing readiness. An independently verified cut-disk copy
+retained the pre-workload ciphertext digest. Stock `tcplay` reopened the vault
+on scratch storage and also found an empty filesystem. The stock control
+reproduces the loss without Lurker's wrapper.
+
+Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse-image power cuts,
+read-only recovery diagnostics, and an orderly reboot with a mounted vault
+remain open for the rebuilt candidate. Release support remains planned.
 
 ## DragonFly VeraCrypt candidate, 2026-11-23
 
