@@ -14,7 +14,7 @@ use std::process::{Command, Output as ProcessOutput, Stdio};
 #[derive(Clone, Debug)]
 pub struct ToolPaths {
     pub cryptsetup: PathBuf,
-    pub mkfs_btrfs: Option<PathBuf>,
+    pub formatter: Option<PathBuf>,
     pub mount: Option<PathBuf>,
     pub umount: Option<PathBuf>,
     pub blkid: Option<PathBuf>,
@@ -50,11 +50,11 @@ impl AppContext {
         &self.tools.cryptsetup
     }
 
-    pub fn mkfs_btrfs_path(&self) -> AppResult<&Path> {
+    pub fn formatter_path(&self) -> AppResult<&Path> {
         self.tools
-            .mkfs_btrfs
+            .formatter
             .as_deref()
-            .ok_or_else(|| AppError::new("Required command not found: mkfs.btrfs"))
+            .ok_or_else(|| AppError::new("Required filesystem formatter was not resolved"))
     }
 
     pub fn mount_path(&self) -> AppResult<&Path> {
@@ -334,7 +334,7 @@ impl ToolPaths {
         };
         let mut tools = Self {
             cryptsetup,
-            mkfs_btrfs: None,
+            formatter: None,
             mount: None,
             umount: None,
             blkid,
@@ -347,9 +347,10 @@ impl ToolPaths {
             CommandAction::Create(CreateCommand {
                 source_kind,
                 volume_type,
+                filesystem,
                 ..
             }) => {
-                tools.mkfs_btrfs = Some(require_command("mkfs.btrfs")?);
+                tools.formatter = Some(require_command(linux_formatter(*filesystem)?)?);
                 if *source_kind == SourceKind::Block && tools.lsblk.is_none() {
                     tools.lsblk = Some(require_command("lsblk")?);
                 }
@@ -367,6 +368,46 @@ impl ToolPaths {
         }
 
         Ok(tools)
+    }
+}
+
+/// Explicit native Linux formatters. Unsupported selections fail before staging
+/// or mutating either a file container or a physical target.
+pub(crate) fn linux_formatter(
+    filesystem: Option<crate::api::CreateFilesystem>,
+) -> AppResult<&'static str> {
+    use crate::api::CreateFilesystem::*;
+    match filesystem.unwrap_or(Btrfs) {
+        Btrfs => Ok("mkfs.btrfs"),
+        Ext4 => Ok("mkfs.ext4"),
+        Xfs => Ok("mkfs.xfs"),
+        Ntfs => Ok("mkntfs"),
+        Exfat => Ok("mkfs.exfat"),
+        Fat32 => Ok("mkfs.fat"),
+        other => Err(AppError::new(format!(
+            "Linux cannot create {} through this container adapter. Supported: btrfs, ext4, xfs, ntfs, exfat, fat32.",
+            other.as_str()
+        ))),
+    }
+}
+
+pub(crate) fn linux_format_args(
+    filesystem: crate::api::CreateFilesystem,
+    owner: crate::new_filesystem::Owner,
+) -> Vec<OsString> {
+    use crate::api::CreateFilesystem::*;
+    match filesystem {
+        Btrfs => vec!["-q".into()],
+        Ext4 => vec![
+            "-q".into(),
+            "-E".into(),
+            format!("root_owner={}:{},root_perms=0700", owner.uid, owner.gid).into(),
+        ],
+        Xfs => vec!["-q".into()],
+        Ntfs => vec!["-Q".into(), "-F".into()],
+        Exfat => vec![],
+        Fat32 => vec!["-F".into(), "32".into()],
+        _ => vec![], // linux_formatter rejects unsupported selections first.
     }
 }
 
@@ -637,7 +678,7 @@ mod tests {
             output: crate::output::Output::buffered().0,
             tools: super::ToolPaths {
                 cryptsetup: "/bin/false".into(),
-                mkfs_btrfs: None,
+                formatter: None,
                 mount: None,
                 umount: None,
                 blkid: None,

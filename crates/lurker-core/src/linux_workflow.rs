@@ -1,5 +1,5 @@
 use super::*;
-use crate::api::{CommandAction, CreateCommand, MountCommand, UnmountCommand};
+use crate::api::{CommandAction, CreateCommand, CreateFilesystem, MountCommand, UnmountCommand};
 use crate::error::{AppError, AppResult};
 use crate::linux::{
     absolute_path, is_block_device_target, mapper_device_path, mapper_name_for_source,
@@ -388,8 +388,12 @@ fn luks_create_device(
             )?;
 
             ctx.set_cleanup_mapper(mapper_name.clone());
-            ctx.output.msg2("Creating Btrfs filesystem");
-            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name), owner)?;
+            format_filesystem(
+                ctx,
+                &mapper_device_path(&mapper_name),
+                command.filesystem,
+                owner,
+            )?;
 
             ctx.output.msg2(&format!(
                 "Closing mapper {}",
@@ -440,8 +444,12 @@ fn luks_create_device(
             )?;
 
             ctx.set_cleanup_mapper(mapper_name.clone());
-            ctx.output.msg2("Creating Btrfs filesystem");
-            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name), owner)?;
+            format_filesystem(
+                ctx,
+                &mapper_device_path(&mapper_name),
+                command.filesystem,
+                owner,
+            )?;
 
             ctx.output.msg2(&format!(
                 "Closing mapper {}",
@@ -522,8 +530,12 @@ fn veracrypt_create_device(
             )?;
 
             ctx.set_cleanup_mapper(mapper_name.clone());
-            ctx.output.msg2("Creating Btrfs filesystem");
-            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name), owner)?;
+            format_filesystem(
+                ctx,
+                &mapper_device_path(&mapper_name),
+                command.filesystem,
+                owner,
+            )?;
 
             ctx.output.msg2(&format!(
                 "Closing mapper {}",
@@ -574,8 +586,12 @@ fn veracrypt_create_device(
             )?;
 
             ctx.set_cleanup_mapper(mapper_name.clone());
-            ctx.output.msg2("Creating Btrfs filesystem");
-            mkfs_btrfs(ctx, &mapper_device_path(&mapper_name), owner)?;
+            format_filesystem(
+                ctx,
+                &mapper_device_path(&mapper_name),
+                command.filesystem,
+                owner,
+            )?;
 
             ctx.output.msg2(&format!(
                 "Closing mapper {}",
@@ -1193,6 +1209,23 @@ fn mount_open_mapper(
     {
         options.push("compress=zstd".into());
     }
+    if matches!(filesystem_type.as_deref(), Some("ntfs" | "exfat" | "vfat")) {
+        let owner = crate::new_filesystem::invoking_owner()?;
+        options.extend([
+            format!("uid={}", owner.uid),
+            format!("gid={}", owner.gid),
+            "umask=0077".into(),
+        ]);
+    }
+    if filesystem_type.as_deref() == Some("ntfs") {
+        // The installed NTFS-3G helper is the portable Linux read/write route.
+        args.extend([OsString::from("-t"), OsString::from("ntfs-3g")]);
+    }
+    if filesystem_type.as_deref() == Some("ufs") && !readonly {
+        return Err(AppError::new(
+            "Linux UFS imports require --readonly; UFS writes are not qualified.",
+        ));
+    }
     if readonly {
         options.push("ro".into());
     }
@@ -1586,28 +1619,58 @@ fn veracrypt_create(
     }
 }
 
-fn mkfs_btrfs(
+fn format_filesystem(
     ctx: &mut AppContext,
     device_path: &Path,
+    filesystem: Option<CreateFilesystem>,
     owner: crate::new_filesystem::Owner,
 ) -> AppResult<()> {
-    // mkfs copies the seed root's owner/mode. This initializes the new Btrfs
-    // inode without mounting it or changing ownership during later unlocks.
-    let seed = EmptyFilesystemRoot::new(owner)?;
-    let args = vec![
-        OsString::from("-q"),
-        OsString::from("--rootdir"),
-        seed.descriptor_path().into_os_string(),
-        device_path.as_os_str().to_os_string(),
-    ];
-    let mkfs_btrfs = ctx.mkfs_btrfs_path()?.to_path_buf();
-    ctx.run_command(
-        &mkfs_btrfs,
+    let filesystem = filesystem.unwrap_or(CreateFilesystem::Btrfs);
+    ctx.output
+        .msg2(&format!("Creating {} filesystem", filesystem.as_str()));
+    let mut args = crate::system::linux_format_args(filesystem, owner);
+    // Seed/prototype initialization sets ownership only for newly created roots;
+    // ordinary unlock never alters an existing filesystem's metadata.
+    let seed = if matches!(filesystem, CreateFilesystem::Btrfs | CreateFilesystem::Xfs) {
+        Some(EmptyFilesystemRoot::new(owner)?)
+    } else {
+        None
+    };
+    if filesystem == CreateFilesystem::Btrfs {
+        args.extend([
+            OsString::from("--rootdir"),
+            seed.as_ref().unwrap().descriptor_path().into_os_string(),
+        ]);
+    }
+    if filesystem == CreateFilesystem::Xfs {
+        let prototype = seed.as_ref().unwrap().parent.join("prototype");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&prototype)
+            .map_err(|e| AppError::io("Create private XFS prototype", e))?;
+        writeln!(
+            file,
+            "/dev/null\n0 0\nd--700 {} {}\n$",
+            owner.uid, owner.gid
+        )
+        .map_err(|e| AppError::io("Write private XFS prototype", e))?;
+        args.extend([OsString::from("-p"), prototype.into_os_string()]);
+    }
+    args.push(device_path.as_os_str().to_os_string());
+    let formatter = ctx.formatter_path()?.to_path_buf();
+    let result = ctx.run_command(
+        &formatter,
         &args,
         true,
         false,
-        "Failed to create Btrfs filesystem",
-    )
+        "Failed to create filesystem",
+    );
+    if let Some(seed) = seed.as_ref() {
+        let _ = fs::remove_file(seed.parent.join("prototype"));
+    }
+    result
 }
 
 fn assign_new_image_owner(path: &Path, owner: crate::new_filesystem::Owner) -> AppResult<()> {

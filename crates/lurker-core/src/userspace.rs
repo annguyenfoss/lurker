@@ -563,9 +563,11 @@ fn start_filesystem(
         // comma so libfuse passes the whole option string to the LKL driver.
         command.args([
             "-o",
-            &format!("opts=uid={}\\,gid={}", crate::effective_uid(), unsafe {
-                libc::getegid()
-            }),
+            &format!(
+                "opts=uid={}\\,gid={}\\,umask=0077",
+                crate::effective_uid(),
+                unsafe { libc::getegid() }
+            ),
         ]);
     }
     if session.readonly {
@@ -941,11 +943,21 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
             .as_deref()
             .ok_or_else(|| AppError::new("File container size is required."))?,
     )?;
-    if size < 128 {
-        return Err(AppError::new(
-            "Btrfs file containers must be at least 128 MiB.",
-        ));
+    let filesystem = c.filesystem.unwrap_or(crate::api::CreateFilesystem::Btrfs);
+    let formatter_name = crate::system::linux_formatter(Some(filesystem))?;
+    let minimum = if filesystem == crate::api::CreateFilesystem::Xfs {
+        384
+    } else {
+        128
+    };
+    if size < minimum {
+        return Err(AppError::new(format!(
+            "{} file containers must be at least {minimum} MiB.",
+            filesystem.as_str()
+        )));
     }
+    let formatter = std::path::absolute(find_program(formatter_name)?)
+        .map_err(|e| AppError::io("Failed to resolve filesystem formatter", e))?;
     let expanded = expand(&c.target)?;
     let parent = expanded
         .parent()
@@ -998,13 +1010,14 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
         live_session = Some((dir.clone(), session.clone()));
         let prepared = (|| {
             open_raw(tools, &dir, &mut session, &secret, c.keyfile.as_deref())?;
-            let mkfs = std::path::absolute(find_program("mkfs.btrfs")?)
-                .map_err(|e| AppError::io("Failed to resolve the Btrfs formatter", e))?;
-            // The formatter stats relative mount-table sources from its working directory.
-            // Keep those lookups in the private session directory owned by this user.
+            // Keep the formatter's mount-table lookups inside our private session.
+            let args = crate::system::linux_format_args(
+                filesystem,
+                crate::new_filesystem::invoking_owner()?,
+            );
             checked(
-                Command::new(mkfs)
-                    .arg("-q")
+                Command::new(&formatter)
+                    .args(&args)
                     .arg(raw_path(&dir))
                     .current_dir(&dir),
                 None,
