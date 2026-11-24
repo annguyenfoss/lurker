@@ -24,3 +24,10 @@ Default verification:
 - `cargo check --workspace`
 - `cargo test --workspace`
 - For desktop-only work, at minimum `cargo test -p lurker-desktop`
+
+## README encryption table layout
+
+- Keep the encryption table within GitHub's rendered README width without horizontal scrolling. Avoid oversized fixed-width columns or footer cells that force overflow.
+- Keep every OS name on one unbroken line. Do not insert zero-width spaces, soft breaks, or line breaks inside OS headers.
+- Render the merged softraid label on exactly two lines: `softraid`, then `CRYPTO / RAID1C`. Keep the entire second line together.
+- Verify the rendered GitHub layout, including header wrapping and horizontal overflow; source inspection and cell counts alone are insufficient.
