@@ -146,6 +146,11 @@ fn probe(mapped: &str) -> AppResult<String> {
 
 fn pool_name(mapped: &str) -> AppResult<String> {
     let labels = exec("/usr/sbin/zdb", &args(&["-l", mapped]), None)?;
+    if !single_device_labels(&labels) {
+        return Err(AppError::new(
+            "Only single-device ZFS labels without child, spare or cache devices are accepted.",
+        ));
+    }
     let names: std::collections::HashSet<&str> = labels
         .lines()
         .filter_map(|line| {
@@ -413,4 +418,57 @@ fn apfs_input(mapped: &str) -> AppResult<PathBuf> {
     selected.ok_or_else(|| {
         AppError::new("No verified VeraCrypt regular image is available for the APFS reader.")
     })
+}
+
+/// Each valid label must describe one disk leaf, with no other device arrays.
+/// Label paths may name an earlier md unit; native import remaps the sole GUID.
+fn single_device_labels(labels: &str) -> bool {
+    let mut names = 0;
+    let mut counts = 0;
+    let mut leaves = 0;
+    for line in labels.lines().map(str::trim) {
+        if line.starts_with("name:") {
+            names += 1;
+        }
+        if let Some(count) = line.strip_prefix("vdev_children:") {
+            if count.trim() != "1" {
+                return false;
+            }
+            counts += 1;
+        }
+        if let Some(kind) = line.strip_prefix("type:") {
+            if kind.trim() != "'disk'" {
+                return false;
+            }
+            leaves += 1;
+        }
+        if ["children", "spares", "l2cache"].iter().any(|key| {
+            line.strip_prefix(key)
+                .is_some_and(|rest| rest.starts_with('[') || rest.starts_with(':'))
+        }) {
+            return false;
+        }
+    }
+    names > 0 && names == counts && counts == leaves
+}
+
+#[cfg(test)]
+mod zfs_label_tests {
+    use super::single_device_labels;
+    #[test]
+    fn labels_require_one_disk_without_additional_devices() {
+        let label = "name: 'lurker_test'\nvdev_children: 1\nvdev_tree:\n type: 'disk'\n path: '/dev/md17.eli'\n";
+        assert!(single_device_labels(label));
+        assert!(single_device_labels(&format!("{label}{label}")));
+        assert!(!single_device_labels(
+            &label.replace("vdev_children: 1", "vdev_children: 2")
+        ));
+        assert!(!single_device_labels(&label.replace("'disk'", "'mirror'")));
+        for extra in ["children[0]:", "spares[0]:", "l2cache[0]:"] {
+            assert!(!single_device_labels(&format!("{label}{extra}\n")));
+        }
+        assert!(!single_device_labels(
+            &label.replace("vdev_children: 1\n", "")
+        ));
+    }
 }
