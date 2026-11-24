@@ -8,15 +8,10 @@ use std::{
     path::Path,
 };
 
-pub(super) fn validate(selected: Option<CreateFilesystem>, backend: VolumeType) -> AppResult<()> {
-    if selected == Some(CreateFilesystem::Xfs) && backend == VolumeType::Geli {
+pub(super) fn validate(selected: Option<CreateFilesystem>, _backend: VolumeType) -> AppResult<()> {
+    if selected == Some(CreateFilesystem::Xfs) {
         return Err(AppError::new(
-            "FreeBSD's packaged LKL driver requires 512-byte providers; the GELI profile uses 4096-byte sectors, so XFS creation is unavailable.",
-        ));
-    }
-    if selected == Some(CreateFilesystem::Ntfs) && backend == VolumeType::Geli {
-        return Err(AppError::new(
-            "The packaged FreeBSD NTFS formatter cannot create the fixed 4096-byte GELI profile; select a supported filesystem or VeraCrypt.",
+            "The packaged FreeBSD LKL driver supports read-only XFS imports only; its append writes fail, so XFS creation is unavailable.",
         ));
     }
     match selected {
@@ -218,6 +213,11 @@ pub(super) fn mount(mapped: &str, target: &Path, readonly: bool) -> AppResult<()
             ]),
         ),
         "xfs" | "btrfs" => {
+            if !readonly {
+                return Err(AppError::new(
+                    "Writable XFS/Btrfs mounts are unavailable with the packaged FreeBSD LKL driver because append writes fail; use --readonly.",
+                ));
+            }
             let info = exec("/usr/sbin/diskinfo", &args(&[mapped]), None)?;
             if sector_size(mapped, &info)? != 512 {
                 return Err(AppError::new(
