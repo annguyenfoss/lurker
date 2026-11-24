@@ -8,7 +8,7 @@ The README and planning summary use the following compact notation. The older de
 
 - **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
 - **✅ Beta** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
-- **⚠️ Limited Support** — Create + R/W exists, but important features are limited or implementation completeness remains unresolved, as in note ². This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
+- **⚠️ Limited Support** — Mounted R/W is available, with important feature limitations or unresolved completeness. Creation is available except where unverified in note ¹. This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
 - **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access, whether or not formatting is available.
 - **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.

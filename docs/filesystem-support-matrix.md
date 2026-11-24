@@ -7,9 +7,9 @@ This planning summary follows the stated use case: format a decrypted physical p
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ext4** | ✅ | ⚠️ Limited Support | ⚠️ Limited Support | ❗R/O | ⚠️ Limited Support | ❗R/O | ⚠️ Limited Support |
-| **Btrfs** | ✅ | ❗R/W; limited features; beta¹ | ⚠️ Limited Support | — | — | — | ⚠️ Limited Support |
+| **Btrfs** | ✅ | ⚠️ Limited Support¹ | ⚠️ Limited Support | — | — | — | ⚠️ Limited Support |
 | **XFS** | ✅ | ⚠️ Limited Support | ⚠️ Limited Support | ❗R/O | — | ❗R/O³ | ❗R/O |
-| **APFS** | ⚠️ Limited Support | ✅ | ❗R/O | ❗R/O | — | ❗R/O³ | ❗R/W; limited features; beta¹ |
+| **APFS** | ⚠️ Limited Support | ✅ | ❗R/O | ❗R/O | — | ❗R/O³ | ⚠️ Limited Support¹ |
 | **UFS1 / FFSv1** | ⚠️ Limited Support | — | ✅ | ✅ | ✅ | ✅ | ❗R/O |
 | **UFS2 / FFSv2** | ⚠️ Limited Support | ❗R/O; limited features | ✅ | ✅ | ✅ | — | ❗R/O |
 | **HAMMER2** | ✅ Beta | — | ⚠️ Limited Support² | ⚠️ Limited Support | ⚠️ Limited Support | ✅ | — |
@@ -21,7 +21,7 @@ This planning summary follows the stated use case: format a decrypted physical p
 
 - **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
 - **✅ Beta** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
-- **⚠️ Limited Support** — Create + R/W exists, but important features are limited or implementation completeness remains unresolved, as in note ². This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
+- **⚠️ Limited Support** — Mounted R/W is available, with important feature limitations or unresolved completeness. Creation is available except where unverified in note ¹. This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
 - **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access, whether or not formatting is available.
 - **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
