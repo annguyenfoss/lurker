@@ -116,6 +116,20 @@ private Xvfb display, with 1,216 sampled colors and clean display teardown.
 Offline remove and reinstall in the same private prefix verified package
 contents and left the guest's system package database unchanged.
 
+The same package passed three FAT32 capacity checks on a separate DragonFly
+6.4.2 guest. With 194,928,640 bytes free on a bounded outer UFS filesystem,
+a 260 MiB create with `--force` returned `ENOSPC`. The existing destination's
+inode and bytes survived, and there was no staged file or session left.
+Freeing space allowed creation and the new synced payload survived reopen.
+Inside a separate FAT32 vault, a 1 MiB append returned `ENOSPC` with one 4 KiB
+cluster free. Prior bytes survived reopen, and a new synced file survived
+after the filler was removed. A fully allocated 4.5 GiB vault accepted and
+synced a 4,294,967,295-byte file, then returned `EFBIG` on a one-byte append.
+Auto reopen matched the entire file's size and SHA-256
+`14c57a2ed8db6fb82ad48668f17bcfb782017176a888a51107760f12ccba7d39`.
+The storage and session inventories matched baseline in all three cases.
+Receipts are under `target/dragonfly-veracrypt-batch/capacity-B/`.
+
 The rebuilt package authenticated a 260 MiB stock VeraCrypt AES image with
 inner HAMMER2 and only about 20 MiB allocated. Identical starting ciphertext
 was tested on UFS and HAMMER2 backing. The two cuts completed 349 ms and
