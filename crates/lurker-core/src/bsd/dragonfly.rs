@@ -12,6 +12,11 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::path::Path;
 
+mod filesystems;
+pub(super) use filesystems::{
+    close_filesystem, filesystem_has_posix_ownership, make_selected_filesystem,
+    matches_filesystem_mount, mount_filesystem, validate_filesystem,
+};
 pub(super) mod linear;
 mod metadata;
 pub(super) mod veracrypt;
