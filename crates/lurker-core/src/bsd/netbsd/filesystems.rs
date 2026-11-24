@@ -19,6 +19,7 @@ pub(in super::super) fn validate_filesystem(
         | CreateFilesystem::Exfat
         | CreateFilesystem::Ntfs
         | CreateFilesystem::Fat32
+        | CreateFilesystem::Hammer2
         | CreateFilesystem::Zfs => Ok(()),
         other => Err(AppError::new(format!(
             "{} has no qualified NetBSD formatter/mount route.",
@@ -34,17 +35,15 @@ fn partition(device: &str) -> AppResult<String> {
 }
 fn label_partition(device: &str, fs: CreateFilesystem) -> AppResult<String> {
     let r = raw(device);
-    let label = exec("/sbin/disklabel", &args(&["-I", "-r", &r]), None)?;
-    let sectors = label
-        .lines()
-        .find_map(|l| {
-            l.strip_prefix("total sectors:")
-                .and_then(|n| n.trim().parse::<u64>().ok())
-        })
-        .ok_or_else(|| AppError::new("Native disklabel omitted device size."))?;
-    if sectors <= 4096 {
+    let geometry = exec("/sbin/dkctl", &args(&[&r, "getgeometry"]), None)?;
+    let words: Vec<_> = geometry.split_whitespace().collect();
+    let sectors = words
+        .get(4)
+        .and_then(|n| n.parse::<u32>().ok())
+        .ok_or_else(|| AppError::new("Native disk geometry exceeds the disklabel limit."))?;
+    if sectors <= 4096 || words.get(7) != Some(&"512") {
         return Err(AppError::new(
-            "CGD device is too small for an inner partition.",
+            "CGD inner partitions require 512-byte sectors and at least 2 MiB.",
         ));
     }
     let kind = match fs {
@@ -54,15 +53,10 @@ fn label_partition(device: &str, fs: CreateFilesystem) -> AppResult<String> {
         CreateFilesystem::Zfs => "ZFS",
         _ => "unknown",
     };
-    let mut label = label
-        .lines()
-        .filter(|l| !l.trim_start().starts_with("a:"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    label.push_str(&format!("\n  a: {} 2048 {kind}\n", sectors - 2048));
+    let label = format!("lurker|Lurker CGD inner filesystem:dt=SCSI:ty=fixed:se#512:ns#32:nt#64:nc#{}:su#{sectors}:pa#{}:oa#2048:ta={kind}:pd#{sectors}:od#0:td=unused:bs#8192:sb#65536:\n", sectors.div_ceil(2048), sectors - 2048);
     exec(
         "/sbin/disklabel",
-        &args(&["-R", "-r", &r, "/dev/stdin"]),
+        &args(&["-w", "-f", "/dev/stdin", &r, "lurker"]),
         Some(label.as_bytes()),
     )?;
     partition(device)
@@ -104,19 +98,26 @@ pub(in super::super) fn make_selected_filesystem(
                     "-O",
                     "^64bit,^metadata_csum,^orphan_file",
                     "-F",
-                    &r,
+                    &inner,
                 ]),
                 None,
             )?;
         }
         CreateFilesystem::Exfat => {
-            exec("/usr/pkg/sbin/mkexfatfs", &args(&[&r]), None)?;
+            exec("/usr/pkg/sbin/mkexfatfs", &args(&[&inner]), None)?;
         }
         CreateFilesystem::Ntfs => {
-            exec("/usr/pkg/sbin/mkntfs", &args(&["-F", "-Q", &r]), None)?;
+            exec("/usr/pkg/sbin/mkntfs", &args(&["-F", "-Q", &inner]), None)?;
         }
         CreateFilesystem::Fat32 => {
             exec("/sbin/newfs_msdos", &args(&["-F", "32", &r]), None)?;
+        }
+        CreateFilesystem::Hammer2 => {
+            exec(
+                "/usr/local/sbin/newfs_hammer2",
+                &args(&["-L", "DATA", &r]),
+                None,
+            )?;
         }
         CreateFilesystem::Zfs => {
             let pool = format!("lurker_{}", super::super::unique_id());
@@ -147,7 +148,7 @@ fn probe(device: &str) -> AppResult<(String, String)> {
             let kind = kind.trim();
             if matches!(
                 kind,
-                "ufs" | "ffs" | "exfat" | "ntfs" | "ext2fs" | "msdosfs" | "zfs"
+                "ufs" | "ffs" | "exfat" | "ntfs" | "ext2fs" | "msdosfs" | "hammer2" | "zfs"
             ) {
                 return Ok((candidate, kind.to_owned()));
             }
@@ -231,6 +232,11 @@ pub(in super::super) fn mount_filesystem(
                 "700",
             ]);
             "/sbin/mount_msdos"
+        }
+        "hammer2" => {
+            argv.extend([format!("{device}@DATA").into(), target.as_os_str().into()]);
+            exec("/usr/local/sbin/mount_hammer2", &argv, None)?;
+            return Ok(());
         }
         "zfs" => {
             let pool = pool_name(&device)?;
