@@ -324,6 +324,20 @@ pub(super) fn close(mapped: &str) -> AppResult<()> {
         let imported = exec("/sbin/zpool", &args(&["list", "-H", "-o", "name"]), None)?;
         if imported.lines().any(|n| n == pool) {
             verify_pool(mapped, &pool)?;
+            // Export normally unmounts every dataset. The shared lifecycle has
+            // authority over its recorded root mount only; retain other mounts.
+            if super::super::mounts()?.iter().any(|mount| {
+                mount.filesystem == "zfs"
+                    && mount.source.to_str().is_some_and(|source| {
+                        source == pool
+                            || source.starts_with(&format!("{pool}/"))
+                            || source.starts_with(&format!("{pool}@"))
+                    })
+            }) {
+                return Err(AppError::new(
+                    "The private ZFS pool still has mounted datasets; refusing export and retaining its encrypted mapping.",
+                ));
+            }
             exec("/sbin/zpool", &args(&["export", &pool]), None)?;
         }
     }
