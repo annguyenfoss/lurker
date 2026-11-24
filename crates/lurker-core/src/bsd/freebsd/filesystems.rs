@@ -8,7 +8,12 @@ use std::{
     path::Path,
 };
 
-pub(super) fn validate(selected: Option<CreateFilesystem>, _backend: VolumeType) -> AppResult<()> {
+pub(super) fn validate(selected: Option<CreateFilesystem>, backend: VolumeType) -> AppResult<()> {
+    if selected == Some(CreateFilesystem::Ntfs) && backend == VolumeType::Geli {
+        return Err(AppError::new(
+            "FreeBSD's packaged mkntfs does not complete on GELI's fixed 4096-byte providers; NTFS creation requires VeraCrypt.",
+        ));
+    }
     if selected == Some(CreateFilesystem::Xfs) {
         return Err(AppError::new(
             "The packaged FreeBSD LKL driver supports read-only XFS imports only; its append writes fail, so XFS creation is unavailable.",
