@@ -8,11 +8,10 @@ The README and planning summary use the following compact notation. The older de
 
 - **✅** Full feature support.
 - **☑️** Largely usable, with some filesystem features missing or unverified.
-- **⚠️ R/O** Read-Only.
+- **⚠️** Read-Only.
 - **—** Unsupported.
 - **¹** Disk/container creation not available.
-- **²** Disk/container creation not available.
-- **³** Largely usable; reliability not established.
+- **²** Largely usable; reliability not established.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 

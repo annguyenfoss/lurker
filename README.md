@@ -254,23 +254,22 @@ Lurker chooses the native format for your OS. Use administrator authorization wh
 | ext4 | ✅ | ☑️ | ☑️ | ⚠️ R/O | ☑️ | ⚠️ R/O | ☑️ |
 | Btrfs | ✅ | ☑️¹ | ☑️ | — | — | — | ☑️ |
 | XFS | ✅ | ☑️ | ☑️ | ⚠️ R/O | — | ⚠️ R/O | ⚠️ R/O |
-| APFS | ☑️ | ✅ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ☑️² |
+| APFS | ☑️ | ✅ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ☑️¹ |
 | UFS1 / FFSv1 | ☑️ | — | ✅ | ✅ | ✅ | ✅ | ⚠️ R/O |
 | UFS2 / FFSv2 | ☑️ | ⚠️ R/O | ✅ | ✅ | ✅ | — | ⚠️ R/O |
-| HAMMER2 | ✅³ | — | ☑️³ | ☑️ | ☑️ | ✅ | — |
+| HAMMER2 | ✅² | — | ☑️² | ☑️ | ☑️ | ✅ | — |
 | NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ✅ |
 | exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅³ |
+| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅² |
 
 **Legend**
 
 - **✅** Full feature support.
 - **☑️** Largely usable, with some filesystem features missing or unverified.
-- **⚠️ R/O** Read-Only.
+- **⚠️** Read-Only.
 - **—** Unsupported.
 - **¹** Disk/container creation not available.
-- **²** Disk/container creation not available.
-- **³** Largely usable; reliability not established.
+- **²** Largely usable; reliability not established.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
