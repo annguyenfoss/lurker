@@ -52,6 +52,13 @@ filesystem metadata. The encrypted cases using ordinary fsync retained the
 pre-workload ciphertext digest.
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
 
+DragonFly issue 3249 tracks loss of a newly created, fsynced HAMMER2 file
+after a forced reboot. An October 2026 report reproduced the loss on upstream
+`1cb32eba459f`, even after both file and directory fsync completed. Its plain
+HAMMER2 control retained the file when the worker also called `sync()`.
+The issue remains open and has no attached fix.
+https://bugs.dragonflybsd.org/issues/3249
+
 A separate plain HAMMER2 control tested a synchronous mount. The stock
 `mount_hammer2` command rejected `-o sync`. The native mount syscall accepted
 `MNT_SYNCHRONOUS`, which `statfs` and the mount table both confirmed before
