@@ -59,3 +59,40 @@ Primary references:
 - https://github.com/tuxera/ntfs-3g/wiki/Manual
 - https://github.com/kusumi/openbsd_hammer2
 - https://github.com/veracrypt/VeraCrypt/blob/7afc449f2bc69366e8b67b82ad66201325d318c3/src/Core/Unix/OpenBSD/CoreOpenBSD.cpp
+
+## Independent review — 2026-11-25
+
+Reviewed implementation commits `8892f3e` / `d469704` and reader harness
+`1d15e4e` against the complete final receipts. All **12 RW pairs / 84 CLI
+operations** have the recorded `d4a11b14…978` executable identity, seven
+successful operations in the required order, unchanged PDF hashes, appended
+text and second-file hashes matching the final reopen, and no remaining mount.
+The three imported-reader receipts independently match their expected hashes
+and explicitly record CLI RO refusal. They remain native reader controls only.
+All ten filesystem rows above agree with the available routes and receipts.
+
+Native `cargo check` and `cargo test` for core, CLI and helper passed on committed
+source `7270de9dd02906498ad3f28b5fc0b4b988e85e1c`: **84 passed, 0 failed,
+18 ignored**. Its source archive SHA-256 is
+`72d99719f9c426166061b4bf561ec78b56a7362b95b9b5057d7bd871a13c3a51`.
+OpenBSD adapters, shared BSD lifecycle and VeraCrypt integration are unchanged
+from the payload-tested source; defaults, explicit selection refusal, native
+label geometry, ownership initialization and ordinary close ordering were
+reviewed. No serious product or harness gap was found, so no patch or payload
+rerun was needed. This compatibility check does not relabel the original
+payload artifacts as a newer build or qualify an installed release package.
+
+Fresh root inventory confirms only the baseline root mount, four unused vnodes,
+no softraid array, no VeraCrypt attachment, no session JSON or live Lurker/build
+worker. All recorded executable/tool hashes still match; elevated candidate
+executables and their ancestors are root-owned without group/other write.
+Packages and preserved fixtures remain intentionally. Fresh package queries
+returned no Btrfs, ZFS or HAMMER2 match. The existing unavailable-route limits,
+native-only RO controls, absent OpenBSD directory engines and untested metadata
+features remain as documented above.
+
+Review evidence: `target/goal-validation/filesystem-round/openbsd/` contains
+`review-summary.json`, `review-receipts.json`, `review-cleanup.json`,
+`review-checkpoint.json`, `review-status.json`, `review-check.log` and
+`review-test.log`. Remote compatibility source/logs remain at
+`/tmp/lurker-filesystem-round-openbsd-review-20261125`; the host is released.
