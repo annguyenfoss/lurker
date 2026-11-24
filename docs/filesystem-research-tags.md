@@ -6,20 +6,27 @@ The README and planning summary use the following compact notation. The older de
 
 **Legend**
 
-- **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
-- **✅ 🛈** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
-- **⚠️** — Mounted R/W is available, with important feature limitations or unresolved completeness. Creation is available except where unverified in note ¹. This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
-- **❗R/O** — Mounted read-only access, whether or not formatting is available.
-- **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
-- **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
-- **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
-- **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel. This prerequisite also applies to the DragonFly XFS and APFS read-only routes.
+- **✅** — Create + R/W on physical partitions and file containers.
+- **⚠️** — Mounted R/W with feature limitations or unresolved completeness; creation exceptions are noted below.
+- **❗R/O** — Mounted read-only access.
+- **—** — Unsupported, including creation-only routes.
+- **¹** — Btrfs/macOS: mounted R/W exists; creation workflow unverified.
+- **²** — APFS/Windows: mounted R/W exists; creation workflow unverified.
+- **³** — HAMMER2/Linux: experimental maturity; physical-device reliability unqualified.
+- **⁴** — HAMMER2/FreeBSD: basic workflow exists; implementation completeness unresolved.
+- **⁵** — NTFS/DragonFly: requires FUSE, omitted from the stock 6.4.2 kernel.
+- **⁶** — exFAT/DragonFly: requires FUSE, omitted from the stock 6.4.2 kernel.
+- **⁷** — OpenZFS/Windows: largely implemented; awaiting production maturity.
+
+The DragonFly FUSE prerequisite also applies to its XFS and APFS read-only routes.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
 This is filesystem capability research based on documentation/source inspection, not a claim that these combinations are integrated or runtime-qualified in Lurker.
 
 This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools run on the host OS and are freely obtainable by individual users; virtual machines, WSL, paid routes and extract–edit–reinsert workflows are excluded. Native and userspace mounts count equally. Separate host-installed formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
+
+Number planning annotations uniquely from 1, scanning cells left to right and rows top to bottom. Use superscript numbers, with one concise explanation per number in the legend.
 
 ## Detailed survey notation
 

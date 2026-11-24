@@ -9,24 +9,29 @@ This planning summary follows the stated use case: format a decrypted physical p
 | ext4 | ✅ | ⚠️ | ⚠️ | ❗R/O | ⚠️ | ❗R/O | ⚠️ |
 | Btrfs | ✅ | ⚠️¹ | ⚠️ | — | — | — | ⚠️ |
 | XFS | ✅ | ⚠️ | ⚠️ | ❗R/O | — | ❗R/O | ❗R/O |
-| APFS | ⚠️ | ✅ | ❗R/O | ❗R/O | — | ❗R/O | ⚠️¹ |
+| APFS | ⚠️ | ✅ | ❗R/O | ❗R/O | — | ❗R/O | ⚠️² |
 | UFS1 / FFSv1 | ⚠️ | — | ✅ | ✅ | ✅ | ✅ | ❗R/O |
 | UFS2 / FFSv2 | ⚠️ | ❗R/O | ✅ | ✅ | ✅ | — | ❗R/O |
-| HAMMER2 | ✅ 🛈 | — | ⚠️² | ⚠️ | ⚠️ | ✅ | — |
-| NTFS | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️³ | ✅ |
-| exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅³ | ✅ |
-| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ⚠️ | — | ✅ 🛈 |
+| HAMMER2 | ✅³ | — | ⚠️⁴ | ⚠️ | ⚠️ | ✅ | — |
+| NTFS | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️⁵ | ✅ |
+| exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅⁶ | ✅ |
+| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ⚠️ | — | ✅⁷ |
 
 **Legend**
 
-- **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
-- **✅ 🛈** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
-- **⚠️** — Mounted R/W is available, with important feature limitations or unresolved completeness. Creation is available except where unverified in note ¹. This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
-- **❗R/O** — Mounted read-only access, whether or not formatting is available.
-- **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
-- **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
-- **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
-- **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel. This prerequisite also applies to the DragonFly XFS and APFS read-only routes.
+- **✅** — Create + R/W on physical partitions and file containers.
+- **⚠️** — Mounted R/W with feature limitations or unresolved completeness; creation exceptions are noted below.
+- **❗R/O** — Mounted read-only access.
+- **—** — Unsupported, including creation-only routes.
+- **¹** — Btrfs/macOS: mounted R/W exists; creation workflow unverified.
+- **²** — APFS/Windows: mounted R/W exists; creation workflow unverified.
+- **³** — HAMMER2/Linux: experimental maturity; physical-device reliability unqualified.
+- **⁴** — HAMMER2/FreeBSD: basic workflow exists; implementation completeness unresolved.
+- **⁵** — NTFS/DragonFly: requires FUSE, omitted from the stock 6.4.2 kernel.
+- **⁶** — exFAT/DragonFly: requires FUSE, omitted from the stock 6.4.2 kernel.
+- **⁷** — OpenZFS/Windows: largely implemented; awaiting production maturity.
+
+The DragonFly FUSE prerequisite also applies to its XFS and APFS read-only routes.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
