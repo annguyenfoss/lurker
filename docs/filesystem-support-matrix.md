@@ -6,23 +6,23 @@ This planning summary follows the stated use case: format a decrypted physical p
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ext4 | ✅ | ⚠️<br>Limited | ⚠️<br>Limited | R/O | ⚠️<br>Limited | R/O | ⚠️<br>Limited |
-| Btrfs | ✅ | ⚠️<br>Limited¹ | ⚠️<br>Limited | — | — | — | ⚠️<br>Limited |
-| XFS | ✅ | ⚠️<br>Limited | ⚠️<br>Limited | R/O | — | R/O | R/O |
-| APFS | ⚠️<br>Limited | ✅ | R/O | R/O | — | R/O | ⚠️<br>Limited¹ |
-| UFS1 / FFSv1 | ⚠️<br>Limited | — | ✅ | ✅ | ✅ | ✅ | R/O |
-| UFS2 / FFSv2 | ⚠️<br>Limited | R/O | ✅ | ✅ | ✅ | — | R/O |
-| HAMMER2 | ✅ Beta | — | ⚠️<br>Limited² | ⚠️<br>Limited | ⚠️<br>Limited | ✅ | — |
-| NTFS | ⚠️<br>Limited | ⚠️<br>Limited | ⚠️<br>Limited | ⚠️<br>Limited | ⚠️<br>Limited | ⚠️<br>Limited³ | ✅ |
+| ext4 | ✅ | ⚠️ | ⚠️ | ❗R/O | ⚠️ | ❗R/O | ⚠️ |
+| Btrfs | ✅ | ⚠️¹ | ⚠️ | — | — | — | ⚠️ |
+| XFS | ✅ | ⚠️ | ⚠️ | ❗R/O | — | ❗R/O | ❗R/O |
+| APFS | ⚠️ | ✅ | ❗R/O | ❗R/O | — | ❗R/O | ⚠️¹ |
+| UFS1 / FFSv1 | ⚠️ | — | ✅ | ✅ | ✅ | ✅ | ❗R/O |
+| UFS2 / FFSv2 | ⚠️ | ❗R/O | ✅ | ✅ | ✅ | — | ❗R/O |
+| HAMMER2 | ✅ Beta | — | ⚠️² | ⚠️ | ⚠️ | ✅ | — |
+| NTFS | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️³ | ✅ |
 | exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅³ | ✅ |
-| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ⚠️<br>Limited | — | ✅ Beta |
+| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ⚠️ | — | ✅ Beta |
 
 **Legend**
 
 - **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
 - **✅ Beta** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
-- **⚠️ Limited** — Mounted R/W is available, with important feature limitations or unresolved completeness. Creation is available except where unverified in note ¹. This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
-- **R/O** — Mounted read-only access, whether or not formatting is available.
+- **⚠️** — Mounted R/W is available, with important feature limitations or unresolved completeness. Creation is available except where unverified in note ¹. This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
+- **❗R/O** — Mounted read-only access, whether or not formatting is available.
 - **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
 - **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
