@@ -26,4 +26,4 @@ Use /tmp/lurker-filesystem-round-<os>-<run> remotely, existing per-user caches f
 
 ## Checkpoint
 
-Not started. Owner updates result note with exact commits, active job handle, receipts and next action; do not paste transcripts. Reviewer records review commits and outcomes after implementation closes.
+Implementation terminal; host released for review on 2026-11-25. Read `MACOS_RESULTS.md` and `target/goal-validation/filesystem-round/macos/result.json` first. Native candidate `a9aeaa6` passed 63 tests and focused exFAT publication regressions; all owned jobs, mounts and sessions are closed. Reviewer records review commits and outcomes after inspecting the recorded native passes and prerequisite limitations.
