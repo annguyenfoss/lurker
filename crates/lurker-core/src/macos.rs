@@ -7,7 +7,7 @@ use crate::{
 use serde::Deserialize;
 use std::ffi::{CString, OsString};
 use std::fs::{self, OpenOptions};
-use std::io::{IsTerminal, Write};
+use std::io::{IsTerminal, Read, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::os::unix::process::ExitStatusExt;
@@ -665,6 +665,39 @@ fn publish(temp: &Path, target: &Path, force: bool) -> AppResult<()> {
     }
 }
 
+// Darwin automatically renames an AppleDouble companion when its base entry
+// moves between directories on filesystems such as exFAT. Accept only that
+// exact missing-source case; arbitrary missing vault data must remain an error.
+pub(crate) fn apple_double_was_moved(source: &Path, published: &Path) -> bool {
+    let Some(name) = published.file_name() else {
+        return false;
+    };
+    if source.file_name() != Some(name) {
+        return false;
+    }
+    let Some(base) = name
+        .as_bytes()
+        .strip_prefix(b"._")
+        .filter(|base| !base.is_empty())
+    else {
+        return false;
+    };
+    if !fs::symlink_metadata(source).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+        || !fs::symlink_metadata(published).is_ok_and(|m| m.file_type().is_file())
+        || !published.parent().is_some_and(|parent| {
+            fs::symlink_metadata(parent.join(std::ffi::OsStr::from_bytes(base)))
+                .is_ok_and(|m| m.is_file() || m.is_dir())
+        })
+    {
+        return false;
+    }
+    let mut magic = [0; 4];
+    fs::File::open(published)
+        .and_then(|mut file| file.read_exact(&mut magic))
+        .is_ok()
+        && magic == [0, 5, 22, 7]
+}
+
 fn same_path(left: &Path, right: &Path) -> bool {
     if let (Ok(left), Ok(right)) = (fs::metadata(left), fs::metadata(right)) {
         if left.dev() == right.dev() && left.ino() == right.ino() {
@@ -960,6 +993,26 @@ mod tests {
         fs::write(&source, b"replacement").unwrap();
         publish(&source, &target, true).unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"replacement");
+    }
+
+    #[test]
+    fn recognizes_only_a_published_native_apple_double_companion() {
+        let stage = Staging::new(&std::env::temp_dir()).unwrap();
+        let source_dir = stage.0.join("source");
+        fs::create_dir(&source_dir).unwrap();
+        let source = source_dir.join("._data");
+        let sidecar = stage.0.join("._data");
+        let base = stage.0.join("data");
+        fs::write(&sidecar, [0, 5, 22, 7]).unwrap();
+        assert!(!apple_double_was_moved(&source, &sidecar));
+        fs::write(&base, b"vault data").unwrap();
+        assert!(apple_double_was_moved(&source, &sidecar));
+        fs::write(&source, b"still present").unwrap();
+        assert!(!apple_double_was_moved(&source, &sidecar));
+        fs::remove_file(&source).unwrap();
+        fs::write(&sidecar, b"ordinary file").unwrap();
+        assert!(!apple_double_was_moved(&source, &sidecar));
+        assert!(!apple_double_was_moved(&source, &base));
     }
 
     #[test]

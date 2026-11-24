@@ -898,8 +898,18 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
         {
             let entry = entry.map_err(|e| AppError::io("Cannot inspect vault data", e))?;
             if entry.file_name() != config {
-                fs::rename(entry.path(), target.join(entry.file_name()))
-                    .map_err(|e| AppError::io("Cannot publish vault data", e))?;
+                let published = target.join(entry.file_name());
+                if let Err(error) = fs::rename(entry.path(), &published) {
+                    // Darwin moves AppleDouble metadata with its base entry on
+                    // exFAT. The directory iterator can still return the old name.
+                    #[cfg(target_os = "macos")]
+                    if error.kind() == std::io::ErrorKind::NotFound
+                        && crate::macos::apple_double_was_moved(&entry.path(), &published)
+                    {
+                        continue;
+                    }
+                    return Err(AppError::io("Cannot publish vault data", error));
+                }
             }
         }
         fs::rename(staging.join(config), target.join(config))
