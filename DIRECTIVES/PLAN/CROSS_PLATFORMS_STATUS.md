@@ -374,11 +374,19 @@ The test used a verified installation ISO after the first OpenBSD clone's
 root filesystem required repair to mount writable. The earlier clone disk
 was retained without repair. The receipt is
 `target/dragonfly-veracrypt-batch/openbsd-exchange/exchange.json`.
-The earlier macOS results remain recorded at their original package
-revision. Windows remains unverified.
+The same DragonFly package and VeraCrypt 1.26.31 on macOS 27.2.1 passed both
+writable AES FAT32 exchange directions. Each 379 MiB image retained its
+4 KiB clusters and aligned data region. All four ciphertext transfers
+matched their source hashes, each creator verified both marker hashes on
+return, and all six visits restored their native inventories. The macOS
+console from the `c997d6a` DMG had SHA-256
+`c5b2420f651e48d59a9bc602076a6e2aaee99e62bb025ef1b800e2992b9e466f`.
+The receipt is `target/dragonfly-veracrypt-batch/macos-exchange/exchange.json`.
+Windows remains unverified.
 
-Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse allocation
-reproduced the abrupt power-loss failure. Release support remains planned.
+The Lurker-side implementation and qualification work is complete for this
+candidate. Release support remains planned pending DragonFly fixes for
+ordinary `fsync` durability and sparse backing-store exhaustion.
 
 ## DragonFly VeraCrypt candidate, 2026-11-23
 
