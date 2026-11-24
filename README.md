@@ -247,7 +247,7 @@ lurker unmount vault
 
 Lurker chooses the native format for your OS. Use administrator authorization where required.
 
-## Filesystem PLanning
+## Filesystem Planning
 
 OS/filesystem capabilities for the stated partition/container use case. See the [research notes](docs/filesystem-support-matrix.md), [tag system](docs/filesystem-research-tags.md), and [detailed assessments](docs/filesystem-implementation-assessment.md) for scope, individual solutions and sources.
 
