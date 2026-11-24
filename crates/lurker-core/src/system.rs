@@ -351,6 +351,17 @@ impl ToolPaths {
                 ..
             }) => {
                 tools.formatter = Some(require_command(linux_formatter(*filesystem)?)?);
+                let module = match filesystem {
+                    Some(crate::api::CreateFilesystem::Apfs) => Some("apfs"),
+                    Some(crate::api::CreateFilesystem::Hammer2) => Some("hammer2"),
+                    Some(crate::api::CreateFilesystem::Zfs) => Some("zfs"),
+                    _ => None,
+                };
+                if let Some(module) = module {
+                    if !native_filesystem_available(module) {
+                        return Err(AppError::new(format!("Writable {module} creation requires its matching native kernel module; refusing before storage mutation.")));
+                    }
+                }
                 if *filesystem == Some(crate::api::CreateFilesystem::Ufs2) {
                     crate::trusted_system_executable("fuse-ufs")?;
                 }
@@ -374,6 +385,25 @@ impl ToolPaths {
     }
 }
 
+fn native_filesystem_available(name: &str) -> bool {
+    if fs::read_to_string("/proc/filesystems").is_ok_and(|text| {
+        text.lines()
+            .any(|line| line.split_whitespace().last() == Some(name))
+    }) {
+        return true;
+    }
+    crate::trusted_system_executable("modinfo")
+        .ok()
+        .is_some_and(|program| {
+            Command::new(program)
+                .arg(name)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+        })
+}
+
 /// Explicit native Linux formatters. Unsupported selections fail before staging
 /// or mutating either a file container or a physical target.
 pub(crate) fn linux_formatter(
@@ -390,7 +420,9 @@ pub(crate) fn linux_formatter(
         Zfs => Ok("zpool"),
         Apfs => Ok("mkapfs"),
         Hammer2 => Ok("newfs_hammer2"),
-        Ufs2 => Ok("makefs"),
+        // The NetBSD makefs shipped by some Linux distributions writes a
+        // different FFSv2 layout than the FreeBSD-only FUSE driver accepts.
+        Ufs2 => Ok("makefs-freebsd"),
         other => Err(AppError::new(format!(
             "Linux cannot create {} through this container adapter. Supported: btrfs, ext4, xfs, ntfs, exfat, fat32, zfs, apfs, hammer2, ufs2.",
             other.as_str()

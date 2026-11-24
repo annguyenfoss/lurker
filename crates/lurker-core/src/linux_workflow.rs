@@ -347,7 +347,8 @@ fn luks_create_device(
             let size_gb = command.size_gb.as_deref().unwrap_or_default();
             let size_mib = size_gb_to_mib(size_gb)?;
             let temp_path = temp_container_path(&command.target)?;
-            let mut temp_guard = TempFileGuard::new(temp_path.clone());
+            let mut temp_guard =
+                TempFileGuard::new(temp_path.clone(), &mapper_name, ctx.output.clone());
 
             ctx.output.msg(&format!(
                 "Creating LUKS container at {}",
@@ -493,7 +494,8 @@ fn veracrypt_create_device(
             let size_gb = command.size_gb.as_deref().unwrap_or_default();
             let size_mib = size_gb_to_mib(size_gb)?;
             let temp_path = temp_container_path(&command.target)?;
-            let mut temp_guard = TempFileGuard::new(temp_path.clone());
+            let mut temp_guard =
+                TempFileGuard::new(temp_path.clone(), &mapper_name, ctx.output.clone());
 
             ctx.output.msg(&format!(
                 "Creating VeraCrypt container at {}",
@@ -1221,11 +1223,18 @@ fn mount_open_mapper(
         && readonly
         && !Path::new("/sys/module/apfs").exists()
     {
-        if let Ok(driver) = crate::trusted_system_executable("apfs-fuse") {
-            return mount_fuse_filesystem(ctx, &driver, &mapper_path, mountpoint, true);
+        for name in ["apfs-fuse", "fsapfsmount"] {
+            if let Ok(driver) = crate::trusted_system_executable(name) {
+                return mount_fuse_filesystem(ctx, &driver, &mapper_path, mountpoint, true);
+            }
         }
     }
     let mut args = Vec::new();
+    // A distro may also ship a read-only mount.apfs helper. Request the
+    // selected native kernel adapter explicitly instead of invoking it.
+    if filesystem_type.as_deref() == Some("apfs") {
+        args.extend(["-i".into(), "-t".into(), "apfs".into()]);
+    }
     let mut options: Vec<String> = Vec::new();
     if filesystem_type
         .as_deref()
@@ -1683,6 +1692,32 @@ fn veracrypt_create(
     }
 }
 
+fn run_formatter(
+    ctx: &mut AppContext,
+    program: &Path,
+    args: &[OsString],
+    context: &str,
+) -> AppResult<()> {
+    // Native tools must not mix progress/version text into helper JSON stdout.
+    let output = ctx.capture_command(program, args, true, context)?;
+    if !output.status.success() {
+        let detail = if output.stderr.is_empty() {
+            &output.stdout
+        } else {
+            &output.stderr
+        };
+        return Err(AppError::new(format!(
+            "{context}: {}",
+            String::from_utf8_lossy(detail)
+                .trim()
+                .chars()
+                .take(8192)
+                .collect::<String>()
+        )));
+    }
+    Ok(())
+}
+
 fn format_filesystem(
     ctx: &mut AppContext,
     device_path: &Path,
@@ -1708,7 +1743,8 @@ fn format_filesystem(
             .parse::<u64>()
             .map_err(|_| AppError::new("Cannot determine new UFS2 device size."))?;
         let formatter = ctx.formatter_path()?.to_path_buf();
-        return ctx.run_command(
+        run_formatter(
+            ctx,
             &formatter,
             &[
                 "-t".into(),
@@ -1722,10 +1758,11 @@ fn format_filesystem(
                 device_path.as_os_str().to_os_string(),
                 seed.descriptor_path().into_os_string(),
             ],
-            true,
-            false,
             "Create new UFS2 filesystem",
-        );
+        )?;
+        // Validate the actual FreeBSD layout through its installed driver before
+        // publishing a newly encrypted container, and initialize its private root.
+        return initialize_native_root(ctx, device_path.as_os_str(), "ufs2", None, owner);
     }
     let mut args = crate::system::linux_format_args(filesystem, owner);
     // Seed/prototype initialization sets ownership only for newly created roots;
@@ -1759,13 +1796,7 @@ fn format_filesystem(
     }
     args.push(device_path.as_os_str().to_os_string());
     let formatter = ctx.formatter_path()?.to_path_buf();
-    let result = ctx.run_command(
-        &formatter,
-        &args,
-        true,
-        false,
-        "Failed to create filesystem",
-    );
+    let result = run_formatter(ctx, &formatter, &args, "Failed to create filesystem");
     if let Some(seed) = seed.as_ref() {
         let _ = fs::remove_file(seed.parent.join("prototype"));
     }
@@ -1801,23 +1832,53 @@ fn mount_fuse_filesystem(
     mountpoint: &Path,
     readonly: bool,
 ) -> AppResult<()> {
-    let options = format!(
+    let mut options = format!(
         "{},allow_other,fsname={}",
         if readonly { "ro" } else { "rw" },
         mapper.display()
     );
-    ctx.run_command(
-        driver,
-        &[
-            "-o".into(),
-            options.into(),
-            mapper.as_os_str().to_os_string(),
-            mountpoint.as_os_str().to_os_string(),
-        ],
-        true,
-        false,
-        "Start native filesystem driver",
-    )?;
+    let mut args: Vec<OsString>;
+    if driver.file_name().is_some_and(|name| name == "fsapfsmount") {
+        if !readonly {
+            return Err(AppError::new(
+                "fsapfsmount supports read-only APFS imports only.",
+            ));
+        }
+        // This forensic reader synthesizes ownership; keep its view private to
+        // the authorized caller without changing any existing APFS metadata.
+        let owner = crate::new_filesystem::invoking_owner()?;
+        options.push_str(&format!(
+            ",default_permissions,uid={},gid={},umask=0077",
+            owner.uid, owner.gid
+        ));
+        args = vec!["-f".into(), "1".into(), "-X".into(), options.into()];
+    } else {
+        args = vec!["-o".into(), options.into()];
+    }
+    args.extend([
+        mapper.as_os_str().to_os_string(),
+        mountpoint.as_os_str().to_os_string(),
+    ]);
+    let output = ctx.capture_command(driver, &args, true, "Start native filesystem driver")?;
+    if !output.status.success() {
+        let detail = if output.stderr.is_empty() {
+            &output.stdout
+        } else {
+            &output.stderr
+        };
+        return Err(AppError::new(format!(
+            "Native filesystem driver failed: {}",
+            String::from_utf8_lossy(detail)
+                .trim()
+                .chars()
+                .take(8192)
+                .collect::<String>()
+        )));
+    }
+    if !output.stderr.is_empty() {
+        ctx.output
+            .warn(String::from_utf8_lossy(&output.stderr).trim());
+    }
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if let Some(mount) = read_mountinfo()?
@@ -2069,13 +2130,21 @@ fn initialize_native_root(
     owner: crate::new_filesystem::Owner,
 ) -> AppResult<()> {
     let seed = EmptyFilesystemRoot::new(owner)?;
-    let mount = crate::trusted_system_executable("mount")?;
-    let mut args: Vec<OsString> = vec!["-t".into(), filesystem.into()];
-    if let Some(options) = options {
-        args.extend(["-o".into(), options.into()]);
+    if filesystem == "ufs2" {
+        let driver = crate::trusted_system_executable("fuse-ufs")?;
+        mount_fuse_filesystem(ctx, &driver, Path::new(source), &seed.path, false)?;
+    } else {
+        let mount = crate::trusted_system_executable("mount")?;
+        let mut args: Vec<OsString> = vec!["-t".into(), filesystem.into()];
+        if filesystem == "apfs" {
+            args.insert(0, "-i".into());
+        }
+        if let Some(options) = options {
+            args.extend(["-o".into(), options.into()]);
+        }
+        args.extend([source.to_os_string(), seed.path.clone().into_os_string()]);
+        ctx.run_command(&mount, &args, true, false, "Initialize new filesystem root")?;
     }
-    args.extend([source.to_os_string(), seed.path.clone().into_os_string()]);
-    ctx.run_command(&mount, &args, true, false, "Initialize new filesystem root")?;
     let mounted = read_mountinfo()?
         .into_iter()
         .find(|m| m.mount_point == seed.path)
@@ -2093,25 +2162,33 @@ fn initialize_native_root(
             std::process::id(),
             directory.as_raw_fd()
         ));
-        let chown = crate::trusted_system_executable("chown")?;
-        ctx.run_command(
-            &chown,
-            &[
-                format!("{}:{}", owner.uid, owner.gid).into(),
-                descriptor.clone(),
-            ],
-            true,
-            false,
-            "Assign new filesystem root owner",
-        )?;
-        let chmod = crate::trusted_system_executable("chmod")?;
-        ctx.run_command(
-            &chmod,
-            &["0700".into(), descriptor],
-            true,
-            false,
-            "Protect new filesystem root",
-        )
+        let metadata = directory
+            .metadata()
+            .map_err(|e| AppError::io("Inspect new filesystem root", e))?;
+        if metadata.uid() != owner.uid || metadata.gid() != owner.gid {
+            let chown = crate::trusted_system_executable("chown")?;
+            ctx.run_command(
+                &chown,
+                &[
+                    format!("{}:{}", owner.uid, owner.gid).into(),
+                    descriptor.clone(),
+                ],
+                true,
+                false,
+                "Assign new filesystem root owner",
+            )?;
+        }
+        if metadata.mode() & 0o777 != 0o700 {
+            let chmod = crate::trusted_system_executable("chmod")?;
+            ctx.run_command(
+                &chmod,
+                &["0700".into(), descriptor],
+                true,
+                false,
+                "Protect new filesystem root",
+            )?;
+        }
+        Ok(())
     })();
     if !read_mountinfo()?
         .iter()
@@ -2322,13 +2399,17 @@ fn write_random_file(output: Output, path: &Path, size_mib: u64) -> AppResult<()
 
 struct TempFileGuard {
     path: PathBuf,
+    mapper_name: String,
+    output: Output,
     persist: bool,
 }
 
 impl TempFileGuard {
-    fn new(path: PathBuf) -> Self {
+    fn new(path: PathBuf, mapper_name: &str, output: Output) -> Self {
         Self {
             path,
+            mapper_name: mapper_name.into(),
+            output,
             persist: false,
         }
     }
@@ -2341,6 +2422,17 @@ impl TempFileGuard {
 impl Drop for TempFileGuard {
     fn drop(&mut self) {
         if !self.persist {
+            // A failed ordinary initialization unmount may leave its mapper
+            // active. Keep its backing inode recoverable instead of unlinking
+            // it before AppContext attempts its normal mapper cleanup.
+            if mapper_device_path(&self.mapper_name).exists() {
+                self.output.warn(&format!(
+                    "Staged container retained at {} while mapper {} remains open.",
+                    self.path.display(),
+                    self.mapper_name
+                ));
+                return;
+            }
             let _ = fs::remove_file(&self.path);
         }
     }

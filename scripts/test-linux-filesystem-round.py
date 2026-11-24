@@ -99,7 +99,7 @@ def main():
                 command(['sudo', '-n', 'zpool', 'create', '-o', 'cachefile=none', '-m', mount, pool, image])
             elif fs == 'ufs2':
                 seed = backing / 'seed'; seed.mkdir(mode=0o700)
-                command(['makefs','-t','ffs','-B','little','-o','version=2,bsize=32768,fsize=4096','-s',str(512 * 1024**2),image,seed])
+                command(['makefs-freebsd','-t','ffs','-B','little','-o','version=2,bsize=32768,fsize=4096','-s',str(512 * 1024**2),image,seed])
                 command(['sudo','-n','/usr/local/bin/fuse-ufs','-o',f'rw,allow_other,fsname={image}',image,mount])
             else:
                 formatter = {'btrfs':['mkfs.btrfs','-q'], 'ext4':['mkfs.ext4','-q'], 'xfs':['mkfs.xfs','-q'],
@@ -112,6 +112,7 @@ def main():
                 if fs == 'apfs': options.append('readwrite')
                 args = ['sudo', '-n', 'mount', '-o', ','.join(options)]
                 if fs == 'ntfs': args += ['-t','ntfs-3g']
+                if fs == 'apfs': args += ['-i','-t','apfs']
                 command([*args, image, mount])
             deadline = time.monotonic() + 5
             while not os.path.ismount(mount) and time.monotonic() < deadline:
