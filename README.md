@@ -10,13 +10,17 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Encryption support
 
-<table width="100%">
+<table>
   <thead>
     <tr>
       <th scope="col" align="left">Encryption</th>
-      <th scope="col" nowrap><samp>Linux</samp></th>
-      <th scope="col" nowrap><samp>MacOS</samp></th>
-      <th scope="col" nowrap><samp>Windows</samp></th>
+      <th scope="col" width="1%" nowrap><samp>Linux</samp></th>
+      <th scope="col" width="1%" nowrap><samp>MacOS</samp></th>
+      <th scope="col" width="1%" nowrap><samp>FreeBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>OpenBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>NetBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>Windows</samp></th>
     </tr>
   </thead>
   <tbody align="center" valign="middle">
@@ -24,122 +28,27 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;1</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td>WIP</td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
-      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>WIP</td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left">Apple&nbsp;Encrypted<br>Disk&nbsp;Image</td>
-      <td><sup>—</sup></td>
-      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left">A&#8203;P&#8203;F&#8203;S<br>E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d</td>
-      <td><sup>—</sup></td>
-      <td><img src="extras/assets/status/eggplant.png" width="24" align="absmiddle" alt="In progress"></td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left">G&#8203;E&#8203;L&#8203;I</td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left">P&#8203;E&#8203;F&#8203;S</td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left" nowrap>softraid<br>CRYPTO&nbsp;/&nbsp;RAID1C</td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left">C&#8203;G&#8203;D</td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td>WIP</td>
-    </tr>
-    <tr height="60">
-      <td align="left">g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s</td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td>WIP</td>
-    </tr>
-    <tr height="60">
-      <td align="left">C&#8203;r&#8203;y&#8203;F&#8203;S</td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td>WIP</td>
-    </tr>
-    <tr height="60">
-      <td align="left">C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r</td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td>WIP</td>
-    </tr>
-    <tr height="60">
-      <td align="left">a&#8203;g&#8203;e</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-    </tr>
-    <tr height="60">
-      <td align="left">O&#8203;p&#8203;e&#8203;n&#8203;S&#8203;S&#8203;L<br>CMS&nbsp;/&nbsp;enc</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-    </tr>
-    <tr height="60">
-      <td align="left">G&#8203;n&#8203;u&#8203;P&#8203;G<br>(OpenPGP)</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-    </tr>
-  </tbody>
-</table>
-
-<table width="100%">
-  <thead>
-    <tr>
-      <th scope="col" align="left">Encryption</th>
-      <th scope="col" nowrap><samp>FreeBSD</samp></th>
-      <th scope="col" nowrap><samp>OpenBSD</samp></th>
-      <th scope="col" nowrap><samp>NetBSD</samp></th>
-      <th scope="col" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
-    </tr>
-  </thead>
-  <tbody align="center" valign="middle">
-    <tr height="60">
-      <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;1</td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"> <sup>🛈</sup></td>
+      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
+      <td>WIP</td>
+      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">Apple&nbsp;Encrypted<br>Disk&nbsp;Image</td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
@@ -148,20 +57,29 @@ Protect disks, file containers and directories with the CLI or native desktop ap
     <tr height="60">
       <td align="left">A&#8203;P&#8203;F&#8203;S<br>E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d</td>
       <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/eggplant.png" width="24" align="absmiddle" alt="In progress"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">G&#8203;E&#8203;L&#8203;I</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">P&#8203;E&#8203;F&#8203;S</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
@@ -169,7 +87,10 @@ Protect disks, file containers and directories with the CLI or native desktop ap
     <tr height="60">
       <td align="left" nowrap>softraid<br>CRYPTO&nbsp;/&nbsp;RAID1C</td>
       <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
     </tr>
@@ -177,39 +98,57 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td align="left">C&#8203;G&#8203;D</td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/eggplant.png" width="24" align="absmiddle" alt="In progress"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s</td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">C&#8203;r&#8203;y&#8203;F&#8203;S</td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r</td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">a&#8203;g&#8203;e</td>
+      <td>WIP</td>
+      <td>WIP</td>
+      <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
@@ -221,9 +160,15 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
+      <td>WIP</td>
+      <td>WIP</td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">G&#8203;n&#8203;u&#8203;P&#8203;G<br>(OpenPGP)</td>
+      <td>WIP</td>
+      <td>WIP</td>
+      <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
