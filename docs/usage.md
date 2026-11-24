@@ -262,14 +262,16 @@ AES, Serpent, or Twofish, SHA-512, PIM 0, and FAT32 with clusters of at least
 FAT32 allows files up to 4 GiB minus one byte. Its ownership and permissions
 come from each mount and apply to the invoking user. On DragonFly 6.4.2, use
 portable ASCII filenames. Native FAT32 rejects directory `fsync` and lacks the
-locking SQLite needs. Abrupt power-loss qualification for the candidate remains open.
-DragonFly VeraCrypt rejects `--readonly` before attaching the container.
+locking SQLite needs. DragonFly 6.4.2 power-cut tests with inner HAMMER2 lost
+file writes and a SQLite transaction after their sync calls reported success.
+The candidate remains unqualified for abrupt power loss. DragonFly VeraCrypt
+rejects `--readonly` before attaching the container.
 
 Close a busy mount after stopping its users. If an operation is interrupted,
 retry `lurker unmount` by source or mountpoint to let Lurker check and release
 the journaled resources. After an interrupted create, close by the original
-destination and inspect the staging path reported by Lurker. Filesystem repair
-uses the native FAT32 tools on a retained copy.
+destination and inspect the staging path reported by Lurker. Keep the original
+image and use the native filesystem recovery tools on a verified copy.
 
 OpenBSD RAID1C is an explicit two-file mirror. Size is per member.
 
