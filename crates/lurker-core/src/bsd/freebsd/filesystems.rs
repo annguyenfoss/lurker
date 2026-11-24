@@ -5,7 +5,7 @@ use crate::{AppError, AppResult, CreateFilesystem, VolumeType};
 use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 pub(super) fn validate(selected: Option<CreateFilesystem>, backend: VolumeType) -> AppResult<()> {
@@ -191,10 +191,12 @@ pub(super) fn mount(mapped: &str, target: &Path, readonly: bool) -> AppResult<()
         owner.uid, owner.gid
     );
     let (program, mut argv) = match fs.as_str() {
-        "apfs" if readonly => (
-            "/usr/local/bin/fsapfsmount",
-            args(&["-X", &format!("ro,fsname={mapped}"), mapped]),
-        ),
+        "apfs" if readonly => {
+            let input = apfs_input(mapped)?;
+            let mut argv = args(&["-X", &format!("ro,fsname={mapped}")]);
+            argv.push(input.as_os_str().into());
+            ("/usr/local/bin/fsapfsmount", argv)
+        }
         "apfs" => {
             return Err(AppError::new(
                 "The FreeBSD APFS driver supports read-only mounts only.",
@@ -332,4 +334,41 @@ mod tests {
         assert!(sector_size("/dev/md0.eli", "/dev/md1.eli 4096 536866816").is_err());
         assert!(sector_size("/dev/md0", "/dev/md0 513 536870912").is_err());
     }
+}
+
+/// libfsapfs makes byte-sized metadata reads that FreeBSD raw providers reject.
+/// VeraCrypt already exposes its decrypted regular FUSE image; use only the
+/// file proven to be this recorded md provider's kernel backing vnode.
+fn apfs_input(mapped: &str) -> AppResult<PathBuf> {
+    if mapped.ends_with(".eli") {
+        return Err(AppError::new(
+            "The FreeBSD APFS reader requires a regular decrypted image; GELI exposes only a raw provider, so APFS imports are unavailable.",
+        ));
+    }
+    let mut selected = None;
+    for mount in super::super::mounts()? {
+        let name = mount
+            .target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        let nonce = name.strip_prefix(".veracrypt_aux_mnt-").unwrap_or("");
+        if mount.target.parent() != Some(Path::new("/tmp"))
+            || nonce.len() != 32
+            || !nonce.bytes().all(|b| b.is_ascii_hexdigit())
+            || mount.source != Path::new("veracrypt")
+            || !matches!(mount.filesystem.as_str(), "fuse" | "fusefs")
+        {
+            continue;
+        }
+        let path = mount.target.join("volume");
+        if super::verify_backing(mapped, &path).is_ok() && selected.replace(path).is_some() {
+            return Err(AppError::new(
+                "Ambiguous VeraCrypt decrypted image identity.",
+            ));
+        }
+    }
+    selected.ok_or_else(|| {
+        AppError::new("No verified VeraCrypt regular image is available for the APFS reader.")
+    })
 }
