@@ -114,9 +114,23 @@ pub(in super::super) fn make_selected_filesystem(
             exec("/sbin/newfs_msdos", &args(&["-F", "32", &r]), None)?;
         }
         CreateFilesystem::Hammer2 => {
+            // NetBSD DIOCGMEDIASIZE describes the whole disk even for an a
+            // slice. Supply the bounded slice size instead of writing past it.
+            let geometry = exec("/sbin/dkctl", &args(&[&r, "getgeometry"]), None)?;
+            let sectors = geometry
+                .split_whitespace()
+                .nth(4)
+                .and_then(|s| s.parse::<u64>().ok())
+                .ok_or_else(|| AppError::new("Missing HAMMER2 device geometry."))?;
+            let mib = sectors.saturating_sub(2048) / 16384 * 8;
+            if mib < 1024 {
+                return Err(AppError::new(
+                    "NetBSD HAMMER2 requires at least 1025 MiB for its verified inner partition.",
+                ));
+            }
             exec(
                 "/usr/local/sbin/newfs_hammer2",
-                &args(&["-L", "DATA", &inner]),
+                &args(&["-L", "DATA", "-s", &format!("{mib}M"), &inner]),
                 None,
             )?;
         }
@@ -352,6 +366,22 @@ pub(in super::super) fn mount_filesystem(
             return Err(AppError::new(format!(
                 "NetBSD NTFS mount failed ({status})."
             )));
+        }
+        // perfuse completes its mount asynchronously after ntfs-3g's parent
+        // exits. Wait for the exact native mount before the shared journal reads it.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if super::super::mounts()?.iter().any(|m| {
+                m.target == target
+                    && m.source == Path::new(&device)
+                    && m.filesystem == "puffs|perfuse|fuseblk"
+            }) {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(AppError::new("NetBSD NTFS mount did not become ready."));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
         }
     } else {
         exec(tool, &argv, None)?;
