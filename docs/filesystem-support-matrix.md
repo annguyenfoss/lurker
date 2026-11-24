@@ -1,393 +1,364 @@
-# File system support by operating system
+# OS / Filesystem Research
 
-Survey date 2026-11-23. The matrix covers local disks, partitions, and
-file-backed block devices on Linux, macOS, FreeBSD, OpenBSD, NetBSD, DragonFly
-BSD, and Windows. It lists OS-supplied drivers, publicly downloadable
-freeware and open-source drivers, and products individuals can buy.
-A separate inventory records specialized and legacy paths.
+Survey date 2026-11-24. This matrix covers physical data partitions and file-backed
+images. Each line describes one publicly obtainable solution on the OS in that
+column. The [research bar and full tag definitions](filesystem-research-tags.md)
+apply to every cell. This audit uses OS and driver documentation, source, and
+package catalogs. Platform and release prerequisites are listed with the
+relevant solutions.
 
-The [filesystem integration matrix](filesystem-integration-matrix.md) selects
-writable formats from this survey for Lurker.
+| Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **ext4** | F M R/W · ext4 + e2fsprogs<br>NF M R · FsRover | NF M R/W · xlinuxfs<br>NF M R/W · anylinuxfs<br>NF MP R/W · PolyDrive Disk<br>NF M R · ExtendFS<br>Beta F M R/W · Ext4Kit<br>Beta F M R/W · open_ext4_for_mac<br>Paid FP MP R/W (1)<br>Paid FP MP R/W (2) | F M R/W · ext2fs + e2fsprogs<br>Beta F M R/W · fusefs-ext2<br>Outdated NF M R/W · fusefs-lkl | F M R · ext2fs + e2fsprogs | F M R · ext2fs + e2fsprogs<br>Beta NF M R/W · fuse-ext2 | F M R · ext2fs + e2fsprogs-core | F NM · DiskInternals Ext4 Formatter<br>F NM · DiskGenius Free<br>FP NM · MiniTool Partition Wizard Free<br>NF M R/W · Ext4Fsd<br>NF M R · FsRover<br>NF MP R · CrossDriver Free<br>Paid FP MP R/W (3)<br>Paid NF MP R/W (4)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
+| **Btrfs** | F M R/W · Btrfs + btrfs-progs<br>NF M R · FsRover | NF M R/W · xlinuxfs<br>NF M R/W · anylinuxfs<br>NF MP R/W · PolyDrive Disk<br>Beta NF M R · btrfs4mac<br>Paid FP MP R/W · vmount Pro | Outdated NF M R/W · fusefs-lkl | — | — | — | F M R/W · WinBtrfs<br>NF M R · FsRover<br>NF MP R · CrossDriver Free<br>Paid NF MP R (3)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
+| **XFS** | F M R/W · XFS + xfsprogs<br>NF M R · FsRover | NF M R/W · xlinuxfs<br>NF M R/W · anylinuxfs<br>NF MP R/W · PolyDrive Disk<br>Beta F M R/W · fuse-xfs<br>Paid FP MP R/W · vmount Pro | F NM · xfsprogs<br>Beta NF M R · libfsxfs<br>Outdated NF M R/W · fusefs-lkl | Beta NF M R · libfsxfs | — | — | NF M R · FsRover<br>NF MP R · CrossDriver Free<br>Paid NF MP R/W (3)<br>Paid FP MP R/W (5)<br>Paid NF MP R (6) |
+| **APFS** | NF M R · apfs-fuse<br>Beta F M R/W · linux-apfs-rw + apfsprogs<br>Beta NF M R · libfsapfs<br>NF M R · FsRover<br>Paid NF MP R/W · Paragon APFS for Linux | F M R/W · Disk Utility / APFS | Beta NF M R · libfsapfs | Beta NF M R · libfsapfs | — | — | NF M R · FsRover<br>NF MP R · CrossDriver for Mac Disks Free<br>Beta NF M R/W · winapfs<br>Beta NF MP R/LW · apfs_for_windows<br>Paid NF MP LR/W (7)<br>Paid MP R/W (8)<br>Paid NF MP R (6)<br>Paid FP MP R (13) |
+| **UFS1 / FFSv1** | FI M R · makefs + Linux UFS<br>Beta FI M R/W · Linux UFS write option + makefs<br>Outdated FI NM · UFS2Tool<br>NF M R · FsRover | Outdated FI NM · UFS2Tool | F M R/W · UFS1 | F M R/W · FFSv1 | F M R/W · FFSv1 | F M R/W · DragonFly UFS | Outdated F MI R/LW · UFS2Tool<br>NF M R · FsRover |
+| **UFS2 / FFSv2** | FI M R · makefs + Linux UFS<br>Beta FI M R/W · Linux UFS write option + makefs<br>Outdated FI NM · UFS2Tool<br>Beta NF M R/W · fuse-ufs<br>NF M R · FsRover | Outdated FI NM · UFS2Tool | F M R/W · UFS2<br>Beta NF M R/W · fuse-ufs | F M R/W · FFSv2<br>Beta NF M R/W · fuse-ufs | F M R/W · FFSv2 | FI NM · portable makefs | Outdated F MI R/LW · UFS2Tool<br>NF M R · FsRover |
+| **HAMMER2** | Beta F M R/W · linux_hammer2 + hammer2-utils<br>Beta NF M R · hammer2-fuse<br>FI NM · portable makefs | — | Beta F M R/W · hammer2 port<br>Beta NF M R · hammer2-fuse<br>FI NM · portable makefs | FI NM · portable makefs | FI NM · portable makefs | F M R/W · HAMMER2 | FI NM · portable makefs (Cygwin) |
+| **NTFS** | F M R/W · kernel NTFS + mkntfs<br>F M R/W · NTFS-3G<br>NF M R · FsRover<br>NF M R/W · Paragon NTFS for Linux Free<br>Paid F M R/W · Paragon NTFS for Linux Professional | NF M R · macOS<br>NF MP R/W · PolyDrive Disk<br>NF MP R/W · NTFSTool<br>NF MP R/W · TT NTFS Native<br>F M R/W · NTFS-3G + macFUSE<br>NF M R/W · NTFS-3G for FUSE-T<br>NF M R/W · anylinuxfs<br>Beta F M R/W · NTFS4Mac<br>NF MP R · CrossDriver Free<br>Paid FP MP R/W (9)<br>Paid F M R/W (10)<br>Paid FP MP R/W (11)<br>Paid FP MP R/W (2)<br>Paid FP MP R/W (12)<br>Paid NF MP R/W (14)<br>Paid FP MP R/W (15) | F M R/W · NTFS-3G<br>Beta NF M R · libfsntfs | NF M R · mount_ntfs<br>F M R/W · ntfs-3g<br>Beta NF M R · libfsntfs | Beta NF M R/LW · mount_ntfs<br>F M R/W · fuse-ntfs-3g + ntfsprogs | Outdated NF M R · mount_ntfs<br>F NM · packaged mkntfs | F M R/W · Windows NTFS<br>NF M R · FsRover |
+| **exFAT** | F M R/W · exFAT + exfatprogs<br>F M R/W · exfat-fuse + exfat-utils<br>NF M R · FsRover | F M R/W · Disk Utility / exFAT<br>Paid FP MP R/W · vmount Pro | F M R/W · fusefs-exfat + formatter | F M R/W · exfat-fuse | F M R/W · fuse-exfat | F NM · exfat-utils | F M R/W · Windows exFAT<br>NF M R · FsRover |
+| **ZFS / OpenZFS** | F M R/W · OpenZFS<br>NF M R · FsRover | F M R/W · OpenZFS on OS X<br>NF M R/W · anylinuxfs | F M R/W · OpenZFS | — | F M R/W · base ZFS | — | Beta F M R/W · OpenZFS on Windows<br>NF M R · FsRover<br>Paid NF MP R · DiskInternals Linux Reader Pro |
 
-**exFAT is the modern interchange choice.** Linux, macOS, and Windows have
-native read/write drivers. FreeBSD, NetBSD, and OpenBSD have packaged exFAT
-drivers. DragonFly BSD has packages too, but stock 6.4.2 omits the kernel FUSE
-module they need. **FAT32 is still the broadly available base-system fallback**
-and cannot hold an individual file of 4 GiB or larger. Linux's `vfat` is the
-driver name for FAT volumes with long file names, including FAT32. It uses the
-same on-disk FAT format. For native daily use, the strongest candidates are
-ext4, Btrfs, and XFS on Linux, APFS on macOS, NTFS on Windows, UFS2 on FreeBSD,
-FFSv2 on NetBSD and OpenBSD, and HAMMER2 or UFS on DragonFly BSD.
-[L1, L5, M1, W1, W2, F1, N1, O1, D1–D3]
+**Legend.** `F` formats both partitions and images, `FP` partitions, `FI` images,
+`NF` neither. `M` mounts both targets, `MP` partitions, `MI` images, `NM` neither.
+`R` is read-only and `R/W` is read/write. `LR`, `R/LW`, `LR/W` and `LR/LW`
+indicate limited reads, limited writes, or both, as defined in the tag guide.
+`Beta` flags experimental routes, `Outdated` flags legacy routes, `Paid` flags
+retail routes, and `—` means the audit found no qualifying solution. A single
+target tag reports that target. Where evidence leaves a capability
+unverified, the notes identify the limitation and the line omits an
+unverified tag. Formatting and mounting are independent, including when
+a formatter is combined with a separate mount driver.
 
-The [OS / Filesystem Research tags](filesystem-research-tags.md) define the
-notation for the revised matrix.
+**Paid key.** (1) Paragon extFS for Mac. (2) vmount Pro. (3) Paragon Linux File
+Systems for Windows. (4) DiskInternals Linux Writer Pro. (5) CrossDriver for
+Linux Disks Pro. (6) DiskInternals Linux Reader Pro. (7) Paragon APFS for
+Windows. (8) OWC MacDrive 12. (9) Paragon NTFS for Mac. (10) Tuxera NTFS for
+Mac. (11) iBoysoft NTFS for Mac. (12) CrossDriver NTFS for Mac Pro.
+(13) CrossDriver for Mac Disks Pro. (14) EaseUS NTFS for Mac. (15) NTFSTool
+Pro. In a cell with one paid solution, its name appears on the line.
 
-## How to read the current survey
+## Research notes and sources
 
-- **Native** means the OS supplies the driver. A formatter may come from a
-  separate package. **Package** means a separately installed free driver or
-  tool. **Paid** combines the capabilities of retail products in one line.
-- **Experimental** means the stated operation is available with limited
-  testing. **Development** means a public port exists and usable mounting is
-  unconfirmed. **Legacy** means an older driver. **Limited** means the stated
-  operation only works with some volume types or on-disk features.
-- **C** = format or create a pool. **RW** = mount read/write. **R** = mount
-  read-only. **Image tools** = work on a disk image directly. **—** = no
-  capability listed.
+### Across operating systems
 
-The native inventory used Linux 7.2.15 on Arch, macOS 27.2.1 arm64, FreeBSD
-15.1, NetBSD 11.1, OpenBSD 8.0, and DragonFly 6.4.2 x86-64. Windows 11 and
-Windows Server claims use Microsoft documentation and named driver projects.
-The SSH checks inventoried release IDs, installed formatters and mount
-helpers, and DragonFly's module files and package catalog. No new filesystem
-mount or write tests were run for this survey.
-
-## OS and file system matrix
-
-### General-purpose and interchange formats
-
-| File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Package RW (xlinuxfs)<br>Experimental C/RW (Ext4Kit)<br>Paid C/RW | Native RW (limited)<br>Package C | Native R (limited)<br>Package C | Native R (limited)<br>Package C<br>Experimental RW | Native R (limited)<br>Package C | Package RW (limited)<br>Package R<br>Paid C/RW (limited) | L1, M2, M5, M8, F1, O2, N2, D4, W4–W5, W8–W10, X7 |
-| **Btrfs** | Native C/RW | Package RW (FSKit)<br>Package RW (microVM)<br>Experimental R (btrfs4mac)<br>Paid RW | Package RW (legacy LKL) | — | — | — | Package C/RW (WinBtrfs)<br>Package R<br>Paid R | L1, M8–M9, F4, W5–W6, X6–X7 |
-| **XFS** | Native C/RW | Package RW (FSKit)<br>Experimental RW (FUSE)<br>Paid RW | Package C<br>Package RW (legacy LKL) | — | — | — | Package R<br>Paid R | L1, M8–M9, F4, W5, X6–X7 |
-| **F2FS** | Native C/RW | — | — | — | — | — | Package R | L1, X7 |
-| **bcachefs** | Package C/RW | — | — | — | — | — | — | L6 |
-| **ZFS / OpenZFS** | Package C/RW | Package C/RW | Native C/RW | — | Native C/RW | — | Experimental C/RW<br>Paid R | W10, Z1–Z4 |
-| **APFS** | Package R<br>Experimental C/RW<br>Paid RW (limited) | Native C/RW | Experimental R | — | — | — | Package R<br>Experimental RW<br>Paid RW | M1, W11, X1–X2, X7–X8 |
-| **HFS+ / HFSX** | Native RW (limited)<br>Paid C/RW | Native C/RW | Package R | Experimental R | Native R | Package R (requires FUSE) | Package R<br>Paid RW | L1, M1, M6, F1, N1, D2–D3, W11, X3, X7 |
-| **NTFS** | Native RW<br>Package C/RW (NTFS-3G)<br>Paid C/RW | Native R<br>Package RW (FSKit)<br>Package RW (FUSE-T)<br>Experimental C<br>Paid C/RW | Package C/RW | Native R<br>Package C/RW | Native R (limited overwrites)<br>Package C/RW | Native R<br>Package C/RW (mount requires FUSE) | Native C/RW | L2–L4, M3, M7, F1, O3, N3, D2–D3, W1, X3 |
-| **ReFS** | Experimental R | Experimental R | Development | Development | Development | Development | Native C/RW (limited) | W1, W3, X4 |
-| **exFAT** | Native C/RW | Native C/RW | Package C/RW | Package C/RW | Package C/RW | Package C<br>Package RW (requires FUSE) | Native C/RW | L5, M1, F1–F2, O3, N3, D2–D3, W1 |
-| **FAT12/16/32** | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | L1, M1, F1, O1, N1, D1, W1–W2 |
-| **UFS1 / FFSv1** | Native R<br>Experimental RW (limited) | Offline image tools | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Package R<br>Experimental C/RW (images only, limited writes) | U1–U3, F1, O1, N1, D1, X7 |
-| **UFS2 / FFSv2** | Native R<br>Experimental RW (limited) | Offline image tools | Native C/RW | Native C/RW | Native C/RW | — | Package R<br>Experimental C/RW (images only, limited writes) | U1–U3, F1, O1, N1, D1, X7 |
-| **HAMMER2** | Experimental C/RW<br>Offline image tools | — | Package C/R<br>Experimental RW | Development | Development | Native C/RW | — | D1, H1–H3 |
-| **HAMMER** | — | — | — | — | — | Native C/RW | — | D1 |
-| **BSD LFS** | — | — | — | — | Native C/RW | — | — | N4 |
-| **NILFS2** | Native C/RW | — | — | — | Native R | — | — | L1, N4 |
-| **UDF** | Native RW (limited)<br>Package C | Native C/R (limited) | Native R | Native R | Native C/RW (limited) | Native R | Native C/RW (limited) | L1, M6, F5, O4, N5, D5, W1–W2 |
-
-### Specialized, legacy, and recovery formats
-
-These rows matter for imports, read-only volumes, and specialized deployments.
-They carry lower priority for new general-purpose volumes.
-
-| File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext2 / ext3** | Native C/RW, including through ext4 where compatible | Paid C/RW<br>FSKit projects vary | Native RW subset<br>Package C | Native ext2 C/RW<br>Compatible ext3 subset | Native ext2 C/RW<br>ext3 feature limits | Native ext2 RW<br>ext3 feature limits | Ext4Fsd or paid RW<br>FsRover R | L1, M2, M5, F1, O2, N2, D4, W5, W8, X7 |
-| **ISO 9660 / Rock Ridge / Joliet** | Native R, image tools | Native R, image tools | Native R, `makefs` | Native R, `makefs` | Native R, `makefs` | Native R, `makefs` | Native R, image authoring supported separately | L1, M6, F5, O4, N5, D1, W7 |
-| **EROFS / SquashFS** | Native R, package image builders | — | SquashFS offline tools | SquashFS offline tools | SquashFS offline tools | SquashFS offline tools | — | L1, S1 |
-| **JFS** | Native RW when built, package C | — | — | — | — | — | FsRover R | L1, X7 |
-| **GFS2 / OCFS2** | Native cluster drivers, package C/RW | — | — | — | — | — | — | L1, S2 |
-| **VxFS** | Paid C/RW on supported Linux releases<br>Native `freevxfs` R subset | — | — | — | — | — | FsRover R | L1, S3, X7 |
-| **Xsan / StorNext** | Paid StorNext client on qualified platforms | Xsan client, metadata controller and SAN dependent | — | — | — | — | Paid StorNext client on qualified platforms | S4 |
-| **GPFS / IBM Storage Scale** | Free Developer Edition C/RW (test use)<br>Paid cluster C/RW | — | — | — | — | — | Vendor- and release-specific client access | S5 |
-| **FFS-style legacy UFS variants** | Native R for old/Sun/NextStep/Horizon variants, writes depend on variant and kernel | — | Select UFS variants | Select FFS variants | Select FFS variants | DragonFly UFS | Experimental UFS2Tool targets FreeBSD UFS variants | U1–U3, F1, O1, N1, D1 |
-| **HFS classic** | Native legacy mount driver | Offline compatibility tools | Offline compatibility tools | — | — | Offline compatibility tools | FsRover R | L1, M6, S6, X7 |
-| **Amiga FFS / AmigaDOS** | Native `affs` RW or R depending on format variant | — | — | — | Native `adosfs` R | — | FsRover R | L8, N1, X7 |
-| **HPFS** | Native RW | — | — | — | — | Native R | FsRover R | L8, D5, X7 |
-| **SGI EFS** | Native R | — | — | — | Native R | — | FsRover R | L1, N1, X7 |
-| **System V Boot File System** | Native `bfs` driver, distro tools | — | — | — | Native `sysvbfs` with formatter | — | FsRover R | L1, N6, X7 |
-| **V7 FS** | — | — | — | — | Native C/RW | — | — | N6 |
-| **Acorn ADFS / FileCore** | Native R and limited overwrites on supported FileCore variants | — | — | — | Native R | — | FsRover R | L8, N6, X7 |
-| **BeFS** | Native R | — | — | — | — | — | FsRover R | L8, X7 |
-| **Minix FS** | Native C/RW with util-linux tools | — | — | — | — | — | FsRover R | L1, L8, X7 |
-| **QNX4 / QNX6** | Native R | — | — | — | — | — | FsRover R | L1, L8, X7 |
-| **OMFS** | Native RW | — | — | — | — | — | — | L8 |
-| **ROMFS** | Native R, image creation tools | — | — | — | — | — | FsRover R | L1, L8, X7 |
-| **CramFS** | Native R, package image tools | — | Offline tools | — | — | — | — | L1, S1 |
-| **UBIFS / JFFS2 / CHFS** | Linux UBIFS and JFFS2 use flash/MTD interfaces | — | — | — | Native CHFS on supported flash devices | — | — | L1, N6 |
-| **zonefs** | Native C/RW on supported zoned block devices | — | — | — | — | — | — | L9 |
-| **FreeBSD tarfs** | Archive tools or userspace archive mounts | Archive tools or userspace archive mounts | Native R over tar archives | Archive tools | Archive tools | Archive tools | Archive tools | F5 |
-| **ReiserFS** | Legacy Linux kernels, offline tools or FsRover R | — | Offline tools where packaged | — | — | — | FsRover R | L1, S6, X7 |
-| **VMFS, FATX, FbFS, LynxFS, RedoxFS and SFS** | FsRover R | — | — | — | — | — | FsRover R | X7 |
-
-## Findings by OS and filesystem
-
-### Interchange and native defaults
-
-- Use **exFAT** for large-file exchange where the required driver is present.
-  FAT32 is the practical choice for an unchanged DragonFly 6.4.2 target or
-  devices that require FAT. FAT and exFAT synthesize ownership and permissions
-  at mount time and lack per-file POSIX metadata and metadata journaling.
-  Include filename and case behavior, capacity limits, and recovery in an
-  interchange test. [L5, M1, W2, D2]
-- A filesystem family can contain incompatible feature profiles. Examples
-  include ext4 extents and journal replay, XFS feature upgrades, ZFS pool
-  feature flags, ReFS Windows releases, and FFSv2 with NetBSD WAPBL. Compare
-  actual features and the formatter profile, especially when the recipient
-  uses a port or compatibility driver. [L1, F1, O2, N2, N7, Z1, W3]
+- An attached image counts when it is exposed as a usable disk device and the
+  formatter or mount driver can operate on it. Linux loop devices, macOS
+  disk-image attachment, FreeBSD `mdconfig`, OpenBSD `vnconfig`, NetBSD
+  `vndconfig`, DragonFly `vnconfig` and Windows VHD/VHDX are the standard paths.
+  Raw images and partitioned images can require different attachment steps.
+  https://man7.org/linux/man-pages/man8/losetup.8.html ·
+  https://support.apple.com/guide/disk-utility/dskutl11888/mac ·
+  https://man.freebsd.org/cgi/man.cgi?query=mdconfig&sektion=8 ·
+  https://man.openbsd.org/vnconfig.8 · https://man.netbsd.org/vnd.4 ·
+  https://man.dragonflybsd.org/?command=vnconfig&section=8 ·
+  https://learn.microsoft.com/en-us/windows-server/storage/disk-management/manage-virtual-hard-disks
+- A writable entry applies to the on-disk profiles the driver accepts.
+  Cross-BSD UFS/FFS writes need a variant check, including journal and extended
+  attribute formats. NetBSD UFS2ea has a distinct signature. ZFS creation means
+  creating a pool with a filesystem. Its active feature flags determine
+  whether another implementation can import the pool read/write, read-only,
+  or at all. https://wiki.netbsd.org/features/UFS2ea/ ·
+  https://openzfs.github.io/openzfs-docs/man/master/8/zpool-create.8.html ·
+  https://openzfs.github.io/openzfs-docs/Basic%20Concepts/Pool%20Structure/Feature%20Flags.html
+- FsRover exposes a real read-only Linux FUSE mount or Windows drive letter.
+  Its published supported filesystem list and disk/image input list are the
+  basis for those entries. GNU GRUB has separate UFS1 and UFS2 readers.
+  https://a1ive.github.io/FsRover/ · https://github.com/a1ive/FsRover ·
+  https://git.savannah.gnu.org/cgit/grub.git/tree/grub-core/fs/ufs.c ·
+  https://git.savannah.gnu.org/cgit/grub.git/tree/grub-core/fs/ufs2.c
 
 ### Linux
 
-- The current kernel documents two writable NTFS drivers, `ntfs3` and the
-  newer `ntfs`. Distro kernels vary. NTFS-3G offers a separate userspace
-  driver and `mkntfs`. The new kernel driver documents `ntfsprogs-plus`
-  utilities. Treat the selected driver and formatter as separate capabilities.
-  [L2–L4]
-- `e2fsprogs`, `btrfs-progs`, `xfsprogs`, `f2fs-tools`,
-  `exfatprogs`, and `dosfstools` provide the usual formatters for ext4,
-  Btrfs, XFS, F2FS, exFAT, and FAT. F2FS targets flash-oriented storage
-  and remains a native option for a compatible block device. bcachefs
-  upstream supplies DKMS for current kernels after removal from Linux 6.18
-  and later. Its maintainer describes the current release line as stable.
-  Distribution support and exact kernel compatibility remain separate.
-  [L1, L5–L7]
-- Linux UFS support depends on the UFS variant and kernel build. The kernel
-  configuration labels UFS write support experimental. A portable UFS
-  import policy should start with read-only access and identify the variant.
-  [U1]
-- Linux NTFS packages include the public, GPL-licensed NTFS-3G driver and
-  its formatter. Paragon's retail NTFS and HFS+ product includes writable
-  mounts and formatters for both file systems. [L4, X3]
-- GFS2 and OCFS2 need explicit cluster configuration. [L1, S2]
+- **ext4, Btrfs, XFS, exFAT.** Kernel drivers and their formatter projects cover
+  physical devices and loop-attached images.
+  https://docs.kernel.org/filesystems/ · https://github.com/tytso/e2fsprogs ·
+  https://btrfs.readthedocs.io/en/latest/mkfs.btrfs.html ·
+  https://git.kernel.org/pub/scm/fs/xfs/xfsprogs-dev.git/ ·
+  https://github.com/exfatprogs/exfatprogs ·
+  https://packages.debian.org/trixie/exfat-fuse · https://github.com/relan/exfat
+- **APFS.** The apfs-fuse and libfsapfs routes mount read-only. libfsapfs is a
+  pre-stable implementation. The Linux APFS kernel module and its formatter
+  are experimental, with no encrypted volume support in that module. Paragon
+  documents read/write access to supported APFS disks, no APFS formatting,
+  and restrictions on encrypted volumes.
+  https://github.com/sgan81/apfs-fuse ·
+  https://github.com/libyal/libfsapfs/blob/main/manuals/fsapfsmount.1 ·
+  https://github.com/linux-apfs/linux-apfs-rw · https://github.com/linux-apfs/apfsprogs ·
+  https://www.paragon-software.com/home/apfs-linux/
+- **UFS1 / FFSv1 and UFS2 / FFSv2.** Debian's `makefs` accepts versions 1 and
+  2 and produces images. The Linux UFS mount needs the correct `ufstype`.
+  The kernel documentation describes writes for `44bsd` and `ufs2`. The
+  running kernel must enable the experimental write option. fuse-ufs is
+  a separate experimental writer for FreeBSD UFS2, with no ACL support.
+  UFS2Tool publishes a Linux image formatter and reserves its mount for Windows.
+  https://manpages.debian.org/trixie/makefs/makefs.8.en.html ·
+  https://docs.kernel.org/admin-guide/ufs.html ·
+  https://github.com/torvalds/linux/blob/master/fs/ufs/Kconfig ·
+  https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/ufs/super.c ·
+  https://github.com/realchonk/fuse-ufs · https://github.com/SvenGDK/UFS2Tool/releases
+- **HAMMER2.** The Linux module project documents writable device and
+  loop-backed mounts and uses `newfs_hammer2` from the utilities project.
+  The separate hammer2-fuse implementation forces a read-only mount. The
+  portable makefs implementation can build images independently.
+  https://github.com/jdmanring/linux_hammer2 ·
+  https://github.com/kusumi/hammer2-utils ·
+  https://github.com/kusumi/hammer2-fuse/blob/master/src/main.rs ·
+  https://github.com/kusumi/makefs
+- **NTFS and ZFS.** Select the in-kernel NTFS driver available in the target
+  kernel and install a formatter. NTFS-3G is a separate userspace driver and
+  includes `mkntfs`. Paragon's Professional edition includes a formatter.
+  The Free edition mounts read/write and lists Linux kernels through 7.0.x.
+  OpenZFS is separately installed and documents file and device vdevs.
+  https://docs.kernel.org/filesystems/ntfs3.html ·
+  https://docs.kernel.org/filesystems/ntfs.html · https://github.com/tuxera/ntfs-3g ·
+  https://www.paragon-software.com/home/ntfs-linux-professional/ ·
+  https://github.com/openzfs/zfs
 
 ### macOS
 
-- `diskutil listFilesystems` on macOS 27.2.1 lists APFS, case-sensitive APFS,
-  exFAT, FAT12/16/32, and HFS+ variants for normal disk formatting. The host
-  also ships `newfs_udf` and `mount_udf` for applicable media and images.
-  [M1, M6]
-- The native NTFS access path is read-only. Paragon, Tuxera, and iBoysoft
-  offer writable mounts and formatting. EaseUS offers writable mounts.
-  Paragon's extFS for Mac offers ext4 read/write and format.
-  Open-source FSKit options include read-only ExtendFS and beta Ext4Kit with
-  writable mounts and a formatter. FSKit is an OS framework. The selected
-  provider determines which on-disk format and operations it implements.
-  [M2, M3, M5]
-- NTFSTool's open-source edition offers writable NTFS mounts through FSKit.
-  NTFS4Mac uses FSKit and libntfs-3g and adds formatting. Its published
-  tests cover Intel Mac RAM disks, with Apple Silicon and Windows-formatted
-  disks still pending in the project README. An NTFS-3G fork also targets
-  FUSE-T. [M7]
-- OpenZFS on macOS ships separately and has OS/architecture-specific builds.
-  Pool compatibility with Linux and FreeBSD depends on the feature flags
-  supported by the installed builds. [Z1, Z3]
-- xlinuxfs uses LKL inside a signed FSKit extension for writable ext4,
-  Btrfs, and XFS mounts. Its documented scope covers supported partitions
-  and disk images. The OS release determines the raw-image attachment
-  workflow. [M8]
-- For Btrfs, PolyDrive Disk advertises writable external drives and subvolumes
-  on Apple Silicon with macOS 26 or later. The open-source `anylinuxfs` exposes
-  writable Btrfs drives and disk images over NFS from a Linux microVM, and
-  vmount Pro offers a paid microVM route for writable Btrfs and XFS external
-  drives. PolyDrive Disk also advertises writable XFS. [M9]
-- btrfs4mac documents a
-  read-only FUSE mount and FSKit work. The `fuse-xfs` projects range from
-  a historical read-only driver to a newer community fork that advertises
-  optional writes. These are distinct paths from a native Linux mount.
-  Check the supported XFS feature set and verify data preservation before
-  enabling writes. [X6]
+- **ext4, Btrfs, XFS.** xlinuxfs covers attached images and partitions via
+  FSKit, with the image attachment method depending on macOS version.
+  PolyDrive Disk documents physical devices on Apple Silicon and macOS 26+.
+  anylinuxfs provides ordinary app access through local NFS from its
+  dedicated microVM. vmount Pro explicitly lists format and Finder access
+  for its supported drive formats. A partition tag on these lines reflects
+  the documented device workflow. The image workflow remains unverified.
+  https://github.com/HuanchuanTech/xlinuxfs · https://polydrive.net/disk/ ·
+  https://github.com/nohajc/anylinuxfs · https://www.vmount.app/
+- **ext4 alternatives.** ExtendFS is read-only. Ext4Kit has a formatter and
+  experimental writes. open_ext4_for_mac has an FSKit driver and formatter,
+  with signing and provisioning requirements when building from source.
+  Paragon extFS is a retail formatter and read/write mount for supported
+  ext4 profiles. https://github.com/kthchew/ExtendFS ·
+  https://github.com/rayhanadev/Ext4Kit ·
+  https://github.com/h3ct0r/open_ext4_for_mac ·
+  https://www.paragon-software.com/home/extfs-mac/
+- **Btrfs and XFS alternatives.** btrfs4mac mounts devices and images through
+  its read-only FUSE frontend. It does not replay the log tree or support
+  all multi-device layouts. The separate fuse-xfs fork documents a
+  formatter and opt-in writes on images and devices.
+  https://github.com/gereoffy/btrfs4mac · https://github.com/karan-vk/fuse-xfs
+- **APFS and exFAT.** Disk Utility supports the formats on physical devices
+  and in disk images. vmount Pro also advertises drive formatting and
+  Finder access for exFAT.
+  https://support.apple.com/guide/disk-utility/dsku19ed921c/mac ·
+  https://support.apple.com/guide/disk-utility/dskutl11888/mac ·
+  https://www.vmount.app/
+- **UFS1 / FFSv1, UFS2 / FFSv2, HAMMER2.** The archived UFS2Tool release can
+  create UFS images on macOS. Its mount command is Windows-only. The audit
+  found no macOS HAMMER2 mount or formatter that met the bar. The portable
+  HAMMER2 formatter names Linux, Cygwin and the BSDs.
+  https://github.com/SvenGDK/UFS2Tool/blob/v4.1/macOS.md ·
+  https://github.com/SvenGDK/UFS2Tool/releases · https://github.com/kusumi/makefs
+- **NTFS.** Apple documents read-only support. PolyDrive and NTFSTool offer
+  writes through FSKit. TT NTFS Native publishes a macOS 26+ Apple Silicon
+  release. The macFUSE route uses NTFS-3G with Mounty as an optional frontend.
+  The FUSE-T port uses a separate transport. NTFS4Mac adds FSKit formatting and documents testing on
+  Intel, including a mounted RAM disk, with Apple Silicon validation
+  pending in the project checklist. Tuxera documents creating NTFS
+  volumes and disk images. Paragon, iBoysoft, vmount Pro and CrossDriver
+  Pro document physical-drive formatting and writable mounts. EaseUS sells
+  a physical-drive mount, with mounting and ejection covered by its guide.
+  NTFSTool Pro also documents an erase-as-NTFS operation on external drives.
+  https://support.apple.com/en-us/101830 · https://polydrive.net/disk/ ·
+  https://github.com/ntfstool/ntfstool · https://mounty.app/ ·
+  https://github.com/macos-fuse-t/ntfs-3g · https://github.com/vahidzekic/ntfs4mac ·
+  https://www.paragon-software.com/home/ntfs-mac/ · https://ntfsformac.tuxera.com/ ·
+  https://iboysoft.com/ntfs-for-mac/ · https://www.crossdriver.com/product/ntfs-new ·
+  https://ntfs.techtag.ch/ · https://toolbox.easeus.com/support/ntfsformac/ ·
+  https://toolbox.easeus.com/ntfs-for-mac/buy.html ·
+  https://ntfstool.com/external-drive-formats-mac
+- **ZFS.** OpenZFS on OS X publishes installers with OS and architecture
+  requirements. anylinuxfs publishes ZFS support using its microVM and
+  mounts partitions and partitioned disk images.
+  https://www.openzfsonosx.org/ · https://github.com/openzfsonosx/openzfs-fork/releases ·
+  https://github.com/nohajc/anylinuxfs
 
 ### FreeBSD
 
-- UFS1 and UFS2 use `newfs`. ZFS uses the base `zpool` and `zfs` tools.
-  FreeBSD's `ext2fs` can write compatible ext4. Treat missing Linux journal
-  replay and other feature differences as a constraint for imported volumes.
-  `e2fsprogs` supplies a formatter, which can enable features beyond the
-  native mounting driver's support. [F1, U2, Z1]
-- FreeBSD's exFAT and NTFS drivers use `fusefs`. The exFAT FUSE driver and
-  format utilities are separate ports. NTFS-3G provides the writable NTFS
-  route. Ports also include a read-only HFS+ driver and a HAMMER2 port with
-  experimental writes. The separate `fusefs-lkl` package for Btrfs, ext4,
-  and XFS is pinned to a Linux 4.16-era snapshot with an architecture
-  restriction. Treat it as a
-  compatibility path and check modern feature bits before accepting an image.
-  [F1–F4, H1]
+- **ext4, Btrfs, XFS.** Native ext2fs supports read/write on compatible ext4
+  profiles without journal replay or encryption. The separate fuse-ext2
+  port advertises writes and uses e2fsprogs. The LKL port mounts all three
+  formats but pins Linux 4.16-era code and is architecture-restricted.
+  xfsprogs provides a formatter. libfsxfs supplies a separate read-only
+  FUSE mount. https://man.freebsd.org/cgi/man.cgi?query=ext2fs&sektion=4 ·
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/ext2 ·
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/lkl ·
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/xfsprogs ·
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/libfsxfs
+- **APFS.** libfsapfs ships `fsapfsmount` with FUSE. A public apfs-fuse
+  patch exists separately. The audit confirmed the packaged libfsapfs route.
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/libfsapfs ·
+  https://github.com/sgan81/apfs-fuse/pull/139
+- **UFS1 / FFSv1, UFS2 / FFSv2, HAMMER2.** Base `newfs -O 1` and
+  `newfs -O 2` cover both UFS formats. fuse-ufs is an experimental UFS2
+  writer. The HAMMER2 port includes a formatter and a kernel mount with
+  experimental writes. Match the module to the running kernel. The
+  separate hammer2-fuse implementation is read-only. Portable makefs
+  provides a standalone image formatter.
+  https://man.freebsd.org/cgi/man.cgi?query=newfs&sektion=8 ·
+  https://github.com/realchonk/fuse-ufs ·
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/hammer2 ·
+  https://github.com/kusumi/hammer2-fuse · https://github.com/kusumi/makefs
+- **NTFS, exFAT, ZFS.** The handbook documents packaged NTFS-3G and exFAT
+  mounts using FreeBSD's FUSE kernel module. Formatters come from NTFS-3G
+  and the separate exFAT utilities. libfsntfs provides an experimental
+  read-only mount. Base OpenZFS supports block and file-backed pool creation
+  and dataset mounts.
+  https://docs.freebsd.org/en/books/handbook/filesystems/ ·
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/exfat-utils ·
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/libfsntfs ·
+  https://docs.freebsd.org/en/books/handbook/zfs/
 
-### OpenBSD and NetBSD
+### OpenBSD
 
-- OpenBSD FFS2 is the native general-purpose choice. Its native `ext2fs`
-  permits a read-only subset of ext4. `exfat-fuse` and the `ntfs_3g`
-  package provide separate FUSE routes with formatters. Native NTFS and UDF
-  mounts are read-only. OpenBSD and NetBSD distribute `mkfs.ext4` in
-  `e2fsprogs`. That formatter can produce feature profiles outside their
-  native ext4 mount capability. [O1–O4, N2]
-- NetBSD supports FFSv1/v2, LFS and ZFS, plus native writable UDF with media
-  constraints. `fuse-exfat` and `fuse-ntfs-3g` provide writable access
-  through the NetBSD userspace filesystem stack. The native NTFS driver
-  allows only limited overwrites, and native NILFS2 and HFS+ are read-only.
-  The native ext4 extent reader and the experimental writable `fuse-ext2`
-  port have different support levels. [N1–N6, Z2]
-- NetBSD provides metadata journaling for FFS through WAPBL. Compatibility
-  with other FFS implementations depends in part on whether the volume was
-  cleanly unmounted. [N7]
+- **ext4, Btrfs, XFS, APFS.** The ext2fs driver accepts a read-only subset of
+  ext4, with e2fsprogs providing independent formatting. A formatter's
+  default ext4 profile can enable incompatible features. Current ports ship
+  `fsxfsmount` and `fsapfsmount` as experimental read-only FUSE paths for
+  XFS and APFS. No qualifying Btrfs route was found in the base/ports or
+  publicly documented drivers checked.
+  https://github.com/openbsd/src/blob/master/sys/ufs/ext2fs/ext2fs_vfsops.c ·
+  https://github.com/openbsd/ports/tree/master/sysutils/e2fsprogs ·
+  https://github.com/openbsd/ports/tree/master/sysutils/libyal/libfsxfs ·
+  https://github.com/openbsd/ports/tree/master/sysutils/libfsapfs
+- **UFS1 / FFSv1, UFS2 / FFSv2, HAMMER2.** Base `newfs` handles both FFS
+  generations. The fuse-ufs project documents an OpenBSD build targeting
+  FreeBSD UFS2. The portable `makefs` project produces HAMMER2 images.
+  The separate OpenBSD HAMMER2 kernel port source exists, with a usable
+  mount on a current OpenBSD release unverified in this audit.
+  https://man.openbsd.org/OpenBSD-8.0/newfs.8 · https://github.com/realchonk/fuse-ufs ·
+  https://github.com/kusumi/makefs · https://github.com/kusumi/openbsd_hammer2
+- **NTFS, exFAT, ZFS.** Base NTFS mounts read-only. The packaged NTFS-3G and
+  exFAT routes provide formatters and writable FUSE mounts. libfsntfs is
+  a separate experimental read-only mount. The upstream ZFS platform list
+  and OpenBSD base and ports yielded no qualifying ZFS route.
+  https://man.openbsd.org/mount_ntfs.8 · https://man.openbsd.org/fuse.4 ·
+  https://github.com/openbsd/ports/tree/master/sysutils/ntfs-3g ·
+  https://github.com/openbsd/ports/tree/master/sysutils/exfat-fuse ·
+  https://github.com/openbsd/ports/tree/master/sysutils/libyal/libfsntfs ·
+  https://github.com/openbsd/ports · https://github.com/openzfs/zfs
+
+### NetBSD
+
+- **ext4, Btrfs, XFS, APFS.** The native ext2fs implementation can read
+  compatible ext4 profiles. pkgsrc e2fsprogs supplies formatting. The
+  fuse-ext2 package calls its write support unsafe for valuable data.
+  No qualifying Btrfs, XFS or APFS route appeared in the base/pkgsrc and
+  upstream ports checked. https://www.netbsd.org/about/interop.html ·
+  https://github.com/NetBSD/src/blob/netbsd-11/sys/ufs/ext2fs/ext2fs_vfsops.c ·
+  https://github.com/NetBSD/pkgsrc/tree/trunk/sysutils/e2fsprogs ·
+  https://github.com/NetBSD/pkgsrc/tree/trunk/filesystems
+- **UFS1 / FFSv1, UFS2 / FFSv2, HAMMER2.** Base `newfs` can create ordinary
+  FFSv1 and FFSv2, with FFSv2ea a separate profile. The portable
+  `makefs` formats HAMMER2 images. A separate kernel port exists, with a
+  usable mount on current NetBSD unverified in this audit.
+  https://man.netbsd.org/NetBSD-11.1/newfs.8 ·
+  https://wiki.netbsd.org/features/UFS2ea/ · https://github.com/kusumi/makefs ·
+  https://github.com/kusumi/netbsd_hammer2
+- **NTFS, exFAT, ZFS.** Base NTFS writes are experimental in-place
+  overwrites on eligible files only, with no create, delete or resize.
+  NetBSD recommends the base driver in read-only mode. For normal writes,
+  pkgsrc offers `fuse-ntfs-3g` and a separate `ntfsprogs` formatter.
+  pkgsrc exFAT includes its formatter. Base ZFS is available on supported
+  architectures. The NetBSD project documents lockups on low-memory systems.
+  https://man.netbsd.org/NetBSD-11.1/mount_ntfs.8 ·
+  https://github.com/NetBSD/pkgsrc/tree/trunk/filesystems/fuse-ntfs-3g ·
+  https://github.com/NetBSD/pkgsrc/tree/trunk/sysutils/ntfsprogs ·
+  https://github.com/NetBSD/pkgsrc/tree/trunk/filesystems/fuse-exfat ·
+  https://wiki.netbsd.org/zfs/
 
 ### DragonFly BSD
 
-- UFS, HAMMER, and HAMMER2 are native and have separate formatters. HAMMER2
-  is the maintained general-purpose target and DragonFly's default root
-  filesystem. [D1]
-- Stock **6.4.2** has `newfs_msdos`, `mount_msdos`, native
-  `mount_ext2fs`, and legacy read-only NTFS/UDF. Its `ext2fs` source
-  accepts only a subset of ext4 features. Native ext4 write compatibility
-  for current Linux formatter defaults remains unverified. DPorts ships
-  `e2fsprogs-core` for formatting. [D1, D4–D5]
-- DPorts supplies `exfat-utils`, `fusefs-exfat`, `fusefs-ntfs`, and
-  `fusefs-hfsfuse`. The base `mount_fusefs` helper exists in 6.4.2,
-  while the release source excludes the `fuse` module from the default
-  build. The development branch builds the module and has additional I/O
-  fixes. Verify a working FUSE kernel and userland pair before exposing
-  read/write exFAT or optional NTFS. Formatting alone does not establish
-  mount support. [D2–D3]
+- **ext4, Btrfs, XFS, APFS.** Stock 6.4.2 ext2fs reads compatible ext4
+  profiles and describes extents as read-only. DPorts supplies a formatter.
+  DPorts libfsapfs and libfsxfs mounts require FUSE. The stock kernel excludes
+  its FUSE module and no matching module package was found in the 6.4
+  repository. No usable Btrfs route was found in base or DPorts.
+  https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/ext2fs/ext2fs.h ·
+  https://github.com/DragonFlyBSD/DPorts/tree/master/filesystems/e2fsprogs-core ·
+  https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/Makefile ·
+  https://avalon.dragonflybsd.org/dports/dragonfly:6.4:x86:64/LATEST/
+- **UFS1 / FFSv1, UFS2 / FFSv2, HAMMER2.** The installation handbook uses
+  native UFS1 and HAMMER2. The portable FreeBSD-derived `makefs` supports
+  producing UFS2 images on DragonFly. No UFS2 mount was confirmed for
+  stock 6.4.2. https://www.dragonflybsd.org/docs/handbook/Installation/ ·
+  https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/ufs/fs.h ·
+  https://github.com/kusumi/makefs/blob/master/src/usr.sbin/makefs/ffs.c
+- **NTFS, exFAT, ZFS.** The legacy base NTFS mount is read-only. NTFS-3G
+  and exFAT package formatters work independently of FUSE. The userspace
+  mounts need a kernel module that the 6.4 release build omits. The 6.4
+  package manifest for fusefs-ntfs includes `mkntfs`. The
+  development branch restored the module and received I/O fixes, with
+  DragonFly exFAT/NTFS mounts on that branch unverified here. No eligible ZFS
+  driver or formatter was found in base or the official package catalog.
+  https://man.dragonflybsd.org/?command=mount_ntfs&section=8 ·
+  https://github.com/DragonFlyBSD/DPorts/tree/master/filesystems/exfat-utils ·
+  https://github.com/relan/exfat/blob/v1.4.0/libexfat/io.c ·
+  https://avalon.dragonflybsd.org/dports/dragonfly:6.4:x86:64/LATEST/All/fusefs-ntfs-2022.10.3_2.pkg ·
+  https://github.com/DragonFlyBSD/DragonFlyBSD/commit/4d178a6a8bdff7603d9bcb6c5fff68a4e2efd337 ·
+  https://github.com/DragonFlyBSD/DragonFlyBSD/commit/053116cafd76a7ce620ebdfedcf6869e986e327d
 
 ### Windows
 
-- NTFS is the general-purpose native choice. exFAT is native for portable
-  volumes. FAT32 and UDF are compatibility choices. ReFS creation depends
-  on Windows Server support and Windows 11 Dev Drive or edition rules.
-  Microsoft documents different feature sets for NTFS and ReFS, so a
-  supported ReFS volume does not provide every NTFS feature. [W1–W3]
-- WinBtrfs provides an optional Windows mount driver and `mkbtrfs`.
-  Check driver signing and the exact Windows build. Windows also has a
-  release-candidate OpenZFS port. Paragon's Linux File Systems for Windows
-  gives ext4 read/write, can reformat an existing ext-family volume as ext4,
-  and gives Btrfs read-only access. Its product page
-  advertises XFS write access, while the vendor's product documentation
-  describes XFS as read-only. Confirm the installed version before counting
-  Windows as a writable XFS target. The APFS and HFS+ products use separate
-  drivers, with APFS volume-type restrictions.
-  [W5–W6, X2–X3, Z4]
-- Janus implements experimental read-only ext4 through WinFsp. [W4]
-- Ext4Fsd is a free Windows ext4 kernel driver. Upstream documents
-  writable support for metadata checksums and 64-bit block numbers.
-  Features such as `bigalloc` and `verity` force read-only access.
-  Features such as `casefold` and `inline_data` prevent mounting.
-  Its journal support is limited to internal journal replay. [W8]
-- Ext4Windows uses WinFsp and lwext4 for writable Windows drive-letter
-  mounts of raw ext4 images and partitions. Pengwin and
-  `ext4-win-driver` provide separate WinFsp implementations with write
-  paths documented upstream. Qualify container-backed virtual devices
-  separately from physical partitions and raw images. [W9]
-- DiskInternals Linux Writer Pro offers drive-letter mounts for ext4 with
-  extents. DiskInternals also offers a separate Windows ext4 formatter.
-  Linux Reader Pro mounts Btrfs, XFS, and ZFS read-only. [W10]
-- OWC MacDrive 12 mounts APFS and HFS+ read/write on x64 Windows, including
-  password-encrypted APFS volumes. [W11]
-
-### Experimental ports and recovery tools
-
-- OpenRefs has a userspace ReFS reader and FUSE frontend, plus an experimental
-  Linux kernel driver. Its BSD and macOS routes depend on a matching FUSE
-  environment. The BSD routes need a working mount demonstrated. [X4]
-- The Linux APFS kernel project defaults to read-only and describes writes as
-  experimental. `apfs-fuse` offers a separate read-only route, and `apfsprogs`
-  provides an experimental formatter. Paragon offers commercial read/write
-  drivers for Linux and Windows with volume-type restrictions. [X1–X2]
-- The open-source Windows `winapfs` beta reuses the Linux APFS driver in
-  userspace over WinFsp. Its first public release describes writes as
-  experimental and marks validation with Apple's `fsck_apfs` as pending.
-  The separate `apfs_for_windows` project offers writable WinFsp mounts
-  for selected unencrypted, unsealed volumes and documents directory size
-  and depth limits for writes. [X8]
-- HAMMER2 has separate FreeBSD, NetBSD, and OpenBSD work. The current FreeBSD
-  port marks write support experimental. NetBSD and OpenBSD have development
-  ports. Linux has an out-of-tree kernel project with formatting and write
-  support under development, plus independent userspace image tools. [H1–H3]
-- Commercial **UFS Explorer** on Windows, macOS, and Linux can inspect or
-  recover files from APFS, HFS+, UFS, ZFS, XFS, Btrfs, ReFS, and other
-  formats listed by the vendor. UFS2Tool creates and edits UFS images
-  directly on macOS. Its Windows Dokan mounts can modify existing files
-  inside an image.
-  [U3, S7]
-- **FsRover** provides a free read-only mount as well as extraction on Windows
-  through WinFsp or Dokany and on Linux through FUSE. Its documented formats
-  include ext4, XFS, Btrfs, F2FS, APFS, UFS, JFS, ReiserFS, and ReFS. [X7]
-
-### Network, virtual, and archive filesystems
-
-SMB, NFS, WebDAV, SSHFS, CephFS, Lustre, BeeGFS, and other network or
-distributed filesystems expose a tree from another machine or cluster.
-OverlayFS, nullfs, tmpfs, procfs, and tarfs expose views of directories,
-memory, kernel state, or archives. WIM, DMG, VHDX, GPT, and MBR are image or
-partition formats. FUSE, FSKit, WinFsp, and Dokan are filesystem frameworks.
-[L1, M5–M6, O4, W4, S2, S4–S5]
-
-## Primary references
-
-### Linux and shared formats
-
-- **L1** Linux filesystem documentation and 7.2 source inventory. https://docs.kernel.org/filesystems/ · https://github.com/torvalds/linux/tree/v7.2/fs
-- **L2** Linux 7.2 writable NTFS driver and formatter documentation. https://docs.kernel.org/7.2/filesystems/ntfs.html · https://github.com/ntfsprogs-plus/ntfsprogs-plus
-- **L3** Linux NTFS3 driver. https://docs.kernel.org/7.2/filesystems/ntfs3.html
-- **L4** Tuxera NTFS-3G source and utilities. https://github.com/tuxera/ntfs-3g
-- **L5** Linux exFAT driver and utilities. https://docs.kernel.org/filesystems/exfat.html · https://github.com/exfatprogs/exfatprogs
-- **L6** bcachefs upstream release and DKMS status. https://bcachefs.org/ · https://github.com/koverstreet/bcachefs-tools/blob/master/Changelog.mdwn
-- **L7** Filesystem tools and F2FS format documentation. https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs.git/ · https://github.com/kdave/btrfs-progs · https://git.kernel.org/pub/scm/fs/xfs/xfsprogs-dev.git/ · https://docs.kernel.org/filesystems/f2fs.html · https://github.com/dosfstools/dosfstools
-- **L8** Linux compatibility filesystem modes and formatter source. https://docs.kernel.org/filesystems/adfs.html · https://docs.kernel.org/filesystems/affs.html · https://docs.kernel.org/filesystems/befs.html · https://docs.kernel.org/filesystems/hpfs.html · https://github.com/torvalds/linux/blob/v7.2/fs/qnx4/Kconfig · https://github.com/torvalds/linux/blob/v7.2/fs/qnx6/Kconfig · https://docs.kernel.org/filesystems/omfs.html · https://docs.kernel.org/filesystems/romfs.html · https://github.com/util-linux/util-linux/blob/master/disk-utils/mkfs.minix.c
-- **L9** Linux zonefs and zoned-device constraints. https://docs.kernel.org/filesystems/zonefs.html
-
-### macOS and Windows
-
-- **M1** Apple Disk Utility filesystem formats. https://support.apple.com/guide/disk-utility/file-system-formats-dsku19ed921c/22.7/mac/27
-- **M2** Paragon extFS for Mac. https://www.paragon-software.com/home/extfs-mac/
-- **M3** Retail NTFS for Mac products. https://www.paragon-software.com/home/ntfs-mac/ · https://ntfsformac.tuxera.com/ · https://macsupport.tuxera.com/hc/en-gb/articles/360021093939-How-do-I-format-external-media-to-use-the-NTFS-file-system · https://iboysoft.com/ntfs-for-mac/ · https://toolbox.easeus.com/support/ntfsformac/
-- **M5** Apple FSKit and ext4 provider examples. https://developer.apple.com/documentation/FSKit · https://github.com/kthchew/ExtendFS · https://github.com/rayhanadev/Ext4Kit
-- **M6** Apple filesystem details, including UDF and optical filesystems. https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/FileSystemDetails/FileSystemDetails.html
-- **M7** Open-source macOS NTFS drivers through FSKit and FUSE-T. https://github.com/ntfstool/ntfstool · https://github.com/vahidzekic/ntfs4mac · https://github.com/macos-fuse-t/ntfs-3g
-- **M8** macOS ext4, Btrfs, and XFS via LKL and FSKit. https://github.com/HuanchuanTech/xlinuxfs
-- **M9** macOS Btrfs and XFS writable access. https://polydrive.net/disk/ · https://github.com/nohajc/anylinuxfs · https://www.vmount.app/ · https://vmount.app/use-cases/mount-btrfs-mac/
-- **W1** Microsoft Windows format command. https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/format
-- **W2** Microsoft filesystem feature comparison and exFAT specification. https://learn.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison · https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
-- **W3** Microsoft ReFS and Windows 11 Dev Drive. https://learn.microsoft.com/en-us/windows-server/storage/refs/refs-overview · https://learn.microsoft.com/en-us/windows/dev-drive/
-- **W4** Janus read-only driver and Windows filesystem frameworks. https://github.com/SuperCoolPencil/janus · https://github.com/winfsp/winfsp · https://github.com/dokan-dev/dokany
-- **W5** Paragon Linux File Systems for Windows documentation. https://www.paragon-software.com/home/linuxfs-windows/ · https://dl.paragon-software.com/doc/Linux_File_Systems_for_Windows_OP.pdf · https://download.paragon-software.com/doc/Paragon_Linux_File_Systems_Windows.pdf
-- **W6** WinBtrfs driver and formatter. https://github.com/maharmstone/btrfs
-- **W7** Microsoft in-box filesystem driver overview. https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/about-file-system-drivers
-- **W8** Ext4Fsd writable features and signed Windows release. https://github.com/bobranten/Ext4Fsd · https://github.com/bobranten/Ext4Fsd/releases/tag/v0.71
-- **W9** WinFsp ext4 write paths. https://github.com/Mateuscruz19/Ext4Windows · https://github.com/althk/pengwin · https://github.com/antimatter-studios/ext4-win-driver
-- **W10** DiskInternals Linux Writer, Linux Reader, and ext4 formatter. https://www.diskinternals.com/linux-writer/ · https://www.diskinternals.com/linux-reader/ · https://www.diskinternals.com/ext4-formatter/
-- **W11** OWC MacDrive and supported Windows releases. https://software.owc.com/macdrive/ · https://software.owc.com/support/macdrive/downloads/
-
-### BSDs and sharing families
-
-- **F1** FreeBSD filesystem handbook and release baseline. https://docs.freebsd.org/en/books/handbook/filesystems/ · https://www.freebsd.org/releases/15.1R/relnotes/
-- **F2** FreeBSD exFAT driver and format ports. https://cgit.freebsd.org/ports/tree/filesystems/exfat/Makefile · https://cgit.freebsd.org/ports/tree/filesystems/exfat-utils/Makefile
-- **F3** FreeBSD NTFS and HFS+ packages. https://cgit.freebsd.org/ports/tree/filesystems/ntfs/Makefile · https://github.com/0x09/hfsfuse
-- **F4** FreeBSD LKL and XFS formatter ports. https://raw.githubusercontent.com/freebsd/freebsd-ports/main/filesystems/lkl/Makefile · https://cgit.freebsd.org/ports/tree/filesystems/xfsprogs
-- **F5** FreeBSD UDF source and tools, tarfs and image tooling. https://github.com/freebsd/freebsd-src/blob/releng/15.1/sys/fs/udf/udf_vfsops.c · https://cgit.freebsd.org/ports/tree/sysutils/udfclient/Makefile?id=e956200e0cb1ab3a412c123fa23aaaf47b1ea8da · https://man.freebsd.org/cgi/man.cgi?query=tarfs&sektion=5 · https://man.freebsd.org/cgi/man.cgi?query=makefs&sektion=8
-- **O1** OpenBSD 8.0, disk setup and filesystem types. https://www.openbsd.org/80.html · https://www.openbsd.org/faq/faq14.html · https://man.openbsd.org/fstab · https://man.openbsd.org/newfs
-- **O2** OpenBSD ext2/ext4 mount implementation and package formatter. https://man.openbsd.org/mount_ext2fs · https://github.com/openbsd/src/blob/master/sys/ufs/ext2fs/ext2fs_vfsops.c · https://raw.githubusercontent.com/openbsd/ports/master/sysutils/e2fsprogs/pkg/PLIST
-- **O3** OpenBSD base NTFS, optional exFAT, and writable NTFS package. https://man.openbsd.org/mount_ntfs · https://raw.githubusercontent.com/openbsd/ports/master/sysutils/exfat-fuse/pkg/PLIST · https://raw.githubusercontent.com/openbsd/ports/master/sysutils/ntfs-3g/Makefile · https://man.openbsd.org/fuse
-- **O4** OpenBSD UDF, general mounts, and image creation. https://github.com/openbsd/src/blob/master/sys/isofs/udf/udf_vfsops.c · https://man.openbsd.org/mount · https://man.openbsd.org/makefs
-- **N1** NetBSD 11.1, native formats, and interoperability. https://www.netbsd.org/releases/formal-11/NetBSD-11.1.html · https://www.netbsd.org/about/interop.html · https://man.netbsd.org/NetBSD-11.1/newfs.8 · https://man.netbsd.org/mount_hfs.8
-- **N2** NetBSD ext4 extent implementation, formatter, and FUSE writer limitations. https://www4.netbsd.org/gallery/presentations/hrishikesh/2017_AsiaBSDCon/abc2017ext4_final_paper.pdf · https://github.com/NetBSD/src/blob/netbsd-11/sys/ufs/ext2fs/ext2fs_vfsops.c · https://raw.githubusercontent.com/NetBSD/pkgsrc/trunk/sysutils/e2fsprogs/PLIST · https://raw.githubusercontent.com/NetBSD/pkgsrc/trunk/filesystems/fuse-ext2/DESCR
-- **N3** NetBSD exFAT and NTFS packages and base NTFS modes. https://wwwcdn.netbsd.org/pub/pkgsrc/current/pkgsrc/filesystems/fuse-exfat/index.html · https://wwwcdn.netbsd.org/pub/pkgsrc/current/pkgsrc/filesystems/fuse-ntfs-3g/index.html · https://man.netbsd.org/mount_ntfs.8
-- **N4** NetBSD LFS and NILFS2. https://man.netbsd.org/newfs_lfs.8 · https://github.com/NetBSD/src/blob/netbsd-11/sbin/mount_nilfs/mount_nilfs.8
-- **N5** NetBSD UDF and image tools. https://man.netbsd.org/newfs_udf.8 · https://man.netbsd.org/mount_udf.8 · https://man.netbsd.org/makefs.8
-- **N6** NetBSD specialty filesystems. https://man.netbsd.org/NetBSD-11.x-BRANCH/mount_chfs.8 · https://man.netbsd.org/mount_filecore.8 · https://man.netbsd.org/newfs_v7fs.8 · https://man.netbsd.org/newfs_sysvbfs.8
-- **N7** NetBSD WAPBL support and interoperability limits. https://man.netbsd.org/NetBSD-11.0/wapbl.4
-- **D1** DragonFly release, native filesystems, and tooling. https://www.dragonflybsd.org/release64/ · https://www.dragonflybsd.org/docs/handbook/UnixBasics/ · https://man.dragonflybsd.org/?command=newfs_hammer2&section=8
-- **D2** DragonFly 6.4.2 FUSE exclusion and development branch changes. https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/Makefile · https://github.com/DragonFlyBSD/DragonFlyBSD/commit/4d178a6a8bdff7603d9bcb6c5fff68a4e2efd337 · https://github.com/DragonFlyBSD/DragonFlyBSD/commit/053116cafd76a7ce620ebdfedcf6869e986e327d
-- **D3** DragonFly optional packages and exFAT driver upstream. https://github.com/DragonFlyBSD/DPorts · https://raw.githubusercontent.com/DragonFlyBSD/DPorts/master/filesystems/exfat-utils/Makefile · https://github.com/relan/exfat
-- **D4** DragonFly ext-family driver and formatter. https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/ext2fs/ext2fs.h · https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/ext2fs/ext2_vfsops.c · https://raw.githubusercontent.com/DragonFlyBSD/DPorts/master/filesystems/e2fsprogs-core/Makefile
-- **D5** DragonFly compatibility mounts. https://man.dragonflybsd.org/?command=mount_ntfs&section=8 · https://man.dragonflybsd.org/?command=mount_udf&section=8 · https://man.dragonflybsd.org/?command=mount_hpfs&section=8
-- **U1** Linux UFS variants and experimental write configuration. https://docs.kernel.org/admin-guide/ufs.html · https://github.com/torvalds/linux/blob/v7.2/fs/ufs/Kconfig
-- **U2** FreeBSD UFS formatter and the DragonFly UFS definition. https://man.freebsd.org/cgi/man.cgi?query=newfs&sektion=8 · https://www.dragonflybsd.org/docs/handbook/Installation/ · https://github.com/DragonFlyBSD/DragonFlyBSD/blob/v6.4.2/sys/vfs/ufs/fs.h
-- **U3** FreeBSD UFS image creation and editing, plus Windows Dokan mounts. https://github.com/SvenGDK/UFS2Tool · https://github.com/SvenGDK/UFS2Tool/blob/main/macOS.md
-
-### Optional, enterprise, and recovery paths
-
-- **Z1** OpenZFS platform support and pool feature flags. https://github.com/openzfs/zfs · https://openzfs.github.io/openzfs-docs/man/master/7/zpool-features.7.html
-- **Z2** NetBSD ZFS port and module. https://wiki.netbsd.org/zfs/ · https://github.com/NetBSD/src/blob/netbsd-11/sys/modules/zfs/Makefile
-- **Z3** OpenZFS on macOS releases. https://github.com/openzfsonosx/openzfs-fork/releases
-- **Z4** OpenZFS on Windows release candidates. https://github.com/openzfsonwindows/openzfs/releases
-- **H1** HAMMER2 FreeBSD port and packaging. https://github.com/kusumi/freebsd_hammer2 · https://raw.githubusercontent.com/freebsd/freebsd-ports/main/filesystems/hammer2/Makefile
-- **H2** HAMMER2 NetBSD and OpenBSD ports. https://github.com/kusumi/netbsd_hammer2 · https://github.com/kusumi/openbsd_hammer2
-- **H3** HAMMER2 portable image tools and Linux research. https://github.com/kusumi/hammer2 · https://github.com/kusumi/hammer2-utils · https://github.com/jdmanring/linux_hammer2
-- **X1** APFS open-source readers, experimental writer and formatter, and FreeBSD port work. https://github.com/sgan81/apfs-fuse · https://github.com/linux-apfs/linux-apfs-rw · https://github.com/linux-apfs/apfsprogs · https://github.com/sgan81/apfs-fuse/pull/139
-- **X2** Paragon APFS for Linux and Windows. https://www.paragon-software.com/home/apfs-linux/ · https://www.paragon-software.com/us/home/apfs-windows/
-- **X3** Paragon HFS+ for Windows, Paragon NTFS and HFS+ for Linux, and open-source HFS+ reader. https://www.paragon-software.com/home/hfs-windows/ · https://www.paragon-software.com/us/home/ntfs-linux-professional/ · https://github.com/0x09/hfsfuse
-- **X4** OpenRefs experimental kernel driver and userspace frontend. https://github.com/unsound/openrefs
-- **X6** macOS community Btrfs and XFS drivers. https://github.com/gereoffy/btrfs4mac · https://github.com/karan-vk/fuse-xfs · https://sourceforge.net/p/fusexfs/wiki/Home/
-- **X7** FsRover format and read-only mount support. https://a1ive.github.io/FsRover/ · https://github.com/a1ive/FsRover
-- **X8** Windows open-source APFS write paths and release limits. https://github.com/christofilojohn/winapfs/releases · https://github.com/RandyNorthrup/apfs_for_windows#supported-scope
-- **S1** EROFS and SquashFS projects, plus current NetBSD tools catalog. https://erofs.docs.kernel.org/en/latest/ · https://github.com/plougher/squashfs-tools · https://wwwcdn.netbsd.org/pub/pkgsrc/current/pkgsrc/filesystems/index.html
-- **S2** Linux shared disk and cluster documentation. https://docs.kernel.org/filesystems/gfs2/index.html · https://docs.kernel.org/filesystems/ocfs2.html
-- **S3** Veritas InfoScale trial download and VxFS support. https://origin-www.veritas.com/en/aa/form/trialware/infoscale-solutions · https://www.veritas.com/content/support/en_US/doc/79722584-170945085-0/v41267960-170945085
-- **S4** Xsan, StorNext interoperability, and client downloads. https://support.apple.com/en-ie/102855 · https://www.quantum.com/en/products/file-system/stornext/ · https://qsupport.quantum.com/kb/flare/content/stornext/sns_docsite/guide_installation/topics/Download_the_StorNext_Client_Software.htm
-- **S5** IBM Storage Scale software requirements and Developer Edition. https://www.ibm.com/docs/en/storage-scale/6.0.1?topic=gpfs-software-requirements · https://www.ibm.com/docs/en/storage-scale/6.0.1?topic=storage-scale-faq
-- **S6** FreeBSD compatibility tools and historical ReiserFS source. https://cgit.freebsd.org/ports/tree/filesystems/hfsutils · https://cgit.freebsd.org/ports/tree/filesystems/progsreiserfs · https://github.com/torvalds/linux/tree/v6.12/fs/reiserfs
-- **S7** UFS Explorer recovery format support. https://www.ufsexplorer.com/ufs-explorer-professional-recovery/ · https://www.ufsexplorer.com/kb-technologies/
+- **ext4, Btrfs, XFS.** Ext4Fsd mounts the supported ext4 feature subset.
+  The separate DiskInternals formatter documents physical and image targets.
+  DiskGenius documents ext4 formatting in its partition formatter and
+  supports formatting partitions in disk images. MiniTool's Free edition
+  documents formatting physical ext4 partitions.
+  WinBtrfs includes `mkbtrfs` and a Windows filesystem driver. Paragon's
+  current product page says XFS is writable, while older vendor documents
+  list it read-only. It can format ext4, not XFS or Btrfs. DiskInternals
+  Writer Pro provides ext4 drive-letter writes and Reader Pro offers
+  read-only drive letters. CrossDriver Free advertises read-only drive
+  letters. Pro adds writing and formatting. Its dedicated VM uses Windows
+  Virtual Machine Platform and exposes the drive to Windows apps.
+  Physical-only commercial lines report documented physical workflows.
+  https://github.com/bobranten/Ext4Fsd · https://www.diskinternals.com/ext4-formatter/ ·
+  https://www.diskgenius.com/manual/format-partition.php ·
+  https://www.diskgenius.com/manual/operate-virtual-disk.php ·
+  https://www.partitionwizard.com/partitionmanager/format-ext4-windows.html ·
+  https://github.com/maharmstone/btrfs ·
+  https://www.paragon-software.com/home/linuxfs-windows/ ·
+  https://download.paragon-software.com/doc/Paragon_Linux_File_Systems_Windows.pdf ·
+  https://www.diskinternals.com/linux-writer/ · https://www.diskinternals.com/linux-reader/ ·
+  https://www.crossdriver.com/product/linux-disk-for-windows
+- **APFS.** winapfs supports physical devices and images with experimental
+  writes on compatible unencrypted data volumes. apfs_for_windows
+  separately documents restrictions on writable directory size and nesting.
+  Paragon and MacDrive provide retail drive-letter mounts. Paragon's
+  read/write path requires a compatible single-store volume. Some compressed
+  system files are unreadable, and snapshot volumes mount read-only. OWC
+  confirms APFS mounts but describes formatting only for Mac disks in
+  general, so MacDrive APFS formatting remains unverified. CrossDriver Free
+  provides read-only drive-letter access. CrossDriver Pro formats APFS
+  on physical devices. Its APFS mount writes still depend on a confirmed
+  product release. Linux Reader Pro advertises APFS access and drive-letter
+  mapping.
+  https://github.com/christofilojohn/winapfs ·
+  https://github.com/RandyNorthrup/apfs_for_windows ·
+  https://www.paragon-software.com/home/apfs-windows/ ·
+  https://paragon-software.zendesk.com/hc/en-us/articles/16290128217745-APFS-for-Windows-Supported-Volumes ·
+  https://www.owc.com/solutions/macdrive · https://fs.crossdriver.com/en/mac-disk/ ·
+  https://www.diskinternals.com/linux-reader/
+- **UFS1 / FFSv1, UFS2 / FFSv2, HAMMER2.** UFS2Tool can format devices and
+  images, with a Dokan mount for images. It can modify existing files
+  and rejects creating new files through the mount. The archived v4.1
+  source implements both routes. Portable `makefs` documents Cygwin
+  support for creating HAMMER2 images. No Windows HAMMER2 mount was found.
+  https://github.com/SvenGDK/UFS2Tool/tree/v4.1 ·
+  https://github.com/SvenGDK/UFS2Tool/blob/v4.1/Program.cs#L2574-L2609 ·
+  https://github.com/SvenGDK/UFS2Tool/blob/v4.1/Ufs2DokanOperations.cs#L97-L127 ·
+  https://github.com/kusumi/makefs
+- **NTFS, exFAT, ZFS.** Windows supports formatting and mounting both
+  partition and attached VHD/VHDX targets for NTFS and exFAT. Windows
+  OpenZFS publishes prerelease builds, with disk and file vdev code and
+  Windows drive-letter integration. Linux Reader Pro advertises a
+  separate read-only ZFS access path.
+  https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/format ·
+  https://learn.microsoft.com/en-us/windows-server/storage/disk-management/manage-virtual-hard-disks ·
+  https://github.com/openzfsonwindows/openzfs/releases ·
+  https://github.com/openzfsonwindows/openzfs/blob/development/module/zfs/vdev_file.c ·
+  https://www.diskinternals.com/linux-reader/
