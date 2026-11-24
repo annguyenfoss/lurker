@@ -26,4 +26,4 @@ Use /tmp/lurker-filesystem-round-<os>-<run> remotely, existing per-user caches f
 
 ## Checkpoint
 
-Not started. Owner updates result note with exact commits, active job handle, receipts and next action; do not paste transcripts. Reviewer records review commits and outcomes after implementation closes.
+Implementation complete; host released for fresh review. Product `1a37591`, no live job handles. Read `FREEBSD_RESULTS.md` and `target/goal-validation/filesystem-round/freebsd/summary.json` for receipts, limits and cleanup. Reviewer records review commits and outcomes after implementation closes.
