@@ -1213,7 +1213,34 @@ fn detect_filesystem_type(ctx: &mut AppContext, device_path: &Path) -> AppResult
         }
     }
 
+    // util-linux releases on several supported distributions do not probe
+    // HAMMER2. Read only its eight-byte volume magic from the owned mapper;
+    // the selected native driver still validates the complete filesystem.
+    if let Ok(dd) = crate::trusted_system_executable("dd") {
+        let probe = ctx.capture_command(
+            &dd,
+            &[
+                format!("if={}", device_path.display()).into(),
+                "bs=8".into(),
+                "count=1".into(),
+                "status=none".into(),
+            ],
+            true,
+            "Inspect native filesystem volume magic",
+        )?;
+        if probe.status.success() && is_hammer2_magic(&probe.stdout) {
+            return Ok(Some("hammer2".into()));
+        }
+    }
     Ok(None)
+}
+
+fn is_hammer2_magic(bytes: &[u8]) -> bool {
+    let Ok(magic) = <[u8; 8]>::try_from(bytes) else {
+        return false;
+    };
+    u64::from_le_bytes(magic) == 0x4841_4d32_0517_2011
+        || u64::from_be_bytes(magic) == 0x4841_4d32_0517_2011
 }
 
 fn mount_open_mapper(
@@ -2661,6 +2688,20 @@ mod tests {
             assert_eq!(parse_luks_cipher_name(name), Some(expected));
         }
         assert_eq!(parse_luks_cipher_name("camellia-xts-plain64"), None);
+    }
+
+    #[test]
+    fn native_hammer2_magic_accepts_both_byte_orders() {
+        // The first sequence is from the independently formatted Ubuntu
+        // scratch fixture, which older blkid releases do not recognize.
+        assert!(is_hammer2_magic(&[
+            0x11, 0x20, 0x17, 0x05, 0x32, 0x4d, 0x41, 0x48
+        ]));
+        assert!(is_hammer2_magic(&[
+            0x48, 0x41, 0x4d, 0x32, 0x05, 0x17, 0x20, 0x11
+        ]));
+        assert!(!is_hammer2_magic(&[0; 8]));
+        assert!(!is_hammer2_magic(&[0x11, 0x20]));
     }
 
     #[test]
