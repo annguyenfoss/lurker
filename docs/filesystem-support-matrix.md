@@ -46,25 +46,25 @@ mount or write tests were run for this survey.
 
 | File system | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | Native C/RW | Package RW · Experimental C<br>Paid C/RW | Native RW (limited) · Package C | Native R (limited) · Package C | Native R (limited) · Package C · Experimental RW | Native R (limited) · Package C | Package RW (limited)<br>Paid C/RW (limited) | L1, M2, M5, M8, F1, O2, N2, D4, W4–W5, W8–W10, X7 |
-| **Btrfs** | Native C/RW | Package RW<br>Paid RW | Package RW (legacy) | — | — | — | Package C/RW<br>Paid R | L1, M8–M9, F4, W5–W6, X6–X7 |
-| **XFS** | Native C/RW | Package RW<br>Paid RW | Package C · Package RW (legacy) | — | — | — | Package R<br>Paid R | L1, M8–M9, F4, W5, X6–X7 |
+| **ext4** | Native C/RW | Package RW (xlinuxfs)<br>Experimental C/RW (Ext4Kit)<br>Paid C/RW | Native RW (limited)<br>Package C | Native R (limited)<br>Package C | Native R (limited)<br>Package C<br>Experimental RW | Native R (limited)<br>Package C | Package RW (limited)<br>Package R<br>Paid C/RW (limited) | L1, M2, M5, M8, F1, O2, N2, D4, W4–W5, W8–W10, X7 |
+| **Btrfs** | Native C/RW | Package RW (FSKit)<br>Package RW (microVM)<br>Experimental R (btrfs4mac)<br>Paid RW | Package RW (legacy LKL) | — | — | — | Package C/RW (WinBtrfs)<br>Package R<br>Paid R | L1, M8–M9, F4, W5–W6, X6–X7 |
+| **XFS** | Native C/RW | Package RW (FSKit)<br>Experimental RW (FUSE)<br>Paid RW | Package C<br>Package RW (legacy LKL) | — | — | — | Package R<br>Paid R | L1, M8–M9, F4, W5, X6–X7 |
 | **F2FS** | Native C/RW | — | — | — | — | — | Package R | L1, X7 |
 | **bcachefs** | Package C/RW | — | — | — | — | — | — | L6 |
 | **ZFS / OpenZFS** | Package C/RW | Package C/RW | Native C/RW | — | Native C/RW | — | Experimental C/RW<br>Paid R | W10, Z1–Z4 |
-| **APFS** | Package R · Experimental C/RW<br>Paid RW (limited) | Native C/RW | Experimental R | — | — | — | Package R · Experimental RW<br>Paid RW | M1, W11, X1–X2, X7–X8 |
+| **APFS** | Package R<br>Experimental C/RW<br>Paid RW (limited) | Native C/RW | Experimental R | — | — | — | Package R<br>Experimental RW<br>Paid RW | M1, W11, X1–X2, X7–X8 |
 | **HFS+ / HFSX** | Native RW (limited)<br>Paid C/RW | Native C/RW | Package R | Experimental R | Native R | Package R (requires FUSE) | Package R<br>Paid RW | L1, M1, M6, F1, N1, D2–D3, W11, X3, X7 |
-| **NTFS** | Native RW · Package C/RW<br>Paid C/RW | Native R · Package RW · Experimental C<br>Paid C/RW | Package C/RW | Native R · Package C/RW | Native R · Package C/RW | Native R · Package C/RW (mount requires FUSE) | Native C/RW | L2–L4, M3, M7, F1, O3, N3, D2–D3, W1, X3 |
+| **NTFS** | Native RW<br>Package C/RW (NTFS-3G)<br>Paid C/RW | Native R<br>Package RW (FSKit)<br>Package RW (FUSE-T)<br>Experimental C<br>Paid C/RW | Package C/RW | Native R<br>Package C/RW | Native R (limited overwrites)<br>Package C/RW | Native R<br>Package C/RW (mount requires FUSE) | Native C/RW | L2–L4, M3, M7, F1, O3, N3, D2–D3, W1, X3 |
 | **ReFS** | Experimental R | Experimental R | Development | Development | Development | Development | Native C/RW (limited) | W1, W3, X4 |
-| **exFAT** | Native C/RW | Native C/RW | Package C/RW | Package C/RW | Package C/RW | Package C/RW (mount requires FUSE) | Native C/RW | L5, M1, F1–F2, O3, N3, D2–D3, W1 |
+| **exFAT** | Native C/RW | Native C/RW | Package C/RW | Package C/RW | Package C/RW | Package C<br>Package RW (requires FUSE) | Native C/RW | L5, M1, F1–F2, O3, N3, D2–D3, W1 |
 | **FAT12/16/32** | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Native C/RW | L1, M1, F1, O1, N1, D1, W1–W2 |
-| **UFS1 / FFSv1** | Native R · Experimental RW | Image tools | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Package R · Experimental C/RW (images) | U1–U3, F1, O1, N1, D1, X7 |
-| **UFS2 / FFSv2** | Native R · Experimental RW | Image tools | Native C/RW | Native C/RW | Native C/RW | — | Package R · Experimental C/RW (images) | U1–U3, F1, O1, N1, D1, X7 |
-| **HAMMER2** | Experimental C/RW | — | Package C/R · Experimental RW | Development | Development | Native C/RW | — | D1, H1–H3 |
+| **UFS1 / FFSv1** | Native R<br>Experimental RW (limited) | Offline image tools | Native C/RW | Native C/RW | Native C/RW | Native C/RW | Package R<br>Experimental C/RW (images only, limited writes) | U1–U3, F1, O1, N1, D1, X7 |
+| **UFS2 / FFSv2** | Native R<br>Experimental RW (limited) | Offline image tools | Native C/RW | Native C/RW | Native C/RW | — | Package R<br>Experimental C/RW (images only, limited writes) | U1–U3, F1, O1, N1, D1, X7 |
+| **HAMMER2** | Experimental C/RW<br>Offline image tools | — | Package C/R<br>Experimental RW | Development | Development | Native C/RW | — | D1, H1–H3 |
 | **HAMMER** | — | — | — | — | — | Native C/RW | — | D1 |
 | **BSD LFS** | — | — | — | — | Native C/RW | — | — | N4 |
 | **NILFS2** | Native C/RW | — | — | — | Native R | — | — | L1, N4 |
-| **UDF** | Native RW (limited) · Package C | Native C/R (limited) | Native R | Native R | Native C/RW (limited) | Native R | Native C/RW (limited) | L1, M6, F5, O4, N5, D5, W1–W2 |
+| **UDF** | Native RW (limited)<br>Package C | Native C/R (limited) | Native R | Native R | Native C/RW (limited) | Native R | Native C/RW (limited) | L1, M6, F5, O4, N5, D5, W1–W2 |
 
 ### Specialized, legacy, and recovery formats
 
