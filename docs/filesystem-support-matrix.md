@@ -1,49 +1,83 @@
 # OS / Filesystem Research
 
-Survey date 2026-11-24. This matrix covers physical data partitions and file-backed
-images. Each cell retains the strongest documented offering in each prefix group
-(None, Beta, Outdated, Paid). The [research bar and full tag definitions](filesystem-research-tags.md)
-apply to every cell. This audit uses OS and driver documentation, source, and
-package catalogs. Platform and release prerequisites are listed with the
-relevant solutions. The [shortlisted solutions](#shortlisted-solutions) names the entries in
-their cell order. Blank filesystem labels continue the preceding filesystem.
-Selection prioritizes mounted file access, then mount target coverage, then
-formatting. Equal-capability ties use the first documented solution.
-The research notes retain the alternatives and their source evidence.
+Survey date 2026-11-24. Every previously researched offering is restored: 160
+solution entries across 70 OS/filesystem cells, without prefix consolidation.
+Each cell contains tags only. Blank filesystem labels continue the preceding
+filesystem; each entry matches the [solution key](#solution-key) in cell order.
+The [tag guide](filesystem-research-tags.md) defines the research bar and the
+feature benchmark. The [implementation assessment](filesystem-implementation-assessment.md)
+records each solution’s verdict, limitations and sources.
+
+`Partial` at the end means important filesystem features are missing. A native,
+free or paid driver can receive it. No suffix is not proof of completeness:
+insufficient published feature coverage is explicitly recorded in the assessment.
+This is documentation/source research, not runtime qualification or a Lurker
+integration claim. Existing format/mount target tags are retained.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | F M R/W | NF M R/W | F M R/W | F M R | F M R | F M R | NF M R/W |
-|  |  | Beta F M R/W | Beta F M R/W |  | Beta NF M R/W |  |  |
-|  |  |  | Outdated NF M R/W |  |  |  |  |
-|  |  | Paid FP MP R/W |  |  |  |  | Paid FP MP R/W |
-| **Btrfs** | F M R/W | NF M R/W |  | — | — | — | F M R/W |
-|  |  | Beta NF M R |  |  |  |  |  |
-|  |  |  | Outdated NF M R/W |  |  |  |  |
-|  |  | Paid FP MP R/W |  |  |  |  | Paid FP MP R/W |
-| **XFS** | F M R/W | NF M R/W | F NM |  | — | — | NF M R |
-|  |  | Beta F M R/W | Beta NF M R | Beta NF M R |  |  |  |
-|  |  |  | Outdated NF M R/W |  |  |  |  |
-|  |  | Paid FP MP R/W |  |  |  |  | Paid FP MP R/W |
-| **APFS** | NF M R | F M R/W |  |  | — | — | NF M R |
-|  | Beta F M R/W |  | Beta NF M R | Beta NF M R |  |  | Beta NF M R/W |
-|  | Paid NF MP R/W |  |  |  |  |  | Paid MP R/W |
-| **UFS1 / FFSv1** | FI M R |  | F M R/W | F M R/W | F M R/W | F M R/W | NF M R |
-|  | Beta FI M R/W |  |  |  |  |  |  |
-|  | Outdated FI NM | Outdated FI NM |  |  |  |  | Outdated F MI R/LW |
-| **UFS2 / FFSv2** | FI M R |  | F M R/W | F M R/W | F M R/W | FI NM | NF M R |
-|  | Beta FI M R/W |  | Beta NF M R/W | Beta NF M R/W |  |  |  |
-|  | Outdated FI NM | Outdated FI NM |  |  |  |  | Outdated F MI R/LW |
-| **HAMMER2** | FI NM | — | FI NM | FI NM | FI NM | F M R/W | FI NM |
-|  | Beta F M R/W |  | Beta F M R/W |  |  |  |  |
-| **NTFS** | F M R/W | F M R/W | F M R/W | F M R/W | F M R/W | F NM | F M R/W |
-|  |  | Beta F M R/W | Beta NF M R | Beta NF M R | Beta NF M R/LW |  |  |
-|  |  |  |  |  |  | Outdated NF M R |  |
-|  | Paid F M R/W | Paid F M R/W |  |  |  |  |  |
+| **ext4** | F M R/W | NF M R/W Partial | F M R/W Partial | F M R Partial | F M R Partial | F M R Partial | F NM |
+|  | NF M R Partial | NF M R/W | Beta F M R/W Partial |  | Beta NF M R/W Partial |  | F NM |
+|  |  | NF MP R/W | Outdated NF M R/W Partial |  |  |  | FP NM |
+|  |  | NF M R Partial |  |  |  |  | NF M R/W Partial |
+|  |  | Beta F M R/W Partial |  |  |  |  | NF M R Partial |
+|  |  | Beta F M R/W Partial |  |  |  |  | NF MP R |
+|  |  | Paid FP MP R/W (1) Partial |  |  |  |  | Paid FP MP R/W (3) |
+|  |  | Paid FP MP R/W (2) |  |  |  |  | Paid NF MP R/W (4) |
+|  |  |  |  |  |  |  | Paid FP MP R/W (5) |
+|  |  |  |  |  |  |  | Paid NF MP R (6) |
+| **Btrfs** | F M R/W | NF M R/W Partial | Outdated NF M R/W Partial | — | — | — | F M R/W Partial |
+|  | NF M R Partial | NF M R/W |  |  |  |  | NF M R Partial |
+|  |  | NF MP R/W |  |  |  |  | NF MP R |
+|  |  | Beta NF M R Partial |  |  |  |  | Paid NF MP R (3) |
+|  |  | Paid FP MP R/W |  |  |  |  | Paid FP MP R/W (5) |
+|  |  |  |  |  |  |  | Paid NF MP R (6) |
+| **XFS** | F M R/W | NF M R/W Partial | F NM | Beta NF M R Partial | — | — | NF M R Partial |
+|  | NF M R Partial | NF M R/W | Beta NF M R Partial |  |  |  | NF MP R |
+|  |  | NF MP R/W | Outdated NF M R/W Partial |  |  |  | Paid NF MP R/W (3) |
+|  |  | Beta F M R/W Partial |  |  |  |  | Paid FP MP R/W (5) |
+|  |  | Paid FP MP R/W |  |  |  |  | Paid NF MP R (6) |
+| **APFS** | NF M R Partial | F M R/W | Beta NF M R Partial | Beta NF M R Partial | — | — | NF M R Partial |
+|  | Beta F M R/W Partial |  |  |  |  |  | NF MP R |
+|  | Beta NF M R Partial |  |  |  |  |  | Beta NF M R/W Partial |
+|  | NF M R Partial |  |  |  |  |  | Beta NF MP R/LW Partial |
+|  | Paid NF MP R/W Partial |  |  |  |  |  | Paid NF MP LR/W (7) Partial |
+|  |  |  |  |  |  |  | Paid MP R/W (8) |
+|  |  |  |  |  |  |  | Paid NF MP R (6) |
+|  |  |  |  |  |  |  | Paid FP MP R (13) |
+| **UFS1 / FFSv1** | FI M R Partial | Outdated FI NM | F M R/W | F M R/W | F M R/W | F M R/W | Outdated F MI R/LW Partial |
+|  | Beta FI M R/W Partial |  |  |  |  |  | NF M R Partial |
+|  | Outdated FI NM |  |  |  |  |  |  |
+|  | NF M R Partial |  |  |  |  |  |  |
+| **UFS2 / FFSv2** | FI M R Partial | Outdated FI NM | F M R/W | F M R/W | F M R/W | FI NM | Outdated F MI R/LW Partial |
+|  | Beta FI M R/W Partial |  | Beta NF M R/W Partial | Beta NF M R/W Partial |  |  | NF M R Partial |
+|  | Outdated FI NM |  |  |  |  |  |  |
+|  | Beta NF M R/W Partial |  |  |  |  |  |  |
+|  | NF M R Partial |  |  |  |  |  |  |
+| **HAMMER2** | Beta F M R/W | — | Beta F M R/W | FI NM | FI NM | F M R/W | FI NM |
+|  | Beta NF M R |  | Beta NF M R |  |  |  |  |
+|  | FI NM |  | FI NM |  |  |  |  |
+| **NTFS** | F M R/W Partial | NF M R | F M R/W Partial | NF M R | Beta NF M R/LW Partial | Outdated NF M R | F M R/W |
+|  | F M R/W Partial | NF MP R/W | Beta NF M R | F M R/W Partial | F M R/W Partial | F NM | NF M R Partial |
+|  | NF M R Partial | NF MP R/W |  | Beta NF M R |  |  |  |
+|  | NF M R/W | NF MP R/W Partial |  |  |  |  |  |
+|  | Paid F M R/W | F M R/W Partial |  |  |  |  |  |
+|  |  | NF M R/W Partial |  |  |  |  |  |
+|  |  | NF M R/W Partial |  |  |  |  |  |
+|  |  | Beta F M R/W Partial |  |  |  |  |  |
+|  |  | NF MP R |  |  |  |  |  |
+|  |  | Paid FP MP R/W (9) |  |  |  |  |  |
+|  |  | Paid F M R/W (10) |  |  |  |  |  |
+|  |  | Paid FP MP R/W (11) |  |  |  |  |  |
+|  |  | Paid FP MP R/W (2) |  |  |  |  |  |
+|  |  | Paid FP MP R/W (12) |  |  |  |  |  |
+|  |  | Paid NF MP R/W (14) |  |  |  |  |  |
+|  |  | Paid FP MP R/W (15) |  |  |  |  |  |
 | **exFAT** | F M R/W | F M R/W | F M R/W | F M R/W | F M R/W | F NM | F M R/W |
-|  |  | Paid FP MP R/W |  |  |  |  |  |
-| **ZFS / OpenZFS** | F M R/W | F M R/W | F M R/W | — | F M R/W | — | NF M R |
-|  |  |  |  |  |  |  | Beta F M R/W |
+|  | F M R/W | Paid FP MP R/W |  |  |  |  | NF M R |
+|  | NF M R |  |  |  |  |  |  |
+| **ZFS / OpenZFS** | F M R/W | F M R/W | F M R/W | — | F M R/W Partial | — | Beta F M R/W |
+|  | NF M R Partial | NF M R/W |  |  |  |  | NF M R Partial |
 |  |  |  |  |  |  |  | Paid NF MP R |
 
 **Legend.** `F` formats both partitions and images, `FP` partitions, `FI` images,
@@ -55,102 +89,114 @@ retail routes, and `—` means the audit found no qualifying solution. A single
 target tag reports that target. Where evidence leaves a capability
 unverified, the notes identify the limitation and the line omits an
 unverified tag. Formatting and mounting are independent, including when
-a formatter is combined with a separate mount driver.
+a formatter is combined with a separate mount driver. `Partial` flags an
+important missing filesystem feature, independently of access mode, maturity,
+price or mount transport. See the assessment for confirmed gaps and unresolved coverage.
 
-## Shortlisted solutions
+## Solution key
 
-One selected offering per prefix group is listed for every OS/filesystem cell.
+Names follow the top-to-bottom order of each cell. Every cell is listed.
 
 ### Linux
 
-- **ext4** — None — ext4 + e2fsprogs.
-- **Btrfs** — None — Btrfs + btrfs-progs.
-- **XFS** — None — XFS + xfsprogs.
-- **APFS** — None — apfs-fuse. Beta — linux-apfs-rw + apfsprogs. Paid — Paragon APFS for Linux.
-- **UFS1 / FFSv1** — None — makefs + Linux UFS. Beta — Linux UFS write option + makefs. Outdated — UFS2Tool.
-- **UFS2 / FFSv2** — None — makefs + Linux UFS. Beta — Linux UFS write option + makefs. Outdated — UFS2Tool.
-- **HAMMER2** — None — portable makefs. Beta — linux_hammer2 + hammer2-utils.
-- **NTFS** — None — kernel NTFS + mkntfs. Paid — Paragon NTFS for Linux Professional.
-- **exFAT** — None — exFAT + exfatprogs.
-- **ZFS / OpenZFS** — None — OpenZFS.
+- **ext4** — ext4 + e2fsprogs, FsRover.
+- **Btrfs** — Btrfs + btrfs-progs, FsRover.
+- **XFS** — XFS + xfsprogs, FsRover.
+- **APFS** — apfs-fuse, linux-apfs-rw + apfsprogs, libfsapfs, FsRover, Paragon APFS for Linux.
+- **UFS1 / FFSv1** — makefs + Linux UFS, Linux UFS write option + makefs, UFS2Tool, FsRover.
+- **UFS2 / FFSv2** — makefs + Linux UFS, Linux UFS write option + makefs, UFS2Tool, fuse-ufs, FsRover.
+- **HAMMER2** — linux_hammer2 + hammer2-utils, hammer2-fuse, portable makefs.
+- **NTFS** — kernel NTFS + mkntfs, NTFS-3G, FsRover, Paragon NTFS for Linux Free, Paragon NTFS for Linux Professional.
+- **exFAT** — exFAT + exfatprogs, exfat-fuse + exfat-utils, FsRover.
+- **ZFS / OpenZFS** — OpenZFS, FsRover.
 
 ### macOS
 
-- **ext4** — None — xlinuxfs. Beta — Ext4Kit. Paid — Paragon extFS for Mac.
-- **Btrfs** — None — xlinuxfs. Beta — btrfs4mac. Paid — vmount Pro.
-- **XFS** — None — xlinuxfs. Beta — fuse-xfs. Paid — vmount Pro.
-- **APFS** — None — Disk Utility / APFS.
-- **UFS1 / FFSv1** — Outdated — UFS2Tool.
-- **UFS2 / FFSv2** — Outdated — UFS2Tool.
+- **ext4** — xlinuxfs, anylinuxfs, PolyDrive Disk, ExtendFS, Ext4Kit, open_ext4_for_mac, Paragon extFS for Mac, vmount Pro.
+- **Btrfs** — xlinuxfs, anylinuxfs, PolyDrive Disk, btrfs4mac, vmount Pro.
+- **XFS** — xlinuxfs, anylinuxfs, PolyDrive Disk, fuse-xfs, vmount Pro.
+- **APFS** — Disk Utility / APFS.
+- **UFS1 / FFSv1** — UFS2Tool.
+- **UFS2 / FFSv2** — UFS2Tool.
 - **HAMMER2** — No qualifying solution found.
-- **NTFS** — None — NTFS-3G + macFUSE. Beta — NTFS4Mac. Paid — Tuxera NTFS for Mac.
-- **exFAT** — None — Disk Utility / exFAT. Paid — vmount Pro.
-- **ZFS / OpenZFS** — None — OpenZFS on OS X.
+- **NTFS** — macOS, PolyDrive Disk, NTFSTool, TT NTFS Native, NTFS-3G + macFUSE, NTFS-3G for FUSE-T, anylinuxfs, NTFS4Mac, CrossDriver Free, Paragon NTFS for Mac, Tuxera NTFS for Mac, iBoysoft NTFS for Mac, vmount Pro, CrossDriver NTFS for Mac Pro, EaseUS NTFS for Mac, NTFSTool Pro.
+- **exFAT** — Disk Utility / exFAT, vmount Pro.
+- **ZFS / OpenZFS** — OpenZFS on OS X, anylinuxfs.
 
 ### FreeBSD
 
-- **ext4** — None — ext2fs + e2fsprogs. Beta — fusefs-ext2. Outdated — fusefs-lkl.
-- **Btrfs** — Outdated — fusefs-lkl.
-- **XFS** — None — xfsprogs. Beta — libfsxfs. Outdated — fusefs-lkl.
-- **APFS** — Beta — libfsapfs.
-- **UFS1 / FFSv1** — None — UFS1.
-- **UFS2 / FFSv2** — None — UFS2. Beta — fuse-ufs.
-- **HAMMER2** — None — portable makefs. Beta — hammer2 port.
-- **NTFS** — None — NTFS-3G. Beta — libfsntfs.
-- **exFAT** — None — fusefs-exfat + formatter.
-- **ZFS / OpenZFS** — None — OpenZFS.
+- **ext4** — ext2fs + e2fsprogs, fusefs-ext2, fusefs-lkl.
+- **Btrfs** — fusefs-lkl.
+- **XFS** — xfsprogs, libfsxfs, fusefs-lkl.
+- **APFS** — libfsapfs.
+- **UFS1 / FFSv1** — UFS1.
+- **UFS2 / FFSv2** — UFS2, fuse-ufs.
+- **HAMMER2** — hammer2 port, hammer2-fuse, portable makefs.
+- **NTFS** — NTFS-3G, libfsntfs.
+- **exFAT** — fusefs-exfat + formatter.
+- **ZFS / OpenZFS** — OpenZFS.
 
 ### OpenBSD
 
-- **ext4** — None — ext2fs + e2fsprogs.
+- **ext4** — ext2fs + e2fsprogs.
 - **Btrfs** — No qualifying solution found.
-- **XFS** — Beta — libfsxfs.
-- **APFS** — Beta — libfsapfs.
-- **UFS1 / FFSv1** — None — FFSv1.
-- **UFS2 / FFSv2** — None — FFSv2. Beta — fuse-ufs.
-- **HAMMER2** — None — portable makefs.
-- **NTFS** — None — ntfs-3g. Beta — libfsntfs.
-- **exFAT** — None — exfat-fuse.
+- **XFS** — libfsxfs.
+- **APFS** — libfsapfs.
+- **UFS1 / FFSv1** — FFSv1.
+- **UFS2 / FFSv2** — FFSv2, fuse-ufs.
+- **HAMMER2** — portable makefs.
+- **NTFS** — mount_ntfs, ntfs-3g, libfsntfs.
+- **exFAT** — exfat-fuse.
 - **ZFS / OpenZFS** — No qualifying solution found.
 
 ### NetBSD
 
-- **ext4** — None — ext2fs + e2fsprogs. Beta — fuse-ext2.
+- **ext4** — ext2fs + e2fsprogs, fuse-ext2.
 - **Btrfs** — No qualifying solution found.
 - **XFS** — No qualifying solution found.
 - **APFS** — No qualifying solution found.
-- **UFS1 / FFSv1** — None — FFSv1.
-- **UFS2 / FFSv2** — None — FFSv2.
-- **HAMMER2** — None — portable makefs.
-- **NTFS** — None — fuse-ntfs-3g + ntfsprogs. Beta — mount_ntfs.
-- **exFAT** — None — fuse-exfat.
-- **ZFS / OpenZFS** — None — base ZFS.
+- **UFS1 / FFSv1** — FFSv1.
+- **UFS2 / FFSv2** — FFSv2.
+- **HAMMER2** — portable makefs.
+- **NTFS** — mount_ntfs, fuse-ntfs-3g + ntfsprogs.
+- **exFAT** — fuse-exfat.
+- **ZFS / OpenZFS** — base ZFS.
 
 ### DragonFly BSD
 
-- **ext4** — None — ext2fs + e2fsprogs-core.
+- **ext4** — ext2fs + e2fsprogs-core.
 - **Btrfs** — No qualifying solution found.
 - **XFS** — No qualifying solution found.
 - **APFS** — No qualifying solution found.
-- **UFS1 / FFSv1** — None — DragonFly UFS.
-- **UFS2 / FFSv2** — None — portable makefs.
-- **HAMMER2** — None — HAMMER2.
-- **NTFS** — None — packaged mkntfs. Outdated — mount_ntfs.
-- **exFAT** — None — exfat-utils.
+- **UFS1 / FFSv1** — DragonFly UFS.
+- **UFS2 / FFSv2** — portable makefs.
+- **HAMMER2** — HAMMER2.
+- **NTFS** — mount_ntfs, packaged mkntfs.
+- **exFAT** — exfat-utils.
 - **ZFS / OpenZFS** — No qualifying solution found.
 
 ### Windows
 
-- **ext4** — None — Ext4Fsd. Paid — Paragon Linux File Systems for Windows.
-- **Btrfs** — None — WinBtrfs. Paid — CrossDriver for Linux Disks Pro.
-- **XFS** — None — FsRover. Paid — CrossDriver for Linux Disks Pro.
-- **APFS** — None — FsRover. Beta — winapfs. Paid — OWC MacDrive 12.
-- **UFS1 / FFSv1** — None — FsRover. Outdated — UFS2Tool.
-- **UFS2 / FFSv2** — None — FsRover. Outdated — UFS2Tool.
-- **HAMMER2** — None — portable makefs (Cygwin).
-- **NTFS** — None — Windows NTFS.
-- **exFAT** — None — Windows exFAT.
-- **ZFS / OpenZFS** — None — FsRover. Beta — OpenZFS on Windows. Paid — DiskInternals Linux Reader Pro.
+- **ext4** — DiskInternals Ext4 Formatter, DiskGenius Free, MiniTool Partition Wizard Free, Ext4Fsd, FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, DiskInternals Linux Writer Pro, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
+- **Btrfs** — WinBtrfs, FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
+- **XFS** — FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
+- **APFS** — FsRover, CrossDriver for Mac Disks Free, winapfs, apfs_for_windows, Paragon APFS for Windows, OWC MacDrive 12, DiskInternals Linux Reader Pro, CrossDriver for Mac Disks Pro.
+- **UFS1 / FFSv1** — UFS2Tool, FsRover.
+- **UFS2 / FFSv2** — UFS2Tool, FsRover.
+- **HAMMER2** — portable makefs (Cygwin).
+- **NTFS** — Windows NTFS, FsRover.
+- **exFAT** — Windows exFAT, FsRover.
+- **ZFS / OpenZFS** — OpenZFS on Windows, FsRover, DiskInternals Linux Reader Pro.
+
+## Paid products
+
+(1) Paragon extFS for Mac. (2) vmount Pro. (3) Paragon Linux File
+Systems for Windows. (4) DiskInternals Linux Writer Pro. (5) CrossDriver for
+Linux Disks Pro. (6) DiskInternals Linux Reader Pro. (7) Paragon APFS for
+Windows. (8) OWC MacDrive 12. (9) Paragon NTFS for Mac. (10) Tuxera NTFS for
+Mac. (11) iBoysoft NTFS for Mac. (12) CrossDriver NTFS for Mac Pro.
+(13) CrossDriver for Mac Disks Pro. (14) EaseUS NTFS for Mac. (15) NTFSTool
+Pro.
 
 ## Research notes and sources
 
@@ -475,99 +521,3 @@ One selected offering per prefix group is listed for every OS/filesystem cell.
   https://github.com/openzfsonwindows/openzfs/releases ·
   https://github.com/openzfsonwindows/openzfs/blob/development/module/zfs/vdev_file.c ·
   https://www.diskinternals.com/linux-reader/
-
-## All researched solutions
-
-This inventory retains every researched solution. The selected matrix
-offerings are identified in the shortlist above.
-
-### Linux
-
-- **ext4** — ext4 + e2fsprogs, FsRover.
-- **Btrfs** — Btrfs + btrfs-progs, FsRover.
-- **XFS** — XFS + xfsprogs, FsRover.
-- **APFS** — apfs-fuse, linux-apfs-rw + apfsprogs, libfsapfs, FsRover, Paragon APFS for Linux.
-- **UFS1 / FFSv1** — makefs + Linux UFS, Linux UFS write option + makefs, UFS2Tool, FsRover.
-- **UFS2 / FFSv2** — makefs + Linux UFS, Linux UFS write option + makefs, UFS2Tool, fuse-ufs, FsRover.
-- **HAMMER2** — linux_hammer2 + hammer2-utils, hammer2-fuse, portable makefs.
-- **NTFS** — kernel NTFS + mkntfs, NTFS-3G, FsRover, Paragon NTFS for Linux Free, Paragon NTFS for Linux Professional.
-- **exFAT** — exFAT + exfatprogs, exfat-fuse + exfat-utils, FsRover.
-- **ZFS / OpenZFS** — OpenZFS, FsRover.
-
-### macOS
-
-- **ext4** — xlinuxfs, anylinuxfs, PolyDrive Disk, ExtendFS, Ext4Kit, open_ext4_for_mac, Paragon extFS for Mac, vmount Pro.
-- **Btrfs** — xlinuxfs, anylinuxfs, PolyDrive Disk, btrfs4mac, vmount Pro.
-- **XFS** — xlinuxfs, anylinuxfs, PolyDrive Disk, fuse-xfs, vmount Pro.
-- **APFS** — Disk Utility / APFS.
-- **UFS1 / FFSv1** — UFS2Tool.
-- **UFS2 / FFSv2** — UFS2Tool.
-- **NTFS** — macOS, PolyDrive Disk, NTFSTool, TT NTFS Native, NTFS-3G + macFUSE, NTFS-3G for FUSE-T, anylinuxfs, NTFS4Mac, CrossDriver Free, Paragon NTFS for Mac, Tuxera NTFS for Mac, iBoysoft NTFS for Mac, vmount Pro, CrossDriver NTFS for Mac Pro, EaseUS NTFS for Mac, NTFSTool Pro.
-- **exFAT** — Disk Utility / exFAT, vmount Pro.
-- **ZFS / OpenZFS** — OpenZFS on OS X, anylinuxfs.
-
-### FreeBSD
-
-- **ext4** — ext2fs + e2fsprogs, fusefs-ext2, fusefs-lkl.
-- **Btrfs** — fusefs-lkl.
-- **XFS** — xfsprogs, libfsxfs, fusefs-lkl.
-- **APFS** — libfsapfs.
-- **UFS1 / FFSv1** — UFS1.
-- **UFS2 / FFSv2** — UFS2, fuse-ufs.
-- **HAMMER2** — hammer2 port, hammer2-fuse, portable makefs.
-- **NTFS** — NTFS-3G, libfsntfs.
-- **exFAT** — fusefs-exfat + formatter.
-- **ZFS / OpenZFS** — OpenZFS.
-
-### OpenBSD
-
-- **ext4** — ext2fs + e2fsprogs.
-- **XFS** — libfsxfs.
-- **APFS** — libfsapfs.
-- **UFS1 / FFSv1** — FFSv1.
-- **UFS2 / FFSv2** — FFSv2, fuse-ufs.
-- **HAMMER2** — portable makefs.
-- **NTFS** — mount_ntfs, ntfs-3g, libfsntfs.
-- **exFAT** — exfat-fuse.
-
-### NetBSD
-
-- **ext4** — ext2fs + e2fsprogs, fuse-ext2.
-- **UFS1 / FFSv1** — FFSv1.
-- **UFS2 / FFSv2** — FFSv2.
-- **HAMMER2** — portable makefs.
-- **NTFS** — mount_ntfs, fuse-ntfs-3g + ntfsprogs.
-- **exFAT** — fuse-exfat.
-- **ZFS / OpenZFS** — base ZFS.
-
-### DragonFly BSD
-
-- **ext4** — ext2fs + e2fsprogs-core.
-- **UFS1 / FFSv1** — DragonFly UFS.
-- **UFS2 / FFSv2** — portable makefs.
-- **HAMMER2** — HAMMER2.
-- **NTFS** — mount_ntfs, packaged mkntfs.
-- **exFAT** — exfat-utils.
-
-### Windows
-
-- **ext4** — DiskInternals Ext4 Formatter, DiskGenius Free, MiniTool Partition Wizard Free, Ext4Fsd, FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, DiskInternals Linux Writer Pro, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
-- **Btrfs** — WinBtrfs, FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
-- **XFS** — FsRover, CrossDriver Free, Paragon Linux File Systems for Windows, CrossDriver for Linux Disks Pro, DiskInternals Linux Reader Pro.
-- **APFS** — FsRover, CrossDriver for Mac Disks Free, winapfs, apfs_for_windows, Paragon APFS for Windows, OWC MacDrive 12, DiskInternals Linux Reader Pro, CrossDriver for Mac Disks Pro.
-- **UFS1 / FFSv1** — UFS2Tool, FsRover.
-- **UFS2 / FFSv2** — UFS2Tool, FsRover.
-- **HAMMER2** — portable makefs (Cygwin).
-- **NTFS** — Windows NTFS, FsRover.
-- **exFAT** — Windows exFAT, FsRover.
-- **ZFS / OpenZFS** — OpenZFS on Windows, FsRover, DiskInternals Linux Reader Pro.
-
-## Retail product inventory
-
-(1) Paragon extFS for Mac. (2) vmount Pro. (3) Paragon Linux File
-Systems for Windows. (4) DiskInternals Linux Writer Pro. (5) CrossDriver for
-Linux Disks Pro. (6) DiskInternals Linux Reader Pro. (7) Paragon APFS for
-Windows. (8) OWC MacDrive 12. (9) Paragon NTFS for Mac. (10) Tuxera NTFS for
-Mac. (11) iBoysoft NTFS for Mac. (12) CrossDriver NTFS for Mac Pro.
-(13) CrossDriver for Mac Disks Pro. (14) EaseUS NTFS for Mac. (15) NTFSTool
-Pro.
