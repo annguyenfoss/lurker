@@ -190,6 +190,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     require_root()?;
     let owner = crate::new_filesystem::invoking_owner()?;
     CommandAction::Create(c.clone()).validate_raid1c_options("openbsd")?;
+    native::validate_filesystem(c.filesystem, VolumeType::Raid1c)?;
     let bytes = crate::size::size_gb_to_mib(
         c.size_gb
             .as_deref()
@@ -285,7 +286,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         set_uuid_from_members(&mut session, None)?;
         registry.save(&session)?;
         verify(&session)?;
-        driver::make_filesystem(session.mapped.as_deref().unwrap())?;
+        native::make_selected_filesystem(session.mapped.as_deref().unwrap(), c.filesystem)?;
         super::initialize_new_filesystem_owner(&registry, &mut session, owner)?;
         close_resources(&registry, &mut session)?;
         super::remove_initialization_directory(&registry, &mut session)?;
@@ -601,9 +602,8 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         let mounted = session.mounted.as_ref().ok_or_else(|| {
             AppError::new("RAID1C mount identity is missing; preserve the journal for recovery.")
         })?;
-        if mounted.source != Path::new(session.mapped.as_deref().unwrap())
+        if !native::matches_filesystem_mount(session.mapped.as_deref().unwrap(), mounted)
             || mounted.readonly
-            || mounted.filesystem != "ffs"
         {
             return Err(AppError::new(
                 "Unexpected RAID1C filesystem attachment; preserve its journal.",
@@ -725,7 +725,7 @@ fn reconcile_detach(registry: &Registry, session: &mut Session) -> AppResult<()>
                 return Ok(());
             }
             verify_members(session, None)?;
-            if mounts()?.iter().any(|m| m.source == Path::new(mapped)) {
+            if mounts()?.iter().any(|m| native::matches_filesystem_mount(mapped, m)) {
                 return Err(conflict());
             }
             session.mapped = None;
@@ -778,7 +778,7 @@ fn close_resources(registry: &Registry, session: &mut Session) -> AppResult<()> 
         registry.save(session)?;
     }
     if let Some(mapped) = session.mapped.clone() {
-        if mounts()?.iter().any(|m| m.source == Path::new(&mapped)) {
+        if mounts()?.iter().any(|m| native::matches_filesystem_mount(&mapped, m)) {
             return Err(AppError::new(
                 "Mirror still has a mounted filesystem; leave it recoverable.",
             ));

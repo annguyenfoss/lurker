@@ -6,6 +6,12 @@
 use super::{args, exec, Credential, Registry, Session};
 use crate::{AppError, AppResult, CreateCipher, VolumeType};
 use serde::{Deserialize, Serialize};
+
+mod filesystems;
+pub(super) use filesystems::{
+    close_filesystem, filesystem_has_posix_ownership, make_selected_filesystem,
+    matches_filesystem_mount, mount_filesystem, validate_filesystem,
+};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::fd::AsRawFd;
