@@ -1,11 +1,27 @@
 # OS / Filesystem Research tags
 
-Each cell contains only tags, with one line per solution. Write the prefix,
+Each cell contains only tags, with at most one selected offering per prefix
+group (None, Beta, Outdated, Paid). Write the prefix,
 formatting tag, mount tag, and mount access in that order. List solution
 names in the notes in the same order as the cell.
 
 Assess formatting and mounting independently for partitions and images. An
 image attached as a virtual block device counts as image support.
+
+## Consolidation
+
+Select one existing documented offering per prefix group in each cell. The
+strongest capability is `F M R/W`. Rank mounted access first, then mount
+target coverage, then formatting.
+
+- Access preference is `R/W`, `LR/W`, `R/LW`, `LR/LW`, `R`, `LR`, then `NM`.
+- Mount target preference is `M`, `MP`, `MI`, then `NM`.
+- Formatting preference is `F`, `FP`, `FI`, `NF`, then unverified formatting.
+- Equal-capability ties use the first documented solution. Keep the selected
+  solution and any capability restrictions in the notes.
+
+Each selected line must belong to an existing solution or documented tool
+combination. Preserve source evidence for alternative solutions in the notes.
 
 ## Research bar
 
@@ -29,7 +45,7 @@ image attached as a virtual block device counts as image support.
 | None | Production-grade support provided by the OS or publicly available for free. |
 | `Beta` | Usable experimental or early-development support. |
 | `Outdated` | Legacy or outdated support. |
-| `Paid` | Commercial product available for individual purchase. When multiple paid solutions appear in a cell, append `(1)`, `(2)`, and so on, and identify the products in the legend. |
+| `Paid` | Commercial product available for individual purchase. Name the selected product in the solution notes. |
 
 ## Format / Create
 
