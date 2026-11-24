@@ -131,7 +131,7 @@ def main():
                         retained = Path.home() / '.cache/lurker/filesystem-round-retained'
                         retained.mkdir(parents=True, exist_ok=True)
                         destination = retained / (backing.name + '.img')
-                        image.rename(destination)
+                        shutil.move(str(image), str(destination))
                         result.setdefault('retained_backings',[]).append(str(destination))
                     else:
                         image.unlink()
