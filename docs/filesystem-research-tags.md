@@ -5,10 +5,20 @@ mount tag, and mount access in that order. Assess formatting and mounting
 independently for partitions and images. An image attached as a virtual block
 device counts as image support.
 
-Mount access requires a mount point or drive letter where ordinary apps can
-open files directly and save changes when the mount supports writes. Exclude
-workflows that require a filesystem-specific tool to extract and reinsert
-individual files. A formatter can still qualify on its own with `NM`.
+## Research bar
+
+- Cover Linux, macOS, FreeBSD, OpenBSD, NetBSD, DragonFly BSD, and Windows.
+- Cover ext4, Btrfs, XFS, APFS, UFS1 / FFSv1, UFS2 / FFSv2, HAMMER2, NTFS,
+  exFAT, and ZFS / OpenZFS.
+- Include solutions any individual can obtain through the OS, a public
+  open-source or freeware download, or a retail purchase. OEM-only products
+  and WSL are outside the scope.
+- Count mount access when ordinary apps can open files directly through an OS
+  mount point or drive letter and save changes when writes are supported.
+  Built-in drivers and frameworks such as FUSE, FSKit, WinFsp, and Dokan
+  qualify on the same basis. Exclude extract–edit–reinsert workflows.
+- Count independently supported formatting even when mounting is unavailable.
+  Use `NM` when mount support is known to be absent in the stated setup.
 
 ## Prefixes
 
