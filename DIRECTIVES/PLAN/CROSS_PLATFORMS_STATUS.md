@@ -105,10 +105,25 @@ private Xvfb display, with 1,216 sampled colors and clean display teardown.
 Offline remove and reinstall in the same private prefix verified package
 contents and left the guest's system package database unchanged.
 
-Receipts are under `target/dragonfly-veracrypt-batch/`. The sparse UFS-backed
-case completed its power cut after the durability acknowledgement. Recovery
-verification is pending. The byte-identical sparse image on HAMMER2 backing
-is prepared for its own cut. Release support remains planned.
+The rebuilt package authenticated a 260 MiB stock VeraCrypt AES image with
+inner HAMMER2 and only about 20 MiB allocated. Identical starting ciphertext
+was tested on UFS and HAMMER2 backing. The two cuts completed 349 ms and
+342 ms after the host observed readiness, respectively. Both independently
+verified cut-disk copies retained the initial ciphertext digest. The rebuilt
+CLI reopened both scratch copies without repair. The application file and
+SQLite database were both missing in each case. The UFS copy retained the
+guest acknowledgement. The HAMMER2 copy lacked it, so recovery used the
+retained host acknowledgement. Both reopen sessions closed normally.
+
+The same package passed all 126 standard-payload checks over the six HAMMER2
+cipher and credential pairs. Every pair passed write, append, and two
+subsequent reopens that verified the five expected SHA-256 values. It passed
+22 rejection checks through explicit VeraCrypt and Auto, including incompatible
+headers, the 80-byte password, old FAT32 geometry, missing credentials, and
+read-only refusal. The source hashes and storage inventories remained intact.
+
+Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse allocation
+reproduced the abrupt power-loss failure. Release support remains planned.
 
 ## DragonFly VeraCrypt candidate, 2026-11-23
 
