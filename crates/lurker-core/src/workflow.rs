@@ -212,6 +212,7 @@ pub(crate) fn macos_veracrypt_create_args(
     cipher: CreateCipher,
     size_mib: u64,
     keyfile: Option<&std::path::Path>,
+    filesystem: Option<crate::CreateFilesystem>,
 ) -> crate::AppResult<Vec<OsString>> {
     let mut args: Vec<OsString> = VERACRYPT_CREATE_ARGS_COMMON
         .iter()
@@ -219,7 +220,10 @@ pub(crate) fn macos_veracrypt_create_args(
         .map(OsString::from)
         .collect();
     args.extend([
-        OsString::from("--filesystem=exFAT"),
+        OsString::from(format!(
+            "--filesystem={}",
+            macos_filesystem(filesystem, "exFAT")?
+        )),
         OsString::from("--stdin"),
         OsString::from("--non-interactive"),
     ]);
@@ -237,15 +241,18 @@ pub(crate) fn macos_veracrypt_create_args(
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn macos_apple_create_args(size_mib: u64) -> Vec<OsString> {
-    [
+pub(crate) fn macos_apple_create_args(
+    size_mib: u64,
+    filesystem: Option<crate::CreateFilesystem>,
+) -> crate::AppResult<Vec<OsString>> {
+    Ok([
         "create",
         "-size",
         &format!("{size_mib}m"),
         "-type",
         "UDIF",
         "-fs",
-        "APFS",
+        macos_filesystem(filesystem, "APFS")?,
         "-volname",
         "Lurker",
         "-encryption",
@@ -254,5 +261,23 @@ pub(crate) fn macos_apple_create_args(size_mib: u64) -> Vec<OsString> {
     ]
     .into_iter()
     .map(OsString::from)
-    .collect()
+    .collect())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_filesystem(
+    filesystem: Option<crate::CreateFilesystem>,
+    default: &'static str,
+) -> crate::AppResult<&'static str> {
+    use crate::CreateFilesystem;
+    match filesystem {
+        None => Ok(default),
+        Some(CreateFilesystem::Apfs) => Ok("APFS"),
+        Some(CreateFilesystem::Exfat) => Ok("exFAT"),
+        Some(CreateFilesystem::Fat32) => Ok("FAT"),
+        Some(other) => Err(crate::AppError::new(format!(
+            "Filesystem {} is not available through the native macOS container formatter.",
+            other.as_str()
+        ))),
+    }
 }
