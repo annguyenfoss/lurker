@@ -48,8 +48,8 @@ copy mounted read-only without repair and had no directory entries for the
 file or SQLite database. A scan of the raw disk found the exact acknowledged
 65,536-byte payload at byte offset 79,691,776. The native topology dump had
 neither name, so the plain control demonstrates persisted data with missing
-filesystem metadata. The encrypted cases retained the pre-workload ciphertext
-digest. The contribution of additional layers to those losses remains open.
+filesystem metadata. The encrypted cases using ordinary fsync retained the
+pre-workload ciphertext digest.
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
 
 A separate plain HAMMER2 control tested a synchronous mount. The stock
@@ -77,6 +77,32 @@ explicit flushes in the tested configuration. Receipts are under
 
 https://man.dragonflybsd.org/?command=hammer2&section=8
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_ioctl.c
+
+A second diagnostic used the same package and HAMMER2-on-UFS configuration
+with a fresh vault. The snapshot completed in 16.62 ms. The worker skipped
+the ciphertext backing-file fsync, and libvirt completed the cut 359 ms
+after observing live acknowledgement. The verified copy's ciphertext digest
+had changed. The CLI reopened the vault without repair, and both the synced
+file and the SQLite database were absent. Replaying recovery with harness
+`b93668c` independently recorded both losses, closed through the CLI, and
+verified that all four vnode slots, the mapper, and the mount inventory were
+back at baseline. The original cut disks and the read-only recovery fixture
+retained their hashes. Receipts are under
+`target/dragonfly-veracrypt-batch/hammer2-snapshot-only/`.
+
+The 6.4.2 HAMMER2 volume flush sends `BUF_CMD_FLUSH` before it writes the
+volume header. The vnode disk can fsync the backing file for that request,
+but its ordinary write path uses `IO_RECURSE` without `IO_SYNC`. The tested
+pair shows that the snapshot alone did not preserve the recovered directory
+entries. The result is consistent with a later backing-file write remaining
+buffered. At upstream `911533c713a9`, the HAMMER2 file fsync still leaves the
+root update to the filesystem syncer and vnode-disk writes still use
+`IO_RECURSE` alone. That revision was checked in source. Ordinary application
+fsync durability on the stock kernel remains the release gate.
+
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_flush.c
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/911533c713a9/sys/vfs/hammer2/hammer2_vnops.c
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/911533c713a9/sys/dev/disk/vn/vn.c
 
 The optimized `9384badb34f909887c85ebccc7dbe145b01c9794` package
 (`c98b150a8dd600b9559f5b92652b342d4e73324fa0ad2f2177b5bf4a93be35d0`)
