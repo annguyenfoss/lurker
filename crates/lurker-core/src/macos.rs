@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output as ProcessOutput, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+mod apfs;
+
 const HDIUTIL: &str = "/usr/bin/hdiutil";
 const DISKUTIL: &str = "/usr/sbin/diskutil";
 
@@ -396,6 +398,7 @@ fn vera_volumes() -> AppResult<Vec<Volume>> {
 
 fn volumes() -> AppResult<Vec<Volume>> {
     let mut result = apple_volumes()?;
+    result.extend(apfs::list()?);
     result.extend(read_veracrypt_volumes(true)?);
     Ok(result)
 }
@@ -469,6 +472,32 @@ fn plain_image_info(bytes: &[u8]) -> AppResult<Option<bool>> {
 }
 
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
+    match &command {
+        CommandAction::Create(c) if c.volume_type == VolumeType::Apfs => {
+            return apfs::create(c.clone(), output)
+        }
+        CommandAction::Mount(c)
+            if c.volume_type == VolumeType::Apfs
+                || c.volume_type == VolumeType::Auto
+                    && (encrypted_apple(&c.source)? != Some(true) && apfs::detects(&c.source)?) =>
+        {
+            return apfs::mount(c.clone(), output)
+        }
+        CommandAction::Unmount(c)
+            if c.volume_type == VolumeType::Apfs
+                || c.volume_type == VolumeType::Auto
+                    && apfs::list()?.iter().any(|v| {
+                        same_path(&v.source, &c.target)
+                            || v.mountpoint
+                                .as_ref()
+                                .is_some_and(|p| same_path(p, &c.target))
+                            || v.devices.iter().any(|p| same_path(p, &c.target))
+                    }) =>
+        {
+            return apfs::unmount(c.clone(), output)
+        }
+        _ => {}
+    }
     match command {
         CommandAction::Create(c) => create(c, output),
         CommandAction::Mount(c) => mount(c, output),

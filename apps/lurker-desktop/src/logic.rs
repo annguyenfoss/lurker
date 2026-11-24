@@ -20,6 +20,7 @@ pub fn create_formats(os: &str, unprivileged: bool) -> Vec<&'static str> {
     [
         "luks",
         "apple",
+        "apfs",
         "geli",
         "cgd",
         "softraid",
@@ -66,7 +67,8 @@ pub fn validate_create_platform(
         ));
     }
     if command.source_kind == SourceKind::Block
-        && (os != "linux" || mode == lurker_core::PrivilegeMode::Unprivileged)
+        && (!(os == "macos" && command.volume_type == VolumeType::Apfs)
+            && (os != "linux" || mode == lurker_core::PrivilegeMode::Unprivileged))
     {
         return Err("Physical-device creation requires Linux Privileged mode.".into());
     }
@@ -471,7 +473,7 @@ mod tests {
         use lurker_core::PrivilegeMode;
         for (os, default, expected_count) in [
             ("linux", "luks", 6),
-            ("macos", "apple", 5),
+            ("macos", "apple", 6),
             ("freebsd", "geli", 4),
             ("netbsd", "cgd", 1),
             ("openbsd", "softraid", 3),

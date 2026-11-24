@@ -47,7 +47,7 @@ Windows packaging and native qualification are planned. Use `cppcryptfs` for the
 ## Physical-device setup scope
 
 - Support physical-device encryption setup where feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. Qualify each backend and device type on its native OS before advertising support.
-- Lurker currently supports physical-device creation on Linux. The current macOS and BSD disk-container workflows use file-backed storage.
+- Lurker currently supports physical-device creation on Linux. macOS APFS accepts unmounted external data partitions and file-backed virtual disks. Physical macOS hardware remains unqualified. BSD disk-container workflows use file-backed storage.
 - The APFS Encrypted scope covers native data-volume setup and unlocking, mounting, and locking existing encrypted APFS volumes via `diskutil`. Apple Encrypted Disk Image uses the existing `hdiutil` backend. Startup-volume FileVault management uses `fdesetup` and native authorization.
 
 ## Create Profile Scope
@@ -230,3 +230,13 @@ If cipher choices change, also update:
 - AES-256 is fixed. Reject Serpent/Twofish instead of silently ignoring the selected cipher.
 - Mount uses `hdiutil attach -stdinpass`, optionally `-readonly`; unmount detaches the virtual disk without force.
 - macOS VeraCrypt retains the existing cipher names, SHA-512, PIM 0, password-or-keyfile authentication, and full initialization; it changes only the inner filesystem to exFAT.
+
+## Native APFS encrypted data volumes (macOS)
+
+- Implemented and tested through native file and virtual-partition lifecycles, CLI prompts and the desktop helper. Packaged release and physical-hardware qualification remain pending.
+- Explicit `apfs` uses `/usr/sbin/diskutil apfs` and its native encryption profile. Password only.
+- File vaults use a plain GUID-partitioned disk image carrying one encrypted APFS volume. The password unlocks the APFS volume.
+- New volumes are encrypted from creation with `addVolume -stdinpassphrase`. File creation stages and publishes through the existing atomic image workflow.
+- Partition creation requires `--force` and an unmounted external data partition. Whole disks, internal disks, and existing APFS containers are refused.
+- Unlock and mount are separate native operations. Close locks the volume before detaching its containing image.
+- Qualification uses disposable disk images, including their virtual partition devices. Physical disks and in-place encryption conversion are unqualified.

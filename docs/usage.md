@@ -314,6 +314,7 @@ Local builds are ad-hoc signed and are not Apple-notarized. Distribution signing
 The macOS backend implementations are:
 
 - **Apple Encryption** (default): an AES-256 encrypted, read/write `.dmg` virtual disk with APFS inside. Encryption protects the disk image, not individual files or the host filesystem. This uses Apple DiskImages encryption, not system FileVault.
+- **APFS (Encrypted)** (`--type apfs`): a plain disk image containing a natively encrypted APFS volume, or an unmounted external data partition initialized with `--force`. Password only. APFS unlock/lock uses `diskutil`; physical disks remain unqualified.
 - **VeraCrypt**: a normal file container with AES, Serpent, or Twofish, SHA-512, and an exFAT filesystem inside.
 
 Apple encryption uses the built-in `/usr/bin/hdiutil`. VeraCrypt unmount uses `/usr/sbin/diskutil` to reject busy filesystems. The packaged private VeraCrypt backend uses separately installed FUSE-T 1.2.9 or later. For a source build, stage the private backend with `scripts/build-macos-backends.py`.
@@ -458,3 +459,13 @@ Desktop administrator elevation requires an administrator-owned installed helper
 and backend, including their parent directories. A user-writable Cargo build is
 suitable for login-user workflows; it is not automatically elevated through
 pkexec/sudo. Install the verified package for privileged desktop operations.
+
+### Native APFS vaults on macOS
+
+```bash
+lurker create --type apfs ./native-apfs.dmg 1
+lurker mount --type apfs ./native-apfs.dmg ~/vault-mount
+lurker unmount ~/vault-mount
+```
+
+Auto detection supports these vaults. The outer image attaches without credentials while the inner APFS volume remains locked. Creation on a selected external data partition requires `--force` and erases that partition. Whole disks and internal disks are refused. Physical-hardware qualification remains pending.

@@ -88,7 +88,7 @@ export component CreateView inherits Card {
 
         Rectangle { height: UiTheme.s3; }   // spacer
 
-        if root.is-linux && !root.unprivileged && !root.directory-format: Segmented {
+        if ((root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs"): Segmented {
             value <=> root.target-kind;
             options: [
                 { value: "file",      label: "File container" },
@@ -151,11 +151,12 @@ export component CreateView inherits Card {
             Field {
                 label: "Partition";
                 required: true;
-                DevicePicker {
+                if root.format == "apfs": ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/diskNsM"; }
+                if root.format != "apfs": DevicePicker {
                     devices: root.devices;
                     value <=> root.partition;
                     selected-label: root.partition-label;
-                    placeholder: "Pick /dev/sdX…";
+                    placeholder: "Pick a partition…";
                     picked(info) => { root.device-picked(info); }
                     rescan => { root.rescan(); }
                 }

@@ -46,6 +46,7 @@ pub enum VolumeType {
     Luks,
     Veracrypt,
     Apple,
+    Apfs,
     Luks1,
     Geli,
     Cgd,
@@ -64,6 +65,7 @@ impl VolumeType {
             "luks" => Some(Self::Luks),
             "veracrypt" => Some(Self::Veracrypt),
             "apple" => Some(Self::Apple),
+            "apfs" => Some(Self::Apfs),
             "luks1" => Some(Self::Luks1),
             "geli" => Some(Self::Geli),
             "cgd" => Some(Self::Cgd),
@@ -84,6 +86,7 @@ impl VolumeType {
             Self::Luks => "luks",
             Self::Veracrypt => "veracrypt",
             Self::Apple => "apple",
+            Self::Apfs => "apfs",
             Self::Luks1 => "luks1",
             Self::Geli => "geli",
             Self::Cgd => "cgd",
@@ -203,7 +206,7 @@ impl VolumeType {
                 os,
                 "linux" | "macos" | "freebsd" | "dragonfly" | "netbsd" | "openbsd"
             ),
-            Self::Apple => os == "macos",
+            Self::Apple | Self::Apfs => os == "macos",
             Self::Luks => os == "linux",
             Self::Luks1 => matches!(os, "linux" | "dragonfly"),
             Self::Veracrypt => {
@@ -234,6 +237,7 @@ mod scope_tests {
         ];
         let cases = [
             (VolumeType::Apple, [true, false, false, false, false, false]),
+            (VolumeType::Apfs, [true, false, false, false, false, false]),
             (VolumeType::Luks, [false, true, false, false, false, false]),
             (VolumeType::Luks1, [false, true, false, true, false, false]),
             (VolumeType::Veracrypt, [true, true, true, true, false, true]),

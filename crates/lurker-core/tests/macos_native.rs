@@ -414,3 +414,161 @@ fn external_host_failure_preserves_existing_container() {
     ok(unmount(&c.target));
     drop(mounted_host);
 }
+
+#[test]
+#[ignore = "creates a disposable plain disk image containing an encrypted APFS volume"]
+fn apfs_encrypted_image_and_virtual_partition() {
+    use std::io::Write;
+    use std::process::Command;
+    let f = Fixture::new();
+    let mut c = f.create(VolumeType::Apfs, CreateCipher::Aes);
+    c.size_gb = Some("0.25".into());
+    ok(CommandAction::Create(c.clone()));
+    ok(f.mount(&c.target, PASS, false, VolumeType::Apfs));
+    let payload = f.0.join("mounted vault/payload");
+    let mut file = fs::File::create(&payload).unwrap();
+    file.write_all(b"APFS encrypted round trip").unwrap();
+    file.sync_all().unwrap();
+    drop(file);
+    let row = list_active_volumes()
+        .unwrap()
+        .into_iter()
+        .find(|v| v.source_path.as_ref() == Some(&c.target))
+        .unwrap();
+    assert_eq!(row.filesystem_type.as_deref(), Some("apfs"));
+    ok(unmount(&c.target));
+    bad(f.mount(&c.target, "wrong password", false, VolumeType::Apfs));
+    ok(f.mount(&c.target, PASS, false, VolumeType::Auto));
+    assert_eq!(fs::read(&payload).unwrap(), b"APFS encrypted round trip");
+    ok(unmount(&f.0.join("mounted vault")));
+    // Attach the outer image with no credentials. Only its APFS volume is locked.
+    let attached = Command::new("/usr/bin/hdiutil")
+        .args(["attach", "-nomount", "-plist"])
+        .arg(&c.target)
+        .output()
+        .unwrap();
+    assert!(attached.status.success());
+    let tree: plist::Value = plist::from_bytes(&attached.stdout).unwrap();
+    let outer = tree.as_dictionary().unwrap()["system-entities"]
+        .as_array()
+        .unwrap()[0]
+        .as_dictionary()
+        .unwrap()["dev-entry"]
+        .as_string()
+        .unwrap()
+        .to_owned();
+    let _attachment = ApfsTestAttachment(outer.clone());
+    let listed = Command::new("/usr/sbin/diskutil")
+        .args(["apfs", "list", "-plist"])
+        .output()
+        .unwrap();
+    let list: plist::Value = plist::from_bytes(&listed.stdout).unwrap();
+    let container = list.as_dictionary().unwrap()["Containers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| {
+            c.as_dictionary().unwrap()["PhysicalStores"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|s| {
+                    s.as_dictionary().unwrap()["DeviceIdentifier"]
+                        .as_string()
+                        .unwrap()
+                        .starts_with(outer.trim_start_matches("/dev/"))
+                })
+        })
+        .unwrap()
+        .as_dictionary()
+        .unwrap();
+    let volume = container["Volumes"].as_array().unwrap()[0]
+        .as_dictionary()
+        .unwrap();
+    assert_eq!(volume["FileVault"].as_boolean(), Some(true));
+    assert_eq!(volume["Locked"].as_boolean(), Some(true));
+    let native = PathBuf::from(format!(
+        "/dev/{}",
+        volume["DeviceIdentifier"].as_string().unwrap()
+    ));
+    ok(f.mount(&native, PASS, false, VolumeType::Apfs));
+    assert_eq!(fs::read(&payload).unwrap(), b"APFS encrypted round trip");
+    ok(unmount(&native));
+    // The wrapper closes the owned image as well, even through the native-volume entry point.
+    assert!(!f.0.join("mounted vault").exists() || !payload.exists());
+}
+
+#[test]
+#[ignore = "initializes only a partition inside a disposable disk image"]
+fn apfs_create_on_virtual_partition() {
+    use std::process::Command;
+    let f = Fixture::new();
+    let image = f.0.join("partition fixture.dmg");
+    let created = Command::new("/usr/bin/hdiutil")
+        .args([
+            "create", "-size", "512m", "-type", "UDIF", "-layout", "GPTSPUD", "-fs", "ExFAT",
+        ])
+        .arg(&image)
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let attached = Command::new("/usr/bin/hdiutil")
+        .args(["attach", "-nomount", "-plist"])
+        .arg(&image)
+        .output()
+        .unwrap();
+    assert!(attached.status.success());
+    let tree: plist::Value = plist::from_bytes(&attached.stdout).unwrap();
+    let entities = tree.as_dictionary().unwrap()["system-entities"]
+        .as_array()
+        .unwrap();
+    let _attachment = ApfsTestAttachment(
+        entities[0].as_dictionary().unwrap()["dev-entry"]
+            .as_string()
+            .unwrap()
+            .into(),
+    );
+    let partition = entities
+        .iter()
+        .find(|e| {
+            e.as_dictionary()
+                .unwrap()
+                .get("content-hint")
+                .and_then(|v| v.as_string())
+                == Some("Microsoft Basic Data")
+        })
+        .unwrap()
+        .as_dictionary()
+        .unwrap()["dev-entry"]
+        .as_string()
+        .unwrap();
+    let mut create = f.create(VolumeType::Apfs, CreateCipher::Aes);
+    create.target = partition.into();
+    create.source_kind = SourceKind::Block;
+    create.size_gb = None;
+    bad(CommandAction::Create(create.clone()));
+    create.force = true;
+    ok(CommandAction::Create(create));
+    ok(f.mount(Path::new(partition), PASS, false, VolumeType::Apfs));
+    fs::write(f.0.join("mounted vault/payload"), b"virtual partition").unwrap();
+    ok(unmount(Path::new(partition)));
+    ok(f.mount(&image, PASS, false, VolumeType::Apfs));
+    assert_eq!(
+        fs::read(f.0.join("mounted vault/payload")).unwrap(),
+        b"virtual partition"
+    );
+    ok(unmount(&image));
+}
+
+struct ApfsTestAttachment(String);
+impl Drop for ApfsTestAttachment {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new("/usr/bin/hdiutil")
+            .args(["detach", &self.0])
+            .output();
+    }
+}

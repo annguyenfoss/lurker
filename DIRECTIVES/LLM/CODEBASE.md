@@ -30,6 +30,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
   - `src/keyslots.rs`: Linux LUKS keyslot inspection, addition and authenticated removal
   - `src/workflow.rs`: source of truth for hardcoded crypto profiles and Linux workflow dispatch
   - `src/macos.rs`: hdiutil/VeraCrypt file-container workflows and native volume discovery
+  - `src/macos/apfs.rs`: diskutil APFS encrypted data-volume lifecycle for image files and external partitions
   - `src/linux_workflow.rs`: Linux create/mount/unmount implementation
   - `src/userspace.rs`: Linux unprivileged VeraCrypt file workflow and private session registry
   - `src/size.rs`: shared size validation
@@ -62,7 +63,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 
 ## Core Invariants
 
-- The matrix in `ENCRYPTION.md` defines approved backend scope and current support. Physical-device setup is in scope on Linux, macOS, and the four BSDs where feasible. The current device-create implementation is Linux-only. BSD and macOS disk-container workflows currently use file-backed devices.
+- The matrix in `ENCRYPTION.md` defines approved backend scope and current support. Physical-device setup is in scope on Linux, macOS, and the four BSDs where feasible. Device creation supports Linux and macOS external APFS data partitions. macOS qualification currently uses file-backed virtual devices. BSD disk-container workflows use file-backed devices.
 - Container defaults: Linux `luks` (LUKS2), macOS `apple`, FreeBSD `geli`, NetBSD `cgd`, OpenBSD `softraid`, DragonFly `luks1`. Explicit Linux `luks1` preserves its compatible PBKDF2 profile. Directory backends are explicit selections with no size or generic cipher option.
 - Apple encryption is AES-256 at the disk-image layer, with APFS inside; it is not system FileVault or APFS filesystem encryption.
 - Supported create ciphers: `aes`, `serpent`, `twofish`.
@@ -79,7 +80,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 - Linux native userspace transport 4 requires persistent source-inode locking and forwards filesystem writeback barriers to the encrypted backing file. Frontend capability negotiation must enforce it. Drain legacy sessions before component upgrades.
 - Unprivileged Linux supports VeraCrypt regular files, with the same cipher profiles and Btrfs/zstd default. It never invokes sudo, pkexec, mount, losetup, or device-mapper. No fallback to elevation is permitted.
 - The unprivileged crypto helper exposes a FUSE image; the filesystem helper runs Linux filesystem code inside LKL. Both run as the login user. Standard user FUSE mounting uses the system's existing fusermount3 helper.
-- The helper JSON command and active-volume records carry a serde-defaulted `privilege_mode`; missing mode retains the original privileged behavior. macOS hides the selector and keeps its existing native user-session route.
+- The helper JSON command and active-volume records carry a serde-defaulted `privilege_mode`; missing mode retains the original privileged behavior. macOS hides the selector and uses its native user-session route, including APFS encrypted files and external data partitions.
 - Userspace state belongs to the current uid in a private runtime directory. Record source device/inode, mount IDs, and process start time; never close a replaced mount or reused process. Drain the filesystem before closing its crypto image. Preserve recoverable sessions on busy/failed unmounts.
 - Probe LUKS metadata before open; authenticate VeraCrypt during open instead of probing encrypted headers without a password.
 - Register mapper cleanup only after a successful open, so failed duplicate operations cannot close an existing mapping.

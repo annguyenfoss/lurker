@@ -205,6 +205,7 @@ mod linux_backend;
 #[cfg(target_os = "linux")]
 pub use linux_backend::run;
 
+// Native APFS volume profiles are delegated to diskutil apfs with a Disk user password.
 // macOS uses VeraCrypt's native formatter instead of Linux's Btrfs step.
 #[cfg(target_os = "macos")]
 pub(crate) fn macos_veracrypt_create_args(
