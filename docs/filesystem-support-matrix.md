@@ -12,22 +12,20 @@ This planning summary follows the stated use case: format a decrypted physical p
 | APFS | ☑️ | ✅ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ☑️² |
 | UFS1 / FFSv1 | ☑️ | — | ✅ | ✅ | ✅ | ✅ | ⚠️ R/O |
 | UFS2 / FFSv2 | ☑️ | ⚠️ R/O | ✅ | ✅ | ✅ | — | ⚠️ R/O |
-| HAMMER2 | ✅³ | — | ☑️⁴ | ☑️ | ☑️ | ✅ | — |
+| HAMMER2 | ✅³ | — | ☑️³ | ☑️ | ☑️ | ✅ | — |
 | NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ✅ |
 | exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅⁵ |
+| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅³ |
 
 **Legend**
 
-- **✅** — Full feature support.
-- **☑️** — Largely usable, with some filesystem features missing or unverified.
-- **⚠️ R/O** — Mounted read-only access.
-- **—** — Unsupported.
-- **¹** — Btrfs/macOS: disk/container creation not available.
-- **²** — APFS/Windows: disk/container creation not available.
-- **³** — HAMMER2/Linux: experimental; tested only on disposable images.
-- **⁴** — HAMMER2/FreeBSD: experimental port; full feature coverage not established.
-- **⁵** — OpenZFS/Windows: release-candidate port; not production-qualified.
+- **✅** Full feature support.
+- **☑️** Largely usable, with some filesystem features missing or unverified.
+- **⚠️ R/O** Read-Only.
+- **—** Unsupported.
+- **¹** Disk/container creation not available.
+- **²** Disk/container creation not available.
+- **³** Largely usable; reliability not established.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
