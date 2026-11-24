@@ -54,3 +54,37 @@ Default e2fsprogs ext4 imports mounted but reads failed with EINVAL. One ordinar
 Local `result.json` contains the ten-cell matrix, exact artifact hashes, all receipt paths and hashes for PDF/UTF-8 payloads. `evidence.tar.gz` retains build, package, FUSE, native control and per-fixture logs/receipts. No fixture mounts, Lurker mapper devices, attached vnode devices, session records or owned background workers remain. Existing stock base mounts were preserved. Root-owned test artifacts and failed/passed closed fixture files remain for review. Native ext2fs/NTFS and the ordinary source-built FUSE module remain loaded; no reboot or permanent boot configuration was changed.
 
 Reviewer next action: inspect `target/goal-validation/filesystem-round/dragonfly/result.json` and evidence archive first. Review adapter commits `f288f6e`, `16303e0` and harness commits `c5bcf44`, `a9652ad`, `ca86bf6`; rerun only meaningful missing coverage with current shared code. Product payload artifact `bb00d25` predates the final conservative mapper-occupancy guard; its targeted test receipt is separate. No useful FUSE or ext4 route remains to fix within the authorized unmodified-upstream scope.
+
+## Independent review — 2026-11-25
+
+Reviewed all ten filesystem cells and the archived native receipts independently.
+All five original RW pairs contain fresh CLI creation, three ordinary mount/close
+cycles, PDF/UTF-8 writes, verified original bytes, append/add-file and matching
+final SHA-256 hashes. NTFS is a separate LUKS1 RO import/read/close pass; it is
+not writable support. Failed setup and upstream ext4 receipts remain failures.
+Every passed aggregate receipt matches its copy in `evidence.tar.gz`.
+
+Current committed source `ceb1c50f849ae999ff09825182442eca04de9093` was archived
+and built as the login user on DragonFly. Core/CLI/helper tests passed: 69 passed,
+0 failed, 3 native opt-in tests ignored. Binaries were installed into the separate
+root-owned `/opt/lurker-filesystem-round-dragonfly-review/` prefix. Source review
+found the original UFS1/FAT32/NTFS lifecycle inputs unchanged; the final HAMMER2
+mapper-occupancy guard was the only relevant product delta. Both LUKS1/HAMMER2
+and VeraCrypt/HAMMER2 therefore received fresh complete seven-operation payload
+reruns on the current artifact, with invoking owner UID 1300; both passed. The
+payload coordinator itself ran as root. No serious product or harness gap was
+found and no product patch was needed.
+
+Review artifact hashes, source archive hash, counts, new per-pair receipts and
+cleanup are in `target/goal-validation/filesystem-round/dragonfly/review/review.json`;
+`review-evidence.tar.gz` retains the new test and fixture logs. Remote evidence:
+`/tmp/lurker-filesystem-round-dragonfly-review/`; closed review fixtures:
+`/var/tmp/ldrev/`. Current-source CLI SHA-256:
+`d7efd303b053ccfcd725c642c4fa8a515efca036a9a1366fcbc51cbbc17d236a`.
+
+The final native inventory again has no fixture mounts, mapper devices, attached
+vnodes, session records or owned workers. Base mounts and ordinary loaded
+prerequisite modules remain. ext4 native reads still fail upstream; stock FUSE
+exFAT/NTFS controls fail before mounting; Btrfs/UFS2/ZFS lack a compatible mount
+runtime and XFS/APFS remain FUSE-blocked. These are explicit upstream or missing
+runtime limits, not payload passes. All excluded workloads remain unexercised.
