@@ -63,6 +63,21 @@ exact 65,536-byte file payload at offset 79,691,776. The synchronous mount
 still failed to preserve the acknowledged directory entries. Receipts are
 under `target/dragonfly-veracrypt-batch/plain/sync-*`.
 
+A separate diagnostic used the exact `9384bad` package with inner HAMMER2
+on outer UFS. After the ordinary file, directory, and SQLite FULL/WAL
+operations, the live worker ran a native HAMMER2 snapshot to flush the
+mounted PFS and then fsynced the ciphertext backing file. Those calls
+completed in 17.43 ms and 0.46 ms, respectively. The host cut power 353 ms
+after observing acknowledgement. From a verified copy, the normal writable
+reopen recovered the file and the committed SQLite row with the expected
+hash. SQLite integrity was `ok` and the uncommitted row was absent. Close
+restored the native storage inventory. This records preservation with both
+explicit flushes in the tested configuration. Receipts are under
+`target/dragonfly-veracrypt-batch/hammer2-snapshot-control/`.
+
+https://man.dragonflybsd.org/?command=hammer2&section=8
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_ioctl.c
+
 The optimized `9384badb34f909887c85ebccc7dbe145b01c9794` package
 (`c98b150a8dd600b9559f5b92652b342d4e73324fa0ad2f2177b5bf4a93be35d0`)
 passed the native workspace check and tests in run
