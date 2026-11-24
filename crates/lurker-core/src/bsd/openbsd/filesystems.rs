@@ -65,8 +65,17 @@ pub(in crate::bsd) fn make_selected_filesystem(
             exec(
                 "/sbin/disklabel",
                 &args(&["-E", name]),
-                Some(b"a a\n64\n*\nMSDOS\nw\nq\n"),
+                Some(b"d a\na a\n64\n*\nMSDOS\nw\nq\n"),
             )?;
+            let label = exec("/sbin/disklabel", &args(&[name]), None)?;
+            if !label.lines().any(|line| {
+                let fields: Vec<_> = line.split_whitespace().collect();
+                fields.len() >= 4 && fields[0] == "a:" && fields[2] == "64" && fields[3] == "MSDOS"
+            }) {
+                return Err(AppError::new(
+                    "New OpenBSD exchange partition has unexpected geometry; refusing format.",
+                ));
+            }
             let device = format!("/dev/{name}a");
             if selected == CreateFilesystem::Ntfs {
                 exec(
