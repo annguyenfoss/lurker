@@ -643,13 +643,28 @@ fn require_command(name: &str) -> AppResult<PathBuf> {
 }
 
 fn find_executable(name: &str) -> Option<PathBuf> {
+    find_executable_with_path(name, env::var_os("PATH"))
+}
+
+fn find_executable_with_path(name: &str, paths: Option<OsString>) -> Option<PathBuf> {
+    // An explicitly empty PATH is also used by callers to disable tool lookup.
+    if paths.as_deref().is_some_and(|p| p.is_empty()) {
+        return None;
+    }
     let path = Path::new(name);
     if path.components().count() > 1 {
         return is_executable(path).then(|| path.to_path_buf());
     }
 
-    let paths = env::var_os("PATH")?;
-    for dir in env::split_paths(&paths) {
+    for dir in paths
+        .into_iter()
+        .flat_map(|p| env::split_paths(&p).collect::<Vec<_>>())
+        .chain(
+            ["/usr/local/sbin", "/usr/sbin", "/sbin", "/usr/bin", "/bin"]
+                .into_iter()
+                .map(PathBuf::from),
+        )
+    {
         let candidate = dir.join(name);
         if is_executable(&candidate) {
             return Some(candidate);
@@ -672,6 +687,17 @@ pub fn effective_uid() -> AppResult<u32> {
 #[cfg(test)]
 mod tests {
     use super::effective_uid;
+
+    #[test]
+    fn linux_system_lookup_works_without_sbin_in_login_path() {
+        let path =
+            super::find_executable_with_path("true", Some("/nonexistent/lurker-path".into()))
+                .unwrap();
+        assert!(path.is_absolute() && super::is_executable(&path));
+        assert!(super::find_executable_with_path("true", None).is_some());
+        assert!(super::find_executable_with_path("true", Some("".into())).is_none());
+        assert!(super::find_executable_with_path("lurker-no-such-tool", None).is_none());
+    }
 
     fn subprocess_context() -> super::AppContext {
         super::AppContext {
