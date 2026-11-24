@@ -1,10 +1,14 @@
 # OS / Filesystem Research tags
 
 Each cell contains only tags, with a separate entry for every researched
-offering. Keep alternatives within the same prefix group (None, Beta,
-Outdated, Paid); do not consolidate them. Write the prefix, formatting tag,
-mount tag, mount access, any paid-product number, and finally `Partial` when
-applicable. List solution names in the notes in the same order as the cell.
+offering. Keep alternatives; do not consolidate them. All status tags are
+prefixes, in the order of the four independent dimensions below:
+
+`[Paid] [Beta] [Partial or Partial*] [Outdated] Format Mount Access [(product number)]`
+
+Omit default status tags; never write `None`, `Free`, `Production`, or
+`Current` in a cell. List solution names in the notes in the same order as
+the cell.
 Use Markdown continuation rows for multiple entries; no HTML is required.
 
 Assess formatting and mounting independently for partitions and images. An
@@ -29,14 +33,20 @@ feature completeness. Assess each offering separately and preserve its sources.
 - Count independently supported formatting even when mounting is unavailable.
   Use `NM` when mount support is known to be absent in the stated setup.
 
-## Prefixes
+## Status prefixes
 
-| Prefix | Meaning |
-| --- | --- |
-| None | Production-grade support provided by the OS or publicly available for free. |
-| `Beta` | Usable experimental or early-development support. |
-| `Outdated` | Legacy or outdated support. |
-| `Paid` | Commercial product available for individual purchase. Number multiple products and name them in the solution notes. |
+| Dimension | No tag means | Explicit prefix |
+| --- | --- | --- |
+| Availability | Free: OS-provided, freeware or freely obtainable open source. | `Paid`: commercial offering available for individual purchase. |
+| Maturity | Production. | `Beta`: usable experimental or early-development implementation. |
+| Completeness | Fully or largely implemented, based on the feature assessment. | `Partial`: confirmed important missing features. `Partial*`: completeness cannot be determined. |
+| Maintenance | Current. | `Outdated`: legacy or outdated implementation. |
+
+The dimensions are independent. Paid offerings can be experimental, incomplete
+or outdated; a production implementation can be partial. Maturity describes
+stability/reliability, while completeness describes implemented features.
+Number multiple paid products and name them in the solution notes. Optional
+donations or paid support do not make a freely obtainable offering `Paid`.
 
 ## Format / Create
 
@@ -77,9 +87,12 @@ modules, and supported on-disk features in the notes for that solution.
 
 ## Implementation completeness
 
-Append `Partial` at the very end when an implementation lacks important
-filesystem features. Keep the existing target/access tags: `R/W` describes
-ordinary file reads/writes, not complete implementation of every filesystem
+Prefix `Partial` when an implementation lacks important filesystem features.
+Prefix `Partial*` when an AI agent cannot determine whether the implementation
+is fully/largely implemented or has important gaps. Unknown completeness must
+never silently imply full/largely implemented support. Keep the existing
+target/access tags: `R/W` describes ordinary file reads/writes, not complete
+implementation of every filesystem
 feature. `R/LW` describes restrictions such as overwrite-only access. Either
 can also receive `Partial` for significant missing implementation features.
 
@@ -111,21 +124,25 @@ not create files or snapshots, but should expose supported existing data and
 metadata correctly. Formatters need not mount; `NM` already expresses that.
 Important layout exclusions or inability to recover a normal supported volume
 can still justify `Partial`. Optional/exotic features alone need not: largely
-implemented support needs no suffix. For example, missing EFS plaintext
-decryption alone does not make an otherwise broad NTFS reader `Partial`.
+implemented support needs no completeness prefix. For example, missing EFS
+plaintext decryption alone does not make an otherwise broad NTFS reader `Partial`.
 
-`Partial` is independent of prefix, price, implementation location and mount
-transport. Native and paid drivers can be partial. Read-only mode, age,
+Completeness is independent of the other status dimensions, implementation
+location and mount transport. Native and paid drivers can be partial. Read-only mode, age,
 experimental maturity, performance, an installation prerequisite or lack of
 formatting alone does not justify it. A feature absent from the format's own
 design is not an implementation gap. Normal release-to-release feature-flag
 compatibility is a condition to document, not automatically `Partial`.
 
 Record every `Partial` reason with an upstream source in the
-[implementation assessment](filesystem-implementation-assessment.md). Record
-insufficiently documented coverage explicitly there; absence of the suffix
-must not be represented as verified completeness. Do not invent a new matrix
-tag for uncertainty or infer a vendor limitation from silence. Keep research
+[implementation assessment](filesystem-implementation-assessment.md).
+For every `Partial*`, record the specific unresolved features or missing
+evidence, the sources checked, and why completeness could not be determined.
+The asterisk means uncertainty, not a confirmed missing feature. Use one of
+`Partial` or `Partial*`, never both: a confirmed important gap is sufficient
+for `Partial`, even when other features remain unverified. Remove the asterisk
+only after evidence establishes either `Partial` or full/largely implemented
+support. Do not infer a vendor limitation from silence. Keep research
 judgments separate from runtime validation.
 
 ## Examples
@@ -134,6 +151,8 @@ judgments separate from runtime validation.
 - `F MI R/LW` formats both targets and mounts images with limited writes.
 - `FI NM` formats images and has no mount support.
 - `NF MP R · MI R/W` gives each mount target its own access tag on the same line.
-- `F M R/W Partial` supports ordinary reads/writes but lacks important features.
-- `Beta NF M R Partial` is experimental, read-only and additionally incomplete.
-- `Paid FP MP R/W (1) Partial` puts the suffix after the paid-product number.
+- `Partial F M R/W` supports ordinary reads/writes but lacks important features.
+- `Beta Partial NF M R` is experimental, read-only and additionally incomplete.
+- `Paid Partial FP MP R/W (1)` is a paid implementation with confirmed gaps.
+- `Paid Partial* NF MP R/W (1)` is paid, with completeness undetermined and explained in the notes.
+- `Beta Partial Outdated NF M R/W` combines three independent status prefixes.

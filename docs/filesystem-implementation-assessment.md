@@ -6,12 +6,20 @@ Covers all 160 restored matrix offerings. Identical findings for the same
 implementation on multiple OSes share a row; OS-specific behavior stays separate.
 The [matrix](filesystem-support-matrix.md) keeps only compact tags.
 
-- **Partial**: a documented important feature gap; append `Partial` to the matrix entry.
+- **Partial**: a documented important feature gap; prefix the matrix entry with `Partial`.
 - **Largely implemented**: no important gap identified for the stated operation;
-  minor or optional exceptions remain in the notes. No suffix.
-- **Coverage unresolved**: sources confirm the advertised operation but do not
-  establish enough feature detail to judge completeness. No new matrix tag is
-  invented; this verdict must not be read as full implementation.
+  minor or optional exceptions remain in the notes. No completeness prefix.
+- **Coverage unresolved** (`Partial*`): sources confirm the advertised operation
+  but do not establish enough feature detail to judge completeness. Prefix the
+  matrix entry with `Partial*`; each finding below records the unresolved
+  features/evidence and the sources checked. Unknown completeness must not
+  silently mean fully/largely implemented.
+
+All status tags precede capabilities: `[Paid] [Beta] [Partial or Partial*]
+[Outdated] Format Mount Access [(product number)]`. These four dimensions are
+independent; their free, production, fully/largely implemented and current
+values are implicit. Use `Partial` for confirmed important gaps even if other
+features remain uncertain; never combine it with `Partial*`.
 
 These are evidence-based research judgments, not independent runtime tests or
 crash-safety certification. Read-only implementations are assessed on reading
@@ -40,13 +48,13 @@ features absent from exFAT’s design do not count as implementation defects.
 | Linux | ext4 + e2fsprogs | **Largely implemented** — Reference Linux implementation and standard formatter; no important implementation gap identified for ordinary data-volume use. | E1 |
 | Linux; Windows | FsRover | **Partial** — Does not replay the journal; encrypted file contents are ciphertext. | E4 |
 | macOS | xlinuxfs | **Partial** — Linux filesystem engine, but mounted access omits POSIX ACL mapping, UID/GID changes and non-user xattr namespaces. | E5 |
-| macOS | anylinuxfs | **Coverage unresolved** — Uses Linux drivers and OpenZFS through NFS. Broad file access is documented; preservation of each filesystem’s ACLs, xattrs and special operations through NFS is not established. | E6 |
-| macOS | PolyDrive Disk | **Coverage unresolved** — Vendor advertises normal file operations and journal recovery; published material does not establish complete metadata and filesystem-specific feature coverage. | E8 |
+| macOS | anylinuxfs | **Coverage unresolved** (`Partial*`) — Uses Linux drivers and OpenZFS through NFS. Broad file access is documented; preservation of each filesystem’s ACLs, xattrs and special operations through NFS is not established. | E6 |
+| macOS | PolyDrive Disk | **Coverage unresolved** (`Partial*`) — Vendor advertises normal file operations and journal recovery; published material does not establish complete metadata and filesystem-specific feature coverage. | E8 |
 | macOS | ExtendFS | **Partial** — Needs-recovery volumes are not repaired, checksum verification is incomplete, and Finder omits duplicate same-directory hardlinks. Refuses unsupported incompatible flags. | E9 |
 | macOS | Ext4Kit | **Partial** — No sparse-file allocation; holes are zero-filled. Also rejects inline_data volumes and restricts xattr values to one filesystem block. | E10 |
 | macOS | open_ext4_for_mac | **Partial** — Rejects several ext4 profiles including casefold, large_dir and ea_inode; quota/project/verity profiles are read-only. Journal support does not remove those restrictions. | E11 |
 | macOS | Paragon extFS for Mac | **Partial** — Current product page excludes metadata_csum, a mainstream ext4 feature, plus bigalloc, external journal, meta_bg and inline_data. Paid status does not imply complete ext4 support. | E12 |
-| macOS | vmount Pro | **Coverage unresolved** — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
+| macOS | vmount Pro | **Coverage unresolved** (`Partial*`) — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
 | FreeBSD | ext2fs + e2fsprogs | **Partial** — No journaling or encryption; extended attributes are experimental. An independent full formatter does not fix the mount driver’s implementation gaps. | E14 |
 | FreeBSD | fusefs-ext2 | **Partial** — No mounted set/list/remove-xattr callbacks; getxattr handles only user attributes. Important metadata/ACL coverage is missing independently of the upstream write-safety warning. | E15 |
 | FreeBSD | fusefs-lkl | **Partial** — Pinned Linux 4.16-era engine cannot handle later incompatible features such as orphan_file. This is inferred from the pinned kernel’s feature set, independently of its age. | E16 |
@@ -54,15 +62,15 @@ features absent from exFAT’s design do not count as implementation defects.
 | NetBSD | ext2fs + e2fsprogs | **Partial** — Supports extents/64-bit layouts but rejects csum_seed and needs-recovery incompatible flags; normal modern profiles or an unreplayed journal can prevent mounting. | E14 |
 | NetBSD | fuse-ext2 | **Partial** — No mounted set/list/remove-xattr callbacks; getxattr handles only user attributes. Important metadata/ACL coverage is missing independently of the upstream write-safety warning. | E15 |
 | DragonFly BSD | ext2fs + e2fsprogs-core | **Partial** — DragonFly 6.4.2 omits needs-recovery from its accepted incompatible flags, so a normal ext4 journal requiring replay prevents mounting. The formatter does not broaden this reader. | E14 |
-| Windows | DiskInternals Ext4 Formatter | **Coverage unresolved** — Creates ext4 according to vendor documentation. The exact generated feature profile and formatter validation coverage are not published; NM already records no mount in this offering. | E17 |
-| Windows | DiskGenius Free | **Coverage unresolved** — Creates ext4 according to vendor documentation. The exact generated feature profile and formatter validation coverage are not published; NM already records no mount in this offering. | E17 |
-| Windows | MiniTool Partition Wizard Free | **Coverage unresolved** — Creates ext4 according to vendor documentation. The exact generated feature profile and formatter validation coverage are not published; NM already records no mount in this offering. | E17 |
+| Windows | DiskInternals Ext4 Formatter | **Coverage unresolved** (`Partial*`) — Creates ext4 according to vendor documentation. The exact generated feature profile and formatter validation coverage are not published; NM already records no mount in this offering. | E17 |
+| Windows | DiskGenius Free | **Coverage unresolved** (`Partial*`) — Creates ext4 according to vendor documentation. The exact generated feature profile and formatter validation coverage are not published; NM already records no mount in this offering. | E17 |
+| Windows | MiniTool Partition Wizard Free | **Coverage unresolved** (`Partial*`) — Creates ext4 according to vendor documentation. The exact generated feature profile and formatter validation coverage are not published; NM already records no mount in this offering. | E17 |
 | Windows | Ext4Fsd | **Partial** — Documents internal-journal replay rather than a full write-journaling implementation; rejects casefold/large-directory/inline-data profiles and downgrades several other profiles to read-only. | E18 |
-| Windows | CrossDriver Free | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
-| Windows | Paragon Linux File Systems for Windows | **Coverage unresolved** — Current global page documents ext4/XFS writes and Btrfs reads; older/regional pages differ. Exact installed version matters, and a complete feature matrix is not published. | E20 |
-| Windows | DiskInternals Linux Writer Pro | **Coverage unresolved** — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
-| Windows | CrossDriver for Linux Disks Pro | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
-| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
+| Windows | CrossDriver Free | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| Windows | Paragon Linux File Systems for Windows | **Coverage unresolved** (`Partial*`) — Current global page documents ext4/XFS writes and Btrfs reads; older/regional pages differ. Exact installed version matters, and a complete feature matrix is not published. | E20 |
+| Windows | DiskInternals Linux Writer Pro | **Coverage unresolved** (`Partial*`) — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
+| Windows | CrossDriver for Linux Disks Pro | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** (`Partial*`) — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
 
 ### Btrfs
 
@@ -71,16 +79,16 @@ features absent from exFAT’s design do not count as implementation defects.
 | Linux | Btrfs + btrfs-progs | **Largely implemented** — Reference Linux implementation and standard formatter; no important implementation gap identified for ordinary data-volume use. | E1 |
 | Linux; Windows | FsRover | **Partial** — Mount bridge lacks ACL/xattr operations and substitutes host ownership on Linux; compressed data and many RAID profiles remain readable. | E4 |
 | macOS | xlinuxfs | **Partial** — Linux filesystem engine, but mounted access omits POSIX ACL mapping, UID/GID changes and non-user xattr namespaces. | E5 |
-| macOS | anylinuxfs | **Coverage unresolved** — Uses Linux drivers and OpenZFS through NFS. Broad file access is documented; preservation of each filesystem’s ACLs, xattrs and special operations through NFS is not established. | E6 |
-| macOS | PolyDrive Disk | **Coverage unresolved** — Vendor advertises normal file operations and journal recovery; published material does not establish complete metadata and filesystem-specific feature coverage. | E8 |
+| macOS | anylinuxfs | **Coverage unresolved** (`Partial*`) — Uses Linux drivers and OpenZFS through NFS. Broad file access is documented; preservation of each filesystem’s ACLs, xattrs and special operations through NFS is not established. | E6 |
+| macOS | PolyDrive Disk | **Coverage unresolved** (`Partial*`) — Vendor advertises normal file operations and journal recovery; published material does not establish complete metadata and filesystem-specific feature coverage. | E8 |
 | macOS | btrfs4mac | **Partial** — Single-device volumes only and no log-tree replay; multi-device/RAID layouts are not supported. These are additional restrictions beyond read-only access. | E22 |
-| macOS | vmount Pro | **Coverage unresolved** — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
+| macOS | vmount Pro | **Coverage unresolved** (`Partial*`) — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
 | FreeBSD | fusefs-lkl | **Partial** — Pinned Linux 4.16-era engine lacks later RAID1C3/RAID1C4 profiles and newer checksum choices. This is inferred from the pinned kernel’s feature set, independently of its age. | E16 |
 | Windows | WinBtrfs | **Partial** — Broad compression, snapshots, checksums and RAID coverage, but full transaction-log support remains on the upstream TODO list. | E23 |
-| Windows | CrossDriver Free | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
-| Windows | Paragon Linux File Systems for Windows | **Coverage unresolved** — Current global page documents ext4/XFS writes and Btrfs reads; older/regional pages differ. Exact installed version matters, and a complete feature matrix is not published. | E20 |
-| Windows | CrossDriver for Linux Disks Pro | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
-| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
+| Windows | CrossDriver Free | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| Windows | Paragon Linux File Systems for Windows | **Coverage unresolved** (`Partial*`) — Current global page documents ext4/XFS writes and Btrfs reads; older/regional pages differ. Exact installed version matters, and a complete feature matrix is not published. | E20 |
+| Windows | CrossDriver for Linux Disks Pro | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** (`Partial*`) — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
 
 ### XFS
 
@@ -89,17 +97,17 @@ features absent from exFAT’s design do not count as implementation defects.
 | Linux | XFS + xfsprogs | **Largely implemented** — Reference Linux implementation and standard formatter; no important implementation gap identified for ordinary data-volume use. | E1 |
 | Linux; Windows | FsRover | **Partial** — Mount bridge lacks ACL/xattr operations and substitutes host ownership on Linux; reading XFS v4/v5 data does not preserve native metadata semantics. | E4 |
 | macOS | xlinuxfs | **Partial** — Linux filesystem engine, but mounted access omits POSIX ACL mapping, UID/GID changes and non-user xattr namespaces. | E5 |
-| macOS | anylinuxfs | **Coverage unresolved** — Uses Linux drivers and OpenZFS through NFS. Broad file access is documented; preservation of each filesystem’s ACLs, xattrs and special operations through NFS is not established. | E6 |
-| macOS | PolyDrive Disk | **Coverage unresolved** — Vendor advertises normal file operations and journal recovery; published material does not establish complete metadata and filesystem-specific feature coverage. | E8 |
+| macOS | anylinuxfs | **Coverage unresolved** (`Partial*`) — Uses Linux drivers and OpenZFS through NFS. Broad file access is documented; preservation of each filesystem’s ACLs, xattrs and special operations through NFS is not established. | E6 |
+| macOS | PolyDrive Disk | **Coverage unresolved** (`Partial*`) — Vendor advertises normal file operations and journal recovery; published material does not establish complete metadata and filesystem-specific feature coverage. | E8 |
 | macOS | fuse-xfs | **Partial** — No reflinks, ACLs, xattr writes or quotas; external-log and realtime layouts are excluded. | E24 |
-| macOS | vmount Pro | **Coverage unresolved** — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
+| macOS | vmount Pro | **Coverage unresolved** (`Partial*`) — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
 | FreeBSD | xfsprogs | **Largely implemented** — Ported upstream formatter; no important format-operation gap identified. This entry makes no claim of an XFS mount. | E25 |
 | FreeBSD; OpenBSD | libfsxfs | **Partial** — Rejects quota-enabled XFS and meta_uuid, among other incompatible features. Ordinary read-only mode does not describe these layout restrictions. | E26 |
 | FreeBSD | fusefs-lkl | **Partial** — Pinned Linux 4.16-era engine predates bigtime and inobtcount, used by modern formatters. This is inferred from the pinned kernel’s feature set, independently of its age. | E16 |
-| Windows | CrossDriver Free | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
-| Windows | Paragon Linux File Systems for Windows | **Coverage unresolved** — Current global page documents ext4/XFS writes and Btrfs reads; older/regional pages differ. Exact installed version matters, and a complete feature matrix is not published. | E20 |
-| Windows | CrossDriver for Linux Disks Pro | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
-| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
+| Windows | CrossDriver Free | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| Windows | Paragon Linux File Systems for Windows | **Coverage unresolved** (`Partial*`) — Current global page documents ext4/XFS writes and Btrfs reads; older/regional pages differ. Exact installed version matters, and a complete feature matrix is not published. | E20 |
+| Windows | CrossDriver for Linux Disks Pro | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** (`Partial*`) — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
 
 ### APFS
 
@@ -111,13 +119,13 @@ features absent from exFAT’s design do not count as implementation defects.
 | Linux; Windows | FsRover | **Partial** — Skips FileVault volumes and does not support snapshots or Fusion containers. | E4 |
 | Linux | Paragon APFS for Linux | **Partial** — Encrypted/snapshot volumes are read-only; Fusion and T2-encrypted storage are excluded. Native APFS encrypted-volume writing is an important missing capability. | E30 |
 | macOS | Disk Utility / APFS | **Largely implemented** — Reference macOS implementation; device and image workflows are documented. | E2 |
-| Windows | CrossDriver for Mac Disks Free | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| Windows | CrossDriver for Mac Disks Free | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
 | Windows | winapfs | **Partial** — Writes exclude encrypted volumes, snapshots and Fusion layouts; readable encrypted volumes use a separate read-only path. | E31 |
 | Windows | apfs_for_windows | **Partial** — Writable volumes are limited by directory entry count and nesting depth; new hardlinks and encrypted/sealed volumes are unsupported. | E32 |
 | Windows | Paragon APFS for Windows | **Partial** — Some compressed files are unreadable; encrypted and snapshot volumes are read-only, and writable support requires a compatible single-store volume. | E33 |
-| Windows | OWC MacDrive 12 | **Coverage unresolved** — Vendor documents APFS reads/writes and encrypted-volume support, but not enough detail to close every benchmark feature. APFS formatting remains unverified in the original survey. | E34 |
-| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
-| Windows | CrossDriver for Mac Disks Pro | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| Windows | OWC MacDrive 12 | **Coverage unresolved** (`Partial*`) — Vendor documents APFS reads/writes and encrypted-volume support, but not enough detail to close every benchmark feature. APFS formatting remains unverified in the original survey. | E34 |
+| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** (`Partial*`) — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
+| Windows | CrossDriver for Mac Disks Pro | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
 
 ### UFS1 / FFSv1
 
@@ -125,7 +133,7 @@ features absent from exFAT’s design do not count as implementation defects.
 | --- | --- | --- | --- |
 | Linux | makefs + Linux UFS | **Partial** — UFS inode-operation tables lack xattr and ACL handlers; selecting the correct BSD variant remains necessary. Experimental write mode is a separate issue. | E35 |
 | Linux | Linux UFS write option + makefs | **Partial** — UFS inode-operation tables lack xattr and ACL handlers; selecting the correct BSD variant remains necessary. Experimental write mode is a separate issue. | E35 |
-| Linux; macOS | UFS2Tool | **Coverage unresolved** — Archived formatter creates UFS images; exact supported output profiles are not fully documented. Offline extraction/editing is outside the bar and is not counted as a mount. | E36 |
+| Linux; macOS | UFS2Tool | **Coverage unresolved** (`Partial*`) — Archived formatter creates UFS images; exact supported output profiles are not fully documented. Offline extraction/editing is outside the bar and is not counted as a mount. | E36 |
 | Linux; Windows | FsRover | **Partial** — Mount bridge lacks ACL/xattr operations and substitutes host ownership on Linux; BSD/Solaris file reading is not complete variant-specific metadata access. | E4 |
 | FreeBSD | UFS1 | **Largely implemented** — Native FreeBSD implementation is the reference for its own UFS variant; cross-BSD incompatibility is not itself a missing implementation feature. | E37 |
 | OpenBSD | FFSv1 | **Largely implemented** — Native implementation is the reference for this OS’s FFS variant. NetBSD FFSv2ea and cross-BSD variant compatibility remain separate qualifications. | E38 |
@@ -139,7 +147,7 @@ features absent from exFAT’s design do not count as implementation defects.
 | --- | --- | --- | --- |
 | Linux | makefs + Linux UFS | **Partial** — UFS inode-operation tables lack xattr and ACL handlers; selecting the correct BSD variant remains necessary. Experimental write mode is a separate issue. | E35 |
 | Linux | Linux UFS write option + makefs | **Partial** — UFS inode-operation tables lack xattr and ACL handlers; selecting the correct BSD variant remains necessary. Experimental write mode is a separate issue. | E35 |
-| Linux; macOS | UFS2Tool | **Coverage unresolved** — Archived formatter creates UFS images; exact supported output profiles are not fully documented. Offline extraction/editing is outside the bar and is not counted as a mount. | E36 |
+| Linux; macOS | UFS2Tool | **Coverage unresolved** (`Partial*`) — Archived formatter creates UFS images; exact supported output profiles are not fully documented. Offline extraction/editing is outside the bar and is not counted as a mount. | E36 |
 | Linux; FreeBSD; OpenBSD | fuse-ufs | **Partial** — FreeBSD UFS2 implementation explicitly lacks ACL support; experimental writes do not imply complete FreeBSD UFS2 semantics. | E41 |
 | Linux; Windows | FsRover | **Partial** — Mount bridge lacks ACL/xattr operations and substitutes host ownership on Linux; BSD/Solaris file reading is not complete variant-specific metadata access. | E4 |
 | FreeBSD | UFS2 | **Largely implemented** — Native FreeBSD implementation is the reference for its own UFS variant; cross-BSD incompatibility is not itself a missing implementation feature. | E37 |
@@ -153,9 +161,9 @@ features absent from exFAT’s design do not count as implementation defects.
 | OS | Solution | Assessment | Evidence |
 | --- | --- | --- | --- |
 | Linux | linux_hammer2 + hammer2-utils | **Largely implemented** — Documents broad local-volume operations, compression, checksums, deduplication and snapshots. Remote replication is limited; experimental clustering is not the ordinary local-filesystem benchmark. | E43 |
-| Linux; FreeBSD | hammer2-fuse | **Coverage unresolved** — Read-only frontend reuses HAMMER2 code; exact mounted metadata and layout coverage is not comprehensively documented. Read-only mode alone does not justify Partial. | E44 |
+| Linux; FreeBSD | hammer2-fuse | **Coverage unresolved** (`Partial*`) — Read-only frontend reuses HAMMER2 code; exact mounted metadata and layout coverage is not comprehensively documented. Read-only mode alone does not justify Partial. | E44 |
 | Linux; FreeBSD; OpenBSD; NetBSD | portable makefs | **Largely implemented** — Generates filesystem images using the ported formatter. No important formatting-only gap identified; NM already records the absence of a mount. | E42 |
-| FreeBSD | hammer2 port | **Coverage unresolved** — Experimental port of DragonFly HAMMER2. Complete parity of mounted metadata, recovery and multi-volume behavior is not established by the public port description. | E45 |
+| FreeBSD | hammer2 port | **Coverage unresolved** (`Partial*`) — Experimental port of DragonFly HAMMER2. Complete parity of mounted metadata, recovery and multi-volume behavior is not established by the public port description. | E45 |
 | DragonFly BSD | HAMMER2 | **Largely implemented** — Reference HAMMER2 implementation for local data volumes, including checksums, compression and PFS/snapshots. | E40 |
 | Windows | portable makefs (Cygwin) | **Largely implemented** — Generates filesystem images using the ported formatter. No important formatting-only gap identified; NM already records the absence of a mount. | E42 |
 
@@ -166,26 +174,26 @@ features absent from exFAT’s design do not count as implementation defects.
 | Linux | kernel NTFS + mkntfs | **Partial** — Kernel choice matters: ntfs3 lists full write journaling as unfinished; the newer ntfs driver rejects explicit size changes for compressed files. This is not one uniform kernel implementation. | E46 |
 | Linux; FreeBSD | NTFS-3G | **Partial** — Normal file/metadata support is broad, but writes are not logged as Windows NTFS transactions; default unclean-volume recovery clears the Windows log. | E47 |
 | Linux; Windows | FsRover | **Partial** — No alternate data streams; encrypted file contents are ciphertext, and reparse handling covers only selected types. | E4 |
-| Linux | Paragon NTFS for Linux Free | **Coverage unresolved** — Vendor documents broad NTFS support. A current exhaustive feature/recovery comparison is unavailable; Free lacks the Professional formatter. Do not substitute ntfs3’s limitations for this commercial engine. | E48 |
-| Linux | Paragon NTFS for Linux Professional | **Coverage unresolved** — Vendor documents broad NTFS support. A current exhaustive feature/recovery comparison is unavailable; Free lacks the Professional formatter. Do not substitute ntfs3’s limitations for this commercial engine. | E48 |
-| macOS | macOS | **Coverage unresolved** — Built-in reads are documented. Current feature-by-feature mounted coverage, including Windows reparse-point behavior, is not established here. Read-only alone is not Partial. | E49 |
-| macOS | PolyDrive Disk | **Coverage unresolved** — Vendor advertises normal file operations and journal recovery; published material does not establish complete metadata and filesystem-specific feature coverage. | E8 |
-| macOS | NTFSTool | **Coverage unresolved** — Named-stream xattrs are documented, but the NTFS engine is supplied as a prebuilt library. Open app/glue source does not establish full engine coverage. | E50 |
+| Linux | Paragon NTFS for Linux Free | **Coverage unresolved** (`Partial*`) — Vendor documents broad NTFS support. A current exhaustive feature/recovery comparison is unavailable; Free lacks the Professional formatter. Do not substitute ntfs3’s limitations for this commercial engine. | E48 |
+| Linux | Paragon NTFS for Linux Professional | **Coverage unresolved** (`Partial*`) — Vendor documents broad NTFS support. A current exhaustive feature/recovery comparison is unavailable; Free lacks the Professional formatter. Do not substitute ntfs3’s limitations for this commercial engine. | E48 |
+| macOS | macOS | **Coverage unresolved** (`Partial*`) — Built-in reads are documented. Current feature-by-feature mounted coverage, including Windows reparse-point behavior, is not established here. Read-only alone is not Partial. | E49 |
+| macOS | PolyDrive Disk | **Coverage unresolved** (`Partial*`) — Vendor advertises normal file operations and journal recovery; published material does not establish complete metadata and filesystem-specific feature coverage. | E8 |
+| macOS | NTFSTool | **Coverage unresolved** (`Partial*`) — Named-stream xattrs are documented, but the NTFS engine is supplied as a prebuilt library. Open app/glue source does not establish full engine coverage. | E50 |
 | macOS | TT NTFS Native | **Partial** — Upstream lists creating compressed files as not yet supported. Documented Windows-compatible journal repair does not establish every NTFS feature. | E51 |
 | macOS | NTFS-3G + macFUSE | **Partial** — Normal file/metadata support is broad, but writes are not logged as Windows NTFS transactions; default unclean-volume recovery clears the Windows log. | E47 |
 | macOS | NTFS-3G for FUSE-T | **Partial** — Normal file/metadata support is broad, but writes are not logged as Windows NTFS transactions; default unclean-volume recovery clears the Windows log. | E47 |
 | macOS | anylinuxfs | **Partial** — Defaults to NTFS-3G and optionally uses ntfs3; both have write-journaling gaps described in the Linux NTFS/NTFS-3G assessments. NFS adds a documented default-driver I/O limitation. | E7 |
 | macOS | NTFS4Mac | **Partial** — No named streams/xattrs or POSIX ownership mapping; recovery resets the log rather than implementing full Windows crash recovery. | E52 |
-| macOS | CrossDriver Free | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
-| macOS | Paragon NTFS for Mac | **Coverage unresolved** — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
-| macOS | Tuxera NTFS for Mac | **Coverage unresolved** — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
-| macOS | iBoysoft NTFS for Mac | **Coverage unresolved** — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
-| macOS | vmount Pro | **Coverage unresolved** — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
-| macOS | CrossDriver NTFS for Mac Pro | **Coverage unresolved** — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
-| macOS | EaseUS NTFS for Mac | **Coverage unresolved** — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
-| macOS | NTFSTool Pro | **Coverage unresolved** — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
+| macOS | CrossDriver Free | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| macOS | Paragon NTFS for Mac | **Coverage unresolved** (`Partial*`) — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
+| macOS | Tuxera NTFS for Mac | **Coverage unresolved** (`Partial*`) — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
+| macOS | iBoysoft NTFS for Mac | **Coverage unresolved** (`Partial*`) — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
+| macOS | vmount Pro | **Coverage unresolved** (`Partial*`) — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
+| macOS | CrossDriver NTFS for Mac Pro | **Coverage unresolved** (`Partial*`) — Mounted access is documented, but complete ACL, metadata and on-disk feature coverage is not. Free/Pro and announced future capabilities must remain separate. | E19 |
+| macOS | EaseUS NTFS for Mac | **Coverage unresolved** (`Partial*`) — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
+| macOS | NTFSTool Pro | **Coverage unresolved** (`Partial*`) — Vendor documents ordinary NTFS writes, but no sufficiently complete current benchmark for streams, permissions, compressed writes and crash recovery was located. No claim of full implementation is made. | E53 |
 | FreeBSD; OpenBSD | libfsntfs | **Largely implemented** — Reads current NTFS 3.0/3.1 including LZNT1/WOF compression and case-sensitive directories. EFS plaintext decryption is absent; that optional credential-dependent feature alone does not cross this benchmark’s threshold. | E54 |
-| OpenBSD; DragonFly BSD | mount_ntfs | **Coverage unresolved** — Legacy-style native reader is documented; a complete current format-feature and metadata assessment is unavailable. Read-only mode alone does not establish Partial. | E55 |
+| OpenBSD; DragonFly BSD | mount_ntfs | **Coverage unresolved** (`Partial*`) — Legacy-style native reader is documented; a complete current format-feature and metadata assessment is unavailable. Read-only mode alone does not establish Partial. | E55 |
 | OpenBSD | ntfs-3g | **Partial** — Normal file/metadata support is broad, but writes are not logged as Windows NTFS transactions; default unclean-volume recovery clears the Windows log. | E47 |
 | NetBSD | mount_ntfs | **Partial** — Writes only overwrite eligible existing data without create/delete/resize; native NTFS operations are substantially incomplete. | E55 |
 | NetBSD | fuse-ntfs-3g + ntfsprogs | **Partial** — Normal file/metadata support is broad, but writes are not logged as Windows NTFS transactions; default unclean-volume recovery clears the Windows log. | E47 |
@@ -200,7 +208,7 @@ features absent from exFAT’s design do not count as implementation defects.
 | Linux | exfat-fuse + exfat-utils | **Largely implemented** — Upstream exFAT driver and utilities cover normal exFAT file operations. Journaling, POSIX ACLs and hardlinks are not exFAT features, so their absence is not Partial. | E57 |
 | Linux; Windows | FsRover | **Largely implemented** — Normal exFAT reading is documented; no important format-reader gap identified. R already records no writes. | E4 |
 | macOS | Disk Utility / exFAT | **Largely implemented** — Reference macOS implementation; device and image workflows are documented. | E2 |
-| macOS | vmount Pro | **Coverage unresolved** — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
+| macOS | vmount Pro | **Coverage unresolved** (`Partial*`) — Formatting and ordinary mounts are advertised. The public product description does not establish the metadata, recovery and format-feature benchmark for each filesystem. | E13 |
 | FreeBSD | fusefs-exfat + formatter | **Largely implemented** — Upstream exFAT driver and utilities cover normal exFAT file operations. Journaling, POSIX ACLs and hardlinks are not exFAT features, so their absence is not Partial. | E57 |
 | OpenBSD | exfat-fuse | **Largely implemented** — Upstream exFAT driver and utilities cover normal exFAT file operations. Journaling, POSIX ACLs and hardlinks are not exFAT features, so their absence is not Partial. | E57 |
 | NetBSD | fuse-exfat | **Largely implemented** — Upstream exFAT driver and utilities cover normal exFAT file operations. Journaling, POSIX ACLs and hardlinks are not exFAT features, so their absence is not Partial. | E57 |
@@ -214,10 +222,10 @@ features absent from exFAT’s design do not count as implementation defects.
 | Linux; FreeBSD | OpenZFS | **Largely implemented** — Current OpenZFS family covers core pool/dataset, integrity, snapshot, compression and encryption operations. Active feature flags still govern cross-version imports. | E58 |
 | Linux; Windows | FsRover | **Partial** — Restricted pool-feature whitelist and no native dataset encryption support. | E4 |
 | macOS | OpenZFS on OS X | **Largely implemented** — Current OpenZFS family covers core pool/dataset, integrity, snapshot, compression and encryption operations. Active feature flags still govern cross-version imports. | E58 |
-| macOS | anylinuxfs | **Coverage unresolved** — Uses Linux drivers and OpenZFS through NFS. Broad file access is documented; preservation of each filesystem’s ACLs, xattrs and special operations through NFS is not established. | E6 |
+| macOS | anylinuxfs | **Coverage unresolved** (`Partial*`) — Uses Linux drivers and OpenZFS through NFS. Broad file access is documented; preservation of each filesystem’s ACLs, xattrs and special operations through NFS is not established. | E6 |
 | NetBSD | base ZFS | **Partial** — NetBSD documents that ZFS extended-attribute support is not wired up (PR 58556), an important mounted metadata gap independent of pool feature flags. | E59 |
-| Windows | OpenZFS on Windows | **Coverage unresolved** — Prerelease port retains the OpenZFS engine. Windows ACL/xattr projection and recovery parity are not established by its release description; Beta records maturity separately. | E58 |
-| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
+| Windows | OpenZFS on Windows | **Coverage unresolved** (`Partial*`) — Prerelease port retains the OpenZFS engine. Windows ACL/xattr projection and recovery parity are not established by its release description; Beta records maturity separately. | E58 |
+| Windows | DiskInternals Linux Reader Pro | **Coverage unresolved** (`Partial*`) — Drive-letter access is advertised. Complete metadata semantics and compatible feature profiles are not documented; file preview/export alone is excluded from the research bar. | E21 |
 
 ## Evidence
 

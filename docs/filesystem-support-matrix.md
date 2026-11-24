@@ -1,97 +1,102 @@
 # OS / Filesystem Research
 
 Survey date 2026-11-24. Every previously researched offering is restored: 160
-solution entries across 70 OS/filesystem cells, without prefix consolidation.
+solution entries across 70 OS/filesystem cells, without consolidation.
 Each cell contains tags only. Blank filesystem labels continue the preceding
 filesystem; each entry matches the [solution key](#solution-key) in cell order.
 The [tag guide](filesystem-research-tags.md) defines the research bar and the
 feature benchmark. The [implementation assessment](filesystem-implementation-assessment.md)
 records each solution’s verdict, limitations and sources.
 
-`Partial` at the end means important filesystem features are missing. A native,
-free or paid driver can receive it. No suffix is not proof of completeness:
-insufficient published feature coverage is explicitly recorded in the assessment.
+All status tags are prefixes in this order: `Paid`, `Beta`, `Partial` or
+`Partial*`, `Outdated`. Omitted statuses mean free, production, fully/largely
+implemented and current, respectively. `Partial` records confirmed important
+feature gaps; `Partial*` records undetermined completeness, with the missing
+evidence explained in the assessment. This marks all 55 unresolved offerings
+explicitly; 68 offerings have confirmed gaps and 37 are largely implemented.
 This is documentation/source research, not runtime qualification or a Lurker
 integration claim. Existing format/mount target tags are retained.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | F M R/W | NF M R/W Partial | F M R/W Partial | F M R Partial | F M R Partial | F M R Partial | F NM |
-|  | NF M R Partial | NF M R/W | Beta F M R/W Partial |  | Beta NF M R/W Partial |  | F NM |
-|  |  | NF MP R/W | Outdated NF M R/W Partial |  |  |  | FP NM |
-|  |  | NF M R Partial |  |  |  |  | NF M R/W Partial |
-|  |  | Beta F M R/W Partial |  |  |  |  | NF M R Partial |
-|  |  | Beta F M R/W Partial |  |  |  |  | NF MP R |
-|  |  | Paid FP MP R/W (1) Partial |  |  |  |  | Paid FP MP R/W (3) |
-|  |  | Paid FP MP R/W (2) |  |  |  |  | Paid NF MP R/W (4) |
-|  |  |  |  |  |  |  | Paid FP MP R/W (5) |
-|  |  |  |  |  |  |  | Paid NF MP R (6) |
-| **Btrfs** | F M R/W | NF M R/W Partial | Outdated NF M R/W Partial | — | — | — | F M R/W Partial |
-|  | NF M R Partial | NF M R/W |  |  |  |  | NF M R Partial |
-|  |  | NF MP R/W |  |  |  |  | NF MP R |
-|  |  | Beta NF M R Partial |  |  |  |  | Paid NF MP R (3) |
-|  |  | Paid FP MP R/W |  |  |  |  | Paid FP MP R/W (5) |
-|  |  |  |  |  |  |  | Paid NF MP R (6) |
-| **XFS** | F M R/W | NF M R/W Partial | F NM | Beta NF M R Partial | — | — | NF M R Partial |
-|  | NF M R Partial | NF M R/W | Beta NF M R Partial |  |  |  | NF MP R |
-|  |  | NF MP R/W | Outdated NF M R/W Partial |  |  |  | Paid NF MP R/W (3) |
-|  |  | Beta F M R/W Partial |  |  |  |  | Paid FP MP R/W (5) |
-|  |  | Paid FP MP R/W |  |  |  |  | Paid NF MP R (6) |
-| **APFS** | NF M R Partial | F M R/W | Beta NF M R Partial | Beta NF M R Partial | — | — | NF M R Partial |
-|  | Beta F M R/W Partial |  |  |  |  |  | NF MP R |
-|  | Beta NF M R Partial |  |  |  |  |  | Beta NF M R/W Partial |
-|  | NF M R Partial |  |  |  |  |  | Beta NF MP R/LW Partial |
-|  | Paid NF MP R/W Partial |  |  |  |  |  | Paid NF MP LR/W (7) Partial |
-|  |  |  |  |  |  |  | Paid MP R/W (8) |
-|  |  |  |  |  |  |  | Paid NF MP R (6) |
-|  |  |  |  |  |  |  | Paid FP MP R (13) |
-| **UFS1 / FFSv1** | FI M R Partial | Outdated FI NM | F M R/W | F M R/W | F M R/W | F M R/W | Outdated F MI R/LW Partial |
-|  | Beta FI M R/W Partial |  |  |  |  |  | NF M R Partial |
-|  | Outdated FI NM |  |  |  |  |  |  |
-|  | NF M R Partial |  |  |  |  |  |  |
-| **UFS2 / FFSv2** | FI M R Partial | Outdated FI NM | F M R/W | F M R/W | F M R/W | FI NM | Outdated F MI R/LW Partial |
-|  | Beta FI M R/W Partial |  | Beta NF M R/W Partial | Beta NF M R/W Partial |  |  | NF M R Partial |
-|  | Outdated FI NM |  |  |  |  |  |  |
-|  | Beta NF M R/W Partial |  |  |  |  |  |  |
-|  | NF M R Partial |  |  |  |  |  |  |
-| **HAMMER2** | Beta F M R/W | — | Beta F M R/W | FI NM | FI NM | F M R/W | FI NM |
-|  | Beta NF M R |  | Beta NF M R |  |  |  |  |
+| **ext4** | F M R/W | Partial NF M R/W | Partial F M R/W | Partial F M R | Partial F M R | Partial F M R | Partial* F NM |
+|  | Partial NF M R | Partial* NF M R/W | Beta Partial F M R/W |  | Beta Partial NF M R/W |  | Partial* F NM |
+|  |  | Partial* NF MP R/W | Partial Outdated NF M R/W |  |  |  | Partial* FP NM |
+|  |  | Partial NF M R |  |  |  |  | Partial NF M R/W |
+|  |  | Beta Partial F M R/W |  |  |  |  | Partial NF M R |
+|  |  | Beta Partial F M R/W |  |  |  |  | Partial* NF MP R |
+|  |  | Paid Partial FP MP R/W (1) |  |  |  |  | Paid Partial* FP MP R/W (3) |
+|  |  | Paid Partial* FP MP R/W (2) |  |  |  |  | Paid Partial* NF MP R/W (4) |
+|  |  |  |  |  |  |  | Paid Partial* FP MP R/W (5) |
+|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
+| **Btrfs** | F M R/W | Partial NF M R/W | Partial Outdated NF M R/W | — | — | — | Partial F M R/W |
+|  | Partial NF M R | Partial* NF M R/W |  |  |  |  | Partial NF M R |
+|  |  | Partial* NF MP R/W |  |  |  |  | Partial* NF MP R |
+|  |  | Beta Partial NF M R |  |  |  |  | Paid Partial* NF MP R (3) |
+|  |  | Paid Partial* FP MP R/W |  |  |  |  | Paid Partial* FP MP R/W (5) |
+|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
+| **XFS** | F M R/W | Partial NF M R/W | F NM | Beta Partial NF M R | — | — | Partial NF M R |
+|  | Partial NF M R | Partial* NF M R/W | Beta Partial NF M R |  |  |  | Partial* NF MP R |
+|  |  | Partial* NF MP R/W | Partial Outdated NF M R/W |  |  |  | Paid Partial* NF MP R/W (3) |
+|  |  | Beta Partial F M R/W |  |  |  |  | Paid Partial* FP MP R/W (5) |
+|  |  | Paid Partial* FP MP R/W |  |  |  |  | Paid Partial* NF MP R (6) |
+| **APFS** | Partial NF M R | F M R/W | Beta Partial NF M R | Beta Partial NF M R | — | — | Partial NF M R |
+|  | Beta Partial F M R/W |  |  |  |  |  | Partial* NF MP R |
+|  | Beta Partial NF M R |  |  |  |  |  | Beta Partial NF M R/W |
+|  | Partial NF M R |  |  |  |  |  | Beta Partial NF MP R/LW |
+|  | Paid Partial NF MP R/W |  |  |  |  |  | Paid Partial NF MP LR/W (7) |
+|  |  |  |  |  |  |  | Paid Partial* MP R/W (8) |
+|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
+|  |  |  |  |  |  |  | Paid Partial* FP MP R (13) |
+| **UFS1 / FFSv1** | Partial FI M R | Partial* Outdated FI NM | F M R/W | F M R/W | F M R/W | F M R/W | Partial Outdated F MI R/LW |
+|  | Beta Partial FI M R/W |  |  |  |  |  | Partial NF M R |
+|  | Partial* Outdated FI NM |  |  |  |  |  |  |
+|  | Partial NF M R |  |  |  |  |  |  |
+| **UFS2 / FFSv2** | Partial FI M R | Partial* Outdated FI NM | F M R/W | F M R/W | F M R/W | FI NM | Partial Outdated F MI R/LW |
+|  | Beta Partial FI M R/W |  | Beta Partial NF M R/W | Beta Partial NF M R/W |  |  | Partial NF M R |
+|  | Partial* Outdated FI NM |  |  |  |  |  |  |
+|  | Beta Partial NF M R/W |  |  |  |  |  |  |
+|  | Partial NF M R |  |  |  |  |  |  |
+| **HAMMER2** | Beta F M R/W | — | Beta Partial* F M R/W | FI NM | FI NM | F M R/W | FI NM |
+|  | Beta Partial* NF M R |  | Beta Partial* NF M R |  |  |  |  |
 |  | FI NM |  | FI NM |  |  |  |  |
-| **NTFS** | F M R/W Partial | NF M R | F M R/W Partial | NF M R | Beta NF M R/LW Partial | Outdated NF M R | F M R/W |
-|  | F M R/W Partial | NF MP R/W | Beta NF M R | F M R/W Partial | F M R/W Partial | F NM | NF M R Partial |
-|  | NF M R Partial | NF MP R/W |  | Beta NF M R |  |  |  |
-|  | NF M R/W | NF MP R/W Partial |  |  |  |  |  |
-|  | Paid F M R/W | F M R/W Partial |  |  |  |  |  |
-|  |  | NF M R/W Partial |  |  |  |  |  |
-|  |  | NF M R/W Partial |  |  |  |  |  |
-|  |  | Beta F M R/W Partial |  |  |  |  |  |
-|  |  | NF MP R |  |  |  |  |  |
-|  |  | Paid FP MP R/W (9) |  |  |  |  |  |
-|  |  | Paid F M R/W (10) |  |  |  |  |  |
-|  |  | Paid FP MP R/W (11) |  |  |  |  |  |
-|  |  | Paid FP MP R/W (2) |  |  |  |  |  |
-|  |  | Paid FP MP R/W (12) |  |  |  |  |  |
-|  |  | Paid NF MP R/W (14) |  |  |  |  |  |
-|  |  | Paid FP MP R/W (15) |  |  |  |  |  |
+| **NTFS** | Partial F M R/W | Partial* NF M R | Partial F M R/W | Partial* NF M R | Beta Partial NF M R/LW | Partial* Outdated NF M R | F M R/W |
+|  | Partial F M R/W | Partial* NF MP R/W | Beta NF M R | Partial F M R/W | Partial F M R/W | F NM | Partial NF M R |
+|  | Partial NF M R | Partial* NF MP R/W |  | Beta NF M R |  |  |  |
+|  | Partial* NF M R/W | Partial NF MP R/W |  |  |  |  |  |
+|  | Paid Partial* F M R/W | Partial F M R/W |  |  |  |  |  |
+|  |  | Partial NF M R/W |  |  |  |  |  |
+|  |  | Partial NF M R/W |  |  |  |  |  |
+|  |  | Beta Partial F M R/W |  |  |  |  |  |
+|  |  | Partial* NF MP R |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (9) |  |  |  |  |  |
+|  |  | Paid Partial* F M R/W (10) |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (11) |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (2) |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (12) |  |  |  |  |  |
+|  |  | Paid Partial* NF MP R/W (14) |  |  |  |  |  |
+|  |  | Paid Partial* FP MP R/W (15) |  |  |  |  |  |
 | **exFAT** | F M R/W | F M R/W | F M R/W | F M R/W | F M R/W | F NM | F M R/W |
-|  | F M R/W | Paid FP MP R/W |  |  |  |  | NF M R |
+|  | F M R/W | Paid Partial* FP MP R/W |  |  |  |  | NF M R |
 |  | NF M R |  |  |  |  |  |  |
-| **ZFS / OpenZFS** | F M R/W | F M R/W | F M R/W | — | F M R/W Partial | — | Beta F M R/W |
-|  | NF M R Partial | NF M R/W |  |  |  |  | NF M R Partial |
-|  |  |  |  |  |  |  | Paid NF MP R |
+| **ZFS / OpenZFS** | F M R/W | F M R/W | F M R/W | — | Partial F M R/W | — | Beta Partial* F M R/W |
+|  | Partial NF M R | Partial* NF M R/W |  |  |  |  | Partial NF M R |
+|  |  |  |  |  |  |  | Paid Partial* NF MP R |
 
 **Legend.** `F` formats both partitions and images, `FP` partitions, `FI` images,
 `NF` neither. `M` mounts both targets, `MP` partitions, `MI` images, `NM` neither.
 `R` is read-only and `R/W` is read/write. `LR`, `R/LW`, `LR/W` and `LR/LW`
 indicate limited reads, limited writes, or both, as defined in the tag guide.
-`Beta` flags experimental routes, `Outdated` flags legacy routes, `Paid` flags
-retail routes, and `—` means the audit found no qualifying solution. A single
+`Paid` flags retail offerings, `Beta` experimental maturity, `Partial` confirmed
+important feature gaps, `Partial*` undetermined completeness, and `Outdated`
+legacy maintenance status. These are independent prefixes; defaults are
+implicit. `—` means the audit found no qualifying solution. A single
 target tag reports that target. Where evidence leaves a capability
 unverified, the notes identify the limitation and the line omits an
 unverified tag. Formatting and mounting are independent, including when
-a formatter is combined with a separate mount driver. `Partial` flags an
-important missing filesystem feature, independently of access mode, maturity,
-price or mount transport. See the assessment for confirmed gaps and unresolved coverage.
+a formatter is combined with a separate mount driver. Every `Partial*` has a
+specific uncertainty and checked sources in the implementation assessment;
+it does not assert a confirmed missing feature.
 
 ## Solution key
 
