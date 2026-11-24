@@ -20,7 +20,10 @@ ext4, Btrfs, and XFS on Linux, APFS on macOS, NTFS on Windows, UFS2 on FreeBSD,
 FFSv2 on NetBSD and OpenBSD, and HAMMER2 or UFS on DragonFly BSD.
 [L1, L5, M1, W1, W2, F1, N1, O1, D1–D3]
 
-## How to read the matrix
+The [OS / Filesystem Research tags](filesystem-research-tags.md) define the
+notation for the revised matrix.
+
+## How to read the current survey
 
 - **Native** means the OS supplies the driver. A formatter may come from a
   separate package. **Package** means a separately installed free driver or
