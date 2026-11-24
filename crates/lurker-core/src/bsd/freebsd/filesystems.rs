@@ -233,7 +233,15 @@ pub(super) fn mount(mapped: &str, target: &Path, readonly: bool) -> AppResult<()
             }
             (
                 "/usr/local/bin/lklfuse",
-                args(&["-o", &format!("{mode},type={fs},fsname={mapped}"), mapped]),
+                args(&[
+                    "-s",
+                    "-o",
+                    &format!(
+                        "{mode},type={fs},fsname={mapped}{}",
+                        if fs == "xfs" { ",opts=norecovery" } else { "" }
+                    ),
+                    mapped,
+                ]),
             )
         }
         "zfs" => {
@@ -272,6 +280,26 @@ pub(super) fn mount(mapped: &str, target: &Path, readonly: bool) -> AppResult<()
     };
     argv.push(target.as_os_str().into());
     exec(program, &argv, None)?;
+    if program == "/usr/local/bin/lklfuse" {
+        // LKL forks before starting its kernel/filesystem. A bounded native
+        // metadata request must succeed before the CLI reports a usable mount.
+        let mut check = args(&["-f", "%d"]);
+        check.push(target.as_os_str().into());
+        super::super::exec_in_locale(
+            "/usr/bin/stat",
+            &check,
+            None,
+            "C",
+            None,
+            std::time::Duration::from_secs(30),
+            None,
+        )
+        .map_err(|e| {
+            AppError::new(format!(
+                "The FreeBSD filesystem driver did not become ready: {e}"
+            ))
+        })?;
+    }
     Ok(())
 }
 
