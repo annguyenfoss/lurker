@@ -45,9 +45,27 @@ to the filesystem syncer. A matched stock `tcplay` control is still required to
 distinguish this behavior from losses elsewhere in the storage path.
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
 
-Receipts are under `target/dragonfly-veracrypt-batch/`. Cold-start verification
-with the new mount path, the corresponding login-user desktop callback, and
-the remaining power-loss comparisons are open. Release support remains planned.
+The optimized `9384badb34f909887c85ebccc7dbe145b01c9794` package
+(`c98b150a8dd600b9559f5b92652b342d4e73324fa0ad2f2177b5bf4a93be35d0`)
+passed the native workspace check and tests in run
+`20261124T094631Z-e15acee7`. Its cold HAMMER2 default create, Auto open, native
+dismount, close and reopen passed without starting the cluster service. A
+login-user desktop callback with the previous test executable and the rebuilt
+installed helper also passed. The exact-build callback and full installed matrix
+are running separately.
+
+The rebuilt CLI reproduced the power-cut failure with a fully allocated image
+on outer HAMMER2. The host completed the cut 358 ms after observing the live
+worker acknowledgement. The pre-workload ciphertext SHA-256 still matched
+on the verified cut-disk copy. That copy lacked the outer readiness record.
+Recovery used the host's saved acknowledgement on scratch storage, opened the
+HAMMER2 vault without repair, and found an empty filesystem. Lurker close
+restored the native mapper and vnode inventory. The original cut disk remains
+preserved.
+
+Receipts are under `target/dragonfly-veracrypt-batch/`. The sparse-image and
+stock `tcplay` power-loss comparisons remain open. Release support remains
+planned.
 
 ## DragonFly VeraCrypt candidate, 2026-11-23
 
