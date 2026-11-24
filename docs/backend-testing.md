@@ -99,6 +99,17 @@ writes. Preserve failures in the application and capacity checks. Require the
 file and directory syncs and SQLite FULL/WAL commit to be acknowledged before a
 power cut. [Power-loss runbook](vm-powerloss-testing.md)
 
+For a separate outer-capacity test, import a hash-verified sparse HAMMER2
+vault onto a dedicated bounded UFS fixture. Sync a marker, close, and reopen
+before filling the outer disk with a fixture-owned file. Check physical free
+space including reserved blocks and confirm the inner filesystem still has
+room. Record each write and fsync result while extending the ciphertext.
+Keep diagnostics outside the full disk. Exercise close both after releasing
+the filler and while holding it with a bounded wait. Record whether close
+completed and whether the mount, mapper and vnode remain. Free the filler,
+retry normal close as needed, then verify the old marker, every acknowledged
+file hash, a new synced file, and the final native inventory.
+
 Use a separate, empty fixture disk for the full FAT32 file-size boundary.
 An 8 GiB UFS fixture fits a fully allocated 4.5 GiB VeraCrypt image and
 provides enough space to distinguish the file-size limit from exhaustion.

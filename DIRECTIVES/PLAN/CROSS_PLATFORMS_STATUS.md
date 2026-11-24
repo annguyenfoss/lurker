@@ -200,6 +200,24 @@ close and Auto reopen, the earlier and newly synced files and the committed
 SQLite rows matched. The receipt is
 `target/dragonfly-veracrypt-batch/hammer2-capacity-B/inner-result.json`.
 
+Two additional tests exhausted the outer UFS filesystem while writing to a
+mounted sparse HAMMER2 vault. Each started with the same stock-`tcplay` AES
+image, 260 MiB logical and about 23 MiB allocated. Each worker wrote and
+fsynced twelve 8 MiB files. The backing filesystem fell below 84 KiB free
+including reserved blocks, and the application received no write or sync
+error. In the first run, freeing the outer filler before close let all twelve
+files and the earlier marker survive authenticated reopen. In the second run,
+the harness held the filler during Lurker close. Native `umount` remained
+blocked for the 60-second deadline and the mount and devices were still
+present when the harness stopped the CLI. Freeing the filler allowed close to
+complete on retry. Auto reopen recovered the earlier file and all twelve
+acknowledged hashes, and a new synced file survived a further close and reopen.
+The final storage and session inventories matched baseline. The missing
+application error and stalled close while outer UFS is full remain a separate
+qualification issue for sparse imports. Receipts are `outer-sparse.jsonl` and
+`outer-held-close.jsonl` under
+`target/dragonfly-veracrypt-batch/hammer2-capacity-B/`.
+
 The same package passed three FAT32 capacity checks on a separate DragonFly
 6.4.2 guest. With 194,928,640 bytes free on a bounded outer UFS filesystem,
 a 260 MiB create with `--force` returned `ENOSPC`. The existing destination's
