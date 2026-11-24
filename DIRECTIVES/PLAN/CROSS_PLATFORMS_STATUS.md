@@ -160,9 +160,19 @@ AES, Serpent and Twofish completed a DragonFly-origin and a Linux-origin
 round trip. Each 379 MiB image retained its 4 KiB-aligned FAT32 geometry.
 The two peers verified the origin marker, then the creator reopened the
 returned image and verified both marker hashes. Both systems restored their
-storage inventories on each visit. The earlier FreeBSD, OpenBSD and macOS
-round trips remain recorded at their original package revision. Windows
-remains unverified.
+storage inventories on each visit.
+
+The same DragonFly package and a VeraCrypt 1.26.31 console build on isolated
+FreeBSD 15.1-RELEASE completed two writable AES FAT32 round trips, one per
+creation direction. The 379 MiB images had 4 KiB clusters and aligned data
+offsets on both peers. The creators verified both marker hashes on return,
+and each ciphertext transfer matched its source digest. All six visits
+restored their storage inventories. The FreeBSD console SHA-256 was
+`92edaf1363133aab8844ddd2c01656174967e260cd046569bd2dcbac64eec8b4`.
+The isolated guest and network were retired after verification. The receipt
+is `target/dragonfly-veracrypt-batch/freebsd-exchange/exchange.json`.
+Earlier OpenBSD and macOS round trips remain recorded at their original
+package revision. Windows remains unverified.
 
 Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse allocation
 reproduced the abrupt power-loss failure. Release support remains planned.
