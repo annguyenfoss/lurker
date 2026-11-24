@@ -1735,6 +1735,11 @@ fn format_filesystem(
         CreateFilesystem::Hammer2 => {
             initialize_native_root(ctx, device_path.as_os_str(), "hammer2", None, owner)?
         }
+        CreateFilesystem::Ext4 => {
+            // e2fsprogs 1.47.0 lacks root_perms. Initialize through the private
+            // mount so supported distribution tools still produce mode 0700.
+            initialize_native_root(ctx, device_path.as_os_str(), "ext4", None, owner)?
+        }
         _ => {}
     }
     Ok(())

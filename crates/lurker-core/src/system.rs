@@ -404,7 +404,7 @@ pub(crate) fn linux_format_args(
         Ext4 => vec![
             "-q".into(),
             "-E".into(),
-            format!("root_owner={}:{},root_perms=0700", owner.uid, owner.gid).into(),
+            format!("root_owner={}:{}", owner.uid, owner.gid).into(),
         ],
         Xfs => vec!["-q".into()],
         Ntfs => vec!["-Q".into(), "-F".into()],
