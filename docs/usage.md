@@ -262,10 +262,13 @@ AES, Serpent, or Twofish, SHA-512, PIM 0, and FAT32 with clusters of at least
 FAT32 allows files up to 4 GiB minus one byte. Its ownership and permissions
 come from each mount and apply to the invoking user. On DragonFly 6.4.2, use
 portable ASCII filenames. Native FAT32 rejects directory `fsync` and lacks the
-locking SQLite needs. DragonFly 6.4.2 power-cut tests with inner HAMMER2 lost
-file writes and a SQLite transaction after their sync calls reported success.
-The candidate remains unqualified for abrupt power loss. DragonFly VeraCrypt
+locking SQLite needs. On DragonFly 6.4.2, abrupt power loss can lose writes
+after `fsync` reports success on either filesystem. DragonFly VeraCrypt
 rejects `--readonly` before attaching the container.
+
+When a sparse HAMMER2 container's backing UFS runs out of space, writes can
+still report success and close can stall. Free space on the filesystem that
+holds the container, let any pending close finish, then retry close as needed.
 
 Close a busy mount after stopping its users. If an operation is interrupted,
 retry `lurker unmount` by source or mountpoint to let Lurker check and release
