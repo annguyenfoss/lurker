@@ -944,6 +944,14 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
             .ok_or_else(|| AppError::new("File container size is required."))?,
     )?;
     let filesystem = c.filesystem.unwrap_or(crate::api::CreateFilesystem::Btrfs);
+    if matches!(
+        filesystem,
+        crate::api::CreateFilesystem::Zfs
+            | crate::api::CreateFilesystem::Apfs
+            | crate::api::CreateFilesystem::Hammer2
+    ) {
+        return Err(AppError::new("Login-user VeraCrypt cannot use APFS, HAMMER2 or OpenZFS; the existing LKL helper has none of these drivers."));
+    }
     let formatter_name = crate::system::linux_formatter(Some(filesystem))?;
     let minimum = if filesystem == crate::api::CreateFilesystem::Xfs {
         384

@@ -384,8 +384,11 @@ pub(crate) fn linux_formatter(
         Ntfs => Ok("mkntfs"),
         Exfat => Ok("mkfs.exfat"),
         Fat32 => Ok("mkfs.fat"),
+        Zfs => Ok("zpool"),
+        Apfs => Ok("mkapfs"),
+        Hammer2 => Ok("newfs_hammer2"),
         other => Err(AppError::new(format!(
-            "Linux cannot create {} through this container adapter. Supported: btrfs, ext4, xfs, ntfs, exfat, fat32.",
+            "Linux cannot create {} through this container adapter. Supported: btrfs, ext4, xfs, ntfs, exfat, fat32, zfs, apfs, hammer2.",
             other.as_str()
         ))),
     }
@@ -407,6 +410,7 @@ pub(crate) fn linux_format_args(
         Ntfs => vec!["-Q".into(), "-F".into()],
         Exfat => vec![],
         Fat32 => vec!["-F".into(), "32".into()],
+        Hammer2 => vec!["-L".into(), "DATA".into()],
         _ => vec![], // linux_formatter rejects unsupported selections first.
     }
 }

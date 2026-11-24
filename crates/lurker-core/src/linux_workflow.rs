@@ -461,7 +461,11 @@ fn luks_create_device(
     }
 
     ctx.output.success(&format!(
-        "Created LUKS+Btrfs volume on {}",
+        "Created LUKS+{} volume on {}",
+        command
+            .filesystem
+            .unwrap_or(CreateFilesystem::Btrfs)
+            .as_str(),
         command.target.display()
     ));
     ctx.output.msg2(&format!("Mapper name: {}", mapper_name));
@@ -603,7 +607,11 @@ fn veracrypt_create_device(
     }
 
     ctx.output.success(&format!(
-        "Created VeraCrypt+Btrfs volume on {}",
+        "Created VeraCrypt+{} volume on {}",
+        command
+            .filesystem
+            .unwrap_or(CreateFilesystem::Btrfs)
+            .as_str(),
         command.target.display()
     ));
     ctx.output.msg2(&format!("Mapper name: {}", mapper_name));
@@ -717,6 +725,12 @@ fn dmcrypt_umount_device(ctx: &mut AppContext, resolved: &ResolvedUmountTarget) 
         resolved.target_kind,
         resolved.origin.display()
     ));
+    let filesystem = detect_filesystem_type(ctx, &resolved.mapper_path)?;
+    if filesystem.as_deref() == Some("zfs_member") {
+        export_zfs(ctx, &resolved.mapper_name)?;
+        crypt_close(ctx, &resolved.mapper_name)?;
+        return Ok(());
+    }
     if let Some(mountpoint) = &resolved.mountpoint {
         ctx.output.msg2(&format!(
             "Unmounting filesystem at {}",
@@ -1189,6 +1203,9 @@ fn mount_open_mapper(
 ) -> AppResult<()> {
     let mapper_path = mapper_device_path(mapper_name);
     let filesystem_type = detect_filesystem_type(ctx, &mapper_path)?;
+    if filesystem_type.as_deref() == Some("zfs_member") {
+        return mount_zfs(ctx, mapper_name, mountpoint, readonly);
+    }
     if let Some(filesystem_type) = &filesystem_type {
         ctx.output
             .msg2(&format!("Detected filesystem: {}", filesystem_type));
@@ -1220,6 +1237,39 @@ fn mount_open_mapper(
     if filesystem_type.as_deref() == Some("ntfs") {
         // The installed NTFS-3G helper is the portable Linux read/write route.
         args.extend([OsString::from("-t"), OsString::from("ntfs-3g")]);
+    }
+    if filesystem_type.as_deref() == Some("apfs") && !readonly {
+        // The separately installed upstream Linux APFS module requires this
+        // explicit opt-in to its experimental writable implementation.
+        options.push("readwrite".into());
+    }
+    if filesystem_type.as_deref() == Some("ufs") {
+        let blkid = ctx
+            .blkid_path()
+            .ok_or_else(|| AppError::new("blkid is required for Linux UFS variant detection."))?
+            .to_path_buf();
+        let probe = ctx.capture_command(
+            &blkid,
+            &[
+                "-o".into(),
+                "value".into(),
+                "-s".into(),
+                "VERSION".into(),
+                "--".into(),
+                mapper_path.clone().into_os_string(),
+            ],
+            true,
+            "Inspect UFS variant",
+        )?;
+        match trim_stdout(&probe).as_str() {
+            "1" => options.push("ufstype=44bsd".into()),
+            "2" => options.push("ufstype=ufs2".into()),
+            _ => {
+                return Err(AppError::new(
+                    "Cannot identify a supported UFS1/UFS2 variant; mount refused.",
+                ))
+            }
+        }
     }
     if filesystem_type.as_deref() == Some("ufs") && !readonly {
         return Err(AppError::new(
@@ -1628,6 +1678,9 @@ fn format_filesystem(
     let filesystem = filesystem.unwrap_or(CreateFilesystem::Btrfs);
     ctx.output
         .msg2(&format!("Creating {} filesystem", filesystem.as_str()));
+    if filesystem == CreateFilesystem::Zfs {
+        return create_zfs(ctx, device_path, owner);
+    }
     let mut args = crate::system::linux_format_args(filesystem, owner);
     // Seed/prototype initialization sets ownership only for newly created roots;
     // ordinary unlock never alters an existing filesystem's metadata.
@@ -1670,7 +1723,239 @@ fn format_filesystem(
     if let Some(seed) = seed.as_ref() {
         let _ = fs::remove_file(seed.parent.join("prototype"));
     }
+    result?;
+    match filesystem {
+        CreateFilesystem::Apfs => initialize_native_root(
+            ctx,
+            device_path.as_os_str(),
+            "apfs",
+            Some("readwrite"),
+            owner,
+        )?,
+        CreateFilesystem::Hammer2 => {
+            initialize_native_root(ctx, device_path.as_os_str(), "hammer2", None, owner)?
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+// ZFS is an inner filesystem here: encryption remains the surrounding mapper.
+// Every pool operation is restricted to one verified mapper; there is no broad
+// import, forced export, persistent cache, or recursive dataset mounting.
+fn zfs_command(
+    ctx: &mut AppContext,
+    args: &[OsString],
+    capture: bool,
+) -> AppResult<std::process::Output> {
+    let program = crate::trusted_system_executable("zpool")?;
+    let output = ctx.capture_command(&program, args, true, "OpenZFS operation failed")?;
+    if !output.status.success() && !capture {
+        return Err(AppError::new(format!(
+            "OpenZFS operation failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(output)
+}
+
+fn verify_zfs_mapper(ctx: &mut AppContext, pool: &str) -> AppResult<()> {
+    let output = zfs_command(ctx, &["status".into(), "-LP".into(), pool.into()], false)?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let leaves: Vec<_> = text
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|token| token.starts_with('/'))
+        .collect();
+    let mapper = fs::canonicalize(mapper_device_path(pool))
+        .map_err(|e| AppError::io("Inspect ZFS mapper identity", e))?;
+    if leaves.len() != 1 || fs::canonicalize(leaves[0]).ok().as_ref() != Some(&mapper) {
+        return Err(AppError::new(
+            "ZFS pool does not contain exactly its expected Lurker mapper; preserving it.",
+        ));
+    }
+    Ok(())
+}
+
+fn export_zfs(ctx: &mut AppContext, pool: &str) -> AppResult<()> {
+    verify_zfs_mapper(ctx, pool)?;
+    zfs_command(ctx, &["export".into(), pool.into()], false)?;
+    Ok(())
+}
+
+fn mount_zfs(ctx: &mut AppContext, pool: &str, mountpoint: &Path, readonly: bool) -> AppResult<()> {
+    let existing = zfs_command(
+        ctx,
+        &[
+            "list".into(),
+            "-H".into(),
+            "-o".into(),
+            "name".into(),
+            pool.into(),
+        ],
+        true,
+    )?;
+    if existing.status.success() {
+        return Err(AppError::new(
+            "The requested ZFS pool name is already imported; refusing to reuse it.",
+        ));
+    }
+    let mapper = mapper_device_path(pool);
+    let discovered = zfs_command(
+        ctx,
+        &[
+            "import".into(),
+            "-d".into(),
+            mapper.clone().into_os_string(),
+        ],
+        true,
+    )?;
+    let text = String::from_utf8_lossy(&discovered.stdout);
+    let ids: Vec<_> = text
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("id:"))
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()))
+        .collect();
+    if ids.len() != 1 {
+        return Err(AppError::new(
+            "Expected exactly one exported ZFS pool on this mapper; import refused.",
+        ));
+    }
+    let mut args: Vec<OsString> = ["import", "-N", "-d"]
+        .into_iter()
+        .map(OsString::from)
+        .collect();
+    args.extend([
+        mapper.into_os_string(),
+        "-o".into(),
+        "cachefile=none".into(),
+    ]);
+    if readonly {
+        args.extend(["-o".into(), "readonly=on".into()]);
+    }
+    args.extend([ids[0].into(), pool.into()]);
+    zfs_command(ctx, &args, false)?;
+    verify_zfs_mapper(ctx, pool)?;
+    let mut args = vec!["-t".into(), "zfs".into()];
+    if readonly {
+        args.extend(["-o".into(), "ro".into()]);
+    }
+    args.extend([pool.into(), mountpoint.as_os_str().to_os_string()]);
+    let mount = crate::trusted_system_executable("mount")?;
+    let result = ctx.run_command(
+        &mount,
+        &args,
+        true,
+        false,
+        "Failed to mount inner ZFS filesystem",
+    );
+    if result.is_err() {
+        export_zfs(ctx, pool)?;
+    }
     result
+}
+
+fn create_zfs(
+    ctx: &mut AppContext,
+    device: &Path,
+    owner: crate::new_filesystem::Owner,
+) -> AppResult<()> {
+    let pool = device
+        .file_name()
+        .and_then(|s| s.to_str())
+        .filter(|s| s.starts_with("lurker_"))
+        .ok_or_else(|| AppError::new("ZFS creation requires a Lurker mapper."))?;
+    zfs_command(
+        ctx,
+        &[
+            "create".into(),
+            "-m".into(),
+            "legacy".into(),
+            "-o".into(),
+            "cachefile=none".into(),
+            "-O".into(),
+            "canmount=noauto".into(),
+            pool.into(),
+            device.as_os_str().to_os_string(),
+        ],
+        false,
+    )?;
+    verify_zfs_mapper(ctx, pool)?;
+    let initialized = initialize_native_root(ctx, std::ffi::OsStr::new(pool), "zfs", None, owner);
+    export_zfs(ctx, pool)?;
+    initialized
+}
+
+fn initialize_native_root(
+    ctx: &mut AppContext,
+    source: &std::ffi::OsStr,
+    filesystem: &str,
+    options: Option<&str>,
+    owner: crate::new_filesystem::Owner,
+) -> AppResult<()> {
+    let seed = EmptyFilesystemRoot::new(owner)?;
+    let mount = crate::trusted_system_executable("mount")?;
+    let mut args: Vec<OsString> = vec!["-t".into(), filesystem.into()];
+    if let Some(options) = options {
+        args.extend(["-o".into(), options.into()]);
+    }
+    args.extend([source.to_os_string(), seed.path.clone().into_os_string()]);
+    ctx.run_command(&mount, &args, true, false, "Initialize new filesystem root")?;
+    let mounted = read_mountinfo()?
+        .into_iter()
+        .find(|m| m.mount_point == seed.path)
+        .ok_or_else(|| {
+            AppError::new("Initialization mount is missing; refusing ownership changes.")
+        })?;
+    let initialized = (|| {
+        let directory = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&seed.path)
+            .map_err(|e| AppError::io("Open new filesystem root", e))?;
+        let descriptor = OsString::from(format!(
+            "/proc/{}/fd/{}",
+            std::process::id(),
+            directory.as_raw_fd()
+        ));
+        let chown = crate::trusted_system_executable("chown")?;
+        ctx.run_command(
+            &chown,
+            &[
+                format!("{}:{}", owner.uid, owner.gid).into(),
+                descriptor.clone(),
+            ],
+            true,
+            false,
+            "Assign new filesystem root owner",
+        )?;
+        let chmod = crate::trusted_system_executable("chmod")?;
+        ctx.run_command(
+            &chmod,
+            &["0700".into(), descriptor],
+            true,
+            false,
+            "Protect new filesystem root",
+        )
+    })();
+    if !read_mountinfo()?
+        .iter()
+        .any(|m| m.mount_id == mounted.mount_id && m.mount_point == seed.path)
+    {
+        return Err(AppError::new(
+            "Initialization mount identity changed; preserving it.",
+        ));
+    }
+    let umount = crate::trusted_system_executable("umount")?;
+    ctx.run_command(
+        &umount,
+        &[seed.path.clone().into_os_string()],
+        true,
+        false,
+        "Close new filesystem initialization mount",
+    )?;
+    initialized
 }
 
 fn assign_new_image_owner(path: &Path, owner: crate::new_filesystem::Owner) -> AppResult<()> {

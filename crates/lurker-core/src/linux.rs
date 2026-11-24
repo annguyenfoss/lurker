@@ -134,6 +134,13 @@ pub fn find_mount_source_for_mountpoint(target: &Path) -> AppResult<Option<PathB
     let mounts = read_mountinfo()?;
     for mount in mounts {
         if mount.mount_point == target {
+            if mount.fs_type == "zfs" {
+                if let Some(pool) = mount.source.as_deref().and_then(|p| p.to_str()) {
+                    if pool.starts_with("lurker_") && !pool.contains('/') {
+                        return Ok(Some(mapper_device_path(pool)));
+                    }
+                }
+            }
             return Ok(mount.source);
         }
     }
@@ -143,7 +150,14 @@ pub fn find_mount_source_for_mountpoint(target: &Path) -> AppResult<Option<PathB
 pub fn find_mountpoint_for_source(source: &Path) -> AppResult<Option<PathBuf>> {
     let mounts = read_mountinfo()?;
     for mount in &mounts {
-        if mount.source.as_deref() == Some(source) {
+        if mount.source.as_deref() == Some(source)
+            || (mount.fs_type == "zfs"
+                && source.parent() == Some(Path::new("/dev/mapper"))
+                && source.file_name().is_some_and(|pool| {
+                    pool.as_encoded_bytes().starts_with(b"lurker_")
+                        && mount.source.as_deref() == Some(Path::new(pool))
+                }))
+        {
             return Ok(Some(mount.mount_point.clone()));
         }
     }
