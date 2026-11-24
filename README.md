@@ -243,92 +243,37 @@ Lurker chooses the native format for your OS. Use administrator authorization wh
 
 ## Filesystem PLanning
 
-OS/filesystem capabilities for planning. See the [solution key](docs/filesystem-support-matrix.md#solution-key), [tag system](docs/filesystem-research-tags.md), and [implementation assessments](docs/filesystem-implementation-assessment.md) for individual offerings, limitations and sources.
+OS/filesystem capabilities for the stated partition/container use case. See the [research notes](docs/filesystem-support-matrix.md), [tag system](docs/filesystem-research-tags.md), and [detailed assessments](docs/filesystem-implementation-assessment.md) for scope, individual solutions and sources.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | F M R/W | Partial NF M R/W | Partial F M R/W | Partial F M R | Partial F M R | Partial F M R | Partial* F NM |
-|  | Partial NF M R | Partial* NF M R/W | Beta Partial F M R/W |  | Beta Partial NF M R/W |  | Partial* F NM |
-|  |  | Partial* NF MP R/W | Partial Outdated NF M R/W |  |  |  | Partial* FP NM |
-|  |  | Partial NF M R |  |  |  |  | Partial NF M R/W |
-|  |  | Beta Partial F M R/W |  |  |  |  | Partial NF M R |
-|  |  | Beta Partial F M R/W |  |  |  |  | Partial* NF MP R |
-|  |  | Paid Partial FP MP R/W (1) |  |  |  |  | Paid Partial* FP MP R/W (3) |
-|  |  | Paid Partial* FP MP R/W (2) |  |  |  |  | Paid Partial* NF MP R/W (4) |
-|  |  |  |  |  |  |  | Paid Partial* FP MP R/W (5) |
-|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
-| **Btrfs** | F M R/W | Partial NF M R/W | Partial Outdated NF M R/W | — | — | — | Partial F M R/W |
-|  | Partial NF M R | Partial* NF M R/W |  |  |  |  | Partial NF M R |
-|  |  | Partial* NF MP R/W |  |  |  |  | Partial* NF MP R |
-|  |  | Beta Partial NF M R |  |  |  |  | Paid Partial* NF MP R (3) |
-|  |  | Paid Partial* FP MP R/W |  |  |  |  | Paid Partial* FP MP R/W (5) |
-|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
-| **XFS** | F M R/W | Partial NF M R/W | F NM | Beta Partial NF M R | — | — | Partial NF M R |
-|  | Partial NF M R | Partial* NF M R/W | Beta Partial NF M R |  |  |  | Partial* NF MP R |
-|  |  | Partial* NF MP R/W | Partial Outdated NF M R/W |  |  |  | Paid Partial* NF MP R/W (3) |
-|  |  | Beta Partial F M R/W |  |  |  |  | Paid Partial* FP MP R/W (5) |
-|  |  | Paid Partial* FP MP R/W |  |  |  |  | Paid Partial* NF MP R (6) |
-| **APFS** | Partial NF M R | F M R/W | Beta Partial NF M R | Beta Partial NF M R | — | — | Partial NF M R |
-|  | Beta Partial F M R/W |  |  |  |  |  | Partial* NF MP R |
-|  | Beta Partial NF M R |  |  |  |  |  | Beta Partial NF M R/W |
-|  | Partial NF M R |  |  |  |  |  | Beta Partial NF MP R/LW |
-|  | Paid Partial NF MP R/W |  |  |  |  |  | Paid Partial NF MP LR/W (7) |
-|  |  |  |  |  |  |  | Paid Partial* MP R/W (8) |
-|  |  |  |  |  |  |  | Paid Partial* NF MP R (6) |
-|  |  |  |  |  |  |  | Paid Partial* FP MP R (13) |
-| **UFS1 / FFSv1** | Partial FI M R | Partial* Outdated FI NM | F M R/W | F M R/W | F M R/W | F M R/W | Partial Outdated F MI R/LW |
-|  | Beta Partial FI M R/W |  |  |  |  |  | Partial NF M R |
-|  | Partial* Outdated FI NM |  |  |  |  |  |  |
-|  | Partial NF M R |  |  |  |  |  |  |
-| **UFS2 / FFSv2** | Partial FI M R | Partial* Outdated FI NM | F M R/W | F M R/W | F M R/W | FI NM | Partial Outdated F MI R/LW |
-|  | Beta Partial FI M R/W |  | Beta Partial NF M R/W | Beta Partial NF M R/W |  |  | Partial NF M R |
-|  | Partial* Outdated FI NM |  |  |  |  |  |  |
-|  | Beta Partial NF M R/W |  |  |  |  |  |  |
-|  | Partial NF M R |  |  |  |  |  |  |
-| **HAMMER2** | Beta F M R/W | — | Beta Partial* F M R/W | FI NM | FI NM | F M R/W | FI NM |
-|  | Beta Partial* NF M R |  | Beta Partial* NF M R |  |  |  |  |
-|  | FI NM |  | FI NM |  |  |  |  |
-| **NTFS** | Partial F M R/W | Partial* NF M R | Partial F M R/W | Partial* NF M R | Beta Partial NF M R/LW | Partial* Outdated NF M R | F M R/W |
-|  | Partial F M R/W | Partial* NF MP R/W | Beta NF M R | Partial F M R/W | Partial F M R/W | F NM | Partial NF M R |
-|  | Partial NF M R | Partial* NF MP R/W |  | Beta NF M R |  |  |  |
-|  | Partial* NF M R/W | Partial NF MP R/W |  |  |  |  |  |
-|  | Paid Partial* F M R/W | Partial F M R/W |  |  |  |  |  |
-|  |  | Partial NF M R/W |  |  |  |  |  |
-|  |  | Partial NF M R/W |  |  |  |  |  |
-|  |  | Beta Partial F M R/W |  |  |  |  |  |
-|  |  | Partial* NF MP R |  |  |  |  |  |
-|  |  | Paid Partial* FP MP R/W (9) |  |  |  |  |  |
-|  |  | Paid Partial* F M R/W (10) |  |  |  |  |  |
-|  |  | Paid Partial* FP MP R/W (11) |  |  |  |  |  |
-|  |  | Paid Partial* FP MP R/W (2) |  |  |  |  |  |
-|  |  | Paid Partial* FP MP R/W (12) |  |  |  |  |  |
-|  |  | Paid Partial* NF MP R/W (14) |  |  |  |  |  |
-|  |  | Paid Partial* FP MP R/W (15) |  |  |  |  |  |
-| **exFAT** | F M R/W | F M R/W | F M R/W | F M R/W | F M R/W | F NM | F M R/W |
-|  | F M R/W | Paid Partial* FP MP R/W |  |  |  |  | NF M R |
-|  | NF M R |  |  |  |  |  |  |
-| **ZFS / OpenZFS** | F M R/W | F M R/W | F M R/W | — | Partial F M R/W | — | Beta Partial* F M R/W |
-|  | Partial NF M R | Partial* NF M R/W |  |  |  |  | Partial NF M R |
-|  |  |  |  |  |  |  | Paid Partial* NF MP R |
+| **ext4** | ✅ | ☑️ Limited features | ☑️ Legacy | ❗Create + R/O | ☑️ Limited features; beta | ❗Create + R/O | ☑️ Limited features |
+| **Btrfs** | ✅ | ❗R/W; limited features; beta¹ | ☑️ Legacy | — | — | — | ☑️ Limited features |
+| **XFS** | ✅ | ☑️ Limited features | ☑️ Legacy | ❗R/O | — | ❗R/O³ | ❗R/O |
+| **APFS** | ☑️ Limited features; beta | ✅ | ❗R/O | ❗R/O | — | ❗R/O³ | ❗R/W; limited features; beta¹ |
+| **UFS1 / FFSv1** | ☑️ Limited features; beta | ❗Create only | ✅ | ✅ | ✅ | ✅ | ❗Create + R/O |
+| **UFS2 / FFSv2** | ☑️ Limited features; beta | ❗Create + R/O; legacy | ✅ | ✅ | ✅ | ❗Create only | ❗Create + R/O |
+| **HAMMER2** | ☑️ Beta | — | ☑️ Limited features; beta² | ☑️ Limited features; beta | ☑️ Limited features; beta | ✅ | ❗Create only |
+| **NTFS** | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features³ | ✅ |
+| **exFAT** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅³ | ✅ |
+| **ZFS / OpenZFS** | ✅ | ✅ | ✅ | — | ☑️ Limited features | — | ☑️ Beta |
 
-**Prefixes:** `Paid` → `Beta` → `Partial` or `Partial*` → `Outdated`.
-Omitted defaults mean free, production, fully/largely implemented, current.
-`Partial` means confirmed important feature gaps; `Partial*` means completeness
-is undetermined and explained in the assessment notes.
+**Legend**
 
-**Capabilities:** `F` = format partitions and images; `FP` = partitions;
-`FI` = images; `NF` = no formatting. `M` = mount both targets; `MP` = partitions;
-`MI` = images; `NM` = no mounting. `R` = read-only; `R/W` = read/write;
-`LR`/`LW` = limited reads/writes. Blank rows continue the filesystem above;
-`—` = no qualifying solution found. Formatting and mounting are independent.
+- **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
+- **☑️ + subtags** — The same Create + R/W workflow, with the stated qualifications.
+- **Limited features** — Important filesystem features are missing; normal file R/W remains available. Unresolved completeness must be identified explicitly, as in note ².
+- **Beta** — Experimental maturity. Without “Limited features”, the implementation is fully or largely implemented for the stated use case and awaits production maturity.
+- **Legacy** — Legacy or outdated implementation.
+- **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access; **Create only** means creation without a qualifying mount.
+- **—** — No qualifying route found.
+- **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
+- **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
+- **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel.
 
-**Paid products:** (1) Paragon extFS for Mac. (2) vmount Pro. (3) Paragon Linux File
-Systems for Windows. (4) DiskInternals Linux Writer Pro. (5) CrossDriver for
-Linux Disks Pro. (6) DiskInternals Linux Reader Pro. (7) Paragon APFS for
-Windows. (8) OWC MacDrive 12. (9) Paragon NTFS for Mac. (10) Tuxera NTFS for
-Mac. (11) iBoysoft NTFS for Mac. (12) CrossDriver NTFS for Mac Pro.
-(13) CrossDriver for Mac Disks Pro. (14) EaseUS NTFS for Mac. (15) NTFSTool
-Pro.
+Beta is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
+
+This is filesystem capability research based on documentation/source inspection, not a claim that these combinations are integrated or runtime-qualified in Lurker.
 
 ## Get started
 

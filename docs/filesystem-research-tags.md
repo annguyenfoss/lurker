@@ -1,5 +1,30 @@
 # OS / Filesystem Research tags
 
+## Planning summary notation
+
+The README and planning summary use the following compact notation. The older detailed per-solution survey retains its independent format/mount tags below.
+
+**Legend**
+
+- **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
+- **☑️ + subtags** — The same Create + R/W workflow, with the stated qualifications.
+- **Limited features** — Important filesystem features are missing; normal file R/W remains available. Unresolved completeness must be identified explicitly, as in note ².
+- **Beta** — Experimental maturity. Without “Limited features”, the implementation is fully or largely implemented for the stated use case and awaits production maturity.
+- **Legacy** — Legacy or outdated implementation.
+- **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access; **Create only** means creation without a qualifying mount.
+- **—** — No qualifying route found.
+- **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
+- **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
+- **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel.
+
+Beta is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
+
+This is filesystem capability research based on documentation/source inspection, not a claim that these combinations are integrated or runtime-qualified in Lurker.
+
+This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools run on the host OS and are freely obtainable by individual users; virtual machines, WSL, paid routes and extract–edit–reinsert workflows are excluded. Native and userspace mounts count equally. Separate host-installed formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
+
+## Detailed survey notation
+
 Each cell contains only tags, with a separate entry for every researched
 offering. Keep alternatives; do not consolidate them. All status tags are
 prefixes, in the order of the four independent dimensions below:
