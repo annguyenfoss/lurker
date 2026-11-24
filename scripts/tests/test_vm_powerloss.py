@@ -1,9 +1,12 @@
 """Fail-closed ownership tests; never call libvirt or execute product storage."""
+from contextlib import closing
+import hashlib
 import importlib.util
 import ipaddress
 import json
 import os
 from pathlib import Path
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -332,6 +335,33 @@ class Ownership(unittest.TestCase):
 
 
 class GuestFixture(unittest.TestCase):
+    def test_power_cut_records_database_recovery_even_when_the_file_is_lost(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mountpoint = Path(directory)
+            payload = b"acknowledged payload"
+            digest = hashlib.sha256(payload).hexdigest()
+            with closing(sqlite3.connect(mountpoint / "profile.sqlite")) as connection:
+                connection.execute("CREATE TABLE committed (id INTEGER PRIMARY KEY, value BLOB)")
+                connection.execute("INSERT INTO committed VALUES (1, ?)", (payload,))
+                connection.commit()
+            recovered = VM.application_recovery(mountpoint, digest)
+            self.assertEqual(recovered["file"]["status"], "failed")
+            self.assertEqual(recovered["sqlite"]["status"], "passed")
+            self.assertEqual(recovered["sqlite"]["row_sha256"], digest)
+            self.assertEqual(recovered["sqlite"]["row_ids"], [1])
+
+    def test_power_cut_records_a_recovered_file_and_a_missing_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mountpoint = Path(directory)
+            payload = b"acknowledged payload"
+            (mountpoint / "durable record").write_bytes(payload)
+            digest = hashlib.sha256(payload).hexdigest()
+            recovered = VM.application_recovery(mountpoint, digest)
+            self.assertEqual(recovered["file"], {"status": "passed", "sha256": digest})
+            self.assertEqual(recovered["sqlite"]["status"], "failed")
+            self.assertIn("missing", recovered["sqlite"]["error"])
+            self.assertFalse((mountpoint / "profile.sqlite").exists())
+
     def test_freebsd_suj_control_rejects_a_changed_md_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory) / "encrypted data"

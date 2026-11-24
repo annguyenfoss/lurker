@@ -1003,6 +1003,39 @@ def guest_worker(run_id):
         time.sleep(0.05)
 
 
+def application_recovery(mountpoint, expected_digest):
+    file_result, sqlite_result = {}, {}
+    try:
+        digest = hashlib.sha256((mountpoint / "durable record").read_bytes()).hexdigest()
+        file_result["sha256"] = digest
+        require(digest == expected_digest, "Acknowledged durable record changed")
+        file_result["status"] = "passed"
+    except (OSError, RuntimeError) as error:
+        file_result.update(status="failed", error=str(error))
+
+    try:
+        database = mountpoint / "profile.sqlite"
+        require(database.is_file(), "Acknowledged SQLite database is missing")
+        connection = sqlite3.connect(database.as_uri() + "?mode=rw", uri=True)
+        try:
+            sqlite_result["integrity"] = [row[0] for row in connection.execute("PRAGMA integrity_check")]
+            require(sqlite_result["integrity"] == ["ok"], "SQLite integrity failed")
+            rows = connection.execute("SELECT id, value FROM committed ORDER BY id").fetchall()
+            sqlite_result["row_ids"] = [row[0] for row in rows]
+            sqlite_result["uncommitted_row_visible"] = sqlite_result["row_ids"].count(2)
+            require(sqlite_result["uncommitted_row_visible"] == 0, "Uncommitted SQLite row became visible")
+            require(sqlite_result["row_ids"] == [1] and isinstance(rows[0][1], bytes),
+                    "Expected exactly one acknowledged SQLite row with a binary payload")
+            sqlite_result["row_sha256"] = hashlib.sha256(rows[0][1]).hexdigest()
+            require(sqlite_result["row_sha256"] == expected_digest, "Acknowledged SQLite row changed")
+            sqlite_result["status"] = "passed"
+        finally:
+            connection.close()
+    except (OSError, RuntimeError, sqlite3.Error) as error:
+        sqlite_result.update(status="failed", error=str(error))
+    return {"file": file_result, "sqlite": sqlite_result}
+
+
 def guest_verify(run_id):
     directory = guest_directory(run_id)
     manifest = json.loads((directory / "guest.json").read_text())
@@ -1031,18 +1064,12 @@ def guest_verify(run_id):
             if path.exists():
                 shutil.copyfile(path, evidence / name)
         phase = "durable-record-and-SQLite-recovery"
-        payload = (mountpoint / "durable record").read_bytes()
-        require(hashlib.sha256(payload).hexdigest() == ready["sha256"], "Acknowledged durable record changed")
-        connection = sqlite3.connect((mountpoint / "profile.sqlite").as_uri() + "?mode=rw", uri=True)
-        try:
-            require(connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok", "SQLite integrity failed")
-            require(connection.execute("SELECT value FROM committed WHERE id=1").fetchone()[0] == payload,
-                    "Acknowledged SQLite row changed")
-            result["uncommitted_row_visible"] = connection.execute("SELECT count(*) FROM committed WHERE id=2").fetchone()[0]
-            require(result["uncommitted_row_visible"] == 0, "Uncommitted SQLite row became visible")
-        finally:
-            connection.close()
+        recovery = result["application_recovery"] = application_recovery(mountpoint, ready["sha256"])
+        if "uncommitted_row_visible" in recovery["sqlite"]:
+            result["uncommitted_row_visible"] = recovery["sqlite"]["uncommitted_row_visible"]
         result["unacknowledged_file_size"] = (mountpoint / "unacknowledged writes").stat().st_size if (mountpoint / "unacknowledged writes").exists() else None
+        failures = [f'{kind}: {check["error"]}' for kind, check in recovery.items() if check["status"] == "failed"]
+        require(not failures, " | ".join(failures))
         phase = "normal-cli-close"
         guest_cli(directory, ["unmount", str(mountpoint)], secret)
         require(not os.path.ismount(mountpoint), "Recovery CLI reported close while the mount remains attached")

@@ -53,6 +53,8 @@ fsync, atomic rename plus directory fsync, and SQLite `WAL`/`synchronous=FULL`
 commit while keeping its connection open. Do not call global `sync` or cleanly
 unmount before cutting power. Reopen through the candidate CLI and verify only
 acknowledged durable data; preserve database/WAL evidence before opening SQLite.
+The recovery result reports the acknowledged file and the committed SQLite row
+independently, including when one of them is missing.
 Record interrupted writes separately. This characterizes tested operations and
 never promises general corruption immunity. An unavailable guest, package or
 recovery path is blocked/incomplete rather than a passing skip.
