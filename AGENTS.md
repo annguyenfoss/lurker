@@ -28,6 +28,7 @@ Default verification:
 ## README encryption table layout
 
 - Keep one encryption support matrix with all OS columns. Do not split it into multiple tables.
+- Expand the encryption table to fill all available README width. Let the Encryption column absorb spare width while keeping OS columns compact.
 - Keep the encryption table within GitHub's rendered README width without horizontal scrolling. Size OS columns to their contents; avoid oversized fixed-width columns or footer cells that force overflow.
 - Keep every OS name on one unbroken line. Do not insert zero-width spaces, soft breaks, or line breaks inside OS headers.
 - Render the merged softraid label on exactly two lines: `softraid`, then `CRYPTO / RAID1C`. Keep the entire second line together.

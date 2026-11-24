@@ -10,10 +10,10 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 ## Encryption support
 
-<table>
+<table width="100%">
   <thead>
     <tr>
-      <th scope="col" align="left">Encryption</th>
+      <th scope="col" align="left" width="10000">Encryption</th>
       <th scope="col" width="1%" nowrap><samp>Linux</samp></th>
       <th scope="col" width="1%" nowrap><samp>MacOS</samp></th>
       <th scope="col" width="1%" nowrap><samp>FreeBSD</samp></th>
