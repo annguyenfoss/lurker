@@ -41,8 +41,15 @@ without repair and contained none of the acknowledged file or SQLite files.
 Close restored the mapper and vnode inventory.
 
 DragonFly 6.4.2's HAMMER2 fsync code leaves synchronization of the volume root
-to the filesystem syncer. The exact layer responsible for the observed loss
-remains open.
+to the filesystem syncer. A direct HAMMER2 control on a dedicated VirtIO disk
+reproduced the loss with no encryption, device mapper, or backing vnode.
+Libvirt completed the cut 337 ms after the host observed readiness. A verified
+copy mounted read-only without repair and had no directory entries for the
+file or SQLite database. A scan of the raw disk found the exact acknowledged
+65,536-byte payload at byte offset 79,691,776. The native topology dump had
+neither name, so the plain control demonstrates persisted data with missing
+filesystem metadata. The encrypted cases retained the pre-workload ciphertext
+digest. The contribution of additional layers to those losses remains open.
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
 
 The optimized `9384badb34f909887c85ebccc7dbe145b01c9794` package
@@ -71,9 +78,31 @@ retained the pre-workload ciphertext digest. Stock `tcplay` reopened the vault
 on scratch storage and also found an empty filesystem. The stock control
 reproduces the loss without Lurker's wrapper.
 
-Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse-image power cuts,
-read-only recovery diagnostics, and an orderly reboot with a mounted vault
-remain open for the rebuilt candidate. Release support remains planned.
+A separate native read-only HAMMER2 mount through stock `tcplay` found no
+acknowledged file or database in a scratch copy of the rebuilt candidate's
+HAMMER2-backed cut vault. Its write probe returned `EROFS`, the ciphertext
+digest was unchanged, and its mapper and vnode inventory returned to baseline.
+The native mapper was writable and confined to the scratch copy. The packaged
+backend continues to refuse read-only attachment.
+
+The rebuilt package passed a single orderly reboot with two vaults mounted.
+HAMMER2 reopened through Auto and matched all five standard payload hashes,
+the application file, and the sole committed SQLite row. SQLite integrity was
+`ok` and row 2 was absent. FAT32 reopened through Auto with the synced ASCII
+marker intact. Both closed normally with no manual reconciliation or repair.
+The package also passed all 14 interruption cases using `SIGINT` and `SIGKILL`
+at the seven journaled boundaries. The test driver initially treated an
+omitted creation-target field as a failure. The exact package recovered that
+mount by source, and the corrected driver passed all six mount and close cases.
+
+The installed desktop rendered a 1280 × 860 X11 window as UID 1300 on a
+private Xvfb display, with 1,216 sampled colors and clean display teardown.
+Offline remove and reinstall in the same private prefix verified package
+contents and left the guest's system package database unchanged.
+
+Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse-image power cuts
+and an orderly shutdown interrupted by a busy vault remain open for the
+rebuilt candidate. Release support remains planned.
 
 ## DragonFly VeraCrypt candidate, 2026-11-23
 
