@@ -3,6 +3,7 @@
 use super::super::Mounted;
 use super::{args, device_number, exec};
 use crate::{AppError, AppResult, CreateFilesystem, VolumeType};
+use std::io::Read;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -160,6 +161,18 @@ pub(in super::super) fn make_selected_filesystem(
 fn probe(device: &str) -> AppResult<(String, String)> {
     device_number(device, "cgd")?;
     for candidate in [device.to_owned(), partition(device)?] {
+        // Base fstyp on NetBSD 11.1 fails its disk ioctl before recognizing
+        // this upstream port. Probe only the public magic; native mount still
+        // validates the complete on-disk structure and checksums.
+        let mut header = [0u8; 512];
+        if std::fs::File::open(raw(&candidate))
+            .and_then(|mut f| f.read_exact(&mut header))
+            .is_ok()
+            && (header[..8] == 0x4841_4d32_0517_2011u64.to_le_bytes()
+                || header[..8] == 0x4841_4d32_0517_2011u64.to_be_bytes())
+        {
+            return Ok((candidate, "hammer2".into()));
+        }
         if let Ok(kind) = exec("/usr/sbin/fstyp", &args(&["-u", &raw(&candidate)]), None) {
             let kind = kind.trim();
             if matches!(
