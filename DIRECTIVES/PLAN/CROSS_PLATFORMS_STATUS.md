@@ -5,6 +5,50 @@ results and remaining release gates apply to this round. Earlier checkpoints
 retain their original dates and source revisions. The approved profiles are
 in `DIRECTIVES/LLM/ENCRYPTION.md`.
 
+## DragonFly VeraCrypt HAMMER2 candidate, 2026-11-24
+
+The exact `248b2a00a9e3106c55abbc506020d415e99cfaa5` package
+(`5b0bb7e23a48dba4dcaebcd50aa98c3536c1a28d29c1fe8dd60ef9537a51e62b`)
+installed offline on a stock DragonFly 6.4.2 x86-64 clone. The native workspace
+check passed, and 101 Rust tests and 114 Python harness tests passed. Four Rust
+tests remained ignored. The installed CLI passed 13 LUKS1 checks and 19 checks
+each for 24 VeraCrypt cases across HAMMER2 and FAT32, the three ciphers,
+password and binary keyfile, and explicit and Auto opens. All VeraCrypt cases
+passed native `umount`, Lurker close, reopen and persistence. The HAMMER2 cases
+also passed directory sync and SQLite FULL/WAL. The FAT32 cases exercised
+synced ASCII files and skipped the application workload. Every lifecycle run
+restored its storage inventory.
+
+The first HAMMER2 mount launched a DragonFly cluster service that inherited
+the Lurker registry lock. The rest of the matrix used a service started outside
+the CLI. `4e06a3d` replaces that path with a local native mount. The revised
+capacity harness drove HAMMER2 to `ENOSPC` and SQLite to `SQLITE_FULL` using
+incompressible data. Two native `hammer2 bulkfree` passes reclaimed the
+deleted blocks, and all nine checks passed, including persistence of older and
+newly synced bytes. A separate case killed the application worker with its WAL
+open before native dismount. The authenticated reopen retained the acknowledged
+payload and the committed row, and SQLite integrity passed.
+
+An abrupt KVM power cut failed the durability gate for a previously published,
+fully allocated 260 MiB AES vault with inner HAMMER2 on outer UFS. The live
+SQLite worker acknowledged the file and directory fsyncs and its FULL/WAL
+commit. The host verified readiness and the worker PID and completed
+`virsh destroy` 321 ms after the observation. The original cut disk was
+retained. The recovery guest mounted a `qemu-img compare`-verified copy
+read-only and copied the encrypted file to scratch for normal authenticated
+reopen. Its digest matched the pre-workload image. The HAMMER2 mount opened
+without repair and contained none of the acknowledged file or SQLite files.
+Close restored the mapper and vnode inventory.
+
+DragonFly 6.4.2's HAMMER2 fsync code leaves synchronization of the volume root
+to the filesystem syncer. A matched stock `tcplay` control is still required to
+distinguish this behavior from losses elsewhere in the storage path.
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/hammer2/hammer2_vnops.c
+
+Receipts are under `target/dragonfly-veracrypt-batch/`. Cold-start verification
+with the new mount path, the corresponding login-user desktop callback, and
+the remaining power-loss comparisons are open. Release support remains planned.
+
 ## DragonFly VeraCrypt candidate, 2026-11-23
 
 Qualification started on `dragonflybsd-core-01` with DragonFly 6.4.2 x86-64.
