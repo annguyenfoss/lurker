@@ -2217,6 +2217,7 @@ mod tests {
                 crate::CreateCipher::Aes,
                 &credential,
                 &params_path(&source),
+                None,
             )
             .unwrap();
             session.mapped =
