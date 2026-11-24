@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import secrets
 import subprocess
+import struct
 import tempfile
 
 spec = importlib.util.spec_from_file_location("payload", Path(__file__).with_name("test-filesystem-cli.py"))
@@ -25,8 +26,9 @@ def main():
     p.add_argument("--tools", required=True, type=Path)
     p.add_argument("--root", required=True, type=Path)
     p.add_argument("--commit", required=True)
+    p.add_argument("--filesystem", choices=["ext4", "ntfs"], action="append")
     args = p.parse_args()
-    for fs in ["ext4", "ntfs"]:
+    for fs in args.filesystem or ["ext4", "ntfs"]:
         directory = Path(tempfile.mkdtemp(prefix="import-" + fs + "-", dir=args.root))
         directory.chmod(0o700)
         image = directory / "vault.img"
@@ -66,15 +68,25 @@ def main():
             run(["/sbin/cryptsetup", "--batch-mode", "luksOpen", vnode, mapping], auth=True)
             mapped = True
             device = "/dev/mapper/" + mapping
+            # These upstream tools do not understand DragonFly mapper size and
+            # locking ioctls. Format an ordinary file and copy its sectors into
+            # the native encrypted payload, without changing upstream code.
+            with image.open("rb") as stream:
+                header = stream.read(108)
+            payload_bytes = image.stat().st_size - struct.unpack(">I", header[104:108])[0] * 512
+            cleartext = directory / "fixture.fs"
+            with cleartext.open("xb") as stream:
+                stream.truncate(payload_bytes)
             if fs == "ext4":
                 # Ordinary upstream feature profile; no driver/source patching.
-                run([args.tools / "sbin/mkfs.ext4", "-F", device])
+                run([args.tools / "sbin/mkfs.ext4", "-F", "-O", "^metadata_csum,^metadata_csum_seed,^orphan_file", cleartext])
                 for name in expected:
-                    run([args.tools / "sbin/debugfs", "-w", "-R", f"write {directory / name} /{name}", device])
+                    run([args.tools / "sbin/debugfs", "-w", "-R", f"write {directory / name} /{name}", cleartext])
             else:
-                run([args.tools / "sbin/mkntfs", "-F", "-Q", device])
+                run([args.tools / "sbin/mkntfs", "-F", "-Q", cleartext])
                 for name in expected:
-                    run([args.tools / "sbin/ntfscp", device, directory / name, "/" + name])
+                    run([args.tools / "sbin/ntfscp", cleartext, directory / name, "/" + name])
+            run(["/bin/dd", "if=" + str(cleartext), "of=" + device, "bs=1048576"])
             run(["/sbin/cryptsetup", "luksClose", mapping])
             mapped = False
             run(["/usr/sbin/vnconfig", "-u", vnode])
