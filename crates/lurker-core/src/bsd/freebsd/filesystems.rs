@@ -14,6 +14,11 @@ pub(super) fn validate(selected: Option<CreateFilesystem>, backend: VolumeType) 
             "FreeBSD's packaged LKL driver requires 512-byte providers; the GELI profile uses 4096-byte sectors, so XFS creation is unavailable.",
         ));
     }
+    if selected == Some(CreateFilesystem::Ntfs) && backend == VolumeType::Geli {
+        return Err(AppError::new(
+            "The packaged FreeBSD NTFS formatter cannot create the fixed 4096-byte GELI profile; select a supported filesystem or VeraCrypt.",
+        ));
+    }
     match selected {
         None
         | Some(
@@ -44,9 +49,22 @@ pub(super) fn format(mapped: &str, selected: Option<CreateFilesystem>) -> AppRes
             // which cannot be written through the fixed 4096-byte GELI profile.
             let info = exec("/usr/sbin/diskinfo", &args(&[mapped]), None)?;
             let sector = sector_size(mapped, &info)?;
+            let sectors = info
+                .split_whitespace()
+                .nth(3)
+                .and_then(|s| s.parse::<u64>().ok())
+                .filter(|n| *n > 0)
+                .ok_or_else(|| AppError::new("Missing decrypted device sector count."))?;
             exec(
                 "/usr/local/sbin/mkntfs",
-                &args(&["-F", "-Q", "-s", &sector.to_string(), mapped]),
+                &args(&[
+                    "-F",
+                    "-Q",
+                    "-s",
+                    &sector.to_string(),
+                    mapped,
+                    &sectors.to_string(),
+                ]),
                 None,
             )?
         }
