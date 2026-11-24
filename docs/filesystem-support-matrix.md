@@ -6,22 +6,22 @@ This planning summary follows the stated use case: format a decrypted physical p
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ext4 | ✅ | ⚠️ | ⚠️ | ❗R/O | ⚠️ | ❗R/O | ⚠️ |
-| Btrfs | ✅ | ⚠️¹ | ⚠️ | — | — | — | ⚠️ |
-| XFS | ✅ | ⚠️ | ⚠️ | ❗R/O | — | ❗R/O | ❗R/O |
-| APFS | ⚠️ | ✅ | ❗R/O | ❗R/O | — | ❗R/O | ⚠️² |
-| UFS1 / FFSv1 | ⚠️ | — | ✅ | ✅ | ✅ | ✅ | ❗R/O |
-| UFS2 / FFSv2 | ⚠️ | ❗R/O | ✅ | ✅ | ✅ | — | ❗R/O |
-| HAMMER2 | ✅³ | — | ⚠️⁴ | ⚠️ | ⚠️ | ✅ | — |
-| NTFS | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️⁵ | ✅ |
+| ext4 | ✅ | ☑️ | ☑️ | ⚠️ R/O | ☑️ | ⚠️ R/O | ☑️ |
+| Btrfs | ✅ | ☑️¹ | ☑️ | — | — | — | ☑️ |
+| XFS | ✅ | ☑️ | ☑️ | ⚠️ R/O | — | ⚠️ R/O | ⚠️ R/O |
+| APFS | ☑️ | ✅ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ☑️² |
+| UFS1 / FFSv1 | ☑️ | — | ✅ | ✅ | ✅ | ✅ | ⚠️ R/O |
+| UFS2 / FFSv2 | ☑️ | ⚠️ R/O | ✅ | ✅ | ✅ | — | ⚠️ R/O |
+| HAMMER2 | ✅³ | — | ☑️⁴ | ☑️ | ☑️ | ✅ | — |
+| NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️⁵ | ✅ |
 | exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅⁶ | ✅ |
-| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ⚠️ | — | ✅⁷ |
+| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅⁷ |
 
 **Legend**
 
-- **✅** — Create + R/W on physical partitions and file containers.
-- **⚠️** — Mounted R/W with feature limitations or unresolved completeness; creation exceptions are noted below.
-- **❗R/O** — Mounted read-only access.
+- **✅** — Full feature support.
+- **☑️** — Largely usable, with some filesystem features missing or unverified.
+- **⚠️ R/O** — Mounted read-only access.
 - **—** — Unsupported.
 - **¹** — Btrfs/macOS: mounted R/W exists; creation workflow unverified.
 - **²** — APFS/Windows: mounted R/W exists; creation workflow unverified.
