@@ -1635,7 +1635,6 @@ pub fn probe_system() -> AppResult<SystemProbe> {
         for (name, path) in [
             ("mount_msdos", "/sbin/mount_msdos"),
             ("newfs_msdos", "/sbin/newfs_msdos"),
-            ("mount_hammer2", "/sbin/mount_hammer2"),
             ("newfs_hammer2", "/sbin/newfs_hammer2"),
             ("fstyp", "/usr/sbin/fstyp"),
         ] {

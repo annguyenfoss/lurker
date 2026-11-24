@@ -5,8 +5,10 @@ use crate::bsd::{exec_dragonfly_locked, mounts, Credential, Mounted, Registry, S
 use crate::new_filesystem::Owner;
 use crate::{CreateCipher, CreateFilesystem, VolumeType};
 use serde::{Deserialize, Serialize};
+use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind, Read};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -21,6 +23,27 @@ const RESERVED: u64 = 128 * 1024;
 const MAX_KEYFILE: u64 = 1024 * 1024;
 const MAX_PASSWORD: usize = 64;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
+
+// DragonFly's sys/mount.h and vfs/hammer2/hammer2_mount.h ABI.
+const HMNT2_LOCAL: libc::c_int = 0x0000_0002;
+
+#[repr(C)]
+struct Hammer2MountInfo {
+    volume: *const libc::c_char,
+    hflags: libc::c_int,
+    cluster_fd: libc::c_int,
+    reserved: [libc::c_char; 112],
+}
+
+extern "C" {
+    #[link_name = "mount"]
+    fn mount_syscall(
+        filesystem: *const libc::c_char,
+        target: *const libc::c_char,
+        flags: libc::c_int,
+        data: *mut libc::c_void,
+    ) -> libc::c_int;
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(in crate::bsd) struct Mapping {
@@ -536,30 +559,63 @@ pub(in crate::bsd) fn mount(
     let filesystem = probe_filesystem(mapped, mapping.sectors)?;
     mapping.filesystem = Some(filesystem);
     registry.save(session)?;
-    let (mount, mut options) = match filesystem {
-        CreateFilesystem::Hammer2 => (
-            "/sbin/mount_hammer2",
-            args(&["-o", "rw,nosuid,nodev,noexec", &format!("{mapped}@DATA")]),
-        ),
-        CreateFilesystem::Fat32 => (
-            "/sbin/mount_msdos",
-            args(&[
-                "-u",
-                &owner.uid.to_string(),
-                "-g",
-                &owner.gid.to_string(),
-                "-m",
-                "600",
-                "-M",
-                "700",
-                "-o",
-                "rw,sync,nosuid,nodev,noexec",
-                mapped,
-            ]),
-        ),
-    };
+    if filesystem == CreateFilesystem::Hammer2 {
+        return mount_hammer2_local(mapped, target);
+    }
+    let mut options = args(&[
+        "-u",
+        &owner.uid.to_string(),
+        "-g",
+        &owner.gid.to_string(),
+        "-m",
+        "600",
+        "-M",
+        "700",
+        "-o",
+        "rw,sync,nosuid,nodev,noexec",
+        mapped,
+    ]);
     options.push(target.as_os_str().to_owned());
-    exec_dragonfly_locked(registry, Path::new(mount), &options, None, COMMAND_TIMEOUT)?;
+    exec_dragonfly_locked(
+        registry,
+        Path::new("/sbin/mount_msdos"),
+        &options,
+        None,
+        COMMAND_TIMEOUT,
+    )?;
+    Ok(())
+}
+
+fn mount_hammer2_local(mapped: &str, target: &Path) -> AppResult<()> {
+    let volume = CString::new(format!("{mapped}@DATA"))
+        .map_err(|_| AppError::new("Invalid HAMMER2 provider path."))?;
+    let target = CString::new(target.as_os_str().as_bytes())
+        .map_err(|_| AppError::new("Invalid HAMMER2 mountpoint."))?;
+    // mount_hammer2 starts the cluster service even for a local mount. That
+    // service can inherit the registry lock. Keep the synchronous native
+    // mount in this process and mount each file container as its own PFS.
+    let mut info = Hammer2MountInfo {
+        volume: volume.as_ptr(),
+        hflags: HMNT2_LOCAL,
+        cluster_fd: -1,
+        reserved: [0; 112],
+    };
+    let flags = libc::MNT_NOSUID | libc::MNT_NODEV | libc::MNT_NOEXEC;
+    // SAFETY: strings and the native mount argument block live for the call.
+    let result = unsafe {
+        mount_syscall(
+            c"hammer2".as_ptr(),
+            target.as_ptr(),
+            flags,
+            (&mut info as *mut Hammer2MountInfo).cast(),
+        )
+    };
+    if result != 0 {
+        return Err(AppError::io(
+            "Mount local VeraCrypt HAMMER2 filesystem",
+            io::Error::last_os_error(),
+        ));
+    }
     Ok(())
 }
 

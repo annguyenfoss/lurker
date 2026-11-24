@@ -52,7 +52,8 @@ refreshing the DragonFly source pin, review `native/dragonfly-tcplay/lurker.patc
 and verify every source hash in `native/dragonfly-tcplay/sources.json` before rerunning
 native qualification. The package includes the wrapper, provenance and notices.
 At runtime it uses DragonFly's base libraries, vnode and device-mapper facilities,
-`fstyp`, and the native HAMMER2 and FAT32 format and mount tools.
+`fstyp`, and the native HAMMER2 and FAT32 formatters. HAMMER2 mounts use the
+native system call in local mode. FAT32 mounts use `mount_msdos`.
 
 Use `pkg add` and `pkg delete` on FreeBSD and DragonFly. Use `pkg_add` and
 `pkg_delete` on NetBSD and OpenBSD. OpenBSD's distribution policy requires a
