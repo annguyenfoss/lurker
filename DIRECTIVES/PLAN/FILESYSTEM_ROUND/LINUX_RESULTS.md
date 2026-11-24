@@ -1,49 +1,91 @@
 # Linux filesystem round results
 
-Implementation in progress. Linux owns archlinux, debian, ubuntu, fedora, opensuse and gentoo exclusively until the jobs below are terminal. No SQLite, GUI, fault, physical-device, kernel replacement or upstream source modification tests were run.
+The ten-filesystem Linux implementation and native qualification are complete on six independent guests. Results below describe small disposable containers with PDF and UTF-8 text, ordinary close/reopen, mutation and hash verification. They do not qualify crash recovery, durability, ACL fidelity, snapshots or production reliability of experimental drivers. No SQLite, GUI, physical-device, fault, kernel replacement or upstream source patch tests were run.
 
-## Source and running jobs
+## Observed filesystem matrix
 
-- `9fdca7f`: explicit ext4/Btrfs/XFS/NTFS/exFAT/FAT32 format and mount dispatch; root metadata belongs to the authorized caller.
-- `2a23185`: standard Linux tool directories remain available when an ordinary login PATH omits sbin; explicitly empty PATH still disables discovery.
-- `1cbeff1`: native APFS/HAMMER2, mapper-scoped inner ZFS pools, UFS1/UFS2 read-only import detection. ZFS uses no persistent cache, broad import or forced export.
-- `6d10cfa`: bounded native matrix coordinator. Exact source deployed and CLI/helper built independently on all six distributions. Job paths: `/tmp/lurker-filesystem-round-HOST-6d10cfa/`. Each retains `identity.json`, `launcher.json`, build log and `cases/matrix.json`.
-- `7270de9`: formatting only.
-- Arch core/CLI/helper candidate checks: 105 passed, zero failed, 12 ignored. Full log: `target/goal-validation/filesystem-round/linux/final-candidate-check.log`. Final shared checks remain pending.
+`RW4` means native LUKS2, LUKS1 and privileged VeraCrypt plus login-user VeraCrypt/LKL passed. `RW3` means the three privileged encryption routes passed; the installed LKL route does not implement that filesystem. `RO2` means independently formatted imports passed through LUKS1 and privileged VeraCrypt; default LUKS2 is blocked as described below. `RO3` means all three privileged read-only imports passed. These are observed routes, not interchangeable filesystem feature sets.
 
-Receipts, inventories, install commands/logs, source archives, source/binary identities and diagnostic snapshots are under ignored `target/goal-validation/filesystem-round/linux/`. The source archive SHA-256 is in `candidate-identity.json`. Ubuntu's launch retry is in `ubuntu-retry/` (closed passed smoke ciphertext removed; the failed fixture preserved).
+| Filesystem | Arch | Debian | Ubuntu | Fedora | openSUSE | Gentoo |
+|---|---|---|---|---|---|---|
+| ext4 | RW4 | RW4 | RW4 | RW4 | RW4 | RW4 |
+| Btrfs | RW4 | RW4 | RW4 | RW4 | RW4 | RW4 |
+| XFS | RW4 | RW4 | RW4 | RW4 | RW4 | RW4 |
+| APFS | RW3 | RW3 | RW3 | RW3 | RW3 | RO3 |
+| UFS1 | RO2 | RO2 | RO2 | RO2 | RO2 | RO2 |
+| UFS2 | RW3 | RW3 | RW3 | RW3 | RW3 | RW3 |
+| HAMMER2 | RO3 | RO3 | RW3 | RO3 | RO3 | RO3 |
+| NTFS | RW4 | RW4 | RW4 | RW4 | RW4 | RW4 |
+| exFAT | RW4 | RW4 | RW4 | RW4 | RW4 | RW4 |
+| ZFS | RW3 | RW3 | RW3 | RW3 | ABI blocked | Kernel SDK missing |
 
-Current base matrix: OpenSUSE terminal, 42 cases, 30 passed, 12 failed; other five guests still running. OpenSUSE failures comprise six transport-3 userspace prerequisite selections, three ext4 formatter compatibility failures, one native password-quality rejection and two CryFS backing-store limitations. Corrections/replays are pending; these are not final product support claims.
+The effective ten-filesystem pair results retain **324 passed and 18 failed** receipts after actual correction replays. Each host's three remaining failures are CryFS on exFAT, CryFS on UFS2 and the UFS1/default-LUKS2 read-only import. Unavailable create/write cells are documented below and are not counted as executed pairs.
 
-## Confirmed prerequisites and bounded installation findings
+| Host | Passed | Failed with recorded limit |
+|---|---:|---:|
+| Arch | 56 | 3 |
+| Debian | 56 | 3 |
+| Ubuntu | 59 | 3 |
+| Fedora | 56 | 3 |
+| openSUSE | 50 | 3 |
+| Gentoo | 47 | 3 |
 
-All six have native ext4/Btrfs/XFS/exFAT/NTFS-3G/FAT tools installed. Linux privileged VeraCrypt retains the installed restricted private creator. Login-user VeraCrypt needs transport 4; `/usr/local/lib/lurker-qualification-2ebae8f/` has transport 3 and fails safely before create. All six have reusable transport-4 helpers with the Linux 6.12.118 stable source receipt in `~/.cache/lurker/final-14ede46/veracrypt-input/`; replay will use those, without rebuilding or changing LKL.
+Directory encryption was tested separately with the encrypted source on each supported writable backing filesystem and plaintext mounts in a private directory on the host filesystem. gocryptfs and Cryptomator passed on every writable filesystem in the table. CryFS passed on ext4, Btrfs, XFS, NTFS, APFS, HAMMER2 and ZFS where writable; it failed on exFAT and UFS2 on every host. No directory backing cases were attempted for read-only UFS1 or Gentoo APFS. These cases do not assign an alternate inner filesystem to a directory engine.
 
-APFS `linux-apfs-rw` v0.3.22, unmodified commit `80f5db04ecd3b240fee4c67829a5b5465f11f63f`, built against the installed matching Debian 6.12.118, Fedora 7.2.11 and Ubuntu 7.3.0 headers and was installed into administrator-controlled module paths. Debian native and CLI PDF/text lifecycles passed in diagnostic smoke tests. APFS tools are installed on all six (distribution packages or unmodified apfsprogs v0.2.1). Native APFS writes require `readwrite`, and remain experimental upstream.
+## Identities and receipts
 
-Ubuntu's unmodified upstream Linux HAMMER2 module builds on its installed 7.3 kernel; its upstream floor is 7.3, higher than the other five guests' kernels. The native formatter was built from unmodified hammer2-utils. Ubuntu's diagnostic full encrypted CLI lifecycle passed. This is a scratch-container result, not a reliability qualification of the new Linux port.
+Remote jobs are terminal. Exact source archives were deployed and CLI/helper built independently on each guest with Rust 1.100.0 and the existing shared Cargo cache:
 
-Ubuntu has packaged matching OpenZFS 2.4.4; Debian installed OpenZFS 2.3.9 DKMS against matching headers after enabling the official contrib component. Both modules load. Other distributions' package/header/build limitations are still being bounded and recorded.
+- Base: commit `6d10cfa`, `/tmp/lurker-filesystem-round-HOST-6d10cfa/`, `cases/matrix.json`.
+- First corrections/supplements: `ec2add1`, `/tmp/lurker-filesystem-round-HOST-ec2add1/`, `native/matrix.json`, `user/matrix.json`.
+- Final corrections/supplements: `c70f8a8d9a73c6861b779d692d6792a1e8f7c55e`, `/tmp/lurker-filesystem-round-HOST-c70f8a8/`, `native/matrix.json`, `ufs1-imports/imports.json` or `apfs-imports/imports.json`, terminal receipts and logs. HAMMER2 RO adapter/probe commits are `ca282e3` and `ee3ab7c`; those final jobs are `/tmp/lurker-filesystem-round-HOST-ee3ab7c/`, with payload receipts under `~/.cache/lurker/filesystem-round/hammer2-imports-ee3ab7c/imports.json` and installed prefix `/usr/local/lib/lurker-filesystem-round-ee3ab7c/`. Gentoo's earlier UFS1 receipt is `/tmp/lurker-filesystem-round-gentoo-ufs1-import/imports.json`.
 
-Upstream realchonk/fuse-ufs 0.6.0 builds unmodified on all six after installing missing FUSE SDK headers where needed. Portable kusumi/makefs builds unmodified on Arch, Fedora, openSUSE and Gentoo; Debian/Ubuntu use packaged makefs. OpenSUSE's independent UFS2 fixture passes PDF/text write, normal close, reopen and hash verification through the experimental FUSE driver. CLI UFS2 adapter qualification remains pending. UFS1 retains the native kernel read-only route where that module is present.
+`HOST` is `archlinux`, `debian`, `ubuntu`, `fedora`, `opensuse` or `gentoo`. Each payload receipt records source commit, CLI SHA-256, actions, payload hashes and mount cleanup; later receipts also record initial root uid/gid/mode. Final CLI/helper/harness hashes, administrator ownership, complete per-pair receipts, module state and reconciliation are collected locally under ignored `target/goal-validation/filesystem-round/linux/HOST-final-results.json`, `HOST-effective-pairs.json` and `HOST-final-reconciliation.json`. Archives, archive hashes, native imports, tool provenance, package/source build commands and full logs remain in that directory. Earlier failures remain visible and are superseded only by actual successful replays of the same pair.
 
-Primary upstream references:
+The installed final prefix is administrator-owned `/usr/local/lib/lurker-filesystem-round-c70f8a8/`. Private privileged engines remain under administrator-owned `/usr/local/lib/lurker-qualification-2ebae8f/libexec/lurker/backends`. Login-user VeraCrypt explicitly uses the existing transport-4 helpers and Linux 6.12.118 LKL receipt under `~/.cache/lurker/final-14ede46/veracrypt-input`; the older transport-3 installed helpers were safely rejected and were not relabeled as passing. FAT32 is auxiliary historical regression evidence, excluded from the promised ten-filesystem totals; its base run retained 29 passes and 13 failures without further expansion.
+
+## Installed providers and bounded unavailable routes
+
+Guest kernels remained unchanged: Arch 7.2.15-arch1-1, Debian 6.12.118+deb13-cloud-amd64, Ubuntu 7.3.0-10-generic, Fedora 7.2.11-300.fc45.x86_64, openSUSE 6.12.0-160100.8-default and Gentoo 6.18.62. Native e2fsprogs, btrfs-progs, xfsprogs, exfatprogs and NTFS-3G/mkntfs were installed on all six.
+
+- **APFS:** unmodified linux-apfs-rw v0.3.22, commit `80f5db04ecd3b240fee4c67829a5b5465f11f63f`, built against matching installed headers on five guests. Arch required matching headers from the official package archive; openSUSE required its exact `.8.1` SDK rather than the newer generic package selection. openSUSE explicitly loaded the unsupported module with the vendor flag; no global unsupported-module policy was changed. apfsprogs packages or unmodified v0.2.1 provide `mkapfs`. Native creation requires the experimental `readwrite` option and bypasses distribution `mount.apfs` helpers. Gentoo lacks a complete matching configured kernel build tree/export map. Unmodified apfs-fuse builds on Gentoo/openSUSE hit upstream C++ errors and were not patched. Gentoo instead built unmodified libfsapfs 20261030 and installed its reader under root-owned `/opt/lurker-libfsapfs-20261030`; `fsapfsmount` passed all three CLI RO imports. openSUSE's packaged reader also passed an independent raw RO control with caller ownership/0700 options.
+- **UFS1:** native kernel reader only, variant `44bsd`; creation and writable unlock are refused. Fedora installed the exact kernel-modules-extra package. Debian and openSUSE built only the unmodified upstream v6.12.118 `fs/ufs` module against matching installed headers, without rebuilding/replacing their kernels. Upstream source commit is `b869a5313cbfe7102873d3de318ddb68675146d0`; openSUSE required `modprobe --ignore-install --allow-unsupported ufs` because its vendor install hook dropped the explicit flag. Other guests used shipped modules. All six failed the default LUKS2 import because the kernel UFS probe starts with a 1024-byte block size while that mapper exposes 4096-byte logical sectors. LUKS1 and privileged VeraCrypt expose suitable geometry and passed. Defaults were not changed to force a compatibility pass.
+- **UFS2:** unmodified realchonk/fuse-ufs 0.6.0 and portable kusumi/makefs built on all six; missing FUSE3/SSL/UUID SDK packages were installed. The trusted formatter is explicitly named `makefs-freebsd`, avoiding Debian/Ubuntu's incompatible NetBSD makefs output. Creation uses little-endian FreeBSD FFSv2, 32768-byte blocks and 4096-byte fragments and validates the new root through the same driver before publishing. FUSE support is experimental. Its missing hardlink support blocks CryFS publication; gocryptfs and Cryptomator passed.
+- **HAMMER2:** Ubuntu's unmodified upstream Linux module and hammer2-utils built and passed three native plus three directory cases. The writable Linux port requires kernel 7.3; all five other unchanged guest kernels are below that floor. Unmodified kusumi/hammer2-fuse 0.5.0, commit `b92433c72dd0925e2ca21e8d06b3183ecb0559ca`, built independently on those five and supplies a read-only import route. An independent 512 MiB Ubuntu-native fixture passed raw reader control and the three encryption imports. Older util-linux lacks a HAMMER2 probe; Lurker uses a bounded eight-byte native magic read from the owned mapper before selecting the trusted reader. The initial import attempt exposed this detection gap and insufficient tmpfs space; closed failed fixtures were retained at home and only those failed pairs were replayed with the corrected adapter under a home-backed root. No kernel upgrade, compatibility patch or writable bridge was attempted.
+- **ZFS:** Debian installed official contrib OpenZFS 2.3.9 DKMS; Ubuntu used packaged 2.4.4. Arch and Fedora built unmodified OpenZFS 2.4.4 against exact installed SDKs, installed administrator-controlled modules/tools under `/opt/lurker-openzfs-2.4.4`, and loaded them. openSUSE attempted the same unmodified release against its exact vendor SDK; configuration failed with `None of the expected lookup_bdev() interfaces were detected`. This is a concrete kernel API incompatibility, not package absence. Gentoo's installed kernel build links are dangling/incomplete with no matching `.config`/`Module.symvers`; its ordinary installation attempt is prerequisite-blocked. Neither case triggered source patches or kernel rebuilding. ZFS filesystem use does not add a ZFS-native encryption backend.
+
+## Implementation and limits
+
+Explicit formatting leaves the Btrfs default, compression and cipher/KDF profiles unchanged. New POSIX roots belong to the authorized caller with mode 0700; ext4 uses `root_owner` plus a private initialization mount because older e2fsprogs lacks `root_perms`. XFS uses its root prototype. NTFS-3G, exFAT and FAT views use caller uid/gid and umask 0077; these synthetic permissions do not imply POSIX ACL semantics. Existing roots are not changed during unlock. Private initialization checks the opened directory's actual mount ID before metadata changes and rechecks the visible mount before ordinary unmount.
+
+Native APFS/HAMMER2/ZFS module-loading/signature prerequisites are checked before storage mutation. UFS variants use low-level blkid probing. Trusted native FUSE readers/writers use the exact mapper source and validated mount identity; their stdout is captured so formatter diagnostics cannot corrupt the helper JSON protocol. APFS forensic reads use explicit RO, caller ownership and umask options. Failed staged ciphertext remains recoverable while an associated mapper exists.
+
+ZFS pools are restricted to one verified mapped leaf, a generated pool name and no persistent cachefile. Label topology is checked before import; import searches only the exact mapped device, uses the numeric pool identity and never force-imports. Post-import topology is verified. Export refuses extra root/child/snapshot/alias mounts rather than auto-unmounting unrecorded storage. No snapshots, native ZFS encryption, multi-device pools or broader dataset lifecycle are claimed.
+
+CryFS exFAT fails with `publish new encrypted block: Operation not permitted`; its integrated atomic publication requires hardlinks. UFS2 reports the same publication failure; the current unmodified FUSE provider has no hardlink handler. UFS2 itself supports hardlinks, so this limit belongs to the selected provider and integrated publication path. Failed backing ciphertext and engine diagnostics are retained. The earlier APFS/HAMMER2 fusermount whitelist failures were resolved by the shared Linux private initialization path and separate plaintext mount root, then replayed successfully. The initial openSUSE password-quality and ext4 formatter failures were corrected without changing host password policy or encryption defaults.
+
+## Verification and handoff
+
+Final remote Arch core/CLI/helper tests: **108 passed, zero failed, 12 ignored**. Scoped `cargo check --locked -p lurker-core -p lurker-cli -p lurker-helper`, the meaningful OSC3008 PTY regression and Python compilation all pass. Native CLI/helper builds passed separately on all six. Full workspace/GUI compilation was not exercised: there is no warm Slint cache and the approved round is CLI/container-only. The common fixture is a valid one-page PDF 1.4 (SHA-256 `f62d9bb8cdf4722e68937ce0fd939201585a74e28ea839b3bc1441a2dd29597b`) plus UTF-8 text; read-only imports verify both payload and unchanged ciphertext.
+
+Cleanup uses only ordinary owned-volume closes/unmounts. Closed passed scratch images are removed where needed for bounded disk usage; failed fixtures, receipts, hashes, installed packages/modules and shared caches remain. Final reconciliation records no owned mounts, crypto mappers, loop attachments or imported pools. No detached round coordinator remains active. Six-host ownership is released to the independent Linux reviewer; review should inspect actual per-pair receipts, provider build decisions and preserved upstream limits rather than repeat the complete matrix.
+
+Primary provider sources:
 
 https://github.com/linux-apfs/linux-apfs-rw
+
 https://github.com/linux-apfs/apfsprogs
-https://github.com/jdmanring/linux_hammer2
-https://github.com/kusumi/hammer2-utils
+
+https://github.com/libyal/libfsapfs
+
 https://github.com/realchonk/fuse-ufs
+
 https://github.com/kusumi/makefs
-https://openzfs.github.io/openzfs-docs/
 
-## Material limits observed so far
+https://github.com/jdmanring/linux_hammer2
 
-- OpenSUSE e2fsprogs 1.47.0 rejects `root_perms`; a private initialization mount will set the new ext4 root to 0700 while retaining supported `root_owner` formatting. No existing filesystem ownership is changed on unlock.
-- CryFS backing exFAT/FAT32 fails upstream publication with `publish new encrypted block: Operation not permitted`. Those backing filesystems lack hardlinks used by the integrated atomic publication. Failed encrypted backing images and supervisor diagnostics are preserved, and normal unmount succeeds. gocryptfs/Cryptomator are assessed separately.
-- The normal-user PTY wrapper can race sudo's nested PTY echo state. Privileged tests use the root-owned installed common harness with the system Python under sudo; CLI talks directly to cryptsetup. Login-user routes stay unprivileged. Logs redact credentials, and the rejected diagnostic fixture remains preserved.
-- Success proves bounded content persistence and ordinary close/reopen only. ACLs, snapshots, complete metadata semantics, journal recovery and durability under failure are not tested.
+https://github.com/kusumi/hammer2-utils
 
-## Next action and reviewer handoff
+https://github.com/kusumi/hammer2-fuse
 
-Finish the already running matrices, replay only failed prerequisite/product cases, test available supplemental APFS/ZFS/UFS2 routes and read-only imports, collect concise receipts/tool/source identities, reconcile only owned resources and replace this checkpoint with the final ten-filesystem table per host. No reviewer should access these hosts until implementation reports terminal status.
+https://github.com/openzfs/zfs
