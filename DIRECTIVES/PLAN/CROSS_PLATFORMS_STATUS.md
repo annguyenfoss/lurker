@@ -186,6 +186,28 @@ engine and FAT32 mount path, which narrows the failure to the native
 file-backed path in these tests. Receipts are under
 `target/dragonfly-veracrypt-batch/fat32-power-cut/stock-file-control/`.
 
+An additional UFS control kept the same stock setup and starting ciphertext.
+After the two ordinary FAT32 file fsyncs, the worker also issued one fsync on
+the verified ciphertext file. That call returned in 0.76 ms. The host cut
+power 350 ms after observing the combined acknowledgement. On the verified
+copy, native read-only recovery matched the hashes of the overwritten file,
+the new file, and the unchanged control. The read-only write probe returned
+`EROFS`, and close restored the native inventory. The original cut image was
+retained. The added backing-file fsync preserved the acknowledged writes in
+this UFS test. The release gate still requires ordinary in-volume file
+syncs to preserve writes. Receipts are under
+`target/dragonfly-veracrypt-batch/fat32-power-cut/backing-fsync-control/`.
+
+DragonFly 6.4.2's FAT file fsync drains the filesystem's dirty buffers and
+syncs the device vnode. The devfs disk fsync drains that vnode's buffers.
+The vnode disk uses `IO_RECURSE` for regular writes and synchronously fsyncs
+its backing file when it receives a block flush. All three FAT32 stock
+runs recorded zero VirtIO flush requests.
+
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/msdosfs/msdosfs_vnops.c
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/devfs/devfs_vnops.c
+https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/dev/disk/vn/vn.c
+
 The rebuilt package authenticated a 260 MiB stock VeraCrypt AES image with
 inner HAMMER2 and only about 20 MiB allocated. Identical starting ciphertext
 was tested on UFS and HAMMER2 backing. The two cuts completed 349 ms and
