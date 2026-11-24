@@ -251,7 +251,9 @@ lurker unmount ./vault-mount
 
 New DragonFly VeraCrypt files use HAMMER2 with the `DATA` label. The filesystem
 root stores the invoking user's ownership and private permissions. Mount
-detects the filesystem after authenticating the container.
+detects the filesystem after authenticating the container. To reclaim space
+after deleting files from a full HAMMER2 vault, run `hammer2 bulkfree` twice as
+an administrator with the mounted vault as the path.
 
 For exchange with VeraCrypt on another OS, select `--filesystem fat32` or
 choose **FAT32 for exchange** in the desktop create form. Use a normal file container with

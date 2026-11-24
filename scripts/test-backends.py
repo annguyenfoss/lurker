@@ -58,7 +58,7 @@ with closing(sqlite3.connect(sys.argv[1])) as db:
     db.execute("PRAGMA synchronous=FULL")
     db.execute("PRAGMA wal_autocheckpoint=0")
     try:
-        db.execute("INSERT INTO profile VALUES (?, zeroblob(?))", ("aborted", 16 * 1024 * 1024))
+        db.execute("INSERT INTO profile VALUES (?, randomblob(?))", ("aborted", 16 * 1024 * 1024))
         db.commit()
     except sqlite3.Error as error:
         print(json.dumps({"sqlite_error": error.sqlite_errorname}))
@@ -119,14 +119,14 @@ def space_bytes(path):
 
 
 def fill_to_enospc(stream, limit, attempts):
-    block = os.urandom(MIB)
     for chunk_size in (MIB, 16 * 1024, 4096):
         stage = "write"
         try:
             while stream.tell() < limit:
                 stage = "write"
                 chunk = min(chunk_size, limit - stream.tell())
-                if not stream.write(memoryview(block)[:chunk]):
+                # A repeated block can be deduplicated by HAMMER2.
+                if not stream.write(os.urandom(chunk)):
                     raise RuntimeError("Zero-byte write before ENOSPC")
                 stage = "fsync"
                 os.fsync(stream.fileno())
@@ -772,6 +772,22 @@ class Suite:
                 finally:
                     filler.unlink()
             self.sync_dir(self.mountpoint)
+            if (platform.system() == "DragonFly" and self.options.backend == "veracrypt"
+                    and self.options.filesystem in (None, "hammer2")):
+                evidence["after_unlink"] = space_bytes(self.mountpoint)
+                evidence["hammer2_bulkfree"] = []
+                # HAMMER2 makes deleted blocks reusable after two bulkfree passes.
+                for _ in range(2):
+                    reclaimed = subprocess.run(
+                        ["/sbin/hammer2", "bulkfree", str(self.mountpoint)],
+                        capture_output=True, text=True, timeout=self.options.timeout,
+                    )
+                    evidence["hammer2_bulkfree"].append({
+                        "exit": reclaimed.returncode, "space": space_bytes(self.mountpoint),
+                        "output": (reclaimed.stdout + reclaimed.stderr)[-4096:],
+                    })
+                    self.save()
+                    reclaimed.check_returncode()
             evidence["after_freeing"] = space_bytes(self.mountpoint)
             with (self.mountpoint / "written-after-freeing.bin").open("xb") as stream:
                 stream.write(self.payload)

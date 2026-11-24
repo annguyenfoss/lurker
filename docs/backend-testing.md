@@ -82,7 +82,9 @@ The 6.4.2 controls rejected directory `fsync` and SQLite locking on bare FAT32
 and on stock `tcplay` FAT32. The candidate also rejects read-only opens before
 attachment because the native read-only mapper control accepted writes. Pass
 `--full-storage` to `test-backends.py` for the separate 0.5 GiB HAMMER2 capacity
-workload. Preserve failures in the application and capacity checks. Require the
+workload. It uses incompressible data to reach ENOSPC and records the two native
+`hammer2 bulkfree` passes needed to reclaim deleted blocks before testing new
+writes. Preserve failures in the application and capacity checks. Require the
 file and directory syncs and SQLite FULL/WAL commit to be acknowledged before a
 power cut. [Power-loss runbook](vm-powerloss-testing.md)
 
