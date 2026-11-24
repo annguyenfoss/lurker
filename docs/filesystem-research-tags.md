@@ -9,7 +9,7 @@ The README and planning summary use the following compact notation. The older de
 - **✅** — Create + R/W on physical partitions and file containers.
 - **⚠️** — Mounted R/W with feature limitations or unresolved completeness; creation exceptions are noted below.
 - **❗R/O** — Mounted read-only access.
-- **—** — Unsupported, including creation-only routes.
+- **—** — Unsupported.
 - **¹** — Btrfs/macOS: mounted R/W exists; creation workflow unverified.
 - **²** — APFS/Windows: mounted R/W exists; creation workflow unverified.
 - **³** — HAMMER2/Linux: experimental maturity; physical-device reliability unqualified.
