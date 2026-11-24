@@ -1238,6 +1238,14 @@ fn mount_open_mapper(
 
     ctx.output
         .msg2(&format!("Mounting filesystem at {}", mountpoint.display()));
+    if filesystem_type.as_deref() == Some("hammer2")
+        && readonly
+        && !Path::new("/sys/module/hammer2").exists()
+    {
+        if let Ok(driver) = crate::trusted_system_executable("hammer2-fuse") {
+            return mount_fuse_filesystem(ctx, &driver, &mapper_path, mountpoint, true);
+        }
+    }
     if filesystem_type.as_deref() == Some("apfs")
         && readonly
         && !Path::new("/sys/module/apfs").exists()
@@ -1858,7 +1866,18 @@ fn mount_fuse_filesystem(
         mapper.display()
     );
     let mut args: Vec<OsString>;
-    if driver.file_name().is_some_and(|name| name == "fsapfsmount") {
+    if driver
+        .file_name()
+        .is_some_and(|name| name == "hammer2-fuse")
+    {
+        if !readonly {
+            return Err(AppError::new(
+                "hammer2-fuse supports read-only imports only.",
+            ));
+        }
+        // This driver always sets RO and uses the exact source as FSName.
+        args = vec!["--allow_other".into()];
+    } else if driver.file_name().is_some_and(|name| name == "fsapfsmount") {
         if !readonly {
             return Err(AppError::new(
                 "fsapfsmount supports read-only APFS imports only.",

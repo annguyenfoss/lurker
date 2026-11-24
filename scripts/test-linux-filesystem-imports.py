@@ -18,7 +18,7 @@ def main():
     p.add_argument('--harness', type=Path, required=True)
     p.add_argument('--fixture', type=Path, required=True)
     p.add_argument('--payload', type=Path, required=True, help='JSON map of root filename to SHA256')
-    p.add_argument('--filesystem', choices=('ufs1', 'apfs'), required=True)
+    p.add_argument('--filesystem', choices=('ufs1', 'apfs', 'hammer2'), required=True)
     p.add_argument('--commit', required=True)
     p.add_argument('--backends', default='luks,luks1,veracrypt')
     p.add_argument('--root', type=Path, required=True)
@@ -67,7 +67,7 @@ def main():
             # Create only a fresh encrypted file through the unchanged AES /
             # password profile; replace its temporary inner filesystem with
             # the independent fixture before the real read-only CLI import.
-            cli('create',['--filesystem','ext4',source,'0.25'])
+            cli('create',['--filesystem','ext4',source,'0.75' if a.filesystem=='hammer2' else '0.25'])
             if mapper.exists():raise RuntimeError('Private import mapper already exists')
             args=['/usr/sbin/cryptsetup' if Path('/usr/sbin/cryptsetup').exists() else '/usr/bin/cryptsetup','open','--batch-mode']
             if backend=='veracrypt':args+=['--type','tcrypt','--veracrypt'];secret=(password+'\n').encode()
