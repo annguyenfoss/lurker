@@ -57,7 +57,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
     <tr height="60">
       <td align="left">A&#8203;P&#8203;F&#8203;S<br>E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d</td>
       <td><sup>—</sup></td>
-      <td><img src="extras/assets/status/eggplant.png" width="24" align="absmiddle" alt="In progress"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
@@ -110,7 +110,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td><img src="extras/assets/status/eggplant.png" width="24" align="absmiddle" alt="In progress"></td>
+      <td>WIP</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td>WIP</td>
     </tr>
