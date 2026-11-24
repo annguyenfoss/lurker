@@ -10,15 +10,11 @@ The README and planning summary use the following compact notation. The older de
 - **☑️** — Largely usable, with some filesystem features missing or unverified.
 - **⚠️ R/O** — Mounted read-only access.
 - **—** — Unsupported.
-- **¹** — Btrfs/macOS: mounted R/W exists; creation workflow unverified.
-- **²** — APFS/Windows: mounted R/W exists; creation workflow unverified.
-- **³** — HAMMER2/Linux: experimental maturity; physical-device reliability unqualified.
-- **⁴** — HAMMER2/FreeBSD: basic workflow exists; implementation completeness unresolved.
-- **⁵** — NTFS/DragonFly: requires FUSE, omitted from the stock 6.4.2 kernel.
-- **⁶** — exFAT/DragonFly: requires FUSE, omitted from the stock 6.4.2 kernel.
-- **⁷** — OpenZFS/Windows: largely implemented; awaiting production maturity.
-
-The DragonFly FUSE prerequisite also applies to its XFS and APFS read-only routes.
+- **¹** — Btrfs/macOS: disk/container creation not available.
+- **²** — APFS/Windows: disk/container creation not available.
+- **³** — HAMMER2/Linux: experimental; tested only on disposable images.
+- **⁴** — HAMMER2/FreeBSD: experimental port; full feature coverage not established.
+- **⁵** — OpenZFS/Windows: release-candidate port; not production-qualified.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
@@ -27,6 +23,8 @@ This is filesystem capability research based on documentation/source inspection,
 This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools run on the host OS and are freely obtainable by individual users; virtual machines, WSL, paid routes and extract–edit–reinsert workflows are excluded. Native and userspace mounts count equally. Separate host-installed formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
 
 Number planning annotations uniquely from 1, scanning cells left to right and rows top to bottom. Use superscript numbers, with one concise explanation per number in the legend.
+
+In the planning summary, “creation not available” means no working end-to-end creation combination was established by this assessment. It does not prove that every formatter candidate is incapable of creating an image; preserve those candidates and the missing validation in the detailed research.
 
 ## Detailed survey notation
 

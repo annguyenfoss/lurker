@@ -13,9 +13,9 @@ This planning summary follows the stated use case: format a decrypted physical p
 | UFS1 / FFSv1 | ☑️ | — | ✅ | ✅ | ✅ | ✅ | ⚠️ R/O |
 | UFS2 / FFSv2 | ☑️ | ⚠️ R/O | ✅ | ✅ | ✅ | — | ⚠️ R/O |
 | HAMMER2 | ✅³ | — | ☑️⁴ | ☑️ | ☑️ | ✅ | — |
-| NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️⁵ | ✅ |
-| exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅⁶ | ✅ |
-| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅⁷ |
+| NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ✅ |
+| exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅⁵ |
 
 **Legend**
 
@@ -23,15 +23,11 @@ This planning summary follows the stated use case: format a decrypted physical p
 - **☑️** — Largely usable, with some filesystem features missing or unverified.
 - **⚠️ R/O** — Mounted read-only access.
 - **—** — Unsupported.
-- **¹** — Btrfs/macOS: mounted R/W exists; creation workflow unverified.
-- **²** — APFS/Windows: mounted R/W exists; creation workflow unverified.
-- **³** — HAMMER2/Linux: experimental maturity; physical-device reliability unqualified.
-- **⁴** — HAMMER2/FreeBSD: basic workflow exists; implementation completeness unresolved.
-- **⁵** — NTFS/DragonFly: requires FUSE, omitted from the stock 6.4.2 kernel.
-- **⁶** — exFAT/DragonFly: requires FUSE, omitted from the stock 6.4.2 kernel.
-- **⁷** — OpenZFS/Windows: largely implemented; awaiting production maturity.
-
-The DragonFly FUSE prerequisite also applies to its XFS and APFS read-only routes.
+- **¹** — Btrfs/macOS: disk/container creation not available.
+- **²** — APFS/Windows: disk/container creation not available.
+- **³** — HAMMER2/Linux: experimental; tested only on disposable images.
+- **⁴** — HAMMER2/FreeBSD: experimental port; full feature coverage not established.
+- **⁵** — OpenZFS/Windows: release-candidate port; not production-qualified.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
