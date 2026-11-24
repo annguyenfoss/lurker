@@ -3,7 +3,8 @@
 use super::super::Mounted;
 use super::{args, device_number, exec};
 use crate::{AppError, AppResult, CreateFilesystem, VolumeType};
-use std::path::Path;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+use std::path::{Path, PathBuf};
 
 pub(in super::super) fn validate_filesystem(
     fs: Option<CreateFilesystem>,
@@ -115,7 +116,7 @@ pub(in super::super) fn make_selected_filesystem(
         CreateFilesystem::Hammer2 => {
             exec(
                 "/usr/local/sbin/newfs_hammer2",
-                &args(&["-L", "DATA", &r]),
+                &args(&["-L", "DATA", &inner]),
                 None,
             )?;
         }
@@ -182,17 +183,58 @@ fn pool_name(device: &str) -> AppResult<String> {
     }
     Ok(name.to_owned())
 }
+fn pool_directory(pool: &str) -> PathBuf {
+    PathBuf::from("/var/run/lurker-bsd").join(format!("zfs-{pool}"))
+}
+fn prepare_pool_directory(pool: &str, device: &str) -> AppResult<PathBuf> {
+    let directory = pool_directory(pool);
+    match std::fs::DirBuilder::new().mode(0o700).create(&directory) {
+        Ok(()) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(e) => return Err(AppError::io("Create private ZFS import directory", e)),
+    }
+    let metadata = std::fs::symlink_metadata(&directory)
+        .map_err(|e| AppError::io("Inspect ZFS import directory", e))?;
+    if !metadata.is_dir() || metadata.uid() != 0 || metadata.mode() & 0o077 != 0 {
+        return Err(AppError::new("Unsafe ZFS import directory."));
+    }
+    let link = directory.join("device");
+    match std::os::unix::fs::symlink(device, &link) {
+        Ok(()) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            if std::fs::read_link(&link).ok().as_deref() != Some(Path::new(device)) {
+                return Err(AppError::new("ZFS import link identity changed."));
+            }
+        }
+        Err(e) => return Err(AppError::io("Create scoped ZFS import link", e)),
+    }
+    Ok(directory)
+}
+fn remove_pool_directory(pool: &str, device: &str) -> AppResult<()> {
+    let directory = pool_directory(pool);
+    let link = directory.join("device");
+    if !directory.exists() {
+        return Ok(());
+    }
+    if std::fs::read_link(&link).ok().as_deref() != Some(Path::new(device)) {
+        return Err(AppError::new(
+            "ZFS import link identity changed; preserving directory.",
+        ));
+    }
+    std::fs::remove_file(link)
+        .and_then(|_| std::fs::remove_dir(directory))
+        .map_err(|e| AppError::io("Remove scoped ZFS import directory", e))
+}
 fn verify_pool(pool: &str, device: &str) -> AppResult<()> {
-    let status = exec("/usr/sbin/zdb", &args(&["-C", pool]), None)?;
+    let status = exec("/sbin/zpool", &args(&["status", pool]), None)?;
     let paths: Vec<_> = status
         .lines()
-        .filter_map(|l| {
-            l.trim()
-                .strip_prefix("path: '")
-                .and_then(|s| s.strip_suffix('\''))
-        })
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|p| p.starts_with('/'))
         .collect();
-    if paths != [device] {
+    if paths.len() != 1
+        || std::fs::canonicalize(paths[0]).ok().as_deref() != Some(Path::new(device))
+    {
         return Err(AppError::new(
             "ZFS pool device identity differs; preserving pool.",
         ));
@@ -247,6 +289,10 @@ pub(in super::super) fn mount_filesystem(
         }
         "zfs" => {
             let pool = pool_name(&device)?;
+            let directory = prepare_pool_directory(&pool, &device)?;
+            let directory = directory
+                .to_str()
+                .ok_or_else(|| AppError::new("Invalid ZFS import path."))?;
             // Import must fail if this name already exists; never reuse a pool
             // imported by another session, even when its name is identical.
             exec(
@@ -254,7 +300,7 @@ pub(in super::super) fn mount_filesystem(
                 &args(&[
                     "import",
                     "-d",
-                    "/dev",
+                    directory,
                     "-N",
                     "-o",
                     "cachefile=none",
@@ -284,7 +330,32 @@ pub(in super::super) fn mount_filesystem(
         _ => return Err(AppError::new("Unsupported NetBSD inner filesystem.")),
     };
     argv.extend([device.into(), target.as_os_str().into()]);
-    exec(tool, &argv, None)?;
+    if kind == "ntfs" {
+        // NetBSD's libperfuse NTFS daemon retains inherited output descriptors.
+        // Pipes would keep exec's drain threads blocked until filesystem close.
+        let executable = crate::trusted_privileged_executable(Path::new(tool))?;
+        let status = std::process::Command::new(executable)
+            .args(&argv)
+            .env_clear()
+            .env(
+                "PATH",
+                "/sbin:/bin:/usr/sbin:/usr/bin:/usr/pkg/sbin:/usr/pkg/bin",
+            )
+            .env("LC_ALL", "C")
+            .env("HOME", "/root")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map_err(|e| AppError::io("Launch NetBSD NTFS mount", e))?;
+        if !status.success() {
+            return Err(AppError::new(format!(
+                "NetBSD NTFS mount failed ({status})."
+            )));
+        }
+    } else {
+        exec(tool, &argv, None)?;
+    }
     Ok(())
 }
 pub(in super::super) fn matches_filesystem_mount(mapped: &str, mounted: &Mounted) -> bool {
@@ -301,8 +372,11 @@ pub(in super::super) fn matches_filesystem_mount(mapped: &str, mounted: &Mounted
     if matches!(kind.as_str(), "exfat" | "ntfs" | "ext2fs") {
         // librefuse records the source in f_fstypename; f_mntfromname is
         // always /dev/puffs. Match both fields, including the exact CGD slice.
-        return mounted.source == Path::new("/dev/puffs")
-            && mounted.filesystem == format!("puffs|{device}");
+        return (mounted.source == Path::new("/dev/puffs")
+            && mounted.filesystem == format!("puffs|{device}"))
+            || (kind == "ntfs"
+                && mounted.source == Path::new(&device)
+                && mounted.filesystem == "puffs|perfuse|fuseblk");
     }
     let source_matches = mounted.source == Path::new(&device)
         || mounted.source == Path::new(&raw(&device))
@@ -334,7 +408,7 @@ pub(in super::super) fn close_filesystem(mapped: &str) -> AppResult<()> {
         )
         .is_err()
         {
-            return Ok(());
+            return remove_pool_directory(&pool, &device);
         }
         verify_pool(&pool, &device)?;
         let datasets = exec(
@@ -348,6 +422,7 @@ pub(in super::super) fn close_filesystem(mapped: &str) -> AppResult<()> {
             ));
         }
         exec("/sbin/zpool", &args(&["export", &pool]), None)?;
+        remove_pool_directory(&pool, &device)?;
     }
     Ok(())
 }
