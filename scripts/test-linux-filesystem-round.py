@@ -11,7 +11,10 @@ import time
 
 
 def command(args, **kw):
-    return subprocess.run(list(map(str, args)), check=True, capture_output=True, text=True, **kw)
+    completed = subprocess.run(list(map(str, args)), capture_output=True, text=True, **kw)
+    if completed.returncode:
+        raise RuntimeError(f'{args[0]} failed ({completed.returncode}): ' + (completed.stderr or completed.stdout)[-4000:])
+    return completed
 
 
 def main():
@@ -23,14 +26,16 @@ def main():
     p.add_argument('--filesystems', default='btrfs,ext4,xfs,ntfs,exfat,fat32')
     p.add_argument('--directory-filesystems', default='btrfs,ext4,xfs,ntfs,exfat,fat32')
     p.add_argument('--backends', type=Path, required=True)
+    p.add_argument('--userspace-backends', type=Path)
     p.add_argument('--skip-block', action='store_true')
+    p.add_argument('--only-userspace', action='store_true')
     a = p.parse_args()
     if os.geteuid() == 0:
         p.error('Run the coordinator as the login user; only block cases use sudo')
     a.root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.environ['PATH'] = '/usr/local/sbin:/usr/sbin:/sbin:' + os.environ.get('PATH', '')
     os.environ['LURKER_BACKEND_DIR'] = str(a.backends)
-    os.environ['LURKER_USERSPACE_DIR'] = str(a.backends)
+    os.environ['LURKER_USERSPACE_DIR'] = str(a.userspace_backends or a.backends)
     result = {'commit': a.commit, 'started': time.time(), 'pid': os.getpid(), 'cases': [], 'status': 'running'}
     receipt = a.root / 'matrix.json'
 
@@ -43,6 +48,8 @@ def main():
         args = ([shutil.which('sudo'), '-n'] if privileged else []) + [('/usr/bin/python3' if privileged else shutil.which('python3')), str(a.harness),
             '--binary', str(a.binary), '--backend', backend, '--filesystem', fs, '--commit', a.commit,
             '--root', str(root or a.root), '--size-gb', '0.5' if fs in {'xfs', 'hammer2'} else '0.25', '--timeout', '90']
+        if directory:
+            args.extend(['--mount-root', str(a.root)])
         if backend == 'veracrypt' and not privileged:
             args.append('--unprivileged')
         started = time.time()
@@ -72,8 +79,9 @@ def main():
     save()
     if not a.skip_block:
         for fs in a.filesystems.split(','):
-            for backend in ('luks', 'luks1', 'veracrypt'):
-                run_case(backend, fs, True)
+            if not a.only_userspace:
+                for backend in ('luks', 'luks1', 'veracrypt'):
+                    run_case(backend, fs, True)
             if fs in {'btrfs', 'ext4', 'xfs', 'ntfs', 'exfat', 'fat32'}:
                 run_case('veracrypt', fs)
     # Directory formats have their own layout. The label below names their
@@ -89,6 +97,10 @@ def main():
         try:
             if fs == 'zfs':
                 command(['sudo', '-n', 'zpool', 'create', '-o', 'cachefile=none', '-m', mount, pool, image])
+            elif fs == 'ufs2':
+                seed = backing / 'seed'; seed.mkdir(mode=0o700)
+                command(['makefs','-t','ffs','-B','little','-o','version=2,bsize=32768,fsize=4096','-s',str(512 * 1024**2),image,seed])
+                command(['sudo','-n','/usr/local/bin/fuse-ufs','-o',f'rw,allow_other,fsname={image}',image,mount])
             else:
                 formatter = {'btrfs':['mkfs.btrfs','-q'], 'ext4':['mkfs.ext4','-q'], 'xfs':['mkfs.xfs','-q'],
                     'ntfs':['mkntfs','-Q','-F'], 'exfat':['mkfs.exfat'], 'fat32':['mkfs.fat','-F','32'],
@@ -101,6 +113,9 @@ def main():
                 args = ['sudo', '-n', 'mount', '-o', ','.join(options)]
                 if fs == 'ntfs': args += ['-t','ntfs-3g']
                 command([*args, image, mount])
+            deadline = time.monotonic() + 5
+            while not os.path.ismount(mount) and time.monotonic() < deadline:
+                time.sleep(.025)
             mounted = os.path.ismount(mount)
             if not mounted:
                 raise RuntimeError('Backing mount missing; refusing to write to underlay')
