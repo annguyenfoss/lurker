@@ -253,27 +253,27 @@ OS/filesystem capabilities for the stated partition/container use case. See the 
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | ✅ | ⚠️ Limited | ⚠️ Limited | ❗R/O | ⚠️ Limited | ❗R/O | ⚠️ Limited |
-| **Btrfs** | ✅ | ⚠️ Limited¹ | ⚠️ Limited | — | — | — | ⚠️ Limited |
-| **XFS** | ✅ | ⚠️ Limited | ⚠️ Limited | ❗R/O | — | ❗R/O³ | ❗R/O |
-| **APFS** | ⚠️ Limited | ✅ | ❗R/O | ❗R/O | — | ❗R/O³ | ⚠️ Limited¹ |
-| **UFS1 / FFSv1** | ⚠️ Limited | — | ✅ | ✅ | ✅ | ✅ | ❗R/O |
-| **UFS2 / FFSv2** | ⚠️ Limited | ❗R/O; limited features | ✅ | ✅ | ✅ | — | ❗R/O |
-| **HAMMER2** | ✅ Beta | — | ⚠️ Limited² | ⚠️ Limited | ⚠️ Limited | ✅ | — |
-| **NTFS** | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited³ | ✅ |
-| **exFAT** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅³ | ✅ |
-| **ZFS / OpenZFS** | ✅ | ✅ | ✅ | — | ⚠️ Limited | — | ✅ Beta |
+| ext4 | ✅ | ⚠️<br>Limited | ⚠️<br>Limited | R/O | ⚠️<br>Limited | R/O | ⚠️<br>Limited |
+| Btrfs | ✅ | ⚠️<br>Limited¹ | ⚠️<br>Limited | — | — | — | ⚠️<br>Limited |
+| XFS | ✅ | ⚠️<br>Limited | ⚠️<br>Limited | R/O | — | R/O | R/O |
+| APFS | ⚠️<br>Limited | ✅ | R/O | R/O | — | R/O | ⚠️<br>Limited¹ |
+| UFS1 / FFSv1 | ⚠️<br>Limited | — | ✅ | ✅ | ✅ | ✅ | R/O |
+| UFS2 / FFSv2 | ⚠️<br>Limited | R/O | ✅ | ✅ | ✅ | — | R/O |
+| HAMMER2 | ✅ Beta | — | ⚠️<br>Limited² | ⚠️<br>Limited | ⚠️<br>Limited | ✅ | — |
+| NTFS | ⚠️<br>Limited | ⚠️<br>Limited | ⚠️<br>Limited | ⚠️<br>Limited | ⚠️<br>Limited | ⚠️<br>Limited³ | ✅ |
+| exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅³ | ✅ |
+| ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ⚠️<br>Limited | — | ✅ Beta |
 
 **Legend**
 
 - **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
 - **✅ Beta** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
 - **⚠️ Limited** — Mounted R/W is available, with important feature limitations or unresolved completeness. Creation is available except where unverified in note ¹. This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
-- **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access, whether or not formatting is available.
+- **R/O** — Mounted read-only access, whether or not formatting is available.
 - **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
 - **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
-- **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel.
+- **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel. This prerequisite also applies to the DragonFly XFS and APFS read-only routes.
 
 Beta is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 

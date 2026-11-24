@@ -9,11 +9,11 @@ The README and planning summary use the following compact notation. The older de
 - **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
 - **✅ Beta** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
 - **⚠️ Limited** — Mounted R/W is available, with important feature limitations or unresolved completeness. Creation is available except where unverified in note ¹. This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
-- **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access, whether or not formatting is available.
+- **R/O** — Mounted read-only access, whether or not formatting is available.
 - **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
 - **²** — Basic workflow exists; implementation completeness remains unresolved, rather than a confirmed missing feature.
-- **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel.
+- **³** — Requires working DragonFly FUSE support, omitted from the stock 6.4.2 kernel. This prerequisite also applies to the DragonFly XFS and APFS read-only routes.
 
 Beta is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
