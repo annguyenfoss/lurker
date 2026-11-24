@@ -66,3 +66,45 @@ Login-user gocryptfs requires `vfs.usermount=1`. It was temporarily enabled for 
 - Final verified cleanup: no owned mounts, processes, md devices, native sessions or initialization directories; root registry lock is free; only system `zroot` is imported; `vfs.usermount=0`. Guest free space is about 2 GiB. Installed packages, modules, trusted candidate runtime and retained evidence remain.
 
 Reviewer next action: read this report and `summary.json`, inspect the small BSD dispatch/FreeBSD adapter commits, verify carried receipt identities, and rerun only a genuinely missing or failed meaningful case. Native-reproduced limits above need no further upstream investigation.
+
+## Independent review, 2026-11-25
+
+Review passed with the existing upstream limits. No serious product or harness
+defect requiring a patch was found. The APFS reader selects only the existing
+VeraCrypt regular image whose inode matches the recorded md provider; GELI stays
+explicitly unavailable for that route. Probes use aligned 4096-byte reads, NTFS
+formatting reads the native sector geometry/count, and LKL refuses incompatible
+providers. ZFS checks single-device labels before import, verifies the mapped
+leaf after import, and refuses export while additional datasets/snapshots remain
+mounted. Native UFS2 defaults and ownership initialization are preserved.
+
+Programmatic receipt reconciliation verified all **13 create/RW pairs**, **four
+RO imports**, **one GELI/NTFS RW import**, and **12/14 directory cases**
+(gocryptfs 7/7, PEFS 5/7), including seven successful CLI actions and the expected
+write/append/final payload hashes for every complete writable lifecycle. The
+retained exact-commit test log totals **86 passed, 0 failed, 10 ignored**. All six
+relocated failed ciphertext fixtures still match their recorded full hashes.
+The executed common/directory harness hashes match their provenance. Live hashes
+of the candidate CLI, private engines and staged harnesses match the final
+artifact record. The final source archive matches both its receipt and a fresh
+`git archive` of `1a37591`.
+
+One affected case was missing after the final ZFS label guard: **VeraCrypt/ZFS**.
+It now passes a fresh seven-action PDF/text write, reopen, append/add-file and
+final reopen lifecycle on the final candidate
+`a2d17a2c78bde516f59faa607937341af11c92984de9e29a3ede4afcfdade442`.
+The receipt is `evidence/review-veracrypt-zfs.json`; the remote fixture/result is
+`/tmp/lurker-filesystem-round-freebsd-20261125/lurker-fs-cli-omw0it4o/`.
+Other receipts retain their original revisions: subsequent relevant changes
+were checked by source inspection, and FreeBSD modules/shared BSD lifecycle
+remain unchanged at review HEAD. Later `system.rs` changes concern Linux
+command resolution.
+
+Fresh native cleanup again finds no owned mounts, driver processes, md devices
+or session records; the registry lock is free, only system `zroot` is imported,
+and `vfs.usermount=0`. No jobs remain live; host is released. Read-only
+APFS/Btrfs/XFS, GELI NTFS creation, and PEFS exFAT/NTFS limitations remain as
+recorded above, without additional upstream attempts. Review receipts are
+`target/goal-validation/filesystem-round/freebsd/review-reconciliation.json`,
+`review-live-artifacts.json`, and `review-live-check.json`. This review is not
+release, feature-parity, reboot, GUI, physical-device or fault qualification.
