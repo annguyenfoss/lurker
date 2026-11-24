@@ -238,7 +238,8 @@ def main():
     mountpoint.mkdir(mode=0o700)
     source = directory / ("encrypted" if args.backend in DIRECTORIES else "vault.img")
     peer = directory / "peer.img"
-    password = secrets.token_urlsafe(30)
+    # Meet ordinary host password policies without changing their settings.
+    password = "Lurker9!" + secrets.token_urlsafe(24)
     pdf = args.pdf.read_bytes() if args.pdf else sample_pdf()
     if not pdf.startswith(b"%PDF-"):
         parser.error("Payload must be a PDF")
@@ -282,6 +283,11 @@ def main():
             if not os.path.ismount(mountpoint):
                 raise RuntimeError("Mount missing; refusing payload write to underlay")
             if phase == "write":
+                metadata = mountpoint.stat()
+                result["initial_root_metadata"] = {
+                    "uid": metadata.st_uid, "gid": metadata.st_gid,
+                    "mode": oct(metadata.st_mode & 0o7777),
+                }
                 payload_dir = mountpoint / "Lurker payload"
                 payload_dir.mkdir(mode=0o700)
                 for name, contents in expected.items():
