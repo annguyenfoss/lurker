@@ -208,6 +208,16 @@ https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/msdos
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/vfs/devfs/devfs_vnops.c
 https://raw.githubusercontent.com/DragonFlyBSD/DragonFlyBSD/v6.4.2/sys/dev/disk/vn/vn.c
 
+The tracked power-cut harness gained the FAT32 file workload in `ac207ab`.
+All 41 harness tests passed on DragonFly 6.4.2. With the same candidate
+binaries, the orderly-dismount control matched all three file hashes and
+closed normally. A separate UFS-backed run cut power 362 ms after observing
+both successful file fsyncs. Recovery from a verified copy reported the
+unchanged control, the pre-workload contents of the overwritten file, and
+the missing new file. It also verified native close and an idle storage
+inventory. The ciphertext digest matched the pre-workload image. Receipts
+are under `target/dragonfly-veracrypt-batch/fat32-regression-harness/`.
+
 The rebuilt package authenticated a 260 MiB stock VeraCrypt AES image with
 inner HAMMER2 and only about 20 MiB allocated. Identical starting ciphertext
 was tested on UFS and HAMMER2 backing. The two cuts completed 349 ms and
