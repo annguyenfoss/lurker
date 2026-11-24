@@ -375,6 +375,27 @@ class GuestFixture(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "Diagnostic"):
                         VM.openbsd_sync_diagnostic(fixture)
 
+    def test_dragonfly_filesystem_selection_applies_only_at_creation(self):
+        manifest = {"backend": "veracrypt", "os": "DragonFly", "source": "/owned/vault",
+                    "mountpoint": "/owned/open", "cipher": "aes", "size_gb": "0.5",
+                    "create_filesystem": "hammer2"}
+        self.assertEqual(VM.guest_volume_arguments("create", manifest),
+                         ["create", "--type", "veracrypt", "--cipher", "aes", "--filesystem",
+                          "hammer2", "/owned/vault", "0.5"])
+        self.assertEqual(VM.guest_volume_arguments("mount", manifest),
+                         ["mount", "--type", "veracrypt", "/owned/vault", "/owned/open"])
+        with self.assertRaises(RuntimeError):
+            VM.guest_volume_arguments("create", {**manifest, "os": "Linux"})
+
+    def test_workload_cannot_rearm_an_existing_worker_log(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "worker.log").touch()
+            manifest = {"mountpoint": str(directory / "open")}
+            with patch.object(VM, "guest_cli") as cli, self.assertRaisesRegex(RuntimeError, "already started"):
+                VM.arm_guest_workload(directory, manifest, "fixture")
+            cli.assert_not_called()
+
     def test_raid_workload_reopens_the_same_two_recorded_members(self):
         manifest = {"backend": "raid1c", "source": "/owned/primary", "peer_sources": ["/owned/peer"],
                     "mountpoint": "/owned/open", "size_gb": "0.125", "cipher": "aes"}

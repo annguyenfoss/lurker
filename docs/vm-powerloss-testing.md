@@ -88,6 +88,13 @@ hypervisor poweroff/boot evidence alongside the guest result; invoking a guest
 verification command alone does not prove a power cut happened. Setup and
 verification retain fixtures and never run filesystem repair.
 
+Add `--prepare-only` to `guest-setup` to publish a vault before the measured
+boot. After a clean reboot, run `guest-arm --run RUN` to verify the package,
+mount the published vault, and start the same worker. Use `--filesystem hammer2`
+at setup to explicitly select the DragonFly VeraCrypt application
+profile. The host must retain the worker's readiness and verify its liveness
+before cutting power to the owned clone.
+
 A completed daemon-owned copy can be mode 0600 and unreadable to the coordinator.
 `finish-copy-boot DIRECTORY` resumes only when the retained copy log confirms
 success and the source checks still pass. For this permission case, a unique

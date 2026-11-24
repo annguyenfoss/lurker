@@ -714,6 +714,10 @@ def guest_volume_arguments(action, manifest):
         command += ["--member", peers[0]]
     if action == "create" and backend in {"luks", "luks1", "veracrypt"}:
         command += ["--cipher", manifest["cipher"]]
+    if action == "create" and (filesystem := manifest.get("create_filesystem")):
+        require(backend == "veracrypt" and manifest.get("os") == "DragonFly"
+                and filesystem in {"hammer2", "fat32"}, "Invalid test filesystem selection")
+        command += ["--filesystem", filesystem]
     command.append(manifest["source"])
     if action == "mount":
         command.append(manifest["mountpoint"])
@@ -838,6 +842,12 @@ def guest_setup(args):
     require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Exact candidate Git commit required")
     try:
         route = validate_guest_route(args.backend, args.unprivileged, args.cipher)
+        if args.filesystem:
+            require(platform.system() == "DragonFly" and args.backend == "veracrypt",
+                    "Filesystem selection requires native DragonFly VeraCrypt")
+        if args.prepare_only:
+            require(not (args.netbsd_sync_diagnostic or args.openbsd_sync_diagnostic),
+                    "Deferred workloads do not use mount diagnostics")
         if args.netbsd_sync_diagnostic or args.netbsd_allocated_diagnostic:
             require(platform.system() == "NetBSD" and args.backend == "cgd" and os.geteuid() == 0,
                     "NetBSD diagnostics require a native CGD container")
@@ -866,7 +876,7 @@ def guest_setup(args):
     size_gb = None
     if args.backend not in DIRECTORIES:
         if platform.system() == "DragonFly":
-            # The aligned FAT32 create profile needs at least 260 MiB.
+            # Both DragonFly VeraCrypt profiles require at least 260 MiB.
             size_gb = "0.25390625" if args.backend == "veracrypt" else "0.125"
         else:
             size_gb = "0.125" if args.backend in {"geli", "cgd", "softraid", "raid1c"} else "0.35"
@@ -877,6 +887,7 @@ def guest_setup(args):
                 "selected_package_backends": package["selected_backends"],
                 "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 "credential_transport_sha256": hashlib.sha256(Path(__file__).with_name("test-backends.py").read_bytes()).hexdigest(),
+                "create_filesystem": args.filesystem,
                 "cipher": args.cipher, "size_gb": size_gb, "unprivileged": args.unprivileged, "source": str(source),
                 "peer_sources": [str(directory / "encrypted peer")] if args.backend == "raid1c" else [],
                 "mountpoint": str(mountpoint), "os": platform.system(), "kernel": platform.release(),
@@ -891,24 +902,57 @@ def guest_setup(args):
     if args.freebsd_suj_diagnostic:
         manifest["freebsd_suj_diagnostic"] = freebsd_suj_diagnostic(source, secret)
         write_json(directory / "guest.json", manifest)
-    guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
-    require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
-    if args.netbsd_sync_diagnostic:
-        manifest["netbsd_sync_diagnostic"] = netbsd_sync_diagnostic(mountpoint)
+    if args.prepare_only:
+        manifest["prepared_before_workload"] = True
         write_json(directory / "guest.json", manifest)
-    if args.openbsd_sync_diagnostic:
-        manifest["openbsd_sync_diagnostic"] = openbsd_sync_diagnostic(mountpoint)
-        write_json(directory / "guest.json", manifest)
-    # Persist only test credentials/recovery metadata before the measured
-    # workload. No global sync and no clean detach occurs before poweroff.
-    fsync_path(directory)
-    with (directory / "worker.log").open("wb") as output:
-        worker = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "guest-worker", "--run", args.run],
+        fsync_path(directory)
+        print(json.dumps({"status": "vault-published", "directory": str(directory)}), flush=True)
+        return 0
+    return arm_guest_workload(directory, manifest, secret,
+                              netbsd_sync=args.netbsd_sync_diagnostic, openbsd_sync=args.openbsd_sync_diagnostic)
+
+
+def arm_guest_workload(directory, manifest, secret, *, netbsd_sync=False, openbsd_sync=False):
+    mountpoint = Path(manifest["mountpoint"])
+    require(not os.path.ismount(mountpoint), "Workload requires an unopened fixture")
+    for name in ("ready.json", "worker-process.json", "worker.log"):
+        require(not os.path.lexists(directory / name), "A workload already started for this fixture")
+    # Reserve the worker log before mounting so parallel or interrupted attempts
+    # cannot arm the same vault twice. Preserve the log and mount on failure.
+    with (directory / "worker.log").open("xb") as output:
+        guest_cli(directory, guest_volume_arguments("mount", manifest), secret)
+        require(os.path.ismount(mountpoint), "CLI reported success without an identified mounted filesystem")
+        if netbsd_sync:
+            manifest["netbsd_sync_diagnostic"] = netbsd_sync_diagnostic(mountpoint)
+            write_json(directory / "guest.json", manifest)
+        if openbsd_sync:
+            manifest["openbsd_sync_diagnostic"] = openbsd_sync_diagnostic(mountpoint)
+            write_json(directory / "guest.json", manifest)
+        # Persist test metadata before the workload. The mounted filesystem
+        # receives only the worker's ordinary application operations.
+        fsync_path(directory)
+        worker = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "guest-worker", "--run", manifest["run"]],
                                   stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
                                   start_new_session=True)
-    write_json(directory / "worker-process.json", {"pid": worker.pid, "run": args.run})
+    write_json(directory / "worker-process.json", {"pid": worker.pid, "run": manifest["run"]})
     print(json.dumps({"status": "workload-started", "directory": str(directory), "pid": worker.pid}), flush=True)
     return 0
+
+
+def guest_arm(run_id):
+    directory = guest_directory(run_id)
+    manifest = json.loads((directory / "guest.json").read_text())
+    require(manifest.get("prepared_before_workload") is True and manifest["run"] == run_id,
+            "This fixture was not published with --prepare-only")
+    require(Path(manifest["source"]) == directory / "encrypted data"
+            and Path(manifest["mountpoint"]) == directory / "open data", "Fixture paths changed")
+    require(manifest.get("peer_sources", []) ==
+            ([str(directory / "encrypted peer")] if manifest["backend"] == "raid1c" else []),
+            "Recorded mirror member paths changed")
+    package, digest = verify_staged_package(Path(manifest["cli"]), manifest["source_commit"], manifest["backend"])
+    require(digest == manifest["package_manifest_sha256"], "Staged package manifest changed after publication")
+    guest_prerequisites(package, manifest["backend"], manifest["unprivileged"])
+    return arm_guest_workload(directory, manifest, (directory / "test-password").read_text())
 
 
 def guest_worker(run_id):
@@ -1031,6 +1075,8 @@ def main():
     setup.add_argument("--cli", type=Path, required=True)
     setup.add_argument("--backend", choices=("luks", "luks1", "veracrypt", "geli", "cgd", "softraid", "raid1c", "gocryptfs", "cryfs", "cryptomator", "pefs"), required=True)
     setup.add_argument("--cipher", choices=("aes", "serpent", "twofish"), default="aes")
+    setup.add_argument("--filesystem", choices=("hammer2", "fat32"), help="DragonFly VeraCrypt create profile")
+    setup.add_argument("--prepare-only", action="store_true", help="Publish the vault for a later guest-arm run")
     setup.add_argument("--commit", required=True)
     setup.add_argument("--unprivileged", action="store_true")
     setup.add_argument("--persistent-home-confirmed", action="store_true")
@@ -1042,12 +1088,14 @@ def main():
                        help="For NetBSD CGD, mount an allocated copy of the new fixture")
     setup.add_argument("--freebsd-suj-diagnostic", action="store_true",
                        help="For FreeBSD GELI, enable soft-updates journaling on the new fixture")
-    for action in ("guest-worker", "guest-verify"):
+    for action in ("guest-arm", "guest-worker", "guest-verify"):
         guest = commands.add_parser(action)
         guest.add_argument("--run", required=True)
     args = parser.parse_args()
     if args.action == "guest-setup":
         return guest_setup(args)
+    if args.action == "guest-arm":
+        return guest_arm(args.run)
     if args.action == "guest-worker":
         guest_worker(args.run)
         return 0
