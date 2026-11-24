@@ -727,7 +727,7 @@ fn dmcrypt_umount_device(ctx: &mut AppContext, resolved: &ResolvedUmountTarget) 
     ));
     let filesystem = detect_filesystem_type(ctx, &resolved.mapper_path)?;
     if filesystem.as_deref() == Some("zfs_member") {
-        export_zfs(ctx, &resolved.mapper_name)?;
+        export_zfs(ctx, &resolved.mapper_name, resolved.mountpoint.as_deref())?;
         crypt_close(ctx, &resolved.mapper_name)?;
         return Ok(());
     }
@@ -1881,10 +1881,69 @@ fn verify_zfs_mapper(ctx: &mut AppContext, pool: &str) -> AppResult<()> {
     Ok(())
 }
 
-fn export_zfs(ctx: &mut AppContext, pool: &str) -> AppResult<()> {
+fn zfs_export_mounts_safe(
+    pool: &str,
+    mounts: &[crate::linux::MountInfo],
+    expected: Option<&Path>,
+) -> bool {
+    let mut root_count = 0;
+    for mount in mounts.iter().filter(|m| m.fs_type == "zfs") {
+        let Some(source) = mount.source.as_deref() else {
+            continue;
+        };
+        let source = source.as_os_str().to_string_lossy();
+        if source == pool {
+            root_count += 1;
+            if expected != Some(mount.mount_point.as_path()) || root_count > 1 {
+                return false;
+            }
+        } else if source.starts_with(&format!("{pool}/")) || source.starts_with(&format!("{pool}@"))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn export_zfs(ctx: &mut AppContext, pool: &str, expected: Option<&Path>) -> AppResult<()> {
     verify_zfs_mapper(ctx, pool)?;
+    if !zfs_export_mounts_safe(pool, &read_mountinfo()?, expected) {
+        return Err(AppError::new("ZFS has an unrecorded dataset, snapshot or additional root mount; close it explicitly before unmounting this vault."));
+    }
     zfs_command(ctx, &["export".into(), pool.into()], false)?;
     Ok(())
+}
+
+fn single_zfs_leaf_labels(text: &str) -> bool {
+    let mut names = 0;
+    let mut children = 0;
+    let mut disks = 0;
+    for line in text.lines().map(str::trim) {
+        if line.starts_with("name:") {
+            names += 1;
+        }
+        if let Some(value) = line.strip_prefix("vdev_children:") {
+            if value.trim() != "1" {
+                return false;
+            }
+            children += 1;
+        }
+        if let Some(value) = line.strip_prefix("type:") {
+            if value.trim() != "'disk'" {
+                return false;
+            }
+            disks += 1;
+        }
+        for key in ["children", "spares", "l2cache"] {
+            if line
+                .strip_prefix(key)
+                .is_some_and(|rest| rest.starts_with('[') || rest.starts_with(':'))
+            {
+                return false;
+            }
+        }
+    }
+    names > 0 && names == children && names == disks
 }
 
 fn mount_zfs(ctx: &mut AppContext, pool: &str, mountpoint: &Path, readonly: bool) -> AppResult<()> {
@@ -1905,6 +1964,17 @@ fn mount_zfs(ctx: &mut AppContext, pool: &str, mountpoint: &Path, readonly: bool
         ));
     }
     let mapper = mapper_device_path(pool);
+    let zdb = crate::trusted_system_executable("zdb")?;
+    let labels = ctx.capture_command(
+        &zdb,
+        &["-l".into(), mapper.clone().into_os_string()],
+        true,
+        "Inspect inner ZFS labels",
+    )?;
+    if !labels.status.success() || !single_zfs_leaf_labels(&String::from_utf8_lossy(&labels.stdout))
+    {
+        return Err(AppError::new("ZFS import requires healthy labels for exactly one disk vdev, without child, spare or cache devices; import refused before attaching a pool."));
+    }
     let discovered = zfs_command(
         ctx,
         &[
@@ -1955,7 +2025,7 @@ fn mount_zfs(ctx: &mut AppContext, pool: &str, mountpoint: &Path, readonly: bool
         "Failed to mount inner ZFS filesystem",
     );
     if result.is_err() {
-        export_zfs(ctx, pool)?;
+        export_zfs(ctx, pool, None)?;
     }
     result
 }
@@ -1987,7 +2057,7 @@ fn create_zfs(
     )?;
     verify_zfs_mapper(ctx, pool)?;
     let initialized = initialize_native_root(ctx, std::ffi::OsStr::new(pool), "zfs", None, owner);
-    export_zfs(ctx, pool)?;
+    export_zfs(ctx, pool, None)?;
     initialized
 }
 
@@ -2279,6 +2349,61 @@ impl Drop for TempFileGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zfs_labels_require_one_disk_without_auxiliary_or_missing_topology() {
+        let valid = "name: 'any_pool'\nvdev_children: 1\nvdev_tree:\n type: 'disk'\n path: '/dev/mapper/lurker_test'\n";
+        assert!(single_zfs_leaf_labels(valid));
+        assert!(single_zfs_leaf_labels(&valid.repeat(4)));
+        assert!(!single_zfs_leaf_labels(
+            &valid.replace("vdev_children: 1", "vdev_children: 2")
+        ));
+        assert!(!single_zfs_leaf_labels(
+            &valid.replace("'disk'", "'mirror'")
+        ));
+        assert!(!single_zfs_leaf_labels(
+            &valid.replace("vdev_children: 1\n", "")
+        ));
+        for extra in ["children[0]:", "spares:", "l2cache[0]:"] {
+            assert!(!single_zfs_leaf_labels(&format!("{valid}{extra}\n")));
+        }
+    }
+
+    #[test]
+    fn zfs_export_refuses_unrecorded_children_snapshots_and_root_aliases() {
+        let mount = |source: &str, target: &str| crate::linux::MountInfo {
+            mount_id: 1,
+            readonly: false,
+            mount_point: target.into(),
+            source: Some(source.into()),
+            fs_type: "zfs".into(),
+        };
+        let pool = "lurker_test";
+        let root = Path::new("/private/vault");
+        let active = mount(pool, "/private/vault");
+        assert!(zfs_export_mounts_safe(pool, &[], None));
+        assert!(zfs_export_mounts_safe(pool, &[active.clone()], Some(root)));
+        assert!(!zfs_export_mounts_safe(pool, &[active.clone()], None));
+        for extra in [
+            mount("lurker_test/child", "/elsewhere"),
+            mount(
+                "lurker_test@snapshot",
+                "/private/vault/.zfs/snapshot/snapshot",
+            ),
+            mount(pool, "/private/alias"),
+        ] {
+            assert!(!zfs_export_mounts_safe(
+                pool,
+                &[active.clone(), extra],
+                Some(root)
+            ));
+        }
+        assert!(zfs_export_mounts_safe(
+            pool,
+            &[active, mount("lurker_test_other/child", "/other")],
+            Some(root)
+        ));
+    }
 
     #[test]
     fn new_filesystem_seed_is_private_and_pinned_after_rename() {
