@@ -1,9 +1,9 @@
 //! VeraCrypt headers are handled in the private tcplay process. Only a
 //! validated native mapper, identified by its journaled UUID, is mounted.
 use super::{args, exec, mapping_name, verify_backing, vnode_name, AppError, AppResult};
-use crate::bsd::{exec_dragonfly_locked, mounts, Credential, Registry, Session};
+use crate::bsd::{exec_dragonfly_locked, mounts, Credential, Mounted, Registry, Session};
 use crate::new_filesystem::Owner;
-use crate::{CreateCipher, VolumeType};
+use crate::{CreateCipher, CreateFilesystem, VolumeType};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind, Read};
@@ -25,6 +25,8 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 #[derive(Clone, Serialize, Deserialize)]
 pub(in crate::bsd) struct Mapping {
     sectors: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    filesystem: Option<CreateFilesystem>,
     #[serde(default)]
     removing: bool,
 }
@@ -190,7 +192,7 @@ fn payload_sectors(bytes: u64) -> AppResult<u64> {
 pub(in crate::bsd) fn validate_create_size(bytes: u64) -> AppResult<()> {
     if bytes < MIN_CREATE_MIB * MIB {
         return Err(AppError::new(format!(
-            "DragonFly VeraCrypt requires at least {MIN_CREATE_MIB} MiB for aligned FAT32."
+            "DragonFly VeraCrypt requires at least {MIN_CREATE_MIB} MiB."
         )));
     }
     payload_sectors(bytes).map(|_| ())
@@ -260,6 +262,7 @@ pub(in crate::bsd) fn activate(
     let sectors = payload_sectors(bytes)?;
     session.dragonfly_veracrypt = Some(Mapping {
         sectors,
+        filesystem: None,
         removing: false,
     });
     registry.save(session)?;
@@ -336,9 +339,7 @@ pub(in crate::bsd) fn reconcile(registry: &Registry, session: &mut Session) -> A
     if session.mounted.is_none() && session.mapped.as_deref() == Some(device.as_str()) {
         if let Some(mounted) = mounts()?.into_iter().find(|mount| {
             session.intended_mountpoint.as_ref() == Some(&mount.target)
-                && mount.source == Path::new(&device)
-                && mount.filesystem == "msdos"
-                && mount.readonly == session.readonly
+                && matches_mount(session, mount)
         }) {
             session.mounted = Some(mounted);
             registry.save(session)?;
@@ -367,22 +368,44 @@ pub(in crate::bsd) fn make_filesystem(
     registry: &Registry,
     mapped: &str,
     size: u64,
+    filesystem: CreateFilesystem,
 ) -> AppResult<()> {
     mapping_name(mapped)?;
-    let (cluster, fat_sectors) = fat32_create_geometry(size)?;
-    let cluster = cluster.to_string();
-    let fat_sectors = fat_sectors.to_string();
-    let mut options = args(&[
-        "-A", "-F", "32", "-c", &cluster, "-a", &fat_sectors, "-u", "63", "-h", "255",
-    ]);
+    let (formatter, mut options) = match filesystem {
+        CreateFilesystem::Hammer2 => ("/sbin/newfs_hammer2", args(&["-L", "DATA"])),
+        CreateFilesystem::Fat32 => {
+            let (cluster, fat_sectors) = fat32_create_geometry(size)?;
+            (
+                "/sbin/newfs_msdos",
+                args(&[
+                    "-A",
+                    "-F",
+                    "32",
+                    "-c",
+                    &cluster.to_string(),
+                    "-a",
+                    &fat_sectors.to_string(),
+                    "-u",
+                    "63",
+                    "-h",
+                    "255",
+                ]),
+            )
+        }
+    };
     options.push(mapped.into());
     exec_dragonfly_locked(
         registry,
-        Path::new("/sbin/newfs_msdos"),
+        Path::new(formatter),
         &options,
         None,
         COMMAND_TIMEOUT,
     )?;
+    if probe_filesystem(mapped, payload_sectors(size)?)? != filesystem {
+        return Err(AppError::new(
+            "The formatter produced an unexpected VeraCrypt filesystem.",
+        ));
+    }
     Ok(())
 }
 
@@ -440,9 +463,64 @@ fn fat32(boot: &[u8; 512], payload: u64) -> bool {
         && (2..=clusters + 1).contains(&long(44))
 }
 
+fn probe_filesystem(mapped: &str, sectors: u64) -> AppResult<CreateFilesystem> {
+    let mut boot = [0; 512];
+    File::open(mapped)
+        .and_then(|mut file| file.read_exact(&mut boot))
+        .map_err(|e| AppError::io("Read authenticated VeraCrypt filesystem boot sector", e))?;
+    if fat32(&boot, sectors) {
+        return Ok(CreateFilesystem::Fat32);
+    }
+    if exec("/usr/sbin/fstyp", &args(&[mapped]), None)
+        .is_ok_and(|result| result.trim() == "hammer2")
+    {
+        return Ok(CreateFilesystem::Hammer2);
+    }
+    Err(AppError::new(
+        "DragonFly VeraCrypt requires HAMMER2 with a DATA label or FAT32 with 4 KiB or larger clusters and a 4 KiB-aligned data region.",
+    ))
+}
+
+fn mounted_filesystem(session: &Session) -> Option<CreateFilesystem> {
+    // Active journals from the original candidate always used FAT32.
+    session
+        .dragonfly_veracrypt
+        .as_ref()
+        .map(|mapping| mapping.filesystem.unwrap_or(CreateFilesystem::Fat32))
+}
+
+pub(in crate::bsd) fn matches_mount(session: &Session, mounted: &Mounted) -> bool {
+    let (Some(mapped), Some(filesystem)) = (session.mapped.as_deref(), mounted_filesystem(session))
+    else {
+        return false;
+    };
+    if mounted.readonly != session.readonly {
+        return false;
+    }
+    match filesystem {
+        CreateFilesystem::Fat32 => {
+            mounted.filesystem == "msdos" && mounted.source == Path::new(mapped)
+        }
+        CreateFilesystem::Hammer2 => {
+            mounted.filesystem == "hammer2"
+                && mounted.source == Path::new(&format!("{mapped}@DATA"))
+        }
+    }
+}
+
+pub(in crate::bsd) fn mount_uses_mapper(mounted: &Mounted, mapped: &str) -> bool {
+    mounted.source == Path::new(mapped)
+        || (mounted.filesystem == "hammer2"
+            && mounted
+                .source
+                .to_str()
+                .and_then(|source| source.strip_prefix(mapped))
+                .is_some_and(|label| label.starts_with('@')))
+}
+
 pub(in crate::bsd) fn mount(
     registry: &Registry,
-    session: &Session,
+    session: &mut Session,
     target: &Path,
     owner: Owner,
 ) -> AppResult<()> {
@@ -450,60 +528,109 @@ pub(in crate::bsd) fn mount(
     let mapped = session
         .mapped
         .as_deref()
-        .ok_or_else(|| AppError::new("Missing VeraCrypt mapper for FAT32 mount."))?;
-    let sectors = session.dragonfly_veracrypt.as_ref().unwrap().sectors;
-    let mut boot = [0; 512];
-    File::open(mapped)
-        .and_then(|mut file| file.read_exact(&mut boot))
-        .map_err(|e| AppError::io("Read authenticated VeraCrypt filesystem boot sector", e))?;
-    if !fat32(&boot, sectors) {
-        return Err(AppError::new(
-            "DragonFly VeraCrypt requires FAT32 with 4 KiB or larger clusters and a 4 KiB-aligned data region.",
-        ));
-    }
-    let uid = owner.uid.to_string();
-    let gid = owner.gid.to_string();
-    let mut options = args(&[
-        "-u",
-        &uid,
-        "-g",
-        &gid,
-        "-m",
-        "600",
-        "-M",
-        "700",
-        "-o",
-        "rw,sync,nosuid,nodev,noexec",
-        mapped,
-    ]);
+        .ok_or_else(|| AppError::new("Missing VeraCrypt mapper for filesystem mount."))?;
+    let mapping = session
+        .dragonfly_veracrypt
+        .as_mut()
+        .ok_or_else(|| AppError::new("Missing DragonFly VeraCrypt mapper identity."))?;
+    let filesystem = probe_filesystem(mapped, mapping.sectors)?;
+    mapping.filesystem = Some(filesystem);
+    registry.save(session)?;
+    let (mount, mut options) = match filesystem {
+        CreateFilesystem::Hammer2 => (
+            "/sbin/mount_hammer2",
+            args(&["-o", "rw,nosuid,nodev,noexec", &format!("{mapped}@DATA")]),
+        ),
+        CreateFilesystem::Fat32 => (
+            "/sbin/mount_msdos",
+            args(&[
+                "-u",
+                &owner.uid.to_string(),
+                "-g",
+                &owner.gid.to_string(),
+                "-m",
+                "600",
+                "-M",
+                "700",
+                "-o",
+                "rw,sync,nosuid,nodev,noexec",
+                mapped,
+            ]),
+        ),
+    };
     options.push(target.as_os_str().to_owned());
-    exec_dragonfly_locked(
-        registry,
-        Path::new("/sbin/mount_msdos"),
-        &options,
-        None,
-        COMMAND_TIMEOUT,
-    )?;
+    exec_dragonfly_locked(registry, Path::new(mount), &options, None, COMMAND_TIMEOUT)?;
     Ok(())
 }
 
-pub(in crate::bsd) fn verify_access(target: &Path, owner: Owner) -> AppResult<()> {
+pub(in crate::bsd) fn verify_access(
+    session: &Session,
+    target: &Path,
+    owner: Owner,
+) -> AppResult<()> {
     let metadata =
-        fs::metadata(target).map_err(|e| AppError::io("Inspect mounted FAT32 root", e))?;
-    if metadata.uid() != owner.uid
-        || metadata.gid() != owner.gid
-        || metadata.mode() & 0o777 != 0o700
+        fs::metadata(target).map_err(|e| AppError::io("Inspect mounted VeraCrypt root", e))?;
+    match mounted_filesystem(session) {
+        Some(CreateFilesystem::Fat32) if metadata.uid() != owner.uid
+            || metadata.gid() != owner.gid || metadata.mode() & 0o777 != 0o700 =>
+            Err(AppError::new("Mounted FAT32 root does not have the invoking user's private access permissions.")),
+        Some(CreateFilesystem::Hammer2) if owner.uid != 0
+            && (metadata.uid() != owner.uid || metadata.mode() & 0o700 != 0o700) =>
+            Err(AppError::new("The HAMMER2 root requires ownership and read, write, and search permissions for the invoking user.")),
+        Some(_) => Ok(()),
+        None => Err(AppError::new("Missing DragonFly VeraCrypt filesystem record.")),
+    }
+}
+
+pub(in crate::bsd) fn sync_backing(session: &Session) -> AppResult<()> {
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(&session.source)
+        .map_err(|e| AppError::io("Open VeraCrypt ciphertext for close", e))?;
+    let metadata = file
+        .metadata()
+        .map_err(|e| AppError::io("Inspect open VeraCrypt ciphertext", e))?;
+    if !metadata.is_file()
+        || metadata.dev() != session.identity.dev
+        || metadata.ino() != session.identity.ino
     {
         return Err(AppError::new(
-            "Mounted FAT32 root does not have the invoking user's private access permissions.",
+            "VeraCrypt ciphertext changed during close; preserving the journal.",
         ));
     }
-    Ok(())
+    file.sync_all()
+        .map_err(|e| AppError::io("Sync VeraCrypt ciphertext before detaching its vnode", e))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{fat32, fat32_create_geometry, MIB};
+    use super::{fat32, fat32_create_geometry, mount_uses_mapper, Mapping, Mounted, MIB};
+    use std::path::PathBuf;
+
+    #[test]
+    fn hammer2_pfs_mount_holds_its_mapper() {
+        let mapper = "/dev/mapper/lurker_vc_fixture";
+        let mut mounted = Mounted {
+            source: format!("{mapper}@DATA").into(),
+            target: PathBuf::from("/mnt/fixture"),
+            fsid: Vec::new(),
+            filesystem: "hammer2".into(),
+            readonly: false,
+        };
+        assert!(mount_uses_mapper(&mounted, mapper));
+        mounted.source = format!("{mapper}@alternate").into();
+        assert!(mount_uses_mapper(&mounted, mapper));
+        mounted.source = format!("{mapper}2@DATA").into();
+        assert!(!mount_uses_mapper(&mounted, mapper));
+    }
+
+    #[test]
+    fn accepts_journal_from_before_filesystem_selection() {
+        let old: Mapping = serde_json::from_str(r#"{"sectors":531968,"removing":false}"#).unwrap();
+        assert!(old.filesystem.is_none());
+        assert_eq!(old.sectors, 531_968);
+    }
 
     #[test]
     fn fat32_create_provisions_tables_at_formatter_rounding_boundaries() {

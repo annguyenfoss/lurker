@@ -249,13 +249,18 @@ lurker list
 lurker unmount ./vault-mount
 ```
 
-For exchange with VeraCrypt on another OS, use a normal file container with
+New DragonFly VeraCrypt files use HAMMER2 with the `DATA` label. The filesystem
+root stores the invoking user's ownership and private permissions. Mount
+detects the filesystem after authenticating the container.
+
+For exchange with VeraCrypt on another OS, select `--filesystem fat32` or
+choose **FAT32 for exchange** in the desktop create form. Use a normal file container with
 AES, Serpent, or Twofish, SHA-512, PIM 0, and FAT32 with clusters of at least
 4 KiB and a 4 KiB-aligned data region. The minimum create size is 260 MiB. Use either a password of up to 64 UTF-8 bytes or `--key-file FILE`.
 FAT32 allows files up to 4 GiB minus one byte. Its ownership and permissions
 come from each mount and apply to the invoking user. On DragonFly 6.4.2, use
 portable ASCII filenames. Native FAT32 rejects directory `fsync` and lacks the
-locking SQLite needs, so application durability qualification remains open.
+locking SQLite needs. Abrupt power-loss qualification for the candidate remains open.
 DragonFly VeraCrypt rejects `--readonly` before attaching the container.
 
 Close a busy mount after stopping its users. If an operation is interrupted,

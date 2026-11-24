@@ -32,6 +32,7 @@ impl Fixture {
             source_kind: SourceKind::File,
             volume_type: kind,
             cipher,
+            filesystem: None,
             passphrase: Some(PASS.into()),
             keyfile: None,
         }

@@ -221,6 +221,7 @@ fn create(source: &Path, cipher: CreateCipher, force: bool) -> CommandAction {
         source_kind: SourceKind::File,
         volume_type: VolumeType::Veracrypt,
         cipher,
+        filesystem: None,
         passphrase: Some(PASSWORD.into()),
         keyfile: None,
     })

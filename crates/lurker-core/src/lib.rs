@@ -40,8 +40,8 @@ mod userspace;
 mod workflow;
 
 pub use api::{
-    ActiveVolume, CommandAction, CreateCommand, KeyslotOperation, KeyslotsCommand, MountCommand,
-    NativeVolumeListResponse, OperationResponse, SystemProbe, ToolStatus, UnmountCommand,
+    ActiveVolume, CommandAction, CreateCommand, CreateFilesystem, KeyslotOperation, KeyslotsCommand,
+    MountCommand, NativeVolumeListResponse, OperationResponse, SystemProbe, ToolStatus, UnmountCommand,
 };
 pub use error::{AppError, AppResult};
 #[doc(hidden)]
@@ -152,6 +152,9 @@ fn native_directory_request(command: &CommandAction) -> bool {
 
 fn validate_platform(command: &CommandAction) -> AppResult<()> {
     command.validate_raid1c_options(std::env::consts::OS)?;
+    if let CommandAction::Create(create) = command {
+        create.validate_filesystem(std::env::consts::OS)?;
+    }
     let backend = command.volume_type();
     if !backend.supports_platform(std::env::consts::OS) {
         return Err(AppError::new(format!(

@@ -52,7 +52,7 @@ refreshing the DragonFly source pin, review `native/dragonfly-tcplay/lurker.patc
 and verify every source hash in `native/dragonfly-tcplay/sources.json` before rerunning
 native qualification. The package includes the wrapper, provenance and notices.
 At runtime it uses DragonFly's base libraries, vnode and device-mapper facilities,
-and FAT32 tools. It needs no separately installed VeraCrypt application.
+`fstyp`, and the native HAMMER2 and FAT32 format and mount tools.
 
 Use `pkg add` and `pkg delete` on FreeBSD and DragonFly. Use `pkg_add` and
 `pkg_delete` on NetBSD and OpenBSD. OpenBSD's distribution policy requires a

@@ -12,6 +12,7 @@ import {
 
 export component CreateView inherits Card {
     in property <bool> is-linux: true;
+    in property <bool> is-dragonfly: false;
     in property <[string]> formats: ["luks", "vera"];
     in property <bool> unprivileged: false;
     in property <bool> busy: false;
@@ -25,6 +26,7 @@ export component CreateView inherits Card {
     in-out property <string> size: "1.0";
     in-out property <string> size-unit: "GB";        // "MB" | "GB"
     in-out property <string> cipher: "aes";          // "aes" | "serpent" | "twofish"
+    in-out property <string> filesystem: "hammer2";
     in-out property <string> passphrase: "";
     in-out property <string> confirm: "";
     in-out property <string> auth-method: "pass";
@@ -66,6 +68,17 @@ export component CreateView inherits Card {
         SelectField {
             value <=> root.format;
             model: root.formats;
+        }
+    }
+
+    if root.is-dragonfly && root.format == "vera": CardSection {
+        SectionHead { title: "FILESYSTEM"; }
+        Segmented {
+            value <=> root.filesystem;
+            options: [
+                { value: "hammer2", label: "HAMMER2" },
+                { value: "fat32", label: "FAT32 for exchange" },
+            ];
         }
     }
 

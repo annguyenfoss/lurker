@@ -169,11 +169,11 @@ Windows packaging and native qualification are planned. Use `cppcryptfs` for the
 ### DragonFly VeraCrypt file containers
 
 - Select `veracrypt` explicitly for create. LUKS1 remains the native default. Auto open keeps a recognized LUKS signature on the LUKS path and authenticates other regular files through the private wrapper.
-- Create normal, fully initialized volumes with AES, Serpent, or Twofish in XTS mode. The wrapper uses `SHA512-VC` (PBKDF2-HMAC-SHA-512, 500,000 iterations, PIM 0), 512-byte sectors, and FAT32 inside. Creation requires at least 260 MiB. FAT32 uses clusters of at least 4 KiB and a 4 KiB-aligned data region. Imports must match the header profile and geometry.
+- Create normal, fully initialized volumes with AES, Serpent, or Twofish in XTS mode. The wrapper uses `SHA512-VC` (PBKDF2-HMAC-SHA-512, 500,000 iterations, PIM 0) and 512-byte sectors. Candidate creation defaults to native HAMMER2 with the `DATA` label. Select FAT32 for exchange. Both profiles require at least 260 MiB. FAT32 uses clusters of at least 4 KiB and a 4 KiB-aligned data region. Imports must match the header profile and a recognized filesystem profile.
 - Creation sizes each FAT explicitly to cover the data clusters and the two reserved entries. Imports must also have enough FAT entries for their declared data region.
 - The core writes and syncs random data through the private staging file descriptor before vnode attachment. The private wrapper creates the VeraCrypt header on the attached, fully initialized file.
 - Accept a nonempty password of up to 64 UTF-8 bytes or one nonempty binary keyfile. VeraCrypt uses up to the first 1 MiB of keyfile contents. Both credentials enter the wrapper through its inherited input pipe.
-- Mounts assign private, per-mount ownership to the authorized invoking user. Read-only VeraCrypt requests fail before vnode attachment because the DragonFly 6.4.2 device mapper does not enforce read-only writes.
+- FAT32 assigns private, per-mount ownership to the authorized invoking user. New HAMMER2 filesystems store that user's ownership and mode `0700`. Close syncs the verified ciphertext file after filesystem and mapper teardown and before vnode detach. Read-only VeraCrypt requests fail before vnode attachment because the DragonFly 6.4.2 device mapper does not enforce read-only writes.
 
 ## VeraCrypt Authentication Decision
 

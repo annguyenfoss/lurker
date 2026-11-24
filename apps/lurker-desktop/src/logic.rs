@@ -175,6 +175,7 @@ pub fn build_create_command(
         source_kind,
         volume_type,
         cipher,
+        filesystem: None,
         passphrase,
         keyfile,
     })

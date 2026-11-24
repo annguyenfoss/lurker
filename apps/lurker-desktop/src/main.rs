@@ -104,7 +104,15 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             &w.get_create_auth_method(),
             &w.get_create_key_file(),
         )
-        .and_then(|command| {
+        .and_then(|mut command| {
+            if cfg!(target_os = "dragonfly")
+                && command.volume_type == lurker_core::VolumeType::Veracrypt
+            {
+                command.filesystem = Some(
+                    lurker_core::CreateFilesystem::parse(&w.get_create_filesystem())
+                        .ok_or_else(|| "Choose HAMMER2 or FAT32.".to_string())?,
+                );
+            }
             logic::with_create_members(command, &w.get_create_peer_source(), std::env::consts::OS)
         }) {
             Ok(command) => {

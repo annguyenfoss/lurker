@@ -125,6 +125,7 @@ fn run_helper_checked(
         CommandAction::Unmount(_) => false,
     };
     let keyslots = matches!(&command, CommandAction::Keyslots(_));
+    let filesystem = matches!(&command, CommandAction::Create(c) if c.filesystem.is_some());
     // OpenBSD Auto unmounts can refer to mirrored sessions by mountpoint alone.
     // Require the member-aware helper there before sending any native request.
     let raid1c = (cfg!(target_os = "openbsd") && !directory_backend)
@@ -144,6 +145,7 @@ fn run_helper_checked(
         || unprivileged
         || keyfile
         || keyslots
+        || filesystem
         || raid1c
         || cryptomator_fence
     {
@@ -186,6 +188,9 @@ fn run_helper_checked(
             || (keyslots && capabilities["luks_keyslots"] != true)
         {
             return Err("Installed lurker-helper does not support keyfiles or LUKS keyslots. Update it together with the desktop app.".into());
+        }
+        if filesystem && capabilities["dragonfly_veracrypt_filesystem"] != true {
+            return Err("Installed lurker-helper does not support selecting the DragonFly VeraCrypt filesystem. Update it together with the desktop app.".into());
         }
         if privileged_tools
             && (capabilities["protocol_version"] != 3
@@ -305,6 +310,7 @@ mod tests {
                 source_kind: lurker_core::SourceKind::Directory,
                 volume_type: VolumeType::Cryptomator,
                 cipher: lurker_core::CreateCipher::Aes,
+                filesystem: None,
                 passphrase: Some("fixture password".into()),
                 keyfile: None,
             }),
@@ -558,6 +564,7 @@ fi
             source_kind: lurker_core::SourceKind::Directory,
             volume_type: VolumeType::Gocryptfs,
             cipher: lurker_core::CreateCipher::Aes,
+            filesystem: None,
             passphrase: Some("fixture password".into()),
             keyfile: None,
         });

@@ -118,9 +118,43 @@ pub struct CreateCommand {
     pub volume_type: VolumeType,
     #[serde(default, alias = "luks_cipher")]
     pub cipher: CreateCipher,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filesystem: Option<CreateFilesystem>,
     pub passphrase: Option<String>,
     #[serde(default)]
     pub keyfile: Option<PathBuf>,
+}
+
+impl CreateCommand {
+    pub fn validate_filesystem(&self, os: &str) -> crate::AppResult<()> {
+        if self.filesystem.is_some()
+            && (os != "dragonfly"
+                || self.volume_type != VolumeType::Veracrypt
+                || self.source_kind != SourceKind::File)
+        {
+            return Err(crate::AppError::new(
+                "Filesystem selection is available for DragonFly VeraCrypt file creation only.",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CreateFilesystem {
+    Hammer2,
+    Fat32,
+}
+
+impl CreateFilesystem {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "hammer2" => Some(Self::Hammer2),
+            "fat32" => Some(Self::Fat32),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

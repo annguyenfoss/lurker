@@ -12,12 +12,12 @@ current project test baseline.
   XTS, VeraCrypt PBKDF2-HMAC-SHA-512 (`SHA512-VC`, 500,000 iterations, PIM 0), and full
   initialization. Accept either a password of up to 64 UTF-8 bytes or one non-empty
   regular binary keyfile. Reject an overlong password before invoking the engine.
-- Use FAT32 as the proposed first create and import filesystem. It gives the containers
-  Lurker creates a writable filesystem shared with the VeraCrypt targets in the
-  interoperability tests. Qualify it before fixing the default. Cover its 4 GiB minus
-  one byte per-file limit and permission semantics. A container with a different inner
-  filesystem needs separate filesystem qualification even when its VeraCrypt header
-  opens.
+- Use HAMMER2 with the `DATA` label as the candidate's DragonFly-native default.
+  Qualify its application workload and durability on the installed package. Keep aligned
+  FAT32 as an explicit exchange profile with its own writable interoperability, file-size,
+  and permission tests. Record its application and durability limits separately. A
+  container with another inner filesystem needs separate qualification even when its
+  VeraCrypt header opens.
 - Qualify imports of the create profile first. Treat other formats `tcplay` opened in
   the exploratory tests as additional test inputs, and list only qualified profiles in
   user documentation. Create selects LUKS1 by default and VeraCrypt explicitly.
@@ -81,7 +81,7 @@ scope matrix when coding begins. Public support follows package qualification.
 2. For create, reserve a same-directory staging file, fill it with random data, and
    sync it before vnode attachment. Create the normal VeraCrypt header with the fixed
    profile, authenticate and map the image, and format the verified decrypted provider
-   with the qualified native FAT32 formatter. Flush and close the owned resources
+   with the selected native formatter. Flush and close the owned resources
    before atomically publishing the image. Preserve the
    existing destination and no-clobber semantics, including `--force` handling and
    invoking-user ownership. Record recoverable state before each operation that may
@@ -125,8 +125,8 @@ applicable skipped cases.
 | Cross-platform exchange | Use the same qualified FAT filesystem in both directions. For Linux, FreeBSD, OpenBSD, and macOS, create with VeraCrypt, open in Lurker on DragonFly, write a marker, and reopen in the creator to verify it. Create with the installed Lurker package and repeat the exchange in reverse. Cover all three ciphers on DragonFly and Linux and at least AES on each additional OS. Use Windows when a native test environment is available, otherwise record Windows as unverified. Keep upstream and Lurker console builds identified in the receipts. |
 | Unsupported imports and read-only | Test Argon2id, BLAKE2s, Camellia, changed PBKDF2 iteration counts and an 80-byte VeraCrypt password as incompatible fixtures. Test a compatible header with an unqualified inner filesystem separately. Confirm an actionable error, unchanged ciphertext and no resources left behind. For read-only, test rejected writes at both layers and unchanged ciphertext, or explicit early refusal when that mode is unavailable. |
 | Ownership, busy close and concurrency | Exercise concurrent independent vaults, duplicate open, symlink and hardlink aliases, source replacement, stale name or vnode reuse, and a foreign mapper present. Hold an open file or working directory across a close attempt and verify it fails without detaching. Release it and retry normally. Compare inventories and unrelated image digests before and after. |
-| Application behavior and capacity | Reuse the [backend conformance harness](../../scripts/test-backends.py). Verify directory and file renames, fsync, and SQLite WAL with `synchronous=FULL`, including the exact committed rows and `integrity_check` after reopen. Exhaust inner FAT space and outer backing space independently, using isolated fixtures. Exercise full allocation, an append with little space, the FAT32 per-file size boundary, and recovery after space is freed. Require a visible write or sync failure when appropriate and preservation of previously committed bytes. |
-| Interruption and recovery | Interrupt after staging, vnode attach, mapper activation, format, mount, unmount, and mapper removal. Exercise both an orderly cancellation and abrupt exit where applicable. Verify atomic publication and existing-destination preservation, correct ownership, retryable journals, safe close of verified resources, and refusal to detach a reused device. Run the DragonFly LUKS1 regression suite after changes to shared discovery or recovery. |
+| Application behavior and capacity | Use the [backend conformance harness](../../scripts/test-backends.py) on HAMMER2 to verify directory and file renames, fsync, and SQLite WAL with `synchronous=FULL`, including exact committed rows and `integrity_check` after reopen. Exercise FAT32's synced file lifecycle and file-size boundary. Exhaust inner and outer space independently with isolated fixtures. Require a visible write or sync failure when appropriate and preservation of previously committed bytes after space is freed. |
+| Interruption and recovery | Interrupt after staging, vnode attach, mapper activation, format, mount, unmount, and mapper removal. Exercise both an orderly cancellation and abrupt exit where applicable. Dismount the filesystem with the native command and verify that Lurker can close and reopen its journaled mapper and vnode. Verify atomic publication and existing-destination preservation, correct ownership, retryable journals, safe close of verified resources, and refusal to detach a reused device. Run the DragonFly LUKS1 regression suite after changes to shared discovery or recovery. |
 | Ordinary reboot | Leave qualified test vaults mounted on a dedicated KVM guest, record boot and mount identities, and perform an ordinary reboot. Reopen through the installed product and verify payload hashes and committed rows. Record any manual reconciliation or filesystem repair separately. A busy or interrupted shutdown gets its own case. |
 | Abrupt power loss | Follow the [power-loss runbook](../../docs/vm-powerloss-testing.md). Use a disposable clone with a previously published vault and cut power after the host observes acknowledged file and directory fsync and a SQLite FULL/WAL commit. Check sparse and fully allocated images on representative HAMMER2 and UFS backing stores. Retain the cut disk and test a hash-verified copy. Compare with stock `tcplay` using the same workload and filesystem, and record read-only recovery, writable reopen, repair and missing bytes separately. Judge normal application durability from the ordinary workload and use extra flushes only to diagnose failures. |
 | Installed package and desktop | Install the exact candidate on a clean DragonFly guest and confirm offline operation, trusted wrapper and library resolution, accurate package requirements, and unrelated backends still working. Run the packaged Slint desktop and actual login-user helper callback through create, open, list, write, close and reopen. Check credentials, busy-close feedback, read-only availability, uninstall behavior, and clean inventories. |

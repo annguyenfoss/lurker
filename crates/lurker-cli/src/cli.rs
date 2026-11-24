@@ -1,6 +1,6 @@
 use lurker_core::{
-    AppError, ColorMode, CommandAction, CreateCipher, CreateCommand, KeyslotOperation,
-    KeyslotsCommand, MountCommand, SourceKind, UnmountCommand, VolumeType,
+    AppError, ColorMode, CommandAction, CreateCipher, CreateCommand, CreateFilesystem,
+    KeyslotOperation, KeyslotsCommand, MountCommand, SourceKind, UnmountCommand, VolumeType,
 };
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -75,6 +75,7 @@ where
     let mut privilege_mode_explicit = false;
     let mut create_cipher = CreateCipher::Aes;
     let mut create_cipher_explicit = false;
+    let mut create_filesystem = None;
     let mut keyfile = None;
     let mut new_keyfile = None;
     let mut slot = None;
@@ -87,7 +88,7 @@ where
         let option = current.split('=').next().unwrap();
         if matches!(
             option,
-            "--key-file" | "--new-key-file" | "--slot" | "--member" | "--timeout"
+            "--key-file" | "--new-key-file" | "--slot" | "--member" | "--timeout" | "--filesystem"
         ) {
             let value = if current.contains('=') {
                 OsString::from_vec(raw_args[index].as_bytes()[option.len() + 1..].to_vec())
@@ -113,6 +114,22 @@ where
             }
             match option {
                 "--member" => peer_sources.push(PathBuf::from(value)),
+                "--filesystem" => {
+                    let filesystem = value.to_str().and_then(CreateFilesystem::parse).ok_or_else(|| {
+                        usage_failure(
+                            &script_name,
+                            color_mode,
+                            "Choose hammer2 or fat32 for --filesystem.",
+                        )
+                    })?;
+                    if create_filesystem.replace(filesystem).is_some() {
+                        return Err(usage_failure(
+                            &script_name,
+                            color_mode,
+                            "Specify --filesystem only once.",
+                        ));
+                    }
+                }
                 "--timeout" => {
                     let seconds = value
                         .to_str()
@@ -340,7 +357,7 @@ where
 
     if first == "list" && matches!(os, "freebsd" | "dragonfly" | "netbsd" | "openbsd") {
         if parsed_args.len() != 1 || volume_type_explicit || readonly || create_cipher_explicit
-            || privilege_mode_explicit || keyfile.is_some() || new_keyfile.is_some()
+            || create_filesystem.is_some() || privilege_mode_explicit || keyfile.is_some() || new_keyfile.is_some()
             || slot.is_some() || close_timeout.is_some() || !peer_sources.is_empty() || allow_degraded
         {
             return Err(usage_failure(&script_name, color_mode, "Usage: lurker list [--color=WHEN]"));
@@ -419,6 +436,13 @@ where
             &script_name,
             color_mode,
             "Option --readonly is only valid with mount.",
+        ));
+    }
+    if create_filesystem.is_some() && action != "create" {
+        return Err(usage_failure(
+            &script_name,
+            color_mode,
+            "--filesystem requires create.",
         ));
     }
 
@@ -728,7 +752,7 @@ where
                 }
             };
 
-            let command = CommandAction::Create(CreateCommand {
+            let create = CreateCommand {
                 privilege_mode,
                 target,
                 peer_sources,
@@ -737,9 +761,13 @@ where
                 force,
                 volume_type,
                 cipher: create_cipher,
+                filesystem: create_filesystem,
                 passphrase: None,
                 keyfile,
-            });
+            };
+            create.validate_filesystem(os)
+                .map_err(|err| usage_failure(&script_name, color_mode, &err.message))?;
+            let command = CommandAction::Create(create);
             command
                 .validate_raid1c_options(os)
                 .map_err(|err| usage_failure(&script_name, color_mode, &err.message))?;
@@ -947,9 +975,14 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     } else {
         ""
     };
+    let dragonfly_help = if cfg!(target_os = "dragonfly") {
+        "\nDragonFly VeraCrypt candidate:\n  create --type veracrypt [--filesystem hammer2|fat32] <file> <size-gb>\n  HAMMER2 is the default. Select FAT32 for cross-platform exchange.\n"
+    } else {
+        ""
+    };
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return format!(
-            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\n  {script_name} list\nNative default: {}. File containers only; native device operations require administrator privileges.\n{raid_help}{directory_help}{session_help}",
+            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] [--readonly] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\n  {script_name} list\nNative default: {}. File containers only; native device operations require administrator privileges.\n{raid_help}{dragonfly_help}{directory_help}{session_help}",
             VolumeType::default_create()
         );
     }
@@ -1103,6 +1136,29 @@ mod tests {
     use super::{parse_env_args, CommandAction, ParseOutcome};
     use lurker_core::{CreateCipher, SourceKind, VolumeType};
     use std::ffi::OsString;
+
+    #[test]
+    fn filesystem_selection_requires_dragonfly_veracrypt_create() {
+        use lurker_core::CreateFilesystem;
+        let parse = |args: &[&str], os| {
+            super::parse_args_for_platform(args.iter().copied().map(OsString::from), os)
+        };
+        let args = ["lurker", "createvc", "--filesystem=fat32", "vault.hc", "1"];
+        let Ok(ParseOutcome::Run(cli)) = parse(&args, "dragonfly") else {
+            panic!("DragonFly createvc must accept the FAT32 profile");
+        };
+        assert!(matches!(cli.command, CommandAction::Create(c) if c.filesystem == Some(CreateFilesystem::Fat32)));
+        assert!(parse(&args, "linux").is_err());
+        for args in [
+            &["lurker", "create", "--type=luks1", "--filesystem=hammer2", "vault.hc", "1"][..],
+            &["lurker", "createvc", "--filesystem=ufs", "vault.hc", "1"],
+            &["lurker", "createvc", "--filesystem=hammer2", "--filesystem=hammer2", "vault.hc", "1"],
+            &["lurker", "mount", "--filesystem=hammer2", "vault.hc", "mountpoint"],
+            &["lurker", "list", "--filesystem=hammer2"],
+        ] {
+            assert!(parse(args, "dragonfly").is_err(), "{args:?}");
+        }
+    }
 
     #[test]
     fn native_list_accepts_color_without_operation_options() {

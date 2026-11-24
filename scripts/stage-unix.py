@@ -50,7 +50,8 @@ TOOLS = {
     "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"],
                 "raid1c": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
     "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "dmsetup", "kldload", "newfs", "mount", "umount"],
-                  "veracrypt": ["vnconfig", "dmsetup", "kldload", "newfs_msdos", "mount_msdos", "umount"]},
+                  "veracrypt": ["vnconfig", "dmsetup", "kldload", "fstyp", "newfs_hammer2", "mount_hammer2",
+                                "newfs_msdos", "mount_msdos", "umount"]},
 }
 
 

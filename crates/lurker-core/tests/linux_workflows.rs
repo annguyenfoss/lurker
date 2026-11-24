@@ -121,6 +121,7 @@ fn create(target: &Path, kind: SourceKind, ty: VolumeType, cipher: CreateCipher)
         source_kind: kind,
         volume_type: ty,
         cipher,
+        filesystem: None,
         passphrase: Some(PASSWORD.into()),
         keyfile: None,
     })

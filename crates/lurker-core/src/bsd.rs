@@ -562,6 +562,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     } else {
         None
     };
+    #[cfg(target_os = "dragonfly")]
+    let vc_filesystem = c.filesystem.unwrap_or(crate::CreateFilesystem::Hammer2);
     let parent = target
         .parent()
         .ok_or_else(|| AppError::new("Container needs a parent directory."))?;
@@ -688,9 +690,13 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
                 program,
                 &credential,
             )?);
-            return initialize_acquired_mapping(&registry, &session, |mapped| {
-                dragonfly_vc::make_filesystem(&registry, mapped, size)
-            });
+            initialize_acquired_mapping(&registry, &session, |mapped| {
+                dragonfly_vc::make_filesystem(&registry, mapped, size, vc_filesystem)
+            })?;
+            if vc_filesystem == crate::CreateFilesystem::Hammer2 {
+                initialize_new_filesystem_owner(&registry, &mut session, owner)?;
+            }
+            return Ok(());
         }
         #[cfg(target_os = "dragonfly")]
         {
@@ -766,17 +772,25 @@ fn initialize_new_filesystem_owner(
     verify_session(session)?;
     let mapped = session
         .mapped
-        .as_deref()
+        .clone()
         .ok_or_else(|| AppError::new("New filesystem has no recorded crypto mapping."))?;
-    mount_filesystem(mapped, &target, false)?;
+    match session.backend {
+        #[cfg(target_os = "dragonfly")]
+        VolumeType::Veracrypt => dragonfly_vc::mount(registry, session, &target, owner)?,
+        _ => mount_filesystem(&mapped, &target, false)?,
+    }
     let mounted = mounts()?
         .into_iter()
         .find(|m| m.target == target)
         .ok_or_else(|| {
             AppError::new("New filesystem mount identity missing; preserve initialization journal.")
         })?;
-    if mounted.source != Path::new(mapped) || mounted.filesystem != filesystem() || mounted.readonly
-    {
+    let matches = match session.backend {
+        #[cfg(target_os = "dragonfly")]
+        VolumeType::Veracrypt => dragonfly_vc::matches_mount(session, &mounted),
+        _ => mounted.source == Path::new(&mapped) && mounted.filesystem == filesystem() && !mounted.readonly,
+    };
+    if !matches {
         return Err(AppError::new(
             "New filesystem mount identity differs; preserve initialization journal.",
         ));
@@ -1048,7 +1062,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         }
         #[cfg(target_os = "dragonfly")]
         if let Some((_, owner)) = &vc {
-            dragonfly_vc::mount(&registry, &session, &target, *owner)?;
+            dragonfly_vc::mount(&registry, &mut session, &target, *owner)?;
         } else {
             mount_filesystem(session.mapped.as_deref().unwrap(), &target, c.readonly)?;
         }
@@ -1056,9 +1070,12 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         mount_filesystem(session.mapped.as_deref().unwrap(), &target, c.readonly)?;
         session.mounted = mounts()?.into_iter().find(|m| m.target == target);
         let mounted = session.mounted.as_ref().ok_or_else(|| AppError::new("Mount succeeded but native mount identity is missing; preserve session for recovery."))?;
-        if mounted.source != Path::new(session.mapped.as_deref().unwrap())
-            || mounted.readonly != c.readonly
-        {
+        let matches = match session.backend {
+            #[cfg(target_os = "dragonfly")]
+            VolumeType::Veracrypt => dragonfly_vc::matches_mount(&session, mounted),
+            _ => mounted.source == Path::new(session.mapped.as_deref().unwrap()) && mounted.readonly == c.readonly,
+        };
+        if !matches {
             return Err(AppError::new(
                 "Unexpected mounted device or read-only mode; preserve session for recovery.",
             ));
@@ -1066,12 +1083,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         registry.save(&session)?;
         #[cfg(target_os = "dragonfly")]
         if let Some((_, owner)) = &vc {
-            if mounted.filesystem != "msdos" {
-                return Err(AppError::new(
-                    "Unexpected mounted DragonFly VeraCrypt filesystem.",
-                ));
-            }
-            dragonfly_vc::verify_access(&target, *owner)?;
+            dragonfly_vc::verify_access(&session, &target, *owner)?;
         }
         require_write_journal(mounted)?;
         Ok(())
@@ -1451,7 +1463,13 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
         registry.save(s)?;
     }
     if let Some(mapped) = &s.mapped {
-        if mounts()?.iter().any(|m| m.source == Path::new(mapped)) {
+        if mounts()?.iter().any(|m| {
+            #[cfg(target_os = "dragonfly")]
+            if s.backend == VolumeType::Veracrypt {
+                return dragonfly_vc::mount_uses_mapper(m, mapped);
+            }
+            m.source == Path::new(mapped)
+        }) {
             return Err(AppError::new(
                 "The crypto device still has a mounted filesystem; leave session recoverable.",
             ));
@@ -1504,6 +1522,9 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
         native::verify_backing(backing, &s.source)?;
         #[cfg(target_os = "dragonfly")]
         {
+            if s.backend == VolumeType::Veracrypt {
+                dragonfly_vc::sync_backing(s)?;
+            }
             s.dragonfly_backing_detach_requested = true;
             registry.save(s)?;
         }
@@ -1611,20 +1632,19 @@ pub fn probe_system() -> AppResult<SystemProbe> {
         })
         .collect();
     if cfg!(target_os = "dragonfly") {
-        tools.push(ToolStatus {
-            name: "mount_msdos".into(),
-            path: Path::new("/sbin/mount_msdos")
-                .is_file()
-                .then(|| "/sbin/mount_msdos".into()),
-            required: false,
-        });
-        tools.push(ToolStatus {
-            name: "newfs_msdos".into(),
-            path: Path::new("/sbin/newfs_msdos")
-                .is_file()
-                .then(|| "/sbin/newfs_msdos".into()),
-            required: false,
-        });
+        for (name, path) in [
+            ("mount_msdos", "/sbin/mount_msdos"),
+            ("newfs_msdos", "/sbin/newfs_msdos"),
+            ("mount_hammer2", "/sbin/mount_hammer2"),
+            ("newfs_hammer2", "/sbin/newfs_hammer2"),
+            ("fstyp", "/usr/sbin/fstyp"),
+        ] {
+            tools.push(ToolStatus {
+                name: name.into(),
+                path: Path::new(path).is_file().then(|| path.into()),
+                required: false,
+            });
+        }
     }
     #[cfg(target_os = "dragonfly")]
     tools.push(ToolStatus {
@@ -2269,6 +2289,7 @@ mod tests {
                     source_kind: SourceKind::File,
                     volume_type: backend,
                     cipher: crate::CreateCipher::Aes,
+                    filesystem: None,
                     passphrase: Some(passphrase.into()),
                     keyfile: None,
                 },
@@ -2359,6 +2380,7 @@ mod tests {
             source_kind: SourceKind::File,
             volume_type: VolumeType::Veracrypt,
             cipher: crate::CreateCipher::Aes,
+            filesystem: None,
             passphrase: Some(passphrase.into()),
             keyfile: None,
         };
@@ -2444,6 +2466,7 @@ mod tests {
                     source_kind: SourceKind::File,
                     volume_type: VolumeType::Veracrypt,
                     cipher: crate::CreateCipher::Aes,
+                    filesystem: None,
                     passphrase: Some(passphrase.into()),
                     keyfile: None,
                 },

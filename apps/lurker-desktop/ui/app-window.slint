@@ -57,6 +57,7 @@ export component MainWindow inherits Window {
     in-out property <string> create-size: "1.0";
     in-out property <string> create-size-unit: "GB";
     in-out property <string> create-cipher: "aes";
+    in-out property <string> create-filesystem: "hammer2";
     in-out property <string> create-passphrase: "";
     in-out property <string> create-confirm: "";
     in-out property <string> create-auth-method: "pass";
@@ -286,6 +287,7 @@ export component MainWindow inherits Window {
 
                             if root.current-view == "create": CreateView {
                                 is-linux: root.is-linux;
+                                is-dragonfly: root.platform-os == "dragonfly";
                                 formats: root.create-formats;
                                 unprivileged: root.unprivileged;
                                 busy: root.operation-busy;
@@ -299,6 +301,7 @@ export component MainWindow inherits Window {
                                 size <=> root.create-size;
                                 size-unit <=> root.create-size-unit;
                                 cipher <=> root.create-cipher;
+                                filesystem <=> root.create-filesystem;
                                 passphrase <=> root.create-passphrase;
                                 confirm <=> root.create-confirm;
                                 auth-method <=> root.create-auth-method;

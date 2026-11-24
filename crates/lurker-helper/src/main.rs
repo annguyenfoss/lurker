@@ -32,6 +32,7 @@ fn run() -> i32 {
                     "folder_supervision_protocol": 1,
                     "cryptomator_fence_protocol": if cfg!(target_os = "macos") { Some(1) } else { None },
                     "raid1c_members": cfg!(target_os = "openbsd"),
+                    "dragonfly_veracrypt_filesystem": cfg!(target_os = "dragonfly"),
                     "noninteractive_sudo": !cfg!(target_os = "macos"),
                     "trusted_privileged_tools": !cfg!(target_os = "macos"),
                     "unprivileged_veracrypt": cfg!(target_os = "linux"),
