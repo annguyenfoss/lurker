@@ -191,6 +191,15 @@ private Xvfb display, with 1,216 sampled colors and clean display teardown.
 Offline remove and reinstall in the same private prefix verified package
 contents and left the guest's system package database unchanged.
 
+The exact `9384bad` package repeated the nine HAMMER2 capacity checks in a
+0.5 GiB AES vault on an isolated DragonFly 6.4.2 UFS fixture. Incompressible
+writes hit `ENOSPC` after 468,041,728 filler bytes, and the SQLite writer
+reported `SQLITE_FULL`. Previously committed data remained readable at
+exhaustion. Two native `hammer2 bulkfree` passes reclaimed space. After
+close and Auto reopen, the earlier and newly synced files and the committed
+SQLite rows matched. The receipt is
+`target/dragonfly-veracrypt-batch/hammer2-capacity-B/inner-result.json`.
+
 The same package passed three FAT32 capacity checks on a separate DragonFly
 6.4.2 guest. With 194,928,640 bytes free on a bounded outer UFS filesystem,
 a 260 MiB create with `--force` returned `ENOSPC`. The existing destination's
