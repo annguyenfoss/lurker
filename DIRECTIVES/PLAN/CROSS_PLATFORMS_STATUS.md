@@ -90,6 +90,11 @@ HAMMER2 reopened through Auto and matched all five standard payload hashes,
 the application file, and the sole committed SQLite row. SQLite integrity was
 `ok` and row 2 was absent. FAT32 reopened through Auto with the synced ASCII
 marker intact. Both closed normally with no manual reconciliation or repair.
+A second orderly reboot kept the HAMMER2 vault mounted while a process held
+both an open file and its working directory there. An explicit close first
+returned `Device busy` and preserved the mount, mapper, and vnode. After reboot
+the busy-test marker and earlier committed SQLite row survived, and normal
+close restored the inventory.
 The package also passed all 14 interruption cases using `SIGINT` and `SIGKILL`
 at the seven journaled boundaries. The test driver initially treated an
 omitted creation-target field as a failure. The exact package recovered that
@@ -100,9 +105,10 @@ private Xvfb display, with 1,216 sampled colors and clean display teardown.
 Offline remove and reinstall in the same private prefix verified package
 contents and left the guest's system package database unchanged.
 
-Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse-image power cuts
-and an orderly shutdown interrupted by a busy vault remain open for the
-rebuilt candidate. Release support remains planned.
+Receipts are under `target/dragonfly-veracrypt-batch/`. The sparse UFS-backed
+case completed its power cut after the durability acknowledgement. Recovery
+verification is pending. The byte-identical sparse image on HAMMER2 backing
+is prepared for its own cut. Release support remains planned.
 
 ## DragonFly VeraCrypt candidate, 2026-11-23
 
