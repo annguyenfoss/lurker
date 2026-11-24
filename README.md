@@ -249,8 +249,6 @@ Lurker chooses the native format for your OS. Use administrator authorization wh
 
 ## Filesystem Planning
 
-OS/filesystem capabilities for the stated partition/container use case. See the [research notes](docs/filesystem-support-matrix.md), [tag system](docs/filesystem-research-tags.md), and [detailed assessments](docs/filesystem-implementation-assessment.md) for scope, individual solutions and sources.
-
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ext4 | ✅ | ⚠️ | ⚠️ | ❗R/O | ⚠️ | ❗R/O | ⚠️ |
