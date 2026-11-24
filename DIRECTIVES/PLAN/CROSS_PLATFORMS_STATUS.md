@@ -206,8 +206,20 @@ restored their storage inventories. The FreeBSD console SHA-256 was
 `92edaf1363133aab8844ddd2c01656174967e260cd046569bd2dcbac64eec8b4`.
 The isolated guest and network were retired after verification. The receipt
 is `target/dragonfly-veracrypt-batch/freebsd-exchange/exchange.json`.
-Earlier OpenBSD and macOS round trips remain recorded at their original
-package revision. Windows remains unverified.
+
+The same DragonFly package and a VeraCrypt 1.26.31 console build on a clean
+OpenBSD 8.0 guest passed both writable AES FAT32 exchange directions. Each
+379 MiB image kept its 4 KiB-aligned FAT32 layout. Each creator verified both
+marker hashes on return, each transfer matched its source ciphertext digest,
+and all six visits restored their native storage inventories. The OpenBSD
+console SHA-256 was
+`7e463ce272db16be59b6b4755b574f0d6aa4d06a9374bd9daf2ef3f333dd3e46`.
+The test used a verified installation ISO after the first OpenBSD clone's
+root filesystem required repair to mount writable. The earlier clone disk
+was retained without repair. The receipt is
+`target/dragonfly-veracrypt-batch/openbsd-exchange/exchange.json`.
+The earlier macOS results remain recorded at their original package
+revision. Windows remains unverified.
 
 Receipts are under `target/dragonfly-veracrypt-batch/`. Sparse allocation
 reproduced the abrupt power-loss failure. Release support remains planned.
