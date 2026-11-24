@@ -351,12 +351,7 @@ impl ToolPaths {
                 ..
             }) => {
                 tools.formatter = Some(require_command(linux_formatter(*filesystem)?)?);
-                let module = match filesystem {
-                    Some(crate::api::CreateFilesystem::Apfs) => Some("apfs"),
-                    Some(crate::api::CreateFilesystem::Hammer2) => Some("hammer2"),
-                    Some(crate::api::CreateFilesystem::Zfs) => Some("zfs"),
-                    _ => None,
-                };
+                let module = linux_filesystem_module(*filesystem);
                 if let Some(module) = module {
                     if !native_filesystem_available(module) {
                         return Err(AppError::new(format!("Writable {module} creation requires its matching native kernel module; refusing before storage mutation.")));
@@ -382,6 +377,17 @@ impl ToolPaths {
         }
 
         Ok(tools)
+    }
+}
+
+pub(crate) fn linux_filesystem_module(
+    filesystem: Option<crate::api::CreateFilesystem>,
+) -> Option<&'static str> {
+    match filesystem {
+        Some(crate::api::CreateFilesystem::Apfs) => Some("apfs"),
+        Some(crate::api::CreateFilesystem::Hammer2) => Some("hammer2"),
+        Some(crate::api::CreateFilesystem::Zfs) => Some("zfs"),
+        _ => None,
     }
 }
 

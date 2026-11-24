@@ -57,6 +57,25 @@ fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> 
         None
     };
     assert_mapper_available(&mapper_name_for_source(&command.target, None)?)?;
+    if let Some(module) = crate::system::linux_filesystem_module(command.filesystem) {
+        if !Path::new("/sys/module").join(module).exists() {
+            // Resolve module/signing prerequisites before creating a header,
+            // especially for explicitly destructive physical-device requests.
+            let modprobe = crate::trusted_system_executable("modprobe")?;
+            let loaded = ctx.capture_command(
+                &modprobe,
+                &[module.into()],
+                true,
+                "Load filesystem driver before storage mutation",
+            )?;
+            if !loaded.status.success() {
+                return Err(AppError::new(format!(
+                    "Cannot load native {module} driver before storage creation: {}",
+                    String::from_utf8_lossy(&loaded.stderr).trim()
+                )));
+            }
+        }
+    }
     match command.volume_type {
         VolumeType::Veracrypt => {
             veracrypt_create_device(ctx, &command, source_guard.as_ref(), owner)
@@ -1261,6 +1280,7 @@ fn mount_open_mapper(
         options.push("readwrite".into());
     }
     if filesystem_type.as_deref() == Some("ufs") {
+        args.extend(["-i".into(), "-t".into(), "ufs".into()]);
         let blkid = ctx
             .blkid_path()
             .ok_or_else(|| AppError::new("blkid is required for Linux UFS variant detection."))?
@@ -2122,6 +2142,17 @@ fn create_zfs(
     initialized
 }
 
+fn descriptor_mount_id(file: &File) -> AppResult<u64> {
+    let info = fs::read_to_string(format!("/proc/self/fdinfo/{}", file.as_raw_fd()))
+        .map_err(|e| AppError::io("Inspect initialization directory mount identity", e))?;
+    info.lines()
+        .find_map(|line| {
+            line.strip_prefix("mnt_id:")
+                .and_then(|id| id.trim().parse().ok())
+        })
+        .ok_or_else(|| AppError::new("Initialization directory has no verified mount identity."))
+}
+
 fn initialize_native_root(
     ctx: &mut AppContext,
     source: &std::ffi::OsStr,
@@ -2157,6 +2188,11 @@ fn initialize_native_root(
             .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(&seed.path)
             .map_err(|e| AppError::io("Open new filesystem root", e))?;
+        if descriptor_mount_id(&directory)? != mounted.mount_id {
+            return Err(AppError::new(
+                "Initialization directory is covered by another mount; refusing ownership changes.",
+            ));
+        }
         let descriptor = OsString::from(format!(
             "/proc/{}/fd/{}",
             std::process::id(),
@@ -2198,6 +2234,17 @@ fn initialize_native_root(
             "Initialization mount identity changed; preserving it.",
         ));
     }
+    let visible = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&seed.path)
+        .map_err(|e| AppError::io("Recheck initialization mount", e))?;
+    if descriptor_mount_id(&visible)? != mounted.mount_id {
+        return Err(AppError::new(
+            "Initialization mount is covered or replaced; preserving it.",
+        ));
+    }
+    drop(visible);
     let umount = crate::trusted_system_executable("umount")?;
     ctx.run_command(
         &umount,
