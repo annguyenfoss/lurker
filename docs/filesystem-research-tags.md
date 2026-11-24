@@ -7,10 +7,8 @@ The README and planning summary use the following compact notation. The older de
 **Legend**
 
 - **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
-- **☑️ + subtags** — The same Create + R/W workflow, with the stated qualifications.
-- **Limited features** — Filesystem feature support is limited; available access is shown by the cell’s symbol/capability. Unresolved completeness must be identified explicitly, as in note ².
-- **Beta** — Experimental maturity. Without “Limited features”, the implementation is fully or largely implemented for the stated use case and awaits production maturity.
-- Legacy routes are grouped under **Limited features** in this summary; their maintenance details remain in the research notes.
+- **✅ Beta** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
+- **⚠️ Limited Support** — Create + R/W exists, but important features are limited or implementation completeness remains unresolved, as in note ². This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
 - **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access, whether or not formatting is available.
 - **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.

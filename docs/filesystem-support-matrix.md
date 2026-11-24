@@ -6,24 +6,22 @@ This planning summary follows the stated use case: format a decrypted physical p
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ext4** | ✅ | ☑️ Limited features | ☑️ Limited features | ❗R/O | ☑️ Limited features; beta | ❗R/O | ☑️ Limited features |
-| **Btrfs** | ✅ | ❗R/W; limited features; beta¹ | ☑️ Limited features | — | — | — | ☑️ Limited features |
-| **XFS** | ✅ | ☑️ Limited features | ☑️ Limited features | ❗R/O | — | ❗R/O³ | ❗R/O |
-| **APFS** | ☑️ Limited features; beta | ✅ | ❗R/O | ❗R/O | — | ❗R/O³ | ❗R/W; limited features; beta¹ |
-| **UFS1 / FFSv1** | ☑️ Limited features; beta | — | ✅ | ✅ | ✅ | ✅ | ❗R/O |
-| **UFS2 / FFSv2** | ☑️ Limited features; beta | ❗R/O; limited features | ✅ | ✅ | ✅ | — | ❗R/O |
-| **HAMMER2** | ☑️ Beta | — | ☑️ Limited features; beta² | ☑️ Limited features; beta | ☑️ Limited features; beta | ✅ | — |
-| **NTFS** | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features | ☑️ Limited features³ | ✅ |
+| **ext4** | ✅ | ⚠️ Limited Support | ⚠️ Limited Support | ❗R/O | ⚠️ Limited Support | ❗R/O | ⚠️ Limited Support |
+| **Btrfs** | ✅ | ❗R/W; limited features; beta¹ | ⚠️ Limited Support | — | — | — | ⚠️ Limited Support |
+| **XFS** | ✅ | ⚠️ Limited Support | ⚠️ Limited Support | ❗R/O | — | ❗R/O³ | ❗R/O |
+| **APFS** | ⚠️ Limited Support | ✅ | ❗R/O | ❗R/O | — | ❗R/O³ | ❗R/W; limited features; beta¹ |
+| **UFS1 / FFSv1** | ⚠️ Limited Support | — | ✅ | ✅ | ✅ | ✅ | ❗R/O |
+| **UFS2 / FFSv2** | ⚠️ Limited Support | ❗R/O; limited features | ✅ | ✅ | ✅ | — | ❗R/O |
+| **HAMMER2** | ✅ Beta | — | ⚠️ Limited Support² | ⚠️ Limited Support | ⚠️ Limited Support | ✅ | — |
+| **NTFS** | ⚠️ Limited Support | ⚠️ Limited Support | ⚠️ Limited Support | ⚠️ Limited Support | ⚠️ Limited Support | ⚠️ Limited Support³ | ✅ |
 | **exFAT** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅³ | ✅ |
-| **ZFS / OpenZFS** | ✅ | ✅ | ✅ | — | ☑️ Limited features | — | ☑️ Beta |
+| **ZFS / OpenZFS** | ✅ | ✅ | ✅ | — | ⚠️ Limited Support | — | ✅ Beta |
 
 **Legend**
 
 - **✅** — Create + R/W: create/format, reopen and mount both physical partitions and file containers for normal file reads and writes.
-- **☑️ + subtags** — The same Create + R/W workflow, with the stated qualifications.
-- **Limited features** — Filesystem feature support is limited; available access is shown by the cell’s symbol/capability. Unresolved completeness must be identified explicitly, as in note ².
-- **Beta** — Experimental maturity. Without “Limited features”, the implementation is fully or largely implemented for the stated use case and awaits production maturity.
-- Legacy routes are grouped under **Limited features** in this summary; their maintenance details remain in the research notes.
+- **✅ Beta** — The same Create + R/W workflow, fully or largely implemented, with experimental maturity and awaiting production maturity.
+- **⚠️ Limited Support** — Create + R/W exists, but important features are limited or implementation completeness remains unresolved, as in note ². This groups limited implementations, including those previously marked beta or legacy; their individual qualifications remain in the research notes.
 - **❗ + capability** — Creation or normal mounted R/W is missing or unconfirmed. **R/O** means mounted read-only access, whether or not formatting is available.
 - **—** — Unsupported for this use case: no qualifying mounted route found, including creation-only tools.
 - **¹** — Mounted R/W exists; the proposed formatter-to-driver creation workflow remains unverified.
