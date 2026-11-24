@@ -1140,6 +1140,7 @@ def guest_verify(run_id):
             require_fat32_mount(mountpoint)
             recovery = result["fat32_recovery"] = fat32_recovery(mountpoint, ready["marker_sha256"],
                                                                 manifest["fat32_baseline"])
+            failures = [f'{name}: {marker["status"]}' for name, marker in recovery.items() if marker["status"] != "matched"]
         else:
             phase = "capture-raw-WAL-evidence"
             evidence = directory / "recovered-evidence"
@@ -1154,15 +1155,13 @@ def guest_verify(run_id):
                 result["uncommitted_row_visible"] = recovery["sqlite"]["uncommitted_row_visible"]
             result["unacknowledged_file_size"] = (mountpoint / "unacknowledged writes").stat().st_size if (mountpoint / "unacknowledged writes").exists() else None
             failures = [f'{kind}: {check["error"]}' for kind, check in recovery.items() if check["status"] == "failed"]
-            require(not failures, " | ".join(failures))
+        recovery_phase = phase
         phase = "normal-cli-close"
         guest_cli(directory, ["unmount", str(mountpoint)], secret)
         require(not os.path.ismount(mountpoint), "Recovery CLI reported close while the mount remains attached")
-        if fat32:
-            result["native_close"] = "passed"
-            phase = "fat32-marker-recovery"
-            failures = [f'{name}: {marker["status"]}' for name, marker in recovery.items() if marker["status"] != "matched"]
-            require(not failures, " | ".join(failures))
+        result["native_close"] = "passed"
+        phase = recovery_phase
+        require(not failures, " | ".join(failures))
         result.update(status="passed", checks=5)
     except Exception as error:
         result.update(status="failed", failed_stage=phase, error=str(error).replace(secret, "<redacted>")[:2048])

@@ -384,6 +384,34 @@ class GuestFixture(unittest.TestCase):
             self.assertIn("missing", recovered["sqlite"]["error"])
             self.assertFalse((mountpoint / "profile.sqlite").exists())
 
+    def test_power_cut_closes_the_mount_after_a_recovery_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            mountpoint = directory / "open data"
+            mountpoint.mkdir()
+            (directory / "test-password").write_text("test secret")
+            VM.write_json(directory / "guest.json", {
+                "backend": "veracrypt", "create_filesystem": "hammer2", "source_commit": "test",
+                "source": str(directory / "encrypted data"), "mountpoint": str(mountpoint),
+                "cli": str(directory / "lurker"), "package_manifest_sha256": "package digest",
+            })
+            VM.write_json(directory / "ready.json", {
+                "status": "ready-for-abrupt-poweroff", "run": "test1234", "sha256": "missing payload digest",
+            })
+            with (
+                patch.object(VM, "guest_directory", return_value=directory),
+                patch.object(VM, "verify_staged_package", return_value=(None, "package digest")),
+                patch.object(VM, "guest_cli") as cli,
+                patch.object(VM.os.path, "ismount", side_effect=[True, False]),
+            ):
+                self.assertEqual(VM.guest_verify("test1234"), 1)
+            cli.assert_called_with(directory, ["unmount", str(mountpoint)], "test secret")
+            receipt = json.loads((directory / "result.json").read_text())
+            self.assertEqual(receipt["failed_stage"], "durable-record-and-SQLite-recovery")
+            self.assertEqual(receipt["native_close"], "passed")
+            self.assertEqual(receipt["application_recovery"]["file"]["status"], "failed")
+            self.assertEqual(receipt["application_recovery"]["sqlite"]["status"], "failed")
+
     def test_freebsd_suj_control_rejects_a_changed_md_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory) / "encrypted data"
