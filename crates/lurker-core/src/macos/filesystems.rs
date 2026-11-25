@@ -1,9 +1,10 @@
-//! Optional login-user ext4/XFS drivers over VeraCrypt's regular decrypted image.
-//! Native Apple filesystems retain hdiutil; no external tool is ever elevated.
+//! Optional filesystems over VeraCrypt's authenticated decrypted image.
+//! Formatters and filesystem drivers always run as the login user.
 use super::*;
 use crate::CreateFilesystem;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::io::{Seek, SeekFrom};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::thread;
@@ -13,24 +14,36 @@ use std::time::{Duration, Instant};
 enum Kind {
     Ext4,
     Xfs,
+    Ntfs,
+    Zfs,
+    Ufs2,
 }
 impl Kind {
     fn name(self) -> &'static str {
         match self {
             Self::Ext4 => "ext4",
             Self::Xfs => "xfs",
+            Self::Ntfs => "ntfs",
+            Self::Zfs => "zfs",
+            Self::Ufs2 => "ufs2",
         }
     }
     fn driver(self) -> &'static str {
         match self {
             Self::Ext4 => "fuse-ext2",
             Self::Xfs => "fuse-xfs",
+            Self::Ntfs => "ttntfs",
+            Self::Zfs => "mount_zfs",
+            Self::Ufs2 => "fuse-ufs",
         }
     }
     fn formatter(self) -> &'static str {
         match self {
             Self::Ext4 => "mkfs.ext4",
             Self::Xfs => "mkfs.xfs",
+            Self::Ntfs => "mkntfs",
+            Self::Zfs => "zpool",
+            Self::Ufs2 => unreachable!("UFS2 imports are read-only; no formatter is selected"),
         }
     }
 }
@@ -38,6 +51,8 @@ fn requested(filesystem: Option<CreateFilesystem>) -> Option<Kind> {
     match filesystem {
         Some(CreateFilesystem::Ext4) => Some(Kind::Ext4),
         Some(CreateFilesystem::Xfs) => Some(Kind::Xfs),
+        Some(CreateFilesystem::Ntfs) => Some(Kind::Ntfs),
+        Some(CreateFilesystem::Zfs) => Some(Kind::Zfs),
         _ => None,
     }
 }
@@ -54,7 +69,37 @@ fn tool(name: &str) -> AppResult<PathBuf> {
         .ok_or_else(|| AppError::new("Missing executable directory."))?;
     [directory.join("macos-filesystems").join(name), directory.join("../libexec/lurker/filesystems").join(name), directory.join("../Helpers/filesystems").join(name)]
         .into_iter().find(|path| executable(path))
-        .ok_or_else(|| AppError::new(format!("Private macOS filesystem tool {name} is missing. Install the qualified FUSE-T filesystem tools; no driver is run with sudo.")))
+        .ok_or_else(|| AppError::new(if name == "fuse-ufs" {
+            "Private macOS filesystem tool fuse-ufs is missing. Install the qualified foreground-only reader and approve the separately installed macFUSE kernel extension.".into()
+        } else {
+            format!("Private macOS filesystem tool {name} is missing. Install the qualified FUSE-T filesystem tools; no driver is run with sudo.")
+        }))
+}
+
+fn formatter(kind: Kind) -> AppResult<PathBuf> {
+    if kind != Kind::Ntfs {
+        return tool(kind.formatter());
+    }
+    // hdiutil authorizes the login user to format their identified virtual disk.
+    // Homebrew paths are deliberately never passed through sudo.
+    if crate::effective_uid() == 0 {
+        return Err(AppError::new("NTFS formatting must run as the login user."));
+    }
+    if let Ok(path) = tool("mkntfs") {
+        return Ok(path);
+    }
+    [
+        "/opt/homebrew/opt/ntfs-3g-mac/sbin/mkntfs",
+        "/usr/local/opt/ntfs-3g-mac/sbin/mkntfs",
+    ]
+    .into_iter()
+    .map(PathBuf::from)
+    .find(|path| executable(path))
+    .ok_or_else(|| {
+        AppError::new(
+            "NTFS creation requires mkntfs from ntfs-3g-mac. Install its free native formatter.",
+        )
+    })
 }
 
 pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<OsString>>> {
@@ -62,8 +107,19 @@ pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<
     else {
         return Ok(None);
     };
-    tool(kind.driver())?;
-    tool(kind.formatter())?;
+    if crate::effective_uid() == 0 {
+        return Err(AppError::new(
+            "External macOS filesystem containers must be created as the login user.",
+        ));
+    }
+    if !matches!(kind, Kind::Ntfs | Kind::Zfs) {
+        tool(kind.driver())?;
+    }
+    if kind == Kind::Zfs {
+        zfs::available()?;
+    } else {
+        formatter(kind)?;
+    }
     if size < 384 {
         return Err(AppError::new(
             "External macOS filesystem containers require at least 384 MiB.",
@@ -79,7 +135,9 @@ pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<
     Ok(Some(arguments))
 }
 fn detect(bytes: &[u8]) -> Option<Kind> {
-    if bytes.starts_with(b"XFSB") {
+    if bytes.get(3..11) == Some(b"NTFS    ") {
+        Some(Kind::Ntfs)
+    } else if bytes.starts_with(b"XFSB") {
         Some(Kind::Xfs)
     } else if bytes.get(1080..1082) == Some(&[0x53, 0xef])
         && bytes
@@ -92,9 +150,20 @@ fn detect(bytes: &[u8]) -> Option<Kind> {
     }
 }
 fn image_kind(image: &Path) -> Option<Kind> {
+    read_image_kind(&mut File::open(image).ok()?)
+}
+fn read_image_kind(image: &mut (impl Read + Seek)) -> Option<Kind> {
     let mut bytes = [0; 4096];
-    File::open(image).ok()?.read_exact(&mut bytes).ok()?;
-    detect(&bytes)
+    image.read_exact(&mut bytes).ok()?;
+    if let Some(kind) = detect(&bytes) {
+        return Some(kind);
+    }
+    // FreeBSD UFS2's primary superblock starts at 64 KiB. The magic is
+    // 1372 bytes into it; the reader supports both filesystem byte orders.
+    image.seek(SeekFrom::Start(65536 + 1372)).ok()?;
+    let mut magic = [0; 4];
+    image.read_exact(&mut magic).ok()?;
+    matches!(magic, [0x19, 0x01, 0x54, 0x19] | [0x19, 0x54, 0x01, 0x19]).then_some(Kind::Ufs2)
 }
 fn close_crypto(source: &Path) -> AppResult<()> {
     checked(
@@ -109,12 +178,48 @@ fn close_crypto(source: &Path) -> AppResult<()> {
     )?;
     Ok(())
 }
+
+fn close_identified_crypto(source: &Path, expected_image: &Path) -> AppResult<()> {
+    // VeraCrypt remembers a native device number even after an external driver
+    // detaches it. Never let that cached number close another image after reuse.
+    let attached = images()?;
+    let volumes = read_veracrypt_volumes(false)?;
+    let Some(volume) = volumes
+        .iter()
+        .find(|volume| same_path(&volume.source, source))
+    else {
+        return Ok(());
+    };
+    if volume
+        .devices
+        .iter()
+        .any(|device| cached_device_reused(&attached, device, expected_image))
+    {
+        return Err(AppError::new(
+            "VeraCrypt's cached virtual device now belongs to another image; preserving the encrypted session.",
+        ));
+    }
+    close_crypto(source)
+}
+
+fn cached_device_reused(attached: &[Image], device: &Path, expected_image: &Path) -> bool {
+    attached.iter().any(|image| {
+        image.entities.iter().any(|entity| entity.device == device)
+            && !same_path(&image.path, expected_image)
+    })
+}
+
+struct OpenImage {
+    path: PathBuf,
+    device: PathBuf,
+}
 fn open_image(
     source: &Path,
     pass: &[u8],
     readonly: bool,
     keyfile: Option<&Path>,
-) -> AppResult<PathBuf> {
+    detach_native: bool,
+) -> AppResult<OpenImage> {
     let mut arguments = args(&[
         "-t",
         "--mount",
@@ -131,45 +236,52 @@ fn open_image(
     }
     arguments.push(source.into());
     checked(&require_veracrypt()?, &arguments, Some(pass))?;
-    let result = (|| {
-        let volume = read_veracrypt_volumes(false)?
-            .into_iter()
-            .find(|volume| same_path(&volume.source, source))
-            .ok_or_else(|| AppError::new("VeraCrypt did not publish the authenticated volume."))?;
-        let device = volume.devices.first().ok_or_else(|| {
-            AppError::new("VeraCrypt has no identified auxiliary virtual device.")
-        })?;
-        let image = images()?
-            .into_iter()
-            .find(|image| image.entities.iter().any(|entity| &entity.device == device))
-            .ok_or_else(|| AppError::new("Cannot identify VeraCrypt's decrypted image."))?;
-        let path = existing(&image.path)?;
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|e| AppError::io("Cannot inspect decrypted image", e))?;
-        if !metadata.is_file()
-            || metadata.uid() != crate::effective_uid()
-            || metadata.mode() & 0o077 != 0
-            || path.file_name() != Some(std::ffi::OsStr::new("volume.dmg"))
-        {
-            return Err(AppError::new(
-                "VeraCrypt decrypted image must be a private regular file owned by the login user.",
-            ));
+    let result = identified_image(source).and_then(|image| {
+        if detach_native {
+            checked(
+                Path::new(HDIUTIL),
+                &["detach".into(), image.device.as_os_str().into()],
+                None,
+            )?;
         }
-        // The ordinary native virtual device exclusively locks this regular
-        // image. No native filesystem is mounted; detach only that identified
-        // device and retain VeraCrypt's live encryption/FUSE service.
-        checked(
-            Path::new(HDIUTIL),
-            &["detach".into(), device.as_os_str().into()],
-            None,
-        )?;
-        Ok(path)
-    })();
+        Ok(image)
+    });
     if result.is_err() {
         close_crypto(source)?;
     }
     result
 }
+fn identified_image(source: &Path) -> AppResult<OpenImage> {
+    let volume = read_veracrypt_volumes(false)?
+        .into_iter()
+        .find(|volume| same_path(&volume.source, source))
+        .ok_or_else(|| AppError::new("VeraCrypt did not publish the authenticated volume."))?;
+    let device = volume
+        .devices
+        .first()
+        .ok_or_else(|| AppError::new("VeraCrypt has no identified auxiliary virtual device."))?;
+    let image = images()?
+        .into_iter()
+        .find(|image| image.entities.iter().any(|entity| &entity.device == device))
+        .ok_or_else(|| AppError::new("Cannot identify VeraCrypt's decrypted image."))?;
+    let path = existing(&image.path)?;
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|e| AppError::io("Cannot inspect decrypted image", e))?;
+    if !metadata.is_file()
+        || metadata.uid() != crate::effective_uid()
+        || metadata.mode() & 0o077 != 0
+        || path.file_name() != Some(std::ffi::OsStr::new("volume.dmg"))
+    {
+        return Err(AppError::new(
+            "VeraCrypt decrypted image must be a private regular file owned by the login user.",
+        ));
+    }
+    Ok(OpenImage {
+        path,
+        device: device.clone(),
+    })
+}
+
 pub(super) fn format(
     source: &Path,
     filesystem: Option<CreateFilesystem>,
@@ -179,7 +291,11 @@ pub(super) fn format(
     let Some(kind) = requested(filesystem) else {
         return Ok(());
     };
-    let image = open_image(source, pass, false, keyfile)?;
+    if kind == Kind::Zfs {
+        return format_zfs(source, pass, keyfile);
+    }
+    let opened = open_image(source, pass, false, keyfile, kind != Kind::Ntfs)?;
+    let image = &opened.path;
     let arguments = match kind {
         Kind::Ext4 => vec![
             "-F".into(),
@@ -191,9 +307,18 @@ pub(super) fn format(
             image.as_os_str().into(),
         ],
         Kind::Xfs => vec!["-f".into(), image.as_os_str().into()],
+        Kind::Ntfs => vec![
+            "-F".into(),
+            "-Q".into(),
+            "-s".into(),
+            "512".into(),
+            opened.device.as_os_str().into(),
+        ],
+        Kind::Zfs => unreachable!("ZFS uses its authenticated native device"),
+        Kind::Ufs2 => unreachable!("UFS2 creation is unsupported"),
     };
-    let result = checked(&tool(kind.formatter())?, &arguments, None).map(|_| ());
-    close_crypto(source)?;
+    let result = checked(&formatter(kind)?, &arguments, None).map(|_| ());
+    close_identified_crypto(source, image)?;
     result
 }
 #[derive(Serialize, Deserialize)]
@@ -212,6 +337,10 @@ struct Session {
     process_start: String,
     mount_identity: Option<String>,
     mount_dev: Option<u64>,
+    #[serde(default)]
+    native_device: Option<PathBuf>,
+    #[serde(default)]
+    zfs_pool: Option<zfs::PoolIdentity>,
 }
 struct Registry {
     path: PathBuf,
@@ -384,10 +513,319 @@ fn validate_image(session: &Session) -> AppResult<()> {
             "VeraCrypt auxiliary image identity changed; preserving session.",
         ));
     }
+    if let Some(device) = &session.native_device {
+        validate_native_device(&session.image, device)?;
+    }
     Ok(())
 }
+
+fn validate_native_device(image: &Path, device: &Path) -> AppResult<()> {
+    if !images()?.iter().any(|attached| {
+        same_path(&attached.path, image)
+            && attached
+                .entities
+                .iter()
+                .any(|entity| entity.device == device)
+    }) {
+        return Err(AppError::new(
+            "Native virtual device identity changed; preserving the encrypted session.",
+        ));
+    }
+    Ok(())
+}
+
+fn mount_is_readonly(path: &Path) -> AppResult<bool> {
+    let path = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| AppError::new("Invalid filesystem mount path."))?;
+    let mut status = std::mem::MaybeUninit::<libc::statfs>::uninit();
+    // SAFETY: path is NUL-terminated and status points to writable storage.
+    if unsafe { libc::statfs(path.as_ptr(), status.as_mut_ptr()) } != 0 {
+        return Err(AppError::io(
+            "Cannot inspect filesystem mount flags",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    // SAFETY: successful statfs initialized the entire structure.
+    Ok(unsafe { status.assume_init() }.f_flags & libc::MNT_RDONLY as u32 != 0)
+}
+
+fn start_native_ntfs(
+    registry: &Registry,
+    source: &Path,
+    mountpoint: &Path,
+    image: &OpenImage,
+    readonly: bool,
+) -> AppResult<bool> {
+    validate_native_device(&image.path, &image.device)?;
+    let (path, mut session) = reserve_session(
+        registry,
+        source,
+        mountpoint,
+        &image.path,
+        Kind::Ntfs,
+        readonly,
+        Some(image.device.clone()),
+    )?;
+    // hdiutil authorizes this login user's virtual device. FSKit provides the
+    // driver; no private binary or native mount command is elevated.
+    let mut arguments = args(&["-F", "-t", "ttntfs"]);
+    if readonly {
+        arguments.extend(args(&["-o", "ro"]));
+    }
+    arguments.extend([
+        image.device.as_os_str().into(),
+        mountpoint.as_os_str().into(),
+    ]);
+    let mounted = checked(Path::new("/sbin/mount"), &arguments, None);
+    if let Some(identity) = mount_identity(mountpoint)? {
+        if !native_ntfs_identity(&identity, &image.device, mountpoint) {
+            return Err(AppError::new(
+                "TT NTFS Native published an unexpected mount identity; preserving the encrypted session.",
+            ));
+        }
+        session.mount_identity = Some(identity);
+        session.mount_dev = Some(
+            fs::metadata(mountpoint)
+                .map_err(|error| AppError::io("Cannot inspect native NTFS mount", error))?
+                .dev(),
+        );
+        save(&path, &session)?;
+    }
+    let result = mounted.and_then(|_| {
+        if session.mount_identity.is_none() {
+            return Err(AppError::new(
+                "TT NTFS Native did not publish a filesystem mount.",
+            ));
+        }
+        if mount_is_readonly(mountpoint)? != readonly {
+            return Err(AppError::new(
+                "TT NTFS Native did not honor the requested read-only mode.",
+            ));
+        }
+        fs::read_dir(mountpoint)
+            .map_err(|error| AppError::io("Cannot read native NTFS filesystem", error))?;
+        Ok(true)
+    });
+    if let Err(error) = result {
+        let cleanup = close_session(&path, &mut session);
+        return Err(AppError::new(format!(
+            "Native NTFS mount failed: {}. Install and enable the free TT NTFS Native FSKit extension. Cleanup: {}",
+            error.message,
+            cleanup
+                .err()
+                .map(|error| error.message)
+                .unwrap_or_else(|| "complete".into()),
+        )));
+    }
+    result
+}
+
+/// A native VeraCrypt mount can succeed through Apple's read-only NTFS driver.
+/// Inspect successful mounts too, so an RW request never silently uses it.
+pub(super) fn replace_native_ntfs(
+    source: &Path,
+    mountpoint: &Path,
+    readonly: bool,
+) -> AppResult<()> {
+    // Successful writable mounts already satisfy the request. Read-only
+    // imports can retain Apple's native driver; only a silent RW downgrade
+    // needs the explicit TT NTFS route.
+    if readonly || !mount_is_readonly(mountpoint)? {
+        return Ok(());
+    }
+    let identity = mount_identity(mountpoint)?;
+    if !identity.as_deref().is_some_and(|line| {
+        line.rsplit_once(" (")
+            .is_some_and(|(_, options)| options.starts_with("ntfs,"))
+    }) {
+        return Ok(());
+    }
+    let registry = Registry::lock()?;
+    let image = identified_image(source)?;
+    validate_native_device(&image.path, &image.device)?;
+    if !read_veracrypt_volumes(false)?.iter().any(|volume| {
+        same_path(&volume.source, source)
+            && volume
+                .mountpoint
+                .as_ref()
+                .is_some_and(|path| same_path(path, mountpoint))
+    }) {
+        return Err(AppError::new(
+            "Native NTFS mount does not belong to the authenticated VeraCrypt source.",
+        ));
+    }
+    checked(
+        Path::new(DISKUTIL),
+        &["unmount".into(), mountpoint.as_os_str().into()],
+        None,
+    )?;
+    let result = start_native_ntfs(&registry, source, mountpoint, &image, readonly).map(|_| ());
+    if result.is_err()
+        && !registry
+            .sessions()?
+            .iter()
+            .any(|(_, session)| same_path(&session.source, source))
+    {
+        close_identified_crypto(source, &image.path)?;
+    }
+    result
+}
+
+fn native_ntfs_identity(identity: &str, device: &Path, mountpoint: &Path) -> bool {
+    identity
+        .strip_prefix(&format!(
+            "{} on {} (",
+            device.display(),
+            mountpoint.display()
+        ))
+        .and_then(|options| options.strip_suffix(')'))
+        .is_some_and(|options| {
+            let options: Vec<_> = options.split(", ").collect();
+            options.first() == Some(&"ntfs") && options.contains(&"fskit")
+        })
+}
+
+fn validate_session_mount(session: &Session) -> AppResult<()> {
+    if let Some(identity) = mount_identity(&session.mountpoint)? {
+        if session.mount_identity.as_ref() != Some(&identity)
+            || session.mount_dev
+                != Some(
+                    fs::metadata(&session.mountpoint)
+                        .map_err(|error| AppError::io("Inspect native filesystem mount", error))?
+                        .dev(),
+                )
+        {
+            return Err(AppError::new(
+                "Filesystem mount identity changed; preserving encrypted container.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn remember_zfs_mount(path: &Path, session: &mut Session) -> AppResult<()> {
+    if let Some(identity) = mount_identity(&session.mountpoint)? {
+        let pool = session
+            .zfs_pool
+            .as_ref()
+            .ok_or_else(|| AppError::new("Missing ZFS identity."))?;
+        let device = session
+            .native_device
+            .as_ref()
+            .ok_or_else(|| AppError::new("Missing ZFS virtual device."))?;
+        if !zfs::verify_mounted(device, pool, &session.mountpoint, Some(session.readonly))? {
+            return Err(AppError::new(
+                "Unexpected ZFS mount; preserving the encrypted session.",
+            ));
+        }
+        session.mount_identity = Some(identity);
+        session.mount_dev = Some(
+            fs::metadata(&session.mountpoint)
+                .map_err(|error| AppError::io("Inspect native ZFS mount", error))?
+                .dev(),
+        );
+        save(path, session)?;
+    }
+    Ok(())
+}
+
+fn format_zfs(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult<()> {
+    let registry = Registry::lock()?;
+    let target = source
+        .parent()
+        .ok_or_else(|| AppError::new("Missing ZFS staging directory."))?
+        .join("zfs-initialize");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&target)
+        .map_err(|error| AppError::io("Create private ZFS initialization mount", error))?;
+    let image = open_image(source, pass, false, keyfile, false)?;
+    let (path, mut session) = reserve_session(
+        &registry,
+        source,
+        &target,
+        &image.path,
+        Kind::Zfs,
+        false,
+        Some(image.device.clone()),
+    )?;
+    // Recovery ownership is durable before zpool can change the authenticated device.
+    let (device, identity) = zfs::create(&image.device, &image.path)?;
+    session.native_device = Some(device.clone());
+    session.zfs_pool = Some(identity.clone());
+    save(&path, &session)?;
+    let result = zfs::initialize(&device, &identity, &target);
+    remember_zfs_mount(&path, &mut session)?;
+    result?;
+    close_session(&path, &mut session)?;
+    fs::remove_dir(&target).map_err(|error| AppError::io("Remove ZFS initialization mount", error))
+}
+
+fn start_native_zfs(
+    registry: &Registry,
+    source: &Path,
+    mountpoint: &Path,
+    image: &OpenImage,
+    readonly: bool,
+    pool: zfs::PoolIdentity,
+) -> AppResult<bool> {
+    validate_native_device(&image.path, &image.device)?;
+    let (path, mut session) = reserve_session(
+        registry,
+        source,
+        mountpoint,
+        &image.path,
+        Kind::Zfs,
+        readonly,
+        Some(image.device.clone()),
+    )?;
+    session.zfs_pool = Some(pool.clone());
+    save(&path, &session)?;
+    let result = zfs::mount(&image.device, &pool, mountpoint, readonly);
+    remember_zfs_mount(&path, &mut session)?;
+    result?;
+    if session.mount_identity.is_none() || mount_is_readonly(mountpoint)? != readonly {
+        return Err(AppError::new(
+            "ZFS did not publish the requested mount; preserving recovery state.",
+        ));
+    }
+    Ok(true)
+}
+
 fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
     validate_image(session)?;
+    if session.kind == Kind::Zfs {
+        let device = session.native_device.clone().ok_or_else(|| {
+            AppError::new("Missing native ZFS device; preserving the encrypted session.")
+        })?;
+        if session.zfs_pool.is_none() {
+            let (leaf, pool) = zfs::resolve_device(&device, &session.image)?.ok_or_else(|| {
+                AppError::new(
+                    "Cannot identify the ZFS pool for recovery; preserving its encrypted device.",
+                )
+            })?;
+            session.native_device = Some(leaf);
+            session.zfs_pool = Some(pool);
+            save(path, session)?;
+        }
+        validate_image(session)?;
+        // Import/mount may have completed before startup journaled the mount.
+        // Adopt only the exact root proven by the recorded pool and sole-vdev
+        // GUIDs; an existing recorded identity must still match unchanged.
+        if session.mount_identity.is_none() {
+            remember_zfs_mount(path, session)?;
+        }
+        let device = session.native_device.as_ref().unwrap();
+        let pool = session.zfs_pool.as_ref().unwrap();
+        validate_session_mount(session)?;
+        zfs::close(device, pool, &session.mountpoint)?;
+        session.mount_identity = None;
+        session.mount_dev = None;
+        save(path, session)?;
+        close_identified_crypto(&session.source, &session.image)?;
+        return fs::remove_dir_all(path)
+            .map_err(|error| AppError::io("Cannot remove closed ZFS session", error));
+    }
     if let Some(identity) = mount_identity(&session.mountpoint)? {
         if session.mount_identity.as_ref() != Some(&identity)
             || session.mount_dev
@@ -442,20 +880,18 @@ fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
             ));
         }
     }
-    close_crypto(&session.source)?;
+    close_identified_crypto(&session.source, &session.image)?;
     fs::remove_dir_all(path).map_err(|e| AppError::io("Cannot remove closed filesystem session", e))
 }
-fn start(
+fn reserve_session(
     registry: &Registry,
     source: &Path,
     mountpoint: &Path,
     image: &Path,
+    kind: Kind,
     readonly: bool,
-) -> AppResult<bool> {
-    let Some(kind) = image_kind(image) else {
-        return Ok(false);
-    };
-    let driver = tool(kind.driver())?;
+    native_device: Option<PathBuf>,
+) -> AppResult<(PathBuf, Session)> {
     if mount_identity(mountpoint)?.is_some() {
         return Err(AppError::new(
             "Refusing to replace an existing filesystem mount.",
@@ -479,7 +915,7 @@ fn start(
         .mode(0o700)
         .create(&path)
         .map_err(|e| AppError::io("Cannot reserve filesystem session", e))?;
-    let mut session = Session {
+    let session = Session {
         source: source.into(),
         source_dev: metadata.dev(),
         source_ino: metadata.ino(),
@@ -503,12 +939,35 @@ fn start(
         process_start: String::new(),
         mount_identity: None,
         mount_dev: None,
+        native_device,
+        zfs_pool: None,
     };
     // Publish recovery ownership before starting a process that can mount.
     if let Err(error) = save(&path, &session) {
         let _ = fs::remove_dir_all(&path);
         return Err(error);
     }
+    Ok((path, session))
+}
+fn start(
+    registry: &Registry,
+    source: &Path,
+    mountpoint: &Path,
+    image: &Path,
+    readonly: bool,
+) -> AppResult<bool> {
+    let Some(kind) = image_kind(image).filter(|kind| !matches!(kind, Kind::Ntfs | Kind::Zfs))
+    else {
+        return Ok(false);
+    };
+    if kind == Kind::Ufs2 && !readonly {
+        return Err(AppError::new(
+            "macOS UFS2 imports support read-only access only. Retry with --readonly.",
+        ));
+    }
+    let driver = tool(kind.driver())?;
+    let (path, mut session) =
+        reserve_session(registry, source, mountpoint, image, kind, readonly, None)?;
     let mut a: Vec<OsString> = match kind {
         Kind::Ext4 => vec![
             image.as_os_str().into(),
@@ -539,6 +998,15 @@ fn start(
             ]);
             a
         }
+        Kind::Ntfs => unreachable!("native NTFS does not spawn a FUSE driver"),
+        Kind::Zfs => unreachable!("native ZFS does not spawn a FUSE driver"),
+        Kind::Ufs2 => vec![
+            "-f".into(),
+            "-o".into(),
+            "ro,nodev,nosuid".into(),
+            image.as_os_str().into(),
+            mountpoint.as_os_str().into(),
+        ],
     };
     let log = OpenOptions::new()
         .write(true)
@@ -582,6 +1050,9 @@ fn start(
             let expected_transport = match kind {
                 Kind::Xfs => " (smbfs,",
                 Kind::Ext4 => " (nfs,",
+                Kind::Ntfs => unreachable!("native NTFS has its own mount lifecycle"),
+                Kind::Zfs => unreachable!("native ZFS has its own mount lifecycle"),
+                Kind::Ufs2 => " (macfuse,",
             };
             if !identity.contains(expected_transport) {
                 return Err(AppError::new(
@@ -604,6 +1075,11 @@ fn start(
                     .dev(),
             );
             save(&path, &session)?;
+            if kind == Kind::Ufs2 && !mount_is_readonly(mountpoint)? {
+                return Err(AppError::new(
+                    "UFS2 reader published a writable mount; preserving its identified session for normal close.",
+                ));
+            }
             let readable = fs::read_dir(mountpoint)
                 .and_then(|entries| entries.collect::<Result<Vec<_>, _>>())
                 .is_ok();
@@ -650,15 +1126,37 @@ pub(super) fn mount_missing(
             "Container already has an external filesystem session.",
         ));
     }
-    let image = open_image(source, pass, readonly, keyfile)?;
-    let result = start(&registry, source, mountpoint, &image, readonly);
+    let image = open_image(source, pass, readonly, keyfile, false)?;
+    let result = (|| {
+        if image_kind(&image.path) == Some(Kind::Ntfs) {
+            start_native_ntfs(&registry, source, mountpoint, &image, readonly)
+        } else {
+            if image_kind(&image.path).is_none() && Path::new("/usr/local/zfs/bin/zdb").exists() {
+                if let Some((device, pool)) = zfs::resolve_device(&image.device, &image.path)? {
+                    let native = OpenImage {
+                        path: image.path.clone(),
+                        device,
+                    };
+                    return start_native_zfs(
+                        &registry, source, mountpoint, &native, readonly, pool,
+                    );
+                }
+            }
+            checked(
+                Path::new(HDIUTIL),
+                &["detach".into(), image.device.as_os_str().into()],
+                None,
+            )?;
+            start(&registry, source, mountpoint, &image.path, readonly)
+        }
+    })();
     if !matches!(result, Ok(true))
         && !registry
             .sessions()?
             .iter()
             .any(|(_, session)| same_path(&session.source, source))
     {
-        close_crypto(source)?;
+        close_identified_crypto(source, &image.path)?;
     }
     result
 }
@@ -719,5 +1217,87 @@ mod tests {
         assert_eq!(detect(&ext4), None);
         ext4[1120] = 0x40;
         assert_eq!(detect(&ext4), Some(Kind::Ext4));
+    }
+
+    #[test]
+    fn ntfs_probe_requires_the_complete_oem_signature_at_its_real_offset() {
+        let mut header = [0; 512];
+        header[3..11].copy_from_slice(b"NTFS    ");
+        assert_eq!(detect(&header), Some(Kind::Ntfs));
+        assert_eq!(detect(&header[..10]), None);
+        assert_eq!(detect(b"NTFS    "), None);
+        header[3..11].copy_from_slice(b"EXFAT   ");
+        assert_eq!(detect(&header), None);
+    }
+
+    #[test]
+    fn ufs2_probe_reads_its_real_superblock_magic_in_both_byte_orders() {
+        use std::io::Cursor;
+        const OFFSET: usize = 65536 + 1372;
+        for magic in [[0x19, 0x01, 0x54, 0x19], [0x19, 0x54, 0x01, 0x19]] {
+            let mut image = vec![0; OFFSET + 4];
+            image[OFFSET..].copy_from_slice(&magic);
+            assert_eq!(read_image_kind(&mut Cursor::new(&image)), Some(Kind::Ufs2));
+            assert_eq!(
+                read_image_kind(&mut Cursor::new(&image[..OFFSET + 3])),
+                None
+            );
+            image[OFFSET..].copy_from_slice(&[0x54, 0x19, 0x01, 0]);
+            assert_eq!(read_image_kind(&mut Cursor::new(&image)), None);
+        }
+        assert_eq!(requested(Some(CreateFilesystem::Ufs2)), None);
+    }
+
+    #[test]
+    fn native_ntfs_mount_must_use_the_owned_device_and_fskit() {
+        let target = Path::new("/private/tmp/mounted vault");
+        let device = Path::new("/dev/disk4");
+        let identity = "/dev/disk4 on /private/tmp/mounted vault (ntfs, local, noowners, fskit, mounted by adjutant)";
+        assert!(native_ntfs_identity(identity, device, target));
+        assert!(!native_ntfs_identity(
+            identity,
+            Path::new("/dev/disk5"),
+            target
+        ));
+        assert!(!native_ntfs_identity(
+            identity,
+            device,
+            Path::new("/private/tmp/mounted")
+        ));
+        assert!(!native_ntfs_identity(
+            &identity.replace(", fskit", ""),
+            device,
+            target
+        ));
+        assert!(!native_ntfs_identity(
+            &identity.replace("(ntfs,", "(exfat,"),
+            device,
+            target
+        ));
+    }
+
+    #[test]
+    fn crypto_close_rejects_a_cached_device_reassigned_to_another_image() {
+        let expected = Path::new("/private/tmp/owned/volume.dmg");
+        let device = Path::new("/dev/disk4");
+        let mut attached = vec![Image {
+            path: expected.into(),
+            entities: vec![Entity {
+                device: device.into(),
+                ..Entity::default()
+            }],
+            encrypted: false,
+            writable: true,
+            owner: None,
+        }];
+        assert!(!cached_device_reused(&attached, device, expected));
+        assert!(!cached_device_reused(&[], device, expected));
+        attached[0].path = "/private/tmp/unrelated.dmg".into();
+        assert!(cached_device_reused(&attached, device, expected));
+        assert!(!cached_device_reused(
+            &attached,
+            Path::new("/dev/disk5"),
+            expected
+        ));
     }
 }

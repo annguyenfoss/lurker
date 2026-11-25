@@ -17,6 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 mod apfs;
 mod filesystems;
+mod zfs;
 
 const HDIUTIL: &str = "/usr/bin/hdiutil";
 const DISKUTIL: &str = "/usr/sbin/diskutil";
@@ -818,10 +819,21 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     }
     if let Err(error) = checked(&program, &arguments, Some(&pass)) {
         if kind == VolumeType::Veracrypt
-            && (error.message.contains("no mountable file systems") || error.message.contains("Unable to invoke task"))
-            && filesystems::mount_missing(&source, &mountpoint, &pass, c.readonly, c.keyfile.as_deref())?
+            && (error.message.contains("no mountable file systems")
+                || error.message.contains("Unable to invoke task"))
+            && filesystems::mount_missing(
+                &source,
+                &mountpoint,
+                &pass,
+                c.readonly,
+                c.keyfile.as_deref(),
+            )?
         {
-            output.msg2(&format!("Mounted {} at {}", source.display(), mountpoint.display()));
+            output.msg2(&format!(
+                "Mounted {} at {}",
+                source.display(),
+                mountpoint.display()
+            ));
             return Ok(());
         }
         // Native tools normally roll back failed mounts themselves. If one
@@ -847,6 +859,9 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             }
         }
         return Err(error);
+    }
+    if kind == VolumeType::Veracrypt {
+        filesystems::replace_native_ntfs(&source, &mountpoint, c.readonly)?;
     }
     output.msg2(&format!(
         "Mounted {} at {}",

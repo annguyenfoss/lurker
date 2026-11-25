@@ -1,9 +1,11 @@
-# Optional macOS ext4 and XFS container tools
+# Optional macOS filesystem tools
 
 The CLI can create and mount VeraCrypt file containers with `--filesystem ext4`
 or `--filesystem xfs` when the optional private tools below are staged beside the
-CLI or helper. Existing Apple, APFS and exFAT defaults are unchanged. These are
-source-built development tools; current release packages do not bundle them.
+CLI or helper. Native NTFS and ZFS create/RW routes and UFS2 read-only imports
+are also available with the prerequisites below. Existing Apple, APFS and exFAT
+defaults are unchanged. These are source-built development tools; current release
+packages do not bundle them.
 The native receipts are in
 `DIRECTIVES/PLAN/FILESYSTEM_ROUND/MACOS_RETEST.md`.
 
@@ -15,11 +17,36 @@ file. The encryption service stays live throughout the session. XFS uses FUSE-T
 SMB; ext4 uses FUSE-T NFS. Neither route requires enabling an FSKit module or
 running a private executable as root.
 
-Create requires at least 384 MiB. Explicit Apple-image ext4/XFS creation and NTFS
-writable creation remain unavailable. NTFS read-only imports keep the native
-route. Only AES/password PDF/text persistence was exercised for these new
+Create requires at least 384 MiB. Alternate Apple-image filesystem creation
+remains unavailable. NTFS read-only imports keep the native route.
+Only AES/password PDF/text persistence was exercised for these new
 routes; no desktop, physical-device, reboot, SQLite, recovery or metadata-parity
 qualification is implied.
+
+## Native NTFS, ZFS and UFS2
+
+All three routes keep the existing private FUSE-T VeraCrypt encryption engine.
+They add inner-filesystem support without changing encryption profiles.
+
+| Filesystem | Creation | Mounted access | Additional free prerequisites |
+|---|---|---|---|
+| NTFS | `--filesystem ntfs`; login-user `mkntfs` formats the identified hdiutil device | Read/write through TT NTFS Native FSKit; read-only imports can use Apple's native driver | Homebrew `gromgit/fuse/ntfs-3g-mac` and enabled TT NTFS Native extension |
+| ZFS | `--filesystem zfs`; native `zpool` creates one pool on the identified hdiutil device | Read/write or read-only native OpenZFS | Matching OpenZFSonOsX package, approved kernel extension and administrator authorization |
+| UFS2 | Not offered | Read-only imports with `--readonly`; writable requests are rejected | Private patched `fuse-ufs` reader and separately installed, approved macFUSE kernel extension |
+
+NTFS formatting and mounting run as the login user. ZFS elevates only trusted,
+administrator-owned installed system/OpenZFS tools through `sudo -n`; it requires
+existing authorization and never elevates a private executable. It records the
+pool and sole-vdev GUIDs, imports only that device, and normally unmounts and
+exports the pool before closing encryption. Multi-device pools and additional
+datasets are outside this adapter's scope.
+
+Stage `fuse-ufs` in the same private filesystem directory described below.
+Its pinned source and the two small Darwin compatibility patches are documented
+in `native/macos/fuse-ufs.md`. macFUSE is an additional optional filesystem
+runtime; VeraCrypt continues to use FUSE-T. On Apple silicon, enabling these
+kernel extensions requires the operator's startup-security and extension
+approval steps. The tools remain free of charge.
 
 ## Reproduce the native tool builds
 
@@ -83,4 +110,5 @@ Changed identities or failed closes preserve the encrypted session for recovery.
 Direct Apple-image device experiments are retained as failures. NTFS-3G rejects
 unprivileged block devices; Darwin raw devices cannot satisfy its unaligned
 reads, and VeraCrypt's SMB file transport does not provide NTFS-3G's required
-record locking. None of those failures is advertised as writable support.
+record locking. The qualified TT NTFS route avoids that failed mounting path:
+`mkntfs` formats the native virtual device and FSKit supplies read/write access.
