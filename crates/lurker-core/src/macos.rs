@@ -16,6 +16,7 @@ use std::process::{Command, Output as ProcessOutput, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod apfs;
+mod filesystems;
 
 const HDIUTIL: &str = "/usr/bin/hdiutil";
 const DISKUTIL: &str = "/usr/sbin/diskutil";
@@ -275,7 +276,7 @@ fn images() -> AppResult<Vec<Image>> {
 
 fn apple_volumes() -> AppResult<Vec<Volume>> {
     let uid = crate::effective_uid();
-    Ok(images()?
+    let mut volumes = images()?
         .into_iter()
         .filter(|i| i.encrypted && i.owner.is_none_or(|owner| owner == uid))
         .map(|i| {
@@ -294,7 +295,9 @@ fn apple_volumes() -> AppResult<Vec<Volume>> {
                 readonly: !i.writable,
             }
         })
-        .collect())
+        .collect::<Vec<_>>();
+    filesystems::augment(&mut volumes)?;
+    Ok(volumes)
 }
 
 fn parse_veracrypt_list(text: &str) -> AppResult<Vec<Volume>> {
@@ -571,7 +574,15 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         return Err(AppError::new("macOS containers must be at least 32 MiB."));
     }
     // Validate the inner filesystem before prompting or allocating a staging image.
-    let mut arguments = if c.volume_type == VolumeType::Apple {
+    let external_args = if c.volume_type == VolumeType::Apple {
+        filesystems::create_args(size, c.filesystem)?
+    } else {
+        None
+    };
+    let external_format = external_args.is_some();
+    let mut arguments = if let Some(arguments) = external_args {
+        arguments
+    } else if c.volume_type == VolumeType::Apple {
         crate::workflow::macos_apple_create_args(size, c.filesystem)?
     } else {
         crate::workflow::macos_veracrypt_create_args(
@@ -622,6 +633,13 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     };
     arguments.push(temp.as_os_str().into());
     checked(&program, &arguments, Some(&pass))?;
+    if external_format {
+        if let Err(error) = filesystems::format(&temp, c.filesystem, &pass) {
+            // Preserve a failed image if native detach also failed.
+            std::mem::forget(staging);
+            return Err(error);
+        }
+    }
     fs::set_permissions(&temp, fs::Permissions::from_mode(0o600))
         .map_err(|e| AppError::io("Failed to protect container permissions", e))?;
     OpenOptions::new()
@@ -801,6 +819,17 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         arguments.push(mountpoint.as_os_str().into());
     }
     if let Err(error) = checked(&program, &arguments, Some(&pass)) {
+        if kind == VolumeType::Apple
+            && error.message.contains("no mountable file systems")
+            && filesystems::mount_missing(&source, &mountpoint, &pass, c.readonly)?
+        {
+            output.msg2(&format!(
+                "Mounted {} at {}",
+                source.display(),
+                mountpoint.display()
+            ));
+            return Ok(());
+        }
         // Native tools normally roll back failed mounts themselves. If one
         // left an attachment behind, close only this source at this mountpoint.
         let attached = if kind == VolumeType::Apple {
@@ -825,6 +854,20 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         }
         return Err(error);
     }
+    if kind == VolumeType::Apple {
+        if let Err(error) = filesystems::replace_native_ntfs(&source, &mountpoint, c.readonly) {
+            // Leave an explicitly owned recoverable session intact on failure.
+            if !filesystems::unmount(&source, VolumeType::Apple)? {
+                for volume in apple_volumes()?
+                    .iter()
+                    .filter(|volume| same_path(&volume.source, &source))
+                {
+                    detach(volume)?;
+                }
+            }
+            return Err(error);
+        }
+    }
     output.msg2(&format!(
         "Mounted {} at {}",
         source.display(),
@@ -837,6 +880,10 @@ fn unmount(c: UnmountCommand, output: Output) -> AppResult<()> {
     require_type(c.volume_type)?;
     require_no_tag(c.tag.as_deref())?;
     let target = existing(&c.target)?;
+    if filesystems::unmount(&target, c.volume_type)? {
+        output.msg2(&format!("Unmounted {}", target.display()));
+        return Ok(());
+    }
     let matches_target = |v: &Volume| {
         same_path(&v.source, &target)
             || v.mountpoint.as_ref().is_some_and(|p| same_path(p, &target))
