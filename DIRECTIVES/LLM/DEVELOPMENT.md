@@ -1,5 +1,10 @@
 # Development, build, test, and validation runbook
 
+Lurker's filesystem acceptance goal is **Create + Read/Write** on every targeted
+OS/filesystem pair. There is one mount/unmount workflow. Read-only-only access
+is a reported capability shortcoming, not a feature or a separate required test
+mode. Follow `CODEBASE.md` for this contract across all platforms and frontends.
+
 ## Development cycle
 
 1. Read the relevant project directives and inspect the working tree and
@@ -120,7 +125,7 @@ from an installed package's results.
    routes, and applicable options. Use representative sizes and boundaries
    for numeric inputs. Use fixture-owned loop devices for Linux device tests
    and the approved file-backed routes on BSD and macOS. Where supported,
-   test both explicit and Auto discovery, read-only, wrong credentials,
+   test both explicit and Auto discovery, wrong credentials,
    duplicate and aliased sources, existing-destination protection, and busy
    close. Include application and recovery cases affected by the change,
    such as SQLite WAL, atomic rename, or full storage.

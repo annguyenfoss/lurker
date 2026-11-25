@@ -63,6 +63,9 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 
 ## Core Invariants
 
+- **The product goal is Create + Read/Write for every targeted OS/filesystem pair.** Cannot create, cannot mount, or can only read means incomplete support, not a desired feature or a successful Create + Read/Write result.
+- **There is one mount action and one unmount action.** Do not add a user-selectable read-only/read-write mode, CLI flag, API option, desktop toggle, or separate read-only feature/test requirement. Mount uses the best available filesystem/driver capability and must use read/write when available. Read-only access is a capability limitation to report explicitly; never choose it when an eligible writable route can satisfy the request.
+- Qualify filesystem support with the ordinary create, mount, write, normal close, reopen, verify, append and reopen flow. Research establishes the expected filesystem/driver capabilities; a successful representative Lurker flow with no discovered blocker can fulfill that expectation without an exhaustive filesystem-feature audit. Record every shortcoming against Create + Read/Write, including any historical promise limited to imports or reading.
 - The matrix in `ENCRYPTION.md` defines approved backend scope and current support. Physical-device setup is in scope on Linux, macOS, and the four BSDs where feasible. Device creation supports Linux and macOS external APFS data partitions. macOS qualification currently uses file-backed virtual devices. BSD disk-container workflows use file-backed devices.
 - Container defaults: Linux `luks` (LUKS2), macOS `apple`, FreeBSD `geli`, NetBSD `cgd`, OpenBSD `softraid`, DragonFly `luks1`. Explicit Linux `luks1` preserves its compatible PBKDF2 profile. Directory backends are explicit selections with no size or generic cipher option.
 - Apple encryption is AES-256 at the disk-image layer, with APFS inside; it is not system FileVault or APFS filesystem encryption.
@@ -84,7 +87,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 - Userspace state belongs to the current uid in a private runtime directory. Record source device/inode, mount IDs, and process start time; never close a replaced mount or reused process. Drain the filesystem before closing its crypto image. Preserve recoverable sessions on busy/failed unmounts.
 - Probe LUKS metadata before open; authenticate VeraCrypt during open instead of probing encrypted headers without a password.
 - Register mapper cleanup only after a successful open, so failed duplicate operations cannot close an existing mapping.
-- Readonly applies to both the crypto mapping and the filesystem mount.
+- Keep observed read-only state and native write-protection checks for capability reporting, safe teardown and detection of an unexpected writable-mount downgrade. These internal checks do not define a user-selectable read-only mode.
 - Block-device create is destructive and requires force.
 
 ## Request Flow

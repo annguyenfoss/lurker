@@ -2,6 +2,11 @@
 
 Use this file as the source of truth for selected encryption backends and create-time cipher policy.
 
+The global filesystem goal is **Create + Read/Write**, with one mount/unmount
+workflow and no user-selectable read-only mode. Read-only-only or import-only
+support is a shortcoming, not a desired feature or a complete achievement.
+Follow the support and acceptance rules in `CODEBASE.md`.
+
 ## Approved Backend Scope
 
 ✅ implemented with packaged native CLI lifecycle coverage; 🟦 selected, native qualification incomplete; — outside approved scope. These are backend/format names, not cipher algorithms. A tick does not establish desktop, security-audit or complete fault/release qualification; exact tested revisions and limits are in `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md`.
@@ -205,7 +210,7 @@ Windows packaging and native qualification are planned. Use `cppcryptfs` for the
 - Create the VeraCrypt file with `--filesystem=none`, expose its decrypted image through the file-only userspace helper, then run `mkfs.btrfs` on that regular FUSE file.
 - Btrfs is mounted through the LKL filesystem helper with `compress=zstd`. New filesystem ownership belongs to the login user; existing container permissions are preserved.
 - The userspace helper reads passwords from stdin with a newline terminator, in a UTF-8 locale. Preserve spaces and reject embedded NUL/newlines.
-- Read-only applies to both the decrypted FUSE image and the filesystem driver.
+- Report actual filesystem access capability; preserve internal write-protection and mount-state checks without exposing a selectable read-only mode.
 - No physical-device creation, LUKS, tags, custom PIM or hidden-volume controls are added by this mode.
 
 ## Sync Rules
@@ -230,7 +235,7 @@ If cipher choices change, also update:
 - Size is specified in MiB. File containers only, minimum 32 MiB.
 - Encryption protects the virtual disk image; APFS inside is not separately encrypted.
 - AES-256 is fixed. Reject Serpent/Twofish instead of silently ignoring the selected cipher.
-- Mount uses `hdiutil attach -stdinpass`, optionally `-readonly`; unmount detaches the virtual disk without force.
+- Mount uses `hdiutil attach -stdinpass`; any access restriction follows the actual storage/driver capability rather than a user-selectable mode. Unmount detaches the virtual disk without force.
 - macOS VeraCrypt retains the existing cipher names, SHA-512, PIM 0, password-or-keyfile authentication, and full initialization; it changes only the inner filesystem to exFAT.
 
 ## Native APFS encrypted data volumes (macOS)
