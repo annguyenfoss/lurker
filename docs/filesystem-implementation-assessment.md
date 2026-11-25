@@ -6,6 +6,11 @@ Covers all 160 restored matrix offerings. Identical findings for the same
 implementation on multiple OSes share a row; OS-specific behavior stays separate.
 The [matrix](filesystem-support-matrix.md) keeps only compact tags.
 
+For the separate 2026-11-26 review of Lurker's integration code, see the
+[filesystem integration complexity audit](filesystem-integration-complexity-audit.md).
+It distinguishes required adaptations, provider defects and potential
+simplifications; it does not change this capability survey or the promise table.
+
 - **Partial**: a documented important feature gap; prefix the matrix entry with `Partial`.
 - **Largely implemented**: no important gap identified for the stated operation;
   minor or optional exceptions remain in the notes. No completeness prefix.

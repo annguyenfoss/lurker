@@ -4,6 +4,7 @@ User-authorized scope, 2026-11-25. Baseline: 671fa06 (native macOS APFS is alrea
 
 See [round results](RESULTS.md) for the observed matrix, individual OS reports, independent reviews and remaining upstream or prerequisite limits.
 See [unachieved-only retest results](RETEST_RESULTS.md) for later targeted fixes and the conditions of the new passes.
+See the [2026-11-26 integration complexity audit](../../../docs/filesystem-integration-complexity-audit.md) for the source-based assessment of required filesystem adapters, provider workarounds and simplification candidates. It records no new runtime qualification.
 
 ## Outcome and boundaries
 
