@@ -112,9 +112,9 @@ Protect disks, file containers and directories with the CLI or native desktop ap
     </tr>
     <tr height="60">
       <td align="left">BitLocker</td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
+      <td>WIP</td>
+      <td>WIP</td>
+      <td>WIP</td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
@@ -205,6 +205,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 On macOS, `--type apfs` creates a plain disk image containing an encrypted APFS volume. Open and close unlock and lock that volume through `diskutil`. External data-partition creation requires `--force`. The complete flow is tested on disposable images and their virtual partitions. Physical hardware remains untested.
 
+
+BitLocker on Linux, macOS, and FreeBSD is planned for opening existing volumes. Writable access depends on filesystem qualification.
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
