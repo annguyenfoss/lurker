@@ -226,7 +226,6 @@ pub fn build_mount_command(
     auth_method: &str,
     passphrase: &str,
     key_file: &str,
-    readonly: bool,
     source_kind: &str,
 ) -> Result<MountCommand, String> {
     let source = required_value("Source", source)?;
@@ -248,7 +247,7 @@ pub fn build_mount_command(
         volume_type,
         passphrase,
         keyfile,
-        readonly,
+        readonly: false,
     })
 }
 
@@ -443,7 +442,6 @@ mod tests {
             "pass",
             "password",
             "",
-            false,
             "file",
         )
         .unwrap();
@@ -629,7 +627,7 @@ mod tests {
         )
         .is_err());
         assert!(
-            build_mount_command("vault", "/mnt/v", "invalid", "password", "", false, "file")
+            build_mount_command("vault", "/mnt/v", "invalid", "password", "", "file")
                 .is_err()
         );
     }
@@ -756,7 +754,6 @@ mod tests {
             "password",
             password,
             "",
-            false,
             "file",
         )
         .unwrap();
@@ -830,12 +827,12 @@ mod tests {
     }
 
     #[test]
-    fn build_mount_command_accepts_readonly_flag() {
-        let cmd = build_mount_command("/tmp/v.luks", "/mnt/v", "pass", "secret", "", true, "file")
+    fn build_mount_command_leaves_access_to_backend_capabilities() {
+        let cmd = build_mount_command("/tmp/v.luks", "/mnt/v", "pass", "secret", "", "file")
             .unwrap();
         assert_eq!(cmd.source, PathBuf::from("/tmp/v.luks"));
         assert_eq!(cmd.mountpoint, PathBuf::from("/mnt/v"));
-        assert!(cmd.readonly);
+        assert!(!cmd.readonly);
         assert_eq!(cmd.tag, None);
     }
 
@@ -847,7 +844,6 @@ mod tests {
             "key",
             "",
             "/tmp/k.key",
-            false,
             "file",
         )
         .unwrap();
@@ -918,7 +914,6 @@ mod tests {
             "pass",
             " secret ",
             "",
-            true,
             "file",
         )
         .unwrap();

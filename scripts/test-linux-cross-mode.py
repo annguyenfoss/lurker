@@ -72,11 +72,10 @@ def main():
         temporary.write_text(json.dumps(report, indent=2) + "\n")
         temporary.chmod(0o600); temporary.replace(args.result)
 
-    def command(route, action, path=source, readonly=False):
+    def command(route, action, path=source):
         result = [str(cli), action, "--type", "veracrypt"]
         if route == "user": result.append("--unprivileged")
         if action in ["create", "mount"]: result.extend(["--key-file", str(key)])
-        if readonly: result.append("--readonly")
         result.append(str(path))
         if action == "create": result.append("0.15")
         if action == "mount": result.append(str(user_mount if route == "user" else kernel_mount))
@@ -90,8 +89,8 @@ def main():
         if (result.returncode == 0) != expected:
             raise RuntimeError(f"Unexpected exit {result.returncode}; command-{sequence:03}.log")
 
-    def mount(route, path=source, readonly=False):
-        execute(command(route, "mount", path, readonly))
+    def mount(route, path=source):
+        execute(command(route, "mount", path))
         point = user_mount if route == "user" else kernel_mount
         if not is_mounted(point): raise RuntimeError("CLI succeeded without attaching its fixture")
         opened.append((route, point))
@@ -103,8 +102,8 @@ def main():
             if is_mounted(point): raise RuntimeError("Fixture remained mounted after close")
             opened.pop()
 
-    def rejected(route, path=source, readonly=False):
-        execute(command(route, "mount", path, readonly), expected=False)
+    def rejected(route, path=source):
+        execute(command(route, "mount", path), expected=False)
         point = user_mount if route == "user" else kernel_mount
         if is_mounted(point): raise RuntimeError("Rejected duplicate attached storage")
 
@@ -145,9 +144,6 @@ def main():
         finally: os.link(alias, source)
         close()
 
-    def readonly_order(first, second):
-        mount(first, readonly=True); rejected(second, readonly=True); close()
-
     def race():
         logs = [(root / "race-kernel.log").open("wb"), (root / "race-user.log").open("wb")]
         processes = [subprocess.Popen(command("kernel", "mount", alias), stdin=subprocess.DEVNULL, stdout=logs[0], stderr=subprocess.STDOUT, env=env),
@@ -173,8 +169,6 @@ def main():
         os.link(source, alias)
         case("user-first-root-alias-and-rename-rejected", active_user)
         case("kernel-first-user-alias-and-deleted-backing-rejected", active_kernel)
-        case("user-readonly-first", lambda: readonly_order("user", "kernel"))
-        case("kernel-readonly-first", lambda: readonly_order("kernel", "user"))
         for index in range(args.race_rounds): case(f"concurrent-root-user-startup-{index + 1}", race)
         report["status"] = "passed"
     except Exception as error:

@@ -99,7 +99,7 @@ def main():
             mapped = False
             run(["/usr/sbin/vnconfig", "-u", vnode])
             vnode = None
-            command = [str(args.binary), "mount", "--type", "luks1", "--readonly", "--color=never", str(image), str(mountpoint)]
+            command = [str(args.binary), "mount", "--type", "luks1", "--color=never", str(image), str(mountpoint)]
             status = payload.terminal(command, password, 120, directory / "cli-mount.log")
             result["cli_mount"] = status
             if status["exit_code"] or status["timed_out"]:

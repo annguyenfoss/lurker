@@ -79,7 +79,7 @@ def main():
                 os.fsync(target.fileno())
             native([args[0],'close',mapper_name],password);raw_open=False
             before=h.file_hash(source)
-            cli('mount',['--readonly',source,mount]);mounted=True
+            cli('mount',[source,mount]);mounted=True
             if not os.path.ismount(mount):raise RuntimeError('Read-only filesystem mount missing')
             view=native(['findmnt','-rn','-M',mount,'-o','SOURCE,FSTYPE,OPTIONS'],password)
             row['mount']=view

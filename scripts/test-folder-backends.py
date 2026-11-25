@@ -97,20 +97,15 @@ def check_backend(cli: str, kind: str, root: Path) -> int:
         with target.open("rb"):
             terminal([cli, "unmount", str(mountpoint)], ok=False)
         terminal([cli, "unmount", str(mountpoint)])
-        terminal([cli, "mount", "--readonly", str(vault), str(mountpoint)], [secret])
+        terminal([cli, "mount", str(vault), str(mountpoint)], [secret])
         assert target.read_bytes() == payload
-        # Closing the last WAL writer checkpoints it and removes -shm. Opening
-        # SQLite on a read-only FUSE mount then needs immutable=1 because it
-        # cannot create that shared-memory sidecar; this copy is fully closed.
-        database = sqlite3.connect(f"file:{mountpoint / 'firefox-like.sqlite'}?mode=ro&immutable=1", uri=True)
+        database = sqlite3.connect(mountpoint / "firefox-like.sqlite")
         assert database.execute("SELECT value FROM test").fetchone()[0] == "durable WAL"
         database.close()
-        try:
-            (mountpoint / "must fail").write_bytes(b"readonly")
-        except OSError as error:
-            assert error.errno in (errno.EROFS, errno.EACCES, errno.EPERM)
-        else:
-            raise AssertionError("Readonly mount accepted a write")
+        with target.open("ab") as stream:
+            stream.write(b"appended after reopen")
+            stream.flush()
+            os.fsync(stream.fileno())
         terminal([cli, "unmount", str(vault)])
     except BaseException:
         # Best-effort ordinary unmount; preserve evidence if it is busy or fails.

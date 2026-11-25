@@ -24,14 +24,12 @@ SPEC.loader.exec_module(BASE)
 
 
 def arguments(binary, action, source, *, mountpoint=None, peer=None, kind=None,
-              degraded=False, readonly=False, size_gb="0.125"):
+              degraded=False, size_gb="0.125"):
     command = [str(binary), "--color=never", action, "--type", kind or ("raid1c" if action == "create" else "auto")]
     if peer is not None:
         command.extend(["--member", str(peer)])
     if degraded:
         command.append("--degraded")
-    if readonly:
-        command.append("--readonly")
     command.append(str(source))
     if action == "create":
         command.append(size_gb)
@@ -115,7 +113,7 @@ class MirrorSuite(BASE.Suite):
                            size_gb_per_member=options.size_gb,
                            long_parent=options.long_parent, member_parent=str(self.member_parent),
                            actual_mountpoint=str(self.mountpoint),
-                           limitations=["No device create, VM shutdown, rebuild, repair, forced detach or readonly native mapping"])
+                           limitations=["No device create, VM shutdown, rebuild, repair or forced detach"])
         self.save()
 
     def command(self, action, source=None, **options):
@@ -181,11 +179,11 @@ class MirrorSuite(BASE.Suite):
             raise AssertionError("Descriptor does not identify both newly published member files")
         require_idle(self.footprint())
 
-    def mount(self, password=None, readonly=False, target=None, expected=True,
+    def mount(self, password=None, target=None, expected=True,
               source=None, peer=None, kind=None, degraded=False):
         target = target or self.mountpoint
         self.cli(self.command("mount", source, mountpoint=target, peer=peer, kind=kind,
-                              readonly=readonly, degraded=degraded), expected=expected,
+                              degraded=degraded), expected=expected,
                  password=password if password is not None else self.password)
         if expected:
             if not os.path.ismount(target):
@@ -306,8 +304,6 @@ class MirrorSuite(BASE.Suite):
             self.case("normal-close", self.close)
             self.case("wrong-password-no-resources-or-byte-mutation", lambda: self.guarded_rejection(
                 self.command("mount", mountpoint=self.mountpoint), password=self.wrong))
-            self.case("readonly-refused-without-resources", lambda: self.guarded_rejection(
-                self.command("mount", mountpoint=self.mountpoint, readonly=True), password=self.password))
             self.case("explicit-peer-mount", lambda: self.mount(kind="raid1c", peer=self.peer))
             self.case("explicit-peer-persistence", self.verify)
             self.case("explicit-peer-close", self.close)
@@ -524,7 +520,7 @@ def parse_args(argv=None):
     options.binary = options.binary.resolve(strict=True)
     private_binary(options.binary)
     options.backend = "raid1c"; options.cipher = "aes"; options.auto_detect = True
-    options.expect_readonly_unsupported = True; options.skip_readonly = None; options.unprivileged = False
+    options.unprivileged = False
     BASE.validate_full_storage(parser, options)
     return options
 

@@ -139,7 +139,7 @@ pub(in crate::bsd) fn mount_filesystem(
     let fs = probe(mapped)?;
     if !readonly && matches!(fs, Filesystem::Ext | Filesystem::Xfs | Filesystem::Apfs) {
         return Err(AppError::new(
-            "This OpenBSD filesystem import is read-only; use --readonly.",
+            "The installed OpenBSD driver cannot provide writable access to this filesystem.",
         ));
     }
     let mode = if readonly { "ro" } else { "rw" };

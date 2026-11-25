@@ -37,7 +37,7 @@ impl Fixture {
             keyfile: None,
         }
     }
-    fn mount(&self, path: &Path, pass: &str, readonly: bool, kind: VolumeType) -> CommandAction {
+    fn mount(&self, path: &Path, pass: &str, kind: VolumeType) -> CommandAction {
         CommandAction::Mount(MountCommand {
             peer_sources: Vec::new(),
             allow_degraded: false,
@@ -48,7 +48,7 @@ impl Fixture {
             volume_type: kind,
             passphrase: Some(pass.into()),
             keyfile: None,
-            readonly,
+            readonly: false,
         })
     }
 }
@@ -152,9 +152,8 @@ fn veracrypt_keyfile_only_round_trips() {
         create.keyfile = Some(key.clone());
         let source = create.target.clone();
         ok(CommandAction::Create(create));
-        let keyed_mount = |key: &Path, readonly| {
-            let CommandAction::Mount(mut command) =
-                fixture.mount(&source, PASS, readonly, VolumeType::Auto)
+        let keyed_mount = |key: &Path| {
+            let CommandAction::Mount(mut command) = fixture.mount(&source, PASS, VolumeType::Auto)
             else {
                 unreachable!()
             };
@@ -162,23 +161,23 @@ fn veracrypt_keyfile_only_round_trips() {
             command.keyfile = Some(key.into());
             CommandAction::Mount(command)
         };
-        bad(keyed_mount(&wrong, false));
-        bad(fixture.mount(&source, PASS, false, VolumeType::Veracrypt));
-        let CommandAction::Mount(mut combined) = keyed_mount(&key, false) else {
+        bad(keyed_mount(&wrong));
+        bad(fixture.mount(&source, PASS, VolumeType::Veracrypt));
+        let CommandAction::Mount(mut combined) = keyed_mount(&key) else {
             unreachable!()
         };
         combined.passphrase = Some(PASS.into());
         assert!(bad(CommandAction::Mount(combined)).contains("never both"));
-        ok(keyed_mount(&key, false));
+        ok(keyed_mount(&key));
         let mountpoint = fixture.0.join("mounted vault");
         fs::write(mountpoint.join("persistent"), b"keyfile-only data").unwrap();
         ok(unmount(&source));
-        ok(keyed_mount(&key, true));
+        ok(keyed_mount(&key));
         assert_eq!(
             fs::read(mountpoint.join("persistent")).unwrap(),
             b"keyfile-only data"
         );
-        assert!(fs::write(mountpoint.join("forbidden"), b"no").is_err());
+        fs::write(mountpoint.join("after-reopen"), b"writable after reopen").unwrap();
         ok(unmount(&source));
     }
 }
@@ -199,16 +198,16 @@ fn lifecycle(kind: VolumeType, cipher: CreateCipher) {
     assert!(bad(CommandAction::Create(create.clone())).contains("already exists"));
     assert_eq!(fs::read(&source).unwrap(), before);
     // Bad credentials must not leave an attached virtual device.
-    bad(f.mount(&source, "incorrect-password", false, VolumeType::Auto));
+    bad(f.mount(&source, "incorrect-password", VolumeType::Auto));
     assert!(!list_active_volumes()
         .unwrap()
         .iter()
         .any(|v| v.source_path.as_ref() == Some(&source)));
     // A non-empty mount directory must never have its contents hidden.
     fs::write(mountpoint.join("existing"), b"keep").unwrap();
-    assert!(bad(f.mount(&source, PASS, false, kind)).contains("empty directory"));
+    assert!(bad(f.mount(&source, PASS, kind)).contains("empty directory"));
     fs::remove_file(mountpoint.join("existing")).unwrap();
-    ok(f.mount(&source, PASS, false, VolumeType::Auto));
+    ok(f.mount(&source, PASS, VolumeType::Auto));
     let mounted = list_active_volumes()
         .unwrap()
         .into_iter()
@@ -221,7 +220,7 @@ fn lifecycle(kind: VolumeType, cipher: CreateCipher) {
         b"encrypted data survives remount",
     )
     .unwrap();
-    bad(f.mount(&source, PASS, false, VolumeType::Auto));
+    bad(f.mount(&source, PASS, VolumeType::Auto));
     create.force = true;
     assert!(bad(CommandAction::Create(create.clone())).contains("attached"));
     let other = if kind == VolumeType::Apple {
@@ -247,20 +246,24 @@ fn lifecycle(kind: VolumeType, cipher: CreateCipher) {
     assert!(!busy.ok, "busy volume must not be forcibly detached");
     assert!(mountpoint.join("persistent.txt").exists());
     ok(unmount(&source));
-    ok(f.mount(&source, PASS, true, kind));
+    ok(f.mount(&source, PASS, kind));
     assert_eq!(
         fs::read(mountpoint.join("persistent.txt")).unwrap(),
         b"encrypted data survives remount"
     );
-    assert!(fs::write(mountpoint.join("blocked.txt"), b"no").is_err());
+    fs::write(mountpoint.join("after-reopen"), b"writable after reopen").unwrap();
     let mounted = list_active_volumes()
         .unwrap()
         .into_iter()
         .find(|v| v.source_path.as_ref() == Some(&source))
         .unwrap();
-    assert!(mounted.readonly);
+    assert!(!mounted.readonly);
     ok(unmount(&mounted.mapper_path));
-    ok(f.mount(&source, PASS, false, kind));
+    ok(f.mount(&source, PASS, kind));
+    assert_eq!(
+        fs::read(mountpoint.join("after-reopen")).unwrap(),
+        b"writable after reopen"
+    );
     ok(unmount(&mountpoint));
     bad(unmount(&source));
     // Failed forced replacement leaves the previous image intact.
@@ -271,7 +274,7 @@ fn lifecycle(kind: VolumeType, cipher: CreateCipher) {
     create.passphrase = Some(PASS.into());
     ok(CommandAction::Create(create));
     fs::remove_dir(&mountpoint).unwrap();
-    ok(f.mount(&source, PASS, false, kind));
+    ok(f.mount(&source, PASS, kind));
     assert!(!mountpoint.join("persistent.txt").exists());
     ok(unmount(&source));
     assert!(fs::read_dir(&f.0).unwrap().all(|e| !e
@@ -359,7 +362,7 @@ fn plaintext_images_are_refused() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let rejection = bad(f.mount(&source, PASS, false, VolumeType::Auto));
+    let rejection = bad(f.mount(&source, PASS, VolumeType::Auto));
     assert!(rejection.contains("unencrypted"), "{rejection}");
     assert!(!f.0.join("mounted vault").exists());
 }
@@ -410,7 +413,7 @@ fn external_host_failure_preserves_existing_container() {
         .file_name()
         .to_string_lossy()
         .starts_with(".lurker-")));
-    ok(f.mount(&c.target, PASS, false, VolumeType::Apple));
+    ok(f.mount(&c.target, PASS, VolumeType::Apple));
     ok(unmount(&c.target));
     drop(mounted_host);
 }
@@ -424,7 +427,7 @@ fn apfs_encrypted_image_and_virtual_partition() {
     let mut c = f.create(VolumeType::Apfs, CreateCipher::Aes);
     c.size_gb = Some("0.25".into());
     ok(CommandAction::Create(c.clone()));
-    ok(f.mount(&c.target, PASS, false, VolumeType::Apfs));
+    ok(f.mount(&c.target, PASS, VolumeType::Apfs));
     let payload = f.0.join("mounted vault/payload");
     let mut file = fs::File::create(&payload).unwrap();
     file.write_all(b"APFS encrypted round trip").unwrap();
@@ -437,8 +440,8 @@ fn apfs_encrypted_image_and_virtual_partition() {
         .unwrap();
     assert_eq!(row.filesystem_type.as_deref(), Some("apfs"));
     ok(unmount(&c.target));
-    bad(f.mount(&c.target, "wrong password", false, VolumeType::Apfs));
-    ok(f.mount(&c.target, PASS, false, VolumeType::Auto));
+    bad(f.mount(&c.target, "wrong password", VolumeType::Apfs));
+    ok(f.mount(&c.target, PASS, VolumeType::Auto));
     assert_eq!(fs::read(&payload).unwrap(), b"APFS encrypted round trip");
     ok(unmount(&f.0.join("mounted vault")));
     // Attach the outer image with no credentials. Only its APFS volume is locked.
@@ -491,7 +494,7 @@ fn apfs_encrypted_image_and_virtual_partition() {
         "/dev/{}",
         volume["DeviceIdentifier"].as_string().unwrap()
     ));
-    ok(f.mount(&native, PASS, false, VolumeType::Apfs));
+    ok(f.mount(&native, PASS, VolumeType::Apfs));
     assert_eq!(fs::read(&payload).unwrap(), b"APFS encrypted round trip");
     ok(unmount(&native));
     // The wrapper closes the owned image as well, even through the native-volume entry point.
@@ -553,10 +556,10 @@ fn apfs_create_on_virtual_partition() {
     bad(CommandAction::Create(create.clone()));
     create.force = true;
     ok(CommandAction::Create(create));
-    ok(f.mount(Path::new(partition), PASS, false, VolumeType::Apfs));
+    ok(f.mount(Path::new(partition), PASS, VolumeType::Apfs));
     fs::write(f.0.join("mounted vault/payload"), b"virtual partition").unwrap();
     ok(unmount(Path::new(partition)));
-    ok(f.mount(&image, PASS, false, VolumeType::Apfs));
+    ok(f.mount(&image, PASS, VolumeType::Apfs));
     assert_eq!(
         fs::read(f.0.join("mounted vault/payload")).unwrap(),
         b"virtual partition"

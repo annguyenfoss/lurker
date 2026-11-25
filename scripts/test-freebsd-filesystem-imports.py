@@ -82,7 +82,7 @@ def main():
                     native(["/sbin/mdconfig", "-d", "-u", backing.removeprefix("/dev/md")]); backing = None
                 else:
                     native([engine, "--text", "--dismount", image]); native_vc = False; mapped = None
-                cli("mount", ["--readonly", image, target])
+                cli("mount", [image, target])
                 cli_mounted = True
                 if not os.path.ismount(target):
                     raise RuntimeError("CLI read-only mount missing")

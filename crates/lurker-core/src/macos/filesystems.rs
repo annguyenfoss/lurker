@@ -962,7 +962,7 @@ fn start(
     };
     if kind == Kind::Ufs2 && !readonly {
         return Err(AppError::new(
-            "macOS UFS2 imports support read-only access only. Retry with --readonly.",
+            "The installed macOS UFS2 reader cannot create or write this filesystem.",
         ));
     }
     let driver = tool(kind.driver())?;

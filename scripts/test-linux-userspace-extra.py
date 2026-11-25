@@ -89,23 +89,21 @@ for kind in ['ntfs3', 'xfs']:
         raw.open('rb').close()
         run(['fusermount3', '-u', raw_dir])
         raw_dir.rmdir()
-        request('mount', source=str(source), mountpoint=str(mountpoint), tag=None, readonly=False, passphrase=secret)
+        request('mount', source=str(source), mountpoint=str(mountpoint), tag=None, passphrase=secret)
         data = mountpoint / 'persistent.txt'
         data.write_text(f'userspace {kind} survived remount')
         assert data.stat().st_uid == os.getuid()
         with data.open('rb') as file:
             os.fsync(file.fileno())
         request('unmount', target=str(source), tag=None)
-        request('mount', source=str(source), mountpoint=str(mountpoint), tag=None, readonly=True, passphrase=secret)
+        request('mount', source=str(source), mountpoint=str(mountpoint), tag=None, passphrase=secret)
         assert data.read_text() == f'userspace {kind} survived remount'
-        try:
-            (mountpoint / 'blocked').write_text('no')
-        except OSError:
-            pass
-        else:
-            raise AssertionError('read-only filesystem accepted a write')
+        with data.open('ab') as stream:
+            stream.write(b'\nappended after reopen')
+            stream.flush()
+            os.fsync(stream.fileno())
         request('unmount', target=str(source), tag=None)
-        print(f'PASS {kind}: standard VeraCrypt, user-owned writes, fsync, persistence, readonly, helper JSON, no elevation', flush=True)
+        print(f'PASS {kind}: standard VeraCrypt, user-owned writes, fsync, persistence, append, helper JSON, no elevation', flush=True)
     finally:
         if os.path.ismount(mountpoint):
             # A core-managed mount must drain through the helper before crypto.

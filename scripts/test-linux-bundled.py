@@ -87,19 +87,17 @@ def main():
                     run(["mount", "--type", kind, "--key-file", key, source, mountpoint], success=False)
                     run(["unmount", "--type", kind, mountpoint])
                     opened.remove(mountpoint)
-                    run(["mount", "--type", kind, "--readonly", "--key-file", key, source, mountpoint])
+                    run(["mount", "--type", kind, "--key-file", key, source, mountpoint])
                     opened.add(mountpoint)
                     assert content.read_bytes() == b"persisted through close and reopen\n"
                     assert (mountpoint / "renamed").read_text() == "atomic"
-                    with sqlite3.connect(f"file:{mountpoint}/state.sqlite?mode=ro&immutable=1", uri=True) as database:
+                    with sqlite3.connect(mountpoint / "state.sqlite") as database:
                         assert database.execute("SELECT value FROM samples").fetchone()[0] == "persistent"
                     database.close()
-                    try:
-                        content.write_bytes(b"readonly must reject writes")
-                    except OSError:
-                        pass
-                    else:
-                        raise RuntimeError("Readonly filesystem permitted writes")
+                    with content.open("ab") as output:
+                        output.write(b"writable after reopen\n")
+                        output.flush()
+                        os.fsync(output.fileno())
                     run(["unmount", "--type", kind, mountpoint])
                     opened.remove(mountpoint)
                     source.unlink()  # Reclaim tmpfs after verified close, before the next case.

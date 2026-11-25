@@ -127,7 +127,7 @@ def main():
         mapped = None
         attached = False
         for cycle in range(2):
-            status = payload.terminal([str(args.binary), "mount", "--type", "veracrypt", "--readonly",
+            status = payload.terminal([str(args.binary), "mount", "--type", "veracrypt",
                                        "--color=never", str(image), str(mountpoint)], password, 180,
                                       directory / f"cli-mount-{cycle}.log")
             result[f"cli_mount_{cycle}"] = status

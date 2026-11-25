@@ -96,6 +96,11 @@ pub(crate) fn validate(passphrase: Option<&str>, keyfile: Option<&Path>) -> AppR
 }
 
 pub(crate) fn validate_request(command: &CommandAction) -> AppResult<()> {
+    if matches!(command, CommandAction::Mount(c) if c.readonly) {
+        return Err(AppError::new(
+            "Read-only mode has been removed. Mount access follows filesystem/driver capability.",
+        ));
+    }
     let (passphrase, keyfile, kind, target) = match command {
         CommandAction::Create(c) => (
             c.passphrase.as_deref(),
@@ -204,6 +209,18 @@ pub(crate) fn veracrypt_keyfiles(keyfile: Option<&Path>) -> AppResult<std::ffi::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_readonly_selection_is_rejected_before_credentials_or_routing() {
+        let mut command: CommandAction = serde_json::from_value(serde_json::json!({
+            "action":"mount", "source":"missing-vault", "mountpoint":"missing-mount",
+            "tag":null, "volume_type":"auto", "passphrase":""
+        })).unwrap();
+        if let CommandAction::Mount(c) = &mut command {
+            c.readonly = true;
+        }
+        assert!(validate_request(&command).unwrap_err().message.contains("Read-only mode has been removed"));
+    }
 
     #[test]
     fn rejects_combined_and_invalid_credentials() {

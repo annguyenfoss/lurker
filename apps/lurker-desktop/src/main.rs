@@ -147,7 +147,6 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             &w.get_mount_auth_method(),
             &w.get_mount_passphrase(),
             &w.get_mount_key_file(),
-            w.get_mount_readonly(),
             &w.get_mount_source_kind(),
         )
         .and_then(|command| {
@@ -218,7 +217,6 @@ fn bind_callbacks(window: &MainWindow, state: &AppState) {
             w.set_mount_passphrase("".into());
             w.set_mount_key_file("".into());
             w.set_mount_auth_method("pass".into());
-            w.set_mount_readonly(false);
             w.set_mount_mirrored(false);
             w.set_mount_peer_source("".into());
             w.set_mount_degraded(false);
@@ -876,12 +874,10 @@ mod tests {
         render(&window);
         ui.set_mount_key_file("/tmp/stale-key".into());
         ui.set_mount_auth_method("key".into());
-        ui.set_mount_readonly(true);
         ui.set_mount_mirrored(true);
         render(&window);
         assert_eq!(ui.get_mount_auth_method(), "pass");
         assert_eq!(ui.get_mount_key_file(), "");
-        assert!(!ui.get_mount_readonly());
         ui.set_mount_peer_source("/tmp/mirror-peer".into());
         ui.set_mount_degraded(true);
         for scale in [0.8, 1.0, 1.2] {

@@ -32,7 +32,6 @@ export component ManageView inherits Rectangle {
     in-out property <string> mount-auth-method: "pass";
     in-out property <string> mount-passphrase: "";
     in-out property <string> mount-key-file: "";
-    in-out property <bool>   mount-readonly: false;
 
     in property <[DeviceInfo]> devices;
 
@@ -178,7 +177,6 @@ export component ManageView inherits Rectangle {
             auth-method <=> root.mount-auth-method;
             passphrase <=> root.mount-passphrase;
             key-file <=> root.mount-key-file;
-            readonly <=> root.mount-readonly;
             devices: root.devices;
             device-picked(info) => { root.device-picked(info); }
             rescan => { root.rescan(); }

@@ -5,7 +5,6 @@ Owns fresh /tmp images only. Race/identity cases are core unit tests; these real
 CLI cases qualify guarded replacement, preservation without force, and reopen.
 """
 import argparse
-import errno
 import hashlib
 import json
 import os
@@ -53,7 +52,7 @@ def main():
     def mounted(path):
         return any(line.split()[4] == str(path) for line in Path("/proc/self/mountinfo").read_text().splitlines())
     io_program = r'''
-import errno,os,sys
+import os,sys
 from pathlib import Path
 phase,point=sys.argv[1],Path(sys.argv[2])
 if phase=='old':
@@ -61,11 +60,9 @@ if phase=='old':
 elif phase=='new':
  assert not (point/'old marker').exists(), 'Force retained the old filesystem'
  with (point/'new marker').open('wb') as stream:stream.write(b'new filesystem');stream.flush();os.fsync(stream.fileno())
-elif phase=='readonly':
+elif phase=='reopen':
  assert (point/'new marker').read_bytes()==b'new filesystem'
- try:(point/'forbidden').write_bytes(b'must fail')
- except OSError as error:assert error.errno==errno.EROFS, error
- else:raise AssertionError('Readonly replacement permits writes')
+ with (point/'new marker').open('ab') as stream:stream.write(b' reopened');stream.flush();os.fsync(stream.fileno())
 '''
     try:
         for backend, unprivileged in [("luks", False), ("luks1", False), ("veracrypt", False), ("veracrypt", True)]:
@@ -100,7 +97,7 @@ elif phase=='readonly':
                 assert (source.stat().st_dev, source.stat().st_ino) != original, "Force did not replace the original inode"
                 call(command("mount", "--key-file", key, source, point)); io_check("new")
                 call(command("unmount", point))
-                call(command("mount", "--readonly", "--key-file", key, source, point)); io_check("readonly")
+                call(command("mount", "--key-file", key, source, point)); io_check("reopen")
                 call(command("unmount", point))
                 assert not mounted(point)
                 source.unlink()

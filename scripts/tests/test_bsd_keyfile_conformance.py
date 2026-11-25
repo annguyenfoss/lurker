@@ -23,8 +23,7 @@ class BSDKeyfileSafetyTests(unittest.TestCase):
         return HARNESS.BSDKeyfileSuite(SimpleNamespace(
             binary=Path(sys.executable).resolve(), backend=backend, root=str(self.parent),
             cipher="aes" if backend == "geli" else None, auto_detect=True, unprivileged=False,
-            timeout=3, commit="a" * 40, expect_readonly_unsupported=False,
-            skip_readonly=None, size_gb="0.125"))
+            timeout=3, commit="a" * 40, size_gb="0.125"))
 
     def arguments(self, *extra):
         return ["--binary", sys.executable, "--backend", "geli", "--commit", "a" * 40,
@@ -143,8 +142,6 @@ class BSDKeyfileSafetyTests(unittest.TestCase):
                     HARNESS.parse_args(self.arguments(*extra))
             options = HARNESS.parse_args(self.arguments())
         self.assertTrue(options.auto_detect)
-        self.assertFalse(options.expect_readonly_unsupported)
-        self.assertIsNone(options.skip_readonly)
 
     def test_failure_retains_evidence_and_does_not_try_future_storage_steps(self):
         suite = self.suite("pefs")

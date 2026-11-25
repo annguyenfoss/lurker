@@ -125,8 +125,8 @@ class BSDKeyfileSuite(KEYFILES.KeyfileSuite):
         if stat.S_ISLNK(info.st_mode) or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (os.geteuid(), os.getegid(), mode):
             raise AssertionError("Lurker did not publish private storage owned by its invoking account")
 
-    def mount(self, password=None, readonly=False, target=None, expected=True):
-        super().mount(password=password, readonly=readonly, target=target, expected=expected)
+    def mount(self, password=None, target=None, expected=True):
+        super().mount(password=password, target=target, expected=expected)
         if expected and len(self.records()) != 1:
             raise AssertionError("Successful mount lacks exactly one recoverable owned session")
 
@@ -175,8 +175,6 @@ def parse_args(argv=None):
         options.cipher = "aes"
     options.auto_detect = True
     options.unprivileged = False
-    options.expect_readonly_unsupported = False
-    options.skip_readonly = None
     return options
 
 

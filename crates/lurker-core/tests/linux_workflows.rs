@@ -37,6 +37,7 @@ impl Sandbox {
             .find(|v| v.mountpoint.as_deref() == Some(mount))
             .expect("volume missing from active list");
         assert_eq!(volume.filesystem_type.as_deref(), Some("btrfs"));
+        assert!(!volume.readonly, "expected a writable filesystem");
         assert!(volume.mapper_name.starts_with("lurker_"));
         if !self.mappers.contains(&volume.mapper_path) {
             self.mappers.push(volume.mapper_path.clone());
@@ -126,13 +127,7 @@ fn create(target: &Path, kind: SourceKind, ty: VolumeType, cipher: CreateCipher)
         keyfile: None,
     })
 }
-fn mount(
-    source: &Path,
-    at: &Path,
-    ty: VolumeType,
-    readonly: bool,
-    tag: Option<&str>,
-) -> CommandAction {
+fn mount(source: &Path, at: &Path, ty: VolumeType, tag: Option<&str>) -> CommandAction {
     CommandAction::Mount(MountCommand {
         peer_sources: Vec::new(),
         allow_degraded: false,
@@ -140,7 +135,7 @@ fn mount(
         source: source.into(),
         mountpoint: at.into(),
         volume_type: ty,
-        readonly,
+        readonly: false,
         tag: tag.map(String::from),
         passphrase: Some(PASSWORD.into()),
         keyfile: None,
@@ -190,20 +185,17 @@ fn keyfile_round_trips() {
         ] {
             for kind in [SourceKind::File, SourceKind::Block] {
                 let name = format!("keyfile-{ty}-{cipher}-{kind:?}");
-                eprintln!("KEYFILE create/unlock/persistence/readonly: {name}");
+                eprintln!("KEYFILE create/unlock/persistence: {name}");
                 let source = if kind == SourceKind::Block {
                     sandbox.loop_device(&name)
                 } else {
                     sandbox.path(&name)
                 };
                 ok(with_keyfile(create(&source, kind, ty, cipher), &key));
-                bad(with_keyfile(
-                    mount(&source, &at, ty, false, None),
-                    &wrong_key,
-                ));
-                bad(mount(&source, &at, ty, false, None)); // password alone cannot unlock
+                bad(with_keyfile(mount(&source, &at, ty, None), &wrong_key));
+                bad(mount(&source, &at, ty, None)); // password alone cannot unlock
                 ok(with_keyfile(
-                    mount(&source, &at, VolumeType::Auto, false, None),
+                    mount(&source, &at, VolumeType::Auto, None),
                     &key,
                 ));
                 let mapper = sandbox.mapper(&at);
@@ -235,25 +227,25 @@ fn keyfile_round_trips() {
                 }
                 ok(unmount(&source, VolumeType::Auto, None));
                 assert!(!mapper.exists());
-                let read = mount(&source, &at, VolumeType::Auto, true, None);
-                let read = if ty == VolumeType::Luks
+                let reopen = mount(&source, &at, VolumeType::Auto, None);
+                let reopen = if ty == VolumeType::Luks
                     && cipher == CreateCipher::Aes
                     && kind == SourceKind::File
                 {
-                    read
+                    reopen
                 } else {
-                    with_keyfile(read, &key)
+                    with_keyfile(reopen, &key)
                 };
-                ok(read);
+                ok(reopen);
                 let mapper = sandbox.mapper(&at);
                 assert_eq!(fs::read_to_string(at.join("persistent")).unwrap(), name);
-                assert!(fs::write(at.join("forbidden"), b"no").is_err());
+                fs::write(at.join("after-reopen"), b"writable after reopen").unwrap();
                 assert_eq!(
                     String::from_utf8_lossy(
                         &tool("blockdev", &["--getro", mapper.to_str().unwrap()]).stdout
                     )
                     .trim(),
-                    "1"
+                    "0"
                 );
                 ok(unmount(&at, VolumeType::Auto, None));
                 assert!(!mapper.exists());
@@ -294,9 +286,7 @@ fn real_linux_workflow_matrix() {
                 } else {
                     sandbox.path(&name)
                 };
-                eprintln!(
-                    "MATRIX create/mount/persistence/readonly/unmount: {ty} {cipher} {kind:?}"
-                );
+                eprintln!("MATRIX create/mount/persistence/unmount: {ty} {cipher} {kind:?}");
                 if kind == SourceKind::Block {
                     let mut action = create(&source, kind, ty, cipher);
                     if let CommandAction::Create(ref mut c) = action {
@@ -325,13 +315,13 @@ fn real_linux_workflow_matrix() {
                 } else {
                     VolumeType::Luks
                 };
-                bad(mount(&source, &at, wrong, false, None));
-                let mut wrong_password = mount(&source, &at, ty, false, None);
+                bad(mount(&source, &at, wrong, None));
+                let mut wrong_password = mount(&source, &at, ty, None);
                 if let CommandAction::Mount(ref mut m) = wrong_password {
                     m.passphrase = Some("incorrect password".into());
                 }
                 bad(wrong_password);
-                ok(mount(&source, &at, VolumeType::Auto, false, None));
+                ok(mount(&source, &at, VolumeType::Auto, None));
                 let mapper = sandbox.mapper(&at);
                 let opts = tool(
                     "findmnt",
@@ -351,26 +341,26 @@ fn real_linux_workflow_matrix() {
                 child.wait().unwrap();
                 assert!(mapper.exists());
                 // A second mount and a forced create cannot tear down the first mapping.
-                bad(mount(&source, &other, ty, false, None));
+                bad(mount(&source, &other, ty, None));
                 let mut forced = create(&source, kind, ty, cipher);
                 if let CommandAction::Create(ref mut c) = forced {
                     c.force = true;
                 }
                 bad(forced);
                 assert!(at.join("payload").exists());
-                bad(mount(&source, &at, ty, false, None));
+                bad(mount(&source, &at, ty, None));
                 bad(unmount(&at, wrong, None));
                 ok(unmount(&source, VolumeType::Auto, None));
                 assert!(!mapper.exists());
-                ok(mount(&source, &at, ty, true, None));
+                ok(mount(&source, &at, ty, None));
                 let mapper = sandbox.mapper(&at);
                 assert_eq!(
                     fs::read_to_string(at.join("payload")).unwrap(),
                     format!("{name}: persisted secret")
                 );
-                assert!(fs::write(at.join("forbidden"), b"no").is_err());
+                fs::write(at.join("after-reopen"), b"writable after reopen").unwrap();
                 let flags = tool("blockdev", &["--getro", mapper.to_str().unwrap()]);
-                assert_eq!(String::from_utf8_lossy(&flags.stdout).trim(), "1");
+                assert_eq!(String::from_utf8_lossy(&flags.stdout).trim(), "0");
                 ok(unmount(&mapper, VolumeType::Auto, None));
                 assert!(!mapper.exists());
                 bad(unmount(&source, ty, None));
@@ -378,15 +368,15 @@ fn real_linux_workflow_matrix() {
                 let alias = sandbox.path("source alias");
                 symlink(&source, &alias).unwrap();
                 let tag = (ty == VolumeType::Luks).then_some("integration work");
-                ok(mount(&alias, &at, VolumeType::Auto, false, tag));
+                ok(mount(&alias, &at, VolumeType::Auto, tag));
                 sandbox.mapper(&at);
                 ok(unmount(&at, VolumeType::Auto, None));
                 if let Some(tag) = tag {
-                    ok(mount(&source, &at, ty, false, Some(tag)));
+                    ok(mount(&source, &at, ty, Some(tag)));
                     sandbox.mapper(&at);
                     ok(unmount(&source, ty, Some(tag)));
                 } else {
-                    bad(mount(&source, &at, ty, false, Some("unsupported")));
+                    bad(mount(&source, &at, ty, Some("unsupported")));
                 }
                 fs::remove_file(alias).unwrap();
                 // Optional golden-reference interoperability is separate from
@@ -530,7 +520,7 @@ fn real_failure_recovery() {
         ok(create(&target, SourceKind::File, ty, CreateCipher::Aes));
         wrapper("mount");
         std::env::set_var("PATH", &wrapped_path);
-        bad(mount(&target, &at, ty, false, None));
+        bad(mount(&target, &at, ty, None));
         assert_eq!(
             before,
             list_active_volumes()
@@ -546,7 +536,7 @@ fn real_failure_recovery() {
             symlink(format!("/usr/bin/{name}"), wrappers.join(name)).unwrap();
         }
         std::env::set_var("PATH", &wrappers);
-        ok(mount(&target, &at, VolumeType::Auto, false, None));
+        ok(mount(&target, &at, VolumeType::Auto, None));
         sandbox.mapper(&at);
         ok(unmount(&target, VolumeType::Auto, None));
         if ty == VolumeType::Veracrypt {
@@ -561,7 +551,7 @@ fn real_failure_recovery() {
         // A damaged header or random input is never accepted as a volume.
         let invalid = sandbox.path("invalid.img");
         fs::write(&invalid, vec![0xa5; 1024 * 1024]).unwrap();
-        bad(mount(&invalid, &at, VolumeType::Auto, false, None));
+        bad(mount(&invalid, &at, VolumeType::Auto, None));
         fs::remove_file(invalid).unwrap();
     }
     let dev = sandbox.loop_device("safety.img");
@@ -692,7 +682,7 @@ fn external_volumes_and_input_safety() {
         tool("mkfs.ext4", &["-q", mapper.to_str().unwrap()]);
         // Unmount an explicit mapper without a mounted filesystem.
         ok(unmount(&mapper, VolumeType::Auto, None));
-        ok(mount(&file, &at, VolumeType::Auto, false, None));
+        ok(mount(&file, &at, VolumeType::Auto, None));
         let volume = list_active_volumes()
             .unwrap()
             .into_iter()
@@ -707,17 +697,17 @@ fn external_volumes_and_input_safety() {
         assert!(!String::from_utf8_lossy(&opts.stdout).contains("compress="));
         fs::write(at.join("external-data"), "persisted").unwrap();
         ok(unmount(&at, VolumeType::Auto, None));
-        ok(mount(&file, &at, ty, true, None));
+        ok(mount(&file, &at, ty, None));
         assert_eq!(
             fs::read_to_string(at.join("external-data")).unwrap(),
             "persisted"
         );
-        assert!(fs::write(at.join("forbidden"), b"x").is_err());
+        fs::write(at.join("after-reopen"), b"writable after reopen").unwrap();
         ok(unmount(&file, VolumeType::Auto, None));
         let missing = sandbox.path("missing");
-        bad(mount(&missing, &at, ty, false, None));
-        bad(mount(&file, &missing, ty, false, None));
-        let mut no_password = mount(&file, &at, ty, false, None);
+        bad(mount(&missing, &at, ty, None));
+        bad(mount(&file, &missing, ty, None));
+        let mut no_password = mount(&file, &at, ty, None);
         if let CommandAction::Mount(ref mut m) = no_password {
             m.passphrase = None;
         }
@@ -839,7 +829,7 @@ fn partition_round_trip() {
     fs::create_dir(&at).unwrap();
     for ty in [VolumeType::Luks, VolumeType::Veracrypt] {
         ok(create(&partition, SourceKind::Block, ty, CreateCipher::Aes));
-        ok(mount(&partition, &at, VolumeType::Auto, false, None));
+        ok(mount(&partition, &at, VolumeType::Auto, None));
         let mapper = sandbox.mapper(&at);
         fs::write(
             at.join("partition-data"),
@@ -851,7 +841,7 @@ fn partition_round_trip() {
         assert!(response.error.unwrap().contains("holders"));
         ok(unmount(&partition, VolumeType::Auto, None));
         assert!(!mapper.exists());
-        ok(mount(&partition, &at, ty, true, None));
+        ok(mount(&partition, &at, ty, None));
         sandbox.mapper(&at);
         assert_eq!(
             fs::read_to_string(at.join("partition-data")).unwrap(),
@@ -859,7 +849,7 @@ fn partition_round_trip() {
         );
         ok(unmount(&at, VolumeType::Auto, None));
     }
-    eprintln!("PASS: GPT partition create/mount/persistence/readonly/unmount for both formats; parent-disk protection");
+    eprintln!("PASS: GPT partition create/mount/persistence/unmount for both formats; parent-disk protection");
 }
 
 #[test]
@@ -897,11 +887,11 @@ fn containers_on_portable_filesystems() {
         let target = host.join("portable vault.img");
         ok(create(&target, SourceKind::File, ty, CreateCipher::Aes));
         bad(create(&target, SourceKind::File, ty, CreateCipher::Aes));
-        ok(mount(&target, &at, VolumeType::Auto, false, None));
+        ok(mount(&target, &at, VolumeType::Auto, None));
         sandbox.mapper(&at);
         fs::write(at.join("portable-data"), "persisted").unwrap();
         ok(unmount(&at, VolumeType::Auto, None));
-        ok(mount(&target, &at, ty, true, None));
+        ok(mount(&target, &at, ty, None));
         sandbox.mapper(&at);
         assert_eq!(
             fs::read_to_string(at.join("portable-data")).unwrap(),
@@ -917,10 +907,10 @@ fn containers_on_portable_filesystems() {
             c.force = true;
         }
         ok(action);
-        ok(mount(&temp_target, &at, ty, false, None));
+        ok(mount(&temp_target, &at, ty, None));
         sandbox.mapper(&at);
         ok(unmount(&at, VolumeType::Auto, None));
         tool("umount", &[host.to_str().unwrap()]);
     }
-    eprintln!("PASS: creation, atomic no-clobber/replacement, persistence and readonly on FAT/exFAT hosts");
+    eprintln!("PASS: creation, atomic no-clobber/replacement, persistence on FAT/exFAT hosts");
 }

@@ -227,7 +227,7 @@ pub(super) fn mount(mapped: &str, target: &Path, readonly: bool) -> AppResult<()
         "xfs" | "btrfs" => {
             if !readonly {
                 return Err(AppError::new(
-                    "Writable XFS/Btrfs mounts are unavailable with the packaged FreeBSD LKL driver because append writes fail; use --readonly.",
+                    "Writable XFS/Btrfs mounts are unavailable with the packaged FreeBSD LKL driver because append writes fail.",
                 ));
             }
             let info = exec("/usr/sbin/diskinfo", &args(&[mapped]), None)?;

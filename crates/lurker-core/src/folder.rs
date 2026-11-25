@@ -1670,7 +1670,7 @@ mod tests {
         assert!(confirmed_mount_directory(&session, "confirmed mount").is_err());
     }
     #[test]
-    fn readonly_and_secret_transport_are_backend_specific() {
+    fn mount_arguments_preserve_paths_and_use_writable_access() {
         let source = Path::new("/tmp/encrypted vault");
         let mp = Path::new("/tmp/open vault");
         for kind in [
@@ -1678,10 +1678,10 @@ mod tests {
             VolumeType::Cryfs,
             VolumeType::Cryptomator,
         ] {
-            let args = mount_args(kind, source, mp, true).unwrap();
+            let args = mount_args(kind, source, mp, false).unwrap();
             assert!(args.contains(&source.as_os_str().into()));
             assert!(args.contains(&mp.as_os_str().into()));
-            assert!(args
+            assert!(!args
                 .iter()
                 .any(|a| matches!(a.to_str(), Some("-ro" | "ro" | "--readonly"))));
         }

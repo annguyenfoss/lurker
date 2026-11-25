@@ -215,8 +215,20 @@ pub struct MountCommand {
     pub passphrase: Option<String>,
     #[serde(default)]
     pub keyfile: Option<PathBuf>,
-    #[serde(default)]
+    /// Internal resolved capability / legacy request compatibility only.
+    /// Frontends cannot select a read-only mode.
+    #[doc(hidden)]
+    #[serde(default, skip_serializing, deserialize_with = "legacy_readonly")]
     pub readonly: bool,
+}
+
+fn legacy_readonly<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    if bool::deserialize(deserializer)? {
+        return Err(serde::de::Error::custom(
+            "Read-only mode has been removed. Mount access follows filesystem/driver capability.",
+        ));
+    }
+    Ok(false)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -478,17 +490,26 @@ mod tests {
     #[test]
     fn older_requests_keep_privileged_behavior_and_mode_round_trips() {
         let value = serde_json::json!({"action":"mount", "source":"vault.hc", "mountpoint":"mnt",
-            "tag":null, "volume_type":"auto", "passphrase":"  secret  ", "readonly":true});
+            "tag":null, "volume_type":"auto", "passphrase":"  secret  ", "readonly":false});
         let command: CommandAction = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(command.privilege_mode(), PrivilegeMode::Privileged);
         let command = command.with_privilege_mode(PrivilegeMode::Unprivileged);
         let encoded = serde_json::to_value(command).unwrap();
         assert_eq!(encoded["privilege_mode"], "unprivileged");
         assert_eq!(encoded["passphrase"], "  secret  ");
+        assert!(encoded.get("readonly").is_none());
         let roundtrip: CommandAction = serde_json::from_value(encoded).unwrap();
         assert_eq!(roundtrip.privilege_mode(), PrivilegeMode::Unprivileged);
         let mut invalid = value;
         invalid["privilege_mode"] = "invalid".into();
         assert!(serde_json::from_value::<CommandAction>(invalid).is_err());
+    }
+
+    #[test]
+    fn removed_readonly_request_is_rejected_instead_of_silently_mounting_writable() {
+        let value = serde_json::json!({"action":"mount", "source":"vault.hc", "mountpoint":"mnt",
+            "tag":null, "volume_type":"auto", "passphrase":null, "readonly":true});
+        let error = serde_json::from_value::<CommandAction>(value).unwrap_err();
+        assert!(error.to_string().contains("Read-only mode has been removed"));
     }
 }

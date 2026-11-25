@@ -10,7 +10,7 @@ fn cli(args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 #[test]
-fn help_documents_linux_formats_and_readonly() {
+fn help_documents_linux_formats_and_capability_selected_access() {
     for args in [vec!["help"], vec!["--help"], vec!["-h"]] {
         let out = cli(&args);
         assert!(out.status.success());
@@ -20,7 +20,6 @@ fn help_documents_linux_formats_and_readonly() {
             "luks",
             "serpent",
             "twofish",
-            "--readonly",
             "--key-file",
             "--new-key-file",
             "keyslots",
@@ -29,6 +28,21 @@ fn help_documents_linux_formats_and_readonly() {
         ] {
             assert!(text.contains(word));
         }
+        assert!(!text.contains("--readonly"));
+        assert!(text.contains("Mount access follows filesystem and driver capabilities."));
+    }
+}
+#[test]
+fn removed_readonly_option_fails_before_crypto_tools() {
+    for args in [
+        vec!["create", "--readonly", "vault", "1"],
+        vec!["mount", "--readonly", "vault", "/mnt/test"],
+        vec!["mount", "--readonly=true", "vault", "/mnt/test"],
+        vec!["unmount", "--readonly", "/mnt/test"],
+    ] {
+        let out = cli(&args);
+        assert!(!out.status.success(), "accepted {args:?}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("Option --readonly was removed."));
     }
 }
 #[test]

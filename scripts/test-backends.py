@@ -404,7 +404,6 @@ class Suite:
                        "backend": options.backend, "cipher": options.cipher,
                        "create_filesystem": getattr(options, "filesystem", None),
                        "detection_mode": "auto" if options.auto_detect else "explicit",
-                       "readonly_expectation": "unsupported" if options.expect_readonly_unsupported else ("skipped" if options.skip_readonly else "supported"),
                        "host": platform.node(), "os": platform.system(), "release": platform.release(),
                        "architecture": platform.machine(), "binary": str(options.binary),
                        "binary_sha256": file_hash(options.binary), "source_commit": options.commit,
@@ -464,11 +463,9 @@ class Suite:
                 args.extend(["--filesystem", filesystem])
         return args
 
-    def mount(self, password=None, readonly=False, target=None, expected=True):
+    def mount(self, password=None, target=None, expected=True):
         target = target or self.mountpoint
         args = self.args("mount", self.source, target)
-        if readonly:
-            args.append("--readonly")
         self.cli(args, expected=expected, password=password or self.password)
         if expected:
             if not os.path.ismount(target):
@@ -706,31 +703,6 @@ class Suite:
             if self.mountpoint.stat().st_mode & 0o7777 != original_mode:
                 raise AssertionError("Explicit failed-startup recovery did not restore mountpoint mode")
 
-    def readonly_unsupported(self):
-        # A native limitation must fail closed, never silently attach writable
-        # storage. Check the mount even when the CLI returns an unexpected code.
-        try:
-            self.mount(readonly=True, expected=False)
-        finally:
-            if os.path.ismount(self.mountpoint):
-                raise AssertionError("Unsupported read-only request left storage attached; owned fixture retained")
-
-    def readonly(self):
-        self.mount(readonly=True)
-        if (self.mountpoint / "profile 密碼.bin").read_bytes() != self.payload:
-            raise AssertionError("Read-only mount changed profile contents")
-        try:
-            with (self.mountpoint / "forbidden-write").open("xb") as stream:
-                stream.write(b"must not succeed")
-                stream.flush()
-                os.fsync(stream.fileno())
-        except OSError as error:
-            if error.errno != errno.EROFS:
-                raise AssertionError("Read-only failure must be EROFS, not ordinary file permissions") from error
-        else:
-            raise AssertionError("Read-only storage accepted a write")
-        self.close()
-
     def exhaust_storage(self):
         capacity = space_bytes(self.mountpoint)
         if (not os.path.ismount(self.mountpoint)
@@ -896,8 +868,6 @@ class Suite:
                     self.case(f"{label}-reopen", self.mount)
                     self.case(f"{label}-verify", lambda: self.payload_phase("verify"))
                     self.case(f"{label}-close", self.close)
-            self.case("readonly", self.readonly_unsupported if self.options.expect_readonly_unsupported else self.readonly,
-                      skip=self.options.skip_readonly)
             if dismount:
                 self.case("dismount-open", self.mount)
                 self.case("native-dismount", self.native_dismount)
@@ -940,10 +910,6 @@ def parse_args(argv=None):
                         help="Use the opt-in bounded close hook for this owned fixture")
     parser.add_argument("--full-storage", action="store_true",
                         help="Run the bounded ENOSPC and recovery workload on a new file container")
-    readonly = parser.add_mutually_exclusive_group()
-    readonly.add_argument("--skip-readonly", metavar="REASON", help="Record an explicit unsupported-readonly exception")
-    readonly.add_argument("--expect-readonly-unsupported", action="store_true",
-                          help="Execute read-only mount and require rejection without any attached storage")
     options = parser.parse_args(argv)
     if (options.filesystem or options.native_dismount) and not (
             platform.system() == "DragonFly" and options.backend == "veracrypt" and not options.unprivileged):
@@ -952,8 +918,6 @@ def parse_args(argv=None):
         parser.error("The FAT32 exchange suite uses its own file workload")
     if options.native_dismount and (options.full_storage or options.session_close):
         parser.error("Native dismount recovery requires the ordinary lifecycle suite")
-    if platform.system() == "DragonFly" and options.backend == "veracrypt" and not options.skip_readonly:
-        options.expect_readonly_unsupported = True
     validate_full_storage(parser, options)
     if options.session_close and platform.system() == "Darwin":
         parser.error("--session-close is available on Linux and BSD")
@@ -977,8 +941,6 @@ def parse_args(argv=None):
         parser.error("Directory backend profiles do not accept --cipher")
     if options.timeout <= 0:
         parser.error("--timeout must be positive")
-    if options.skip_readonly is not None and not options.skip_readonly.strip():
-        parser.error("--skip-readonly requires a reason")
     if options.unprivileged and options.backend != "veracrypt":
         parser.error("--unprivileged is only for the Linux VeraCrypt user route")
     if platform.system() != "Darwin" and options.backend not in DIRECTORIES and not options.unprivileged and os.geteuid() != 0:

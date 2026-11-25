@@ -11,7 +11,6 @@ import sqlite3
 import subprocess
 import tempfile
 import time
-from urllib.parse import quote
 
 
 def main() -> None:
@@ -33,8 +32,8 @@ def main() -> None:
     passed: list[str] = []
     process = None
 
-    def mount(readonly=False):
-        command = [backend, "mount", str(vault), str(mountpoint)] + (["--readonly"] if readonly else [])
+    def mount():
+        command = [backend, "mount", str(vault), str(mountpoint)]
         child = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=open(root / "stdout.log", "ab"), stderr=open(root / "stderr.log", "ab"))
         child.stdin.write(password)
         child.stdin.close()
@@ -88,29 +87,14 @@ def main() -> None:
         assert result.returncode != 0 and not os.path.ismount(mountpoint)
         passed.append("incorrect-password")
         process = mount()
+        assert (mountpoint / "renamed ü.bin").read_bytes() == bytes(range(256)) * 1000
+        passed.append("reopen-persistence")
         database = sqlite3.connect(mountpoint / "state.sqlite3")
         assert database.execute("SELECT value FROM state").fetchone()[0] == "persistent"
         database.execute("INSERT INTO state VALUES ('reopened')")
         database.commit()
         database.close()
         passed.append("sqlite-wal-reopen")
-        unmount(process)
-        process = None
-        process = mount(readonly=True)
-        assert (mountpoint / "renamed ü.bin").read_bytes() == bytes(range(256)) * 1000
-        # SQLite WAL normally creates shared-memory files on open. Immutable is
-        # safe here because the previous connection closed and checkpointed and
-        # this test owns the only mount, which is now read-only at both layers.
-        database = sqlite3.connect(f"file:{quote(str(mountpoint / 'state.sqlite3'))}?mode=ro&immutable=1", uri=True)
-        assert database.execute("SELECT value FROM state").fetchone()[0] == "persistent"
-        database.close()
-        passed.append("reopen-persistence")
-        try:
-            (mountpoint / "forbidden").write_text("no")
-        except OSError:
-            passed.append("readonly")
-        else:
-            raise AssertionError("Read-only mount accepted a write")
         unmount(process)
         process = None
         result = {"status": "pass", "passed": passed, "evidence": str(root)}

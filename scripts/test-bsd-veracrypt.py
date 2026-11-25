@@ -44,10 +44,8 @@ def main():
             password = secrets.token_urlsafe(32).encode() + b"\n"
             common = [binary, "--text", "--non-interactive", "--stdin", "--pim=0", "--keyfiles="]
             execute(name + "-create", common + ["--create", image, "--force", "--volume-type=normal", f"--encryption={cipher}", "--hash=SHA-512", "--filesystem=none", "--size=96M", "--random-source=/dev/urandom"], password)
-            def unlock(suffix, readonly=False):
+            def unlock(suffix):
                 argv = common + ["--mount", image, "--protect-hidden=no", "--filesystem=none"]
-                if readonly:
-                    argv.append("--mount-options=ro")
                 execute(name + suffix + "-unlock", argv, password)
                 listing = execute(name + suffix + "-list", [binary, "--text", "--list", "--verbose", image])
                 found = re.search(r"^Virtual Device: (/dev/(?:md[0-9]+|vnd[0-9]+c))$", listing, re.MULTILINE)
@@ -84,21 +82,9 @@ def main():
                 raise RuntimeError(f"{cipher}: durable marker mismatch")
             execute(name + "-reumount", ["/sbin/umount", mount])
             execute(name + "-reclose", [binary, "--text", "--non-interactive", "--dismount", image])
-            readonly = "unsupported: upstream OpenBSD attach has no read-only route"
-            if target == "FreeBSD":
-                device = unlock("-readonly", readonly=True)
-                execute(name + "-ro-mount", ["/sbin/mount", "-t", filesystem, "-o", "ro", device, mount])
-                try:
-                    (mount / "must-fail").write_bytes(b"forbidden")
-                except OSError:
-                    readonly = "passed"
-                else:
-                    raise RuntimeError("Read-only filesystem accepted a write")
-                execute(name + "-ro-umount", ["/sbin/umount", mount])
-                execute(name + "-ro-close", [binary, "--text", "--non-interactive", "--dismount", image])
             image.unlink()
             mount.rmdir()
-            results.append({"cipher": cipher, "lifecycle": "passed", "wrong_password": "passed", "fsync_reopen": "passed", "readonly": readonly})
+            results.append({"cipher": cipher, "lifecycle": "passed", "wrong_password": "passed", "fsync_reopen": "passed"})
         report = {"status": "passed", "scope": "private_engine_only", "platform": target, "backend": str(binary), "results": results, "seconds": round(time.monotonic() - started, 2), "evidence": str(root)}
     except Exception as error:
         report = {"status": "failed", "scope": "private_engine_only", "platform": target, "results": results, "error": str(error), "evidence": str(root)}

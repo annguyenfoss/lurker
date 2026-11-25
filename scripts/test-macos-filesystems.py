@@ -107,7 +107,7 @@ def main():
                 run(["/usr/bin/hdiutil", "detach", device])
             for attempt in range(2):
                 log = root / f"ntfs-ro-{attempt}-mount.log"
-                status = harness.terminal([str(binary), "mount", "--type", "apple", "--readonly", "--color=never",
+                status = harness.terminal([str(binary), "mount", "--type", "apple", "--color=never",
                                            str(image), str(mount)], password, 60, log)
                 case = {"attempt": attempt, "mount": status, "mount_log": str(log)}
                 result["cases"].append(case)

@@ -86,7 +86,6 @@ export component MainWindow inherits Window {
     in-out property <string> mount-auth-method: "pass";
     in-out property <string> mount-passphrase: "";
     in-out property <string> mount-key-file: "";
-    in-out property <bool>   mount-readonly: false;
     in-out property <int>    mount-selected-index: -1;
 
     // Data
@@ -349,7 +348,6 @@ export component MainWindow inherits Window {
                                 mount-auth-method <=> root.mount-auth-method;
                                 mount-passphrase <=> root.mount-passphrase;
                                 mount-key-file <=> root.mount-key-file;
-                                mount-readonly <=> root.mount-readonly;
                                 devices: root.devices;
                                 device-picked(info) => { root.device-picked-for-mount(info); }
                                 rescan => { root.rescan-devices(); }

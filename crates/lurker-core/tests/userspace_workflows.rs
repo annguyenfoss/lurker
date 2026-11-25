@@ -48,29 +48,31 @@ fn keyfile_only_userspace_workflows() {
     ] {
         let source = f.path(&format!("keyfile-{cipher}.hc"));
         let at = f.path("keyfile mount");
-        eprintln!("USERSPACE KEYFILE create/unlock/persistence/readonly: {cipher}");
+        eprintln!("USERSPACE KEYFILE create/unlock/persistence: {cipher}");
         ok(keyfile_action(create(&source, cipher, false), &key));
-        bad(keyfile_action(mount(&source, &at, false), &wrong));
-        bad(mount(&source, &at, false));
+        bad(keyfile_action(mount(&source, &at), &wrong));
+        bad(mount(&source, &at));
         assert!(!at.exists());
-        ok(keyfile_action(mount(&source, &at, false), &key));
+        ok(keyfile_action(mount(&source, &at), &key));
         let volume = f.active(&source);
         fs::write(at.join("persistent"), b"keyfile userspace data").unwrap();
         ok(unmount(&source));
         assert!(!volume.mapper_path.exists());
-        ok(keyfile_action(mount(&source, &at, true), &key));
+        ok(keyfile_action(mount(&source, &at), &key));
         let volume = f.active(&source);
-        assert!(volume.readonly);
+        assert!(!volume.readonly);
         assert_eq!(
             fs::read(at.join("persistent")).unwrap(),
             b"keyfile userspace data"
         );
-        assert!(fs::write(at.join("forbidden"), b"no").is_err());
-        assert!(fs::OpenOptions::new()
-            .write(true)
-            .open(&volume.mapper_path)
-            .and_then(|mut file| file.write_all(b"x"))
-            .is_err());
+        fs::write(at.join("after-reopen"), b"writable after reopen").unwrap();
+        ok(unmount(&source));
+        assert!(!volume.mapper_path.exists());
+        ok(keyfile_action(mount(&source, &at), &key));
+        assert_eq!(
+            fs::read(at.join("after-reopen")).unwrap(),
+            b"writable after reopen"
+        );
         ok(unmount(&source));
         // Authenticate the bundled helper's header with stock cryptsetup,
         // without creating a mapping or requesting administrator privileges.
@@ -226,7 +228,7 @@ fn create(source: &Path, cipher: CreateCipher, force: bool) -> CommandAction {
         keyfile: None,
     })
 }
-fn mount(source: &Path, at: &Path, readonly: bool) -> CommandAction {
+fn mount(source: &Path, at: &Path) -> CommandAction {
     CommandAction::Mount(MountCommand {
         peer_sources: Vec::new(),
         allow_degraded: false,
@@ -237,7 +239,7 @@ fn mount(source: &Path, at: &Path, readonly: bool) -> CommandAction {
         tag: None,
         passphrase: Some(PASSWORD.into()),
         keyfile: None,
-        readonly,
+        readonly: false,
     })
 }
 fn unmount(target: &Path) -> CommandAction {
@@ -290,7 +292,7 @@ fn real_userspace_veracrypt_workflows() {
         let before = fs::read(&source).unwrap();
         assert!(bad(create(&source, cipher, false)).contains("already exists"));
         assert_eq!(fs::read(&source).unwrap(), before);
-        ok(mount(&source, &at, false));
+        ok(mount(&source, &at));
         let volume = f.active(&source);
         assert_eq!(volume.privilege_mode, PrivilegeMode::Unprivileged);
         assert_eq!(volume.filesystem_type.as_deref(), Some("btrfs"));
@@ -322,11 +324,10 @@ fn real_userspace_veracrypt_workflows() {
         fs::set_permissions(at.join("private"), fs::Permissions::from_mode(0o000)).unwrap();
         assert!(fs::read(at.join("private")).is_err());
         fs::set_permissions(at.join("private"), fs::Permissions::from_mode(0o600)).unwrap();
-        bad(mount(&source, &f.path("duplicate"), false));
+        bad(mount(&source, &f.path("duplicate")));
         bad(create(&source, cipher, true));
         bad(create(&source, cipher, true).with_privilege_mode(PrivilegeMode::Privileged));
-        bad(mount(&source, &f.path("duplicate"), false)
-            .with_privilege_mode(PrivilegeMode::Privileged));
+        bad(mount(&source, &f.path("duplicate")).with_privilege_mode(PrivilegeMode::Privileged));
         assert_eq!(
             fs::read(at.join("folder/data")).unwrap(),
             b"persistent userspace data"
@@ -347,29 +348,28 @@ fn real_userspace_veracrypt_workflows() {
             !at.exists(),
             "automatically created mountpoint should be removed"
         );
-        ok(mount(&source, &at, true));
-        assert!(f.active(&source).readonly);
+        ok(mount(&source, &at));
+        assert!(!f.active(&source).readonly);
         assert_eq!(
             fs::read(at.join("renamed")).unwrap(),
             b"persistent userspace data"
         );
         assert_eq!(fs::read(at.join("sparse")).unwrap().len(), 1024 * 1024 + 4);
-        assert!(fs::write(at.join("blocked"), b"no").is_err());
+        fs::write(at.join("after-reopen"), b"writable after reopen").unwrap();
         let raw = f.active(&source).mapper_path;
-        let raw_write = fs::OpenOptions::new()
-            .write(true)
-            .open(&raw)
-            .and_then(|mut file| file.write_all(b"x"));
-        assert!(raw_write.is_err(), "crypto layer must also be read-only");
         ok(unmount(&raw));
         // Symlink sources resolve to the same backing identity.
         let alias = f.path("source alias");
         symlink(&source, &alias).unwrap();
-        ok(mount(&alias, &at, false));
+        ok(mount(&alias, &at));
+        assert_eq!(
+            fs::read(at.join("after-reopen")).unwrap(),
+            b"writable after reopen"
+        );
         ok(unmount(&at));
         fs::remove_file(alias).unwrap();
         if cipher == CreateCipher::Aes {
-            ok(mount(&source, &at, false));
+            ok(mount(&source, &at));
             let raw = f.active(&source).mapper_path;
             let state_root = f
                 .path("runtime")
@@ -407,7 +407,7 @@ fn real_userspace_veracrypt_workflows() {
                 "zstd-compressed extents were not found"
             );
             ok(unmount(&source));
-            let mut wrong = mount(&source, &at, false);
+            let mut wrong = mount(&source, &at);
             if let CommandAction::Mount(ref mut c) = wrong {
                 c.passphrase = Some("wrong password".into());
             }
@@ -424,7 +424,7 @@ fn real_userspace_veracrypt_workflows() {
             bad(failed);
             assert_eq!(fs::read(&source).unwrap(), before);
             ok(create(&source, cipher, true));
-            ok(mount(&source, &at, false));
+            ok(mount(&source, &at));
             assert!(!at.join("folder").exists());
             ok(unmount(&source));
         }
@@ -457,7 +457,7 @@ fn real_userspace_veracrypt_workflows() {
             "{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        eprintln!("PASS {cipher}: user-owned Btrfs, POSIX operations, busy/duplicate guards, readonly at both layers, remount and standard header compatibility");
+        eprintln!("PASS {cipher}: user-owned Btrfs, POSIX operations, busy/duplicate guards, writable remount and standard header compatibility");
     }
     assert!(list_active_volumes().unwrap().iter().all(|v| !v
         .source_path
@@ -558,7 +558,7 @@ fn external_filesystems_and_failure_recovery() {
         fs::File::open(&raw).unwrap().sync_all().unwrap();
         tool("fusermount3", &["-u".as_ref(), raw_dir.as_os_str()]);
         fs::remove_dir(&raw_dir).unwrap();
-        ok(mount(&source, &at, false));
+        ok(mount(&source, &at));
         assert_eq!(
             f.active(&source).filesystem_type.as_deref(),
             Some(filesystem)
@@ -569,14 +569,14 @@ fn external_filesystems_and_failure_recovery() {
             effective_uid()
         );
         ok(unmount(&source));
-        ok(mount(&source, &at, true));
+        ok(mount(&source, &at));
         assert_eq!(
             fs::read_to_string(at.join("external-data")).unwrap(),
             filesystem
         );
-        assert!(fs::write(at.join("blocked"), b"x").is_err());
+        fs::write(at.join("after-reopen"), b"writable after reopen").unwrap();
         ok(unmount(&at));
-        eprintln!("PASS external {filesystem}: SHA-256 header, automatic type, user writes, persistence and readonly");
+        eprintln!("PASS external {filesystem}: SHA-256 header, automatic type, user writes and persistence");
     }
     let source = f.path("recovery.hc");
     ok(create(&source, CreateCipher::Aes, false));
@@ -612,7 +612,7 @@ exit 1
         .as_ref()
         .is_some_and(|p| p.starts_with(&f.root))));
     // Mountpoint identity guards must reject stale/replaced mounts.
-    ok(mount(&source, &at, false));
+    ok(mount(&source, &at));
     let session_file = fs::read_dir(
         f.path("runtime")
             .join(format!("lurker-userspace-{}", effective_uid())),
@@ -639,7 +639,7 @@ exit 1
     let pid = current["process"]["pid"].as_u64().unwrap() as i32;
     assert_eq!(unsafe { libc::kill(pid, libc::SIGKILL) }, 0);
     ok(unmount(&source));
-    ok(mount(&source, &at, false));
+    ok(mount(&source, &at));
     assert_eq!(fs::read(&durable).unwrap(), b"synced before crash");
     let volume = f.active(&source);
     // An open raw image prevents closing crypto, after the filesystem has drained.

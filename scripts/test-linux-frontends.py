@@ -144,17 +144,15 @@ def main():
                     subprocess.run(['sudo', '-n', 'chown', f'{os.getuid()}:{os.getgid()}', str(at)], check=True)
                 (at / 'cli-data').write_text('CLI persisted data')
                 terminal(['unmount', str(source)], root)
-                assert terminal(['mount', '--readonly', str(source), str(at)], root) == 1
+                assert terminal(['mount', str(source), str(at)], root) == 1
                 assert (at / 'cli-data').read_text() == 'CLI persisted data'
-                try:
-                    (at / 'forbidden').write_text('must fail')
-                    raise AssertionError('readonly CLI mount allowed writes')
-                except OSError as error:
-                    assert error.errno in (errno.EROFS, errno.EACCES), error
+                (at / 'cli-reopened').write_text('CLI remains writable after reopen')
                 terminal(['unmount', str(at)], root)
                 # Desktop helper receives passphrases on stdin as JSON and preserves its response contract.
-                action = dict(action='mount', source=str(source), mountpoint=str(at), volume_type='auto', tag=None, passphrase=PASSWORD, readonly=True)
+                action = dict(action='mount', source=str(source), mountpoint=str(at), volume_type='auto', tag=None, passphrase=PASSWORD)
                 must_succeed(helper(action))
+                assert (at / 'cli-reopened').read_text() == 'CLI remains writable after reopen'
+                (at / 'helper-data').write_text('Helper mount is writable')
                 must_succeed(helper(dict(action='unmount', target=str(at), volume_type='auto', tag=None)))
                 action['passphrase'] = 'incorrect password'
                 assert not helper(action)['ok']
@@ -162,7 +160,7 @@ def main():
                 assert not helper(action)['ok']
                 invalid = subprocess.run(helper_command(), input=b'{invalid', capture_output=True, timeout=10)
                 assert not json.loads(invalid.stdout)['ok']
-                print(f'PASS {ty}: interactive CLI create/mount/readonly/unmount; helper JSON success and failures', flush=True)
+                print(f'PASS {ty}: interactive CLI create/mount/reopen/unmount; helper JSON success and failures', flush=True)
             finally:
                 # Only our fresh mountpoint/source can be passed to cleanup.
                 helper(dict(action='unmount', target=str(at), volume_type='auto', tag=None))

@@ -75,11 +75,10 @@ def main():
                     with (point / "durable.bin").open("wb") as file:
                         file.write(b"block profile persistence\n"); file.flush(); os.fsync(file.fileno())
                     run([cli, "unmount", "--type", backend, point])
-                    run([cli, "mount", "--type", backend, "--readonly", "--key-file", key, device, point])
+                    run([cli, "mount", "--type", backend, "--key-file", key, device, point])
                     if (point / "durable.bin").read_bytes() != b"block profile persistence\n": raise RuntimeError("Block data did not survive reopen")
-                    try: (point / "forbidden").write_bytes(b"must fail")
-                    except OSError: pass
-                    else: raise RuntimeError("Read-only block mount permitted writes")
+                    with (point / "durable.bin").open("ab") as file:
+                        file.write(b"writable after reopen\n"); file.flush(); os.fsync(file.fileno())
                     run([cli, "unmount", "--type", backend, point])
                     entry["status"] = "passed"
                 except Exception as error:

@@ -24,7 +24,7 @@ export component MountView inherits Card {
     in-out property <bool> degraded: false;
     changed mirrored => {
         root.peer-source = ""; root.degraded = false;
-        if root.mirrored { root.auth-method = "pass"; root.key-file = ""; root.readonly = false; }
+        if root.mirrored { root.auth-method = "pass"; root.key-file = ""; }
     }
     in property <bool> unprivileged: false;
     in property <bool> busy: false;
@@ -35,7 +35,6 @@ export component MountView inherits Card {
     in-out property <string> auth-method: "pass";   // "pass" | "key"
     in-out property <string> passphrase: "";
     in-out property <string> key-file: "";
-    in-out property <bool>   readonly: false;
 
     in property <[DeviceInfo]> devices;
     callback device-picked(DeviceInfo);
@@ -191,7 +190,6 @@ export component MountView inherits Card {
                 color: UiTheme.fg-2;
                 wrap: word-wrap;
             }
-
         }
     }
 
@@ -212,11 +210,6 @@ export component MountView inherits Card {
                 }
             }
 
-            if !root.mirrored: Toggle {
-                label: "Mount read-only";
-                hint: "requires read-only support from the detected format";
-                checked <=> root.readonly;
-            }
         }
     }
 

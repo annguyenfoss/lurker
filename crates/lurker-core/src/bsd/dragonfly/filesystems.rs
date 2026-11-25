@@ -76,7 +76,7 @@ pub(in crate::bsd) fn mount_filesystem(
                 CreateFilesystem::Ntfs if readonly => "ntfs",
                 _ => {
                     return Err(AppError::new(
-                        "The stock DragonFly foreign filesystem route requires --readonly.",
+                        "The stock DragonFly foreign filesystem driver cannot provide writable access.",
                     ));
                 }
             };
