@@ -2,16 +2,16 @@
 
 ## Planning summary
 
-This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools run on the host OS and are freely obtainable by individual users; virtual machines, WSL, paid routes and extract–edit–reinsert workflows are excluded. Native and userspace mounts count equally. Separate host-installed formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
+This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools are freely obtainable by individual users. The original research required host-OS tools and excluded virtual machines; the subsequently approved macOS Btrfs microVM route is an explicit exception. WSL, paid routes and extract–edit–reinsert workflows remain excluded. Native and userspace mounts count equally. Separate formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ext4 | ✅ | ☑️ | ☑️ | ⚠️ R/O | ☑️ | ⚠️ R/O | ☑️ |
-| Btrfs | ✅ | ☑️¹ | ☑️ | — | — | — | ☑️ |
+| Btrfs | ✅ | ☑️ | ☑️ | — | — | — | ☑️ |
 | XFS | ✅ | ☑️ | ☑️ | ⚠️ R/O | — | ⚠️ R/O | ⚠️ R/O |
 | APFS | ☑️ | ✅ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ☑️¹ |
 | UFS1 / FFSv1 | ☑️ | — | ✅ | ✅ | ✅ | ✅ | ⚠️ R/O |
-| UFS2 / FFSv2 | ☑️ | ⚠️ R/O | ✅ | ✅ | ✅ | — | ⚠️ R/O |
+| UFS2 / FFSv2 | ☑️ | ☑️² | ✅ | ✅ | ✅ | — | ⚠️ R/O |
 | HAMMER2 | ✅² | — | ☑️² | ☑️ | ☑️ | ✅ | — |
 | NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ✅ |
 | exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -26,13 +26,36 @@ This planning summary follows the stated use case: format a decrypted physical p
 - **¹** Disk/container creation not available.
 - **²** Largely usable; reliability not established.
 
-Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
+Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. macOS UFS2 uses an experimental writer; moving directories between parents is unsupported. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
-This is filesystem capability research based on documentation/source inspection, not a claim that these combinations are integrated or runtime-qualified in Lurker.
+This remains a planning matrix based on filesystem capability research. The macOS Btrfs and UFS2 promises now include Create + Read/Write following native CLI qualification, as documented below. Other cells do not assert integration or runtime qualification in Lurker.
+
+## macOS promise updates
+
+The 2026-11-25 follow-up exceeded two earlier promises using free tools:
+
+- **Btrfs: ☑️¹ → ☑️.** Creation now works as well as read/write access.
+  Lurker uses anylinuxfs's Linux guest to format and mount the identified
+  decrypted virtual disk, with key-authenticated SFTP and macFUSE SSHFS for
+  host access. This approved microVM route replaces the earlier host-only
+  assumption for this cell; it does not use anylinuxfs's default NFS export.
+- **UFS2 / FFSv2: ⚠️ R/O → ☑️².** Patched UFS2Tool and fuse-ufs now provide
+  creation and read/write access through macFUSE. Moving a directory between
+  parents is safely refused. The writer remains experimental, lacks complete
+  filesystem-feature support, and has no established production reliability.
+
+Both passed actual VeraCrypt file-container CLI creation, writes, normal
+close/reopen and hash verification, append/add-file, and a final close/reopen
+verification. Source revisions and receipts are in
+[the macOS retest record](../DIRECTIVES/PLAN/FILESYSTEM_ROUND/MACOS_RETEST.md).
+[Setup and scope](macos-filesystems.md) and the
+[patched UFS2 tool recipe](../native/macos/fuse-ufs.md) document the required
+providers. These results do not qualify physical-device input, desktop flows
+or release packaging, and do not imply full metadata or crash-safety parity.
 
 ## Detailed solution survey
 
-The earlier per-solution survey below is retained in full, including alternatives excluded from the planning summary. Its detailed tags and counts describe that survey snapshot; the planning summary incorporates the later workflow and beta assessments.
+The earlier per-solution survey below is retained in full, including alternatives excluded from the planning summary. Its detailed tags and counts describe that survey snapshot; the planning summary incorporates the later workflow and beta assessments and the macOS promise updates above. The original anylinuxfs and UFS2Tool entries do not describe the subsequently qualified combinations.
 
 Survey date 2026-11-24. Every previously researched offering is restored: 160
 solution entries across 70 OS/filesystem cells, without consolidation.
@@ -316,6 +339,10 @@ Pro.
 
 ### macOS
 
+- **Later Btrfs and UFS2 qualification.** The [promise updates](#macos-promise-updates)
+  supersede the earlier creation-unavailable Btrfs and reader-only UFS2
+  conclusions. The offering descriptions below retain the original survey's
+  individual tools and interfaces; UFS2Tool alone still supplies no macOS mount.
 - **ext4, Btrfs, XFS.** xlinuxfs covers attached images and partitions via
   FSKit, with the image attachment method depending on macOS version.
   PolyDrive Disk documents physical devices on Apple Silicon and macOS 26+.

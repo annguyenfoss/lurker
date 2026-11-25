@@ -13,11 +13,14 @@ The README and planning summary use the following compact notation. The older de
 - **¹** Disk/container creation not available.
 - **²** Largely usable; reliability not established.
 
-Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
+Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. macOS UFS2 uses an experimental writer; moving directories between parents is unsupported. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
-This is filesystem capability research based on documentation/source inspection, not a claim that these combinations are integrated or runtime-qualified in Lurker.
+This remains a planning matrix based on filesystem capability research. The
+macOS Btrfs and UFS2 promises were raised after representative Create + Read/Write
+CLI flows passed; see the [promise updates](filesystem-support-matrix.md#macos-promise-updates).
+Other cells do not assert integration or runtime qualification in Lurker.
 
-This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools run on the host OS and are freely obtainable by individual users; virtual machines, WSL, paid routes and extract–edit–reinsert workflows are excluded. Native and userspace mounts count equally. Separate host-installed formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
+This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools are freely obtainable by individual users. The original research required host-OS tools and excluded virtual machines; the subsequently approved macOS Btrfs microVM route is an explicit exception. WSL, paid routes and extract–edit–reinsert workflows remain excluded. Native and userspace mounts count equally. Separate formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
 
 Number planning annotations from 1 by first appearance, scanning cells left to right and rows top to bottom. Related cells may share a number and explanation. Use superscript numbers, with one concise explanation per number in the legend; omit OS/filesystem pair names from the explanations.
 

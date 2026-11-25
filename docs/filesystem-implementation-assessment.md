@@ -27,6 +27,32 @@ and metadata exposure; writable ones also on mutation and recovery. Formatters
 are assessed on creation; lack of a mount is already NM. An OS restriction or
 missing module is recorded separately from an implementation defect.
 
+## Later macOS planning updates
+
+The 2026-11-25 native CLI follow-up raises two planning promises beyond the
+original research snapshot below:
+
+- **Btrfs: ☑️¹ → ☑️.** The approved anylinuxfs Linux guest formats and mounts
+  the decrypted virtual disk; authenticated SFTP/macFUSE SSHFS exposes it to
+  macOS applications. Actual VeraCrypt container creation and read/write
+  persistence passed. The original anylinuxfs/NFS assessment below remains
+  specific to that earlier interface, not the qualified SSHFS combination.
+- **UFS2 / FFSv2: ⚠️ R/O → ☑️².** Patched UFS2Tool formatting plus patched
+  fuse-ufs/macFUSE passed actual VeraCrypt Create + Read/Write persistence.
+  This is a combined formatter and mount driver, not UFS2Tool's Windows-only
+  mount command. Cross-parent directory moves are refused; the writer remains
+  experimental and does not provide full UFS2 feature or reliability parity.
+
+Both used normal close/reopen, hash checks, append/add-file and final reopen
+verification. No exhaustive feature audit or physical-device, desktop or
+release-package qualification is implied. The
+[updated planning notes](filesystem-support-matrix.md#macos-promise-updates),
+[native receipts](../DIRECTIVES/PLAN/FILESYSTEM_ROUND/MACOS_RETEST.md),
+[setup documentation](macos-filesystems.md) and
+[UFS2 patches and source pins](../native/macos/fuse-ufs.md) establish the
+new combinations. The original 160 per-solution findings remain a dated survey;
+these two updates do not reclassify its other offerings.
+
 ## Benchmark references
 
 The tag guide lists the common operations and filesystem-specific features.

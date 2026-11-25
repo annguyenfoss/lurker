@@ -279,11 +279,11 @@ Lurker chooses the native format for your OS. Use administrator authorization wh
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ext4 | ✅ | ☑️ | ☑️ | ⚠️ R/O | ☑️ | ⚠️ R/O | ☑️ |
-| Btrfs | ✅ | ☑️¹ | ☑️ | — | — | — | ☑️ |
+| Btrfs | ✅ | ☑️ | ☑️ | — | — | — | ☑️ |
 | XFS | ✅ | ☑️ | ☑️ | ⚠️ R/O | — | ⚠️ R/O | ⚠️ R/O |
 | APFS | ☑️ | ✅ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ☑️¹ |
 | UFS1 / FFSv1 | ☑️ | — | ✅ | ✅ | ✅ | ✅ | ⚠️ R/O |
-| UFS2 / FFSv2 | ☑️ | ⚠️ R/O | ✅ | ✅ | ✅ | — | ⚠️ R/O |
+| UFS2 / FFSv2 | ☑️ | ☑️² | ✅ | ✅ | ✅ | — | ⚠️ R/O |
 | HAMMER2 | ✅² | — | ☑️² | ☑️ | ☑️ | ✅ | — |
 | NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ✅ |
 | exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -298,9 +298,9 @@ Lurker chooses the native format for your OS. Use administrator authorization wh
 - **¹** Disk/container creation not available.
 - **²** Largely usable; reliability not established.
 
-Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
+Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. macOS UFS2 uses an experimental writer; moving directories between parents is unsupported. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
-This is filesystem capability research based on documentation/source inspection, not a claim that these combinations are integrated or runtime-qualified in Lurker.
+This remains a planning matrix based on filesystem capability research. The macOS Btrfs and UFS2 promises now include Create + Read/Write following native CLI qualification; see the [supporting notes](docs/filesystem-support-matrix.md#macos-promise-updates). Other cells do not assert integration or runtime qualification in Lurker.
 
 ## Get started
 
