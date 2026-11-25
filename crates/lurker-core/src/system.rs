@@ -350,6 +350,11 @@ impl ToolPaths {
                 filesystem,
                 ..
             }) => {
+                if *filesystem == Some(crate::api::CreateFilesystem::Ufs1)
+                    && matches!(volume_type, VolumeType::Auto | VolumeType::Luks)
+                {
+                    return Err(AppError::new("Linux UFS1 requires logical sectors no larger than 1024 bytes; default LUKS2 creation can select 4096. Select luks1 or veracrypt for UFS1."));
+                }
                 tools.formatter = Some(require_command(linux_formatter(*filesystem)?)?);
                 let module = linux_filesystem_module(*filesystem);
                 if let Some(module) = module {
@@ -387,6 +392,7 @@ pub(crate) fn linux_filesystem_module(
         Some(crate::api::CreateFilesystem::Apfs) => Some("apfs"),
         Some(crate::api::CreateFilesystem::Hammer2) => Some("hammer2"),
         Some(crate::api::CreateFilesystem::Zfs) => Some("zfs"),
+        Some(crate::api::CreateFilesystem::Ufs1) => Some("ufs"),
         _ => None,
     }
 }
@@ -428,11 +434,7 @@ pub(crate) fn linux_formatter(
         Hammer2 => Ok("newfs_hammer2"),
         // The NetBSD makefs shipped by some Linux distributions writes a
         // different FFSv2 layout than the FreeBSD-only FUSE driver accepts.
-        Ufs2 => Ok("makefs-freebsd"),
-        other => Err(AppError::new(format!(
-            "Linux cannot create {} through this container adapter. Supported: btrfs, ext4, xfs, ntfs, exfat, fat32, zfs, apfs, hammer2, ufs2.",
-            other.as_str()
-        ))),
+        Ufs1 | Ufs2 => Ok("makefs-freebsd"),
     }
 }
 

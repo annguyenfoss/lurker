@@ -1349,11 +1349,6 @@ fn mount_open_mapper(
             }
         }
     }
-    if filesystem_type.as_deref() == Some("ufs") && !readonly {
-        return Err(AppError::new(
-            "Linux UFS imports require --readonly; UFS writes are not qualified.",
-        ));
-    }
     if readonly {
         options.push("ro".into());
     }
@@ -1364,7 +1359,35 @@ fn mount_open_mapper(
     args.push(mapper_path.as_os_str().to_os_string());
     args.push(mountpoint.as_os_str().to_os_string());
     let mount = ctx.mount_path()?.to_path_buf();
-    ctx.run_command(&mount, &args, true, false, "Failed to mount filesystem")
+    ctx.run_command(&mount, &args, true, false, "Failed to mount filesystem")?;
+    // A UFS module compiled without writes can silently accept a writable
+    // request as a read-only mount. Do not report that request as successful.
+    if filesystem_type.as_deref() == Some("ufs") && !readonly {
+        if let Some(mounted) = read_mountinfo()?
+            .into_iter()
+            .find(|m| m.mount_point == mountpoint && m.readonly)
+        {
+            let directory = OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+                .open(mountpoint)
+                .map_err(|e| AppError::io("Inspect read-only UFS mount", e))?;
+            if descriptor_mount_id(&directory)? != mounted.mount_id {
+                return Err(AppError::new("UFS mount identity changed; preserving it."));
+            }
+            drop(directory);
+            let umount = crate::trusted_system_executable("umount")?;
+            ctx.run_command(
+                &umount,
+                &[mountpoint.as_os_str().to_os_string()],
+                true,
+                false,
+                "Close read-only UFS mount",
+            )?;
+            return Err(AppError::new("Writable UFS1 requires CONFIG_UFS_FS_WRITE in the matching kernel module; the installed driver mounted read-only."));
+        }
+    }
+    Ok(())
 }
 
 fn block_device_type(ctx: &mut AppContext, device_path: &Path) -> AppResult<String> {
@@ -1785,18 +1808,18 @@ fn format_filesystem(
     if filesystem == CreateFilesystem::Zfs {
         return create_zfs(ctx, device_path, owner);
     }
-    if filesystem == CreateFilesystem::Ufs2 {
+    if matches!(filesystem, CreateFilesystem::Ufs1 | CreateFilesystem::Ufs2) {
         let seed = EmptyFilesystemRoot::new(owner)?;
         let blockdev = crate::trusted_system_executable("blockdev")?;
         let size = ctx.capture_command(
             &blockdev,
             &["--getsize64".into(), device_path.as_os_str().to_os_string()],
             true,
-            "Inspect new UFS2 device size",
+            "Inspect new UFS device size",
         )?;
         let bytes = trim_stdout(&size)
             .parse::<u64>()
-            .map_err(|_| AppError::new("Cannot determine new UFS2 device size."))?;
+            .map_err(|_| AppError::new("Cannot determine new UFS device size."))?;
         let formatter = ctx.formatter_path()?.to_path_buf();
         run_formatter(
             ctx,
@@ -1807,17 +1830,35 @@ fn format_filesystem(
                 "-B".into(),
                 "little".into(),
                 "-o".into(),
-                "version=2,bsize=32768,fsize=4096".into(),
+                format!(
+                    "version={},bsize=32768,fsize=4096",
+                    if filesystem == CreateFilesystem::Ufs1 {
+                        1
+                    } else {
+                        2
+                    }
+                )
+                .into(),
                 "-s".into(),
                 bytes.to_string().into(),
                 device_path.as_os_str().to_os_string(),
                 seed.descriptor_path().into_os_string(),
             ],
-            "Create new UFS2 filesystem",
+            "Create new UFS filesystem",
         )?;
         // Validate the actual FreeBSD layout through its installed driver before
         // publishing a newly encrypted container, and initialize its private root.
-        return initialize_native_root(ctx, device_path.as_os_str(), "ufs2", None, owner);
+        return if filesystem == CreateFilesystem::Ufs1 {
+            initialize_native_root(
+                ctx,
+                device_path.as_os_str(),
+                "ufs",
+                Some("ufstype=44bsd"),
+                owner,
+            )
+        } else {
+            initialize_native_root(ctx, device_path.as_os_str(), "ufs2", None, owner)
+        };
     }
     let mut args = crate::system::linux_format_args(filesystem, owner);
     // Seed/prototype initialization sets ownership only for newly created roots;
@@ -2229,6 +2270,9 @@ fn initialize_native_root(
             AppError::new("Initialization mount is missing; refusing ownership changes.")
         })?;
     let initialized = (|| {
+        if mounted.readonly {
+            return Err(AppError::new("New filesystem mounted read-only; a writable driver is required. Linux UFS1 requires CONFIG_UFS_FS_WRITE in the matching UFS module."));
+        }
         let directory = OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
