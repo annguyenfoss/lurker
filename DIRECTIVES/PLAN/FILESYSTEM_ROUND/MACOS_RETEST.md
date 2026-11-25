@@ -8,25 +8,28 @@ TT NTFS Native 0.4.2 is enabled. These results supersede the prerequisite blocks
 in the historical attempts below. No paid software was used.
 
 Native NTFS/ZFS implementation: `f3529d9295069e2686246843df249706a585740e`.
-Btrfs implementation and final writable regression candidate: `278d246`.
+Btrfs implementation and writable regression candidate: `278d246`.
+UFS2 Create + Read/Write implementation: `ebc718f`.
 Evidence root on Buran: `~/Library/Caches/lurker-filesystem-setup-20261125/`.
 
 | Pair | Observed through actual Lurker CLI | Create + Read/Write goal | Receipt beneath `cli-cases/` |
 |---|---|---|---|
-| macOS / Btrfs | Create, read/write, three reopen cycles with PDF/text hashes and appended data; normal host/guest/native-device/crypto close | Achieved | `lurker-fs-cli-zgu7vbbs/result.json` |
-| macOS / NTFS | Create, read/write, three reopen cycles with PDF/text hashes and appended data; normal close | Achieved | `lurker-fs-cli-p0o0qha3/result.json` |
-| macOS / ZFS | Create, read/write, three reopen cycles with PDF/text hashes and appended data; normal unmount/export | Achieved | `lurker-fs-cli-bakecz9_/result.json` |
-| macOS / UFS2 | Historical reader-only import test; no creation or writes | Not achieved | `lurker-ufs2-ro-cli-wip9b1an/result.json` |
+| macOS / Btrfs | Create, read/write, three mount sessions with PDF/text hashes and appended data; normal host/guest/native-device/crypto close | Achieved | `lurker-fs-cli-zgu7vbbs/result.json` |
+| macOS / NTFS | Create, read/write, three mount sessions with PDF/text hashes and appended data; normal close | Achieved | `lurker-fs-cli-aivvujso/result.json` |
+| macOS / ZFS | Create, read/write, three mount sessions with PDF/text hashes and appended data; normal unmount/export | Achieved | `lurker-fs-cli-eo201xu3/result.json` |
+| macOS / UFS2 | Create, read/write, three mount sessions with PDF/text hashes and appended data; normal close | Representative flow passes; directory-move limitation remains | `lurker-fs-cli-6_fkerwx/result.json` |
 
-The UFS2 reader needed the two small compatibility patches documented in
-`native/macos/fuse-ufs.md`. No UFS2 create or writable support is claimed.
+The UFS2 route combines patched UFS2Tool formatting with the existing writable
+fuse-ufs engine. Its reproducible sources, patches and staging recipe are in
+`native/macos/fuse-ufs.md`. The previous reader-only result is superseded.
 Additional native-candidate checks passed: ext4 and XFS create/RW regressions,
 ZFS changed-mount-identity refusal, and
 ordinary recovery of a verified ZFS mount whose startup identity was not saved.
 Guard receipt: `lurker-native-guards-ip193qdj/result.json` (13 CLI actions).
 It also contains historical extra NTFS/ZFS read-only checks; those are not
 desired features or independent acceptance requirements.
-Workspace check and tests passed: **118 passed, 0 failed, 11 ignored**.
+The earlier native candidate passed workspace check and tests:
+**118 passed, 0 failed, 11 ignored**.
 The native candidate's source files match the implementation commit above;
 CLI SHA-256 is `c6c7b08bfd305958d66dacf04a7dc384ac6545c2e0fc3917fa67701d748b90b0`.
 No owned crypto session remained after these tests.
@@ -48,11 +51,42 @@ Cleanup found zero owned mounts, crypto sessions, filesystem registry sessions
 or guest control directories. These remain development CLI artifacts; package,
 desktop lifecycle and physical-device qualification are separate.
 
-UFS2 creation/writing remains unachieved. A subsequent source audit found real
-upstream write methods; the earlier reader-only adapter is not proof that writes
-are impossible. Its missing flush/fsync callbacks and create-time formatter/root
-initialization are under investigation. Historical reader tests are not counted
-as success against the Create + Read/Write goal.
+UFS2 now passes the actual encrypted CLI Create + Read/Write workflow. The final
+patches provide real flush/fsync, correct raw indirect-block initialization,
+private new-root ownership, the omitted formatter CG0 backup superblock, and the
+correct macFUSE rename request layout. A native control also passed a 2 MiB file,
+PDF/text, three mount/normal-close cycles, same-parent file/directory renames
+and a cross-parent regular-file move. Receipt:
+`lurker-ufs2-rw-native-8svyc_uu/result.json`.
+
+Known UFS2 shortcoming: a directory cannot be moved to a different parent.
+Upstream does not update its `..` entry or parent link counts; the patched driver
+returns `EOPNOTSUPP` before mutation. The control verified the source directory,
+its child and both parent link counts were unchanged. The upstream writer
+remains experimental and warns of data loss;
+ordinary persistence tests do not establish full filesystem or production
+qualification. No exhaustive metadata audit was added to the acceptance bar.
+
+The exact UFS2 commit `ebc718ff55b4dfe87dcef8ff5c002616656b1765` passed
+`cargo check --workspace`, `cargo test --workspace` (**122 passed, 0 failed,
+11 ignored**) and release CLI/helper builds. All seven final encrypted CLI
+actions passed. The final source archive was extracted separately; replaying
+all committed upstream patches from the pinned bases reproduced every affected
+source file used by the native tools. Artifact SHA-256:
+
+- CLI: `903fe8db238b4836980307271434b50cdc8f8569ceb3ca1d7e846613a3415ab7`.
+- Helper: `50691acc37a8878086ec2115eeada2d90e33a7581a78893f4fbdcbc66f03dd01`.
+- fuse-ufs: `cdb369b05326f9417b17699b104417c49979d472a9453106c86bc2644a405fc8`.
+- UFS2Tool assembly: `97371bd86bc75dee7c8b6161710b45212b179b690dae1fa8c4c27d8aefe0a8f8`.
+
+Final inventory (`ufs2-final-inventory.json`) found zero owned mounts, attached
+images, crypto volumes, registry sessions, guest control directories or storage
+workers; the per-user VM lease was available. No reboot, physical device or
+user-installed Lurker session was used. Full candidate/source/tool hashes and
+receipts are retained locally under
+`target/goal-validation/macos-free-tools-20261125/ufs2-final/` and at the Buran
+evidence root. Development CLI qualification is complete for these macOS
+follow-ups; package and desktop lifecycle qualification are not implied.
 
 ## Historical ext4/XFS round and earlier blocked attempts
 

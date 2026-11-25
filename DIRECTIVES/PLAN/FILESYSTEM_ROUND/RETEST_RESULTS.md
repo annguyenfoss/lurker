@@ -2,7 +2,21 @@
 
 This record supplements, rather than replaces, the original [round results](RESULTS.md). Retests targeted previously unachieved CLI container or directory-backing cases. Existing passing payloads were not repeated except for the DragonFly ext4 case after its base userland changed. The tested payload is PDF and text with normal close/reopen, mutation and hash verification. Windows, physical devices, GUI flows, SQLite and fault tests remain outside this round.
 
-## New results
+## Subsequent macOS follow-up
+
+After the operator approved the free driver prerequisites and Linux guest route,
+macOS Btrfs, NTFS and ZFS passed actual encrypted CLI Create + Read/Write flows.
+UFS2 now also passes that representative flow with patched free formatter/driver
+builds; cross-parent directory moves remain unsupported and are safely refused.
+The upstream UFS2 writer remains experimental. Current source revisions, exact
+receipts and limitations are in [the macOS record](MACOS_RETEST.md). The earlier
+prerequisite blocks below are historical and superseded by that record.
+
+Read-only results anywhere in this historical report describe capability
+shortcomings. They do not count as achievements against the global Create +
+Read/Write goal and do not define an additional product mode.
+
+## Initial retest results
 
 | Target | Newly passing cases | Scope and conditions |
 | --- | --- | --- |
@@ -23,7 +37,7 @@ The Linux retest has 84 distinct new passing cases: 63 before distribution hando
 - FreeBSD Btrfs/XFS ordinary append still fails with both packaged LKL and a newly built unmodified upstream LKL. A separate unmodified fileshare/NFS driver passed native raw-image controls, including a formatter combination, but its writable loopback export lacks user authentication. No Lurker CLI pass is claimed for that route.
 - OpenBSD ext4/XFS/APFS CLI RO attempts remain blocked before authentication by the existing crypto attachment boundary. HAMMER2's kernel port requires an excluded patch; the assessed userspace reader is RO-only.
 - DragonFly XFS/APFS readers fail on encrypted vnode device I/O; NTFS-3G hits vnode locking errors. The exFAT native driver works in a control, but the ordinary FUSE mount helper does not expose sufficient source identity for the existing Lurker lifecycle. A discarded native-mount prototype panicked the disposable guest on ordinary close; the guest was recovered, no upstream change was made, and the final stock kernel/world and cleanup were verified.
-- macOS Btrfs, UFS2 RO, NTFS RW and ZFS remain blocked or unqualified. PolyDrive was incorrectly treated as free: its download provides a three-day trial, with a paid lifetime unlock, so it is excluded by the free-of-charge requirement regardless of the earlier unexplained download stall. The tested NTFS-3G driver rejects the existing VeraCrypt auxiliary image's required lock. ZFS needs the excluded Buran kernel-extension/security/restart setup. See the macOS report's subsequent installation and license audit for the later package state.
+- macOS: the subsequent approved free routes resolve the earlier Btrfs/NTFS/ZFS prerequisite and driver blocks. UFS2 Create + Read/Write persistence now passes; moving a directory between parents remains unsupported. PolyDrive remains excluded because its continued use requires payment. See the current macOS record for the tested routes and their development-artifact scope.
 - NetBSD's seven promised filesystem rows were already achieved. Its owner reconciled prior receipts and ran no new payload tests.
 
 ## Evidence and validation
