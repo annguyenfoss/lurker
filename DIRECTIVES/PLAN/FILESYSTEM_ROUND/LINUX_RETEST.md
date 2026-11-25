@@ -40,8 +40,8 @@ creation with `makefs-freebsd` and native `44bsd` mounts. Matching Linux UFS
 modules require upstream `CONFIG_UFS_FS_WRITE`. New filesystem initialization
 and writable imports reject the kernel's silent read-only fallback. Default
 LUKS2/UFS1 creation is refused before destination mutation because its selected
-4096-byte logical sectors cannot satisfy the kernel UFS driver's initial
-1024-byte probe. The Arch preflight-refusal control passed. Existing crypto
+4096-byte logical sectors cannot satisfy the native `44bsd` driver's initial
+512-byte probe. The Arch preflight-refusal control passed. Existing crypto
 profiles and filesystem defaults remain unchanged. Follow-up `befa5b2` retains
 the pre-existing refusal of unqualified native UFS2 writes without `fuse-ufs`.
 Harness commit `43a0938` adds newly writable UFS1 directory backings.
