@@ -250,3 +250,12 @@ The package is ad-hoc signed, not notarized. These are native development result
 not a security audit, arbitrary OS-version qualification or full shutdown/fault
 coverage. Apple images also retain their earlier packaged CLI/WAL proof.
 See `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md` for the complete matrix and limits.
+
+## Optional inner-filesystem development tools
+
+VeraCrypt file containers now have native development CLI evidence for explicit
+`--filesystem ext4` and `--filesystem xfs`, using separately staged, unmodified
+filesystem drivers with the existing FUSE-T encryption engine. Current release
+packages do not bundle these optional tools. See `docs/macos-filesystems.md`
+for pins, build/stage instructions, dependencies and limits, and
+`DIRECTIVES/PLAN/FILESYSTEM_ROUND/MACOS_RETEST.md` for exact CLI payload receipts.
