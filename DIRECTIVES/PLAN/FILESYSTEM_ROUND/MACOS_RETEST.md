@@ -1,5 +1,38 @@
 # macOS unachieved-only filesystem retest
 
+## Follow-up after operator driver approval
+
+The operator subsequently authorized free software, microVMs and the necessary
+startup-security/extension approvals. OpenZFS 2.4.1 and macFUSE 5.5.0 now load;
+TT NTFS Native 0.4.2 is enabled. These results supersede the prerequisite blocks
+in the historical attempts below. No paid software was used.
+
+Implementation: `f3529d9295069e2686246843df249706a585740e`.
+Evidence root on Buran: `~/Library/Caches/lurker-filesystem-setup-20261125/`.
+
+| Pair | Achieved through actual Lurker CLI | Receipt beneath `cli-cases/` |
+|---|---|---|
+| macOS / NTFS | Create, read/write, three reopen cycles with PDF/text hashes and appended data; normal close | `lurker-fs-cli-p0o0qha3/result.json` |
+| macOS / ZFS | Create, read/write, three reopen cycles with PDF/text hashes and appended data; normal unmount/export | `lurker-fs-cli-bakecz9_/result.json` |
+| macOS / UFS2 | Read-only import, three reopen cycles with hashes, EROFS on writes, explicit writable-request rejection; normal close | `lurker-ufs2-ro-cli-wip9b1an/result.json` |
+
+The UFS2 reader needed the two small compatibility patches documented in
+`native/macos/fuse-ufs.md`. No UFS2 create or writable support is claimed.
+Additional native-candidate checks passed: ext4 and XFS create/RW regressions,
+NTFS/ZFS read-only hashes and EROFS, ZFS changed-mount-identity refusal, and
+ordinary recovery of a verified ZFS mount whose startup identity was not saved.
+Guard receipt: `lurker-native-guards-ip193qdj/result.json` (13 CLI actions).
+Workspace check and tests passed: **118 passed, 0 failed, 11 ignored**.
+The native candidate's source files match the implementation commit above;
+CLI SHA-256 is `c6c7b08bfd305958d66dacf04a7dc384ac6545c2e0fc3917fa67701d748b90b0`.
+No owned crypto session remained after these tests.
+
+Btrfs has passed a separate plain-image authenticated SFTP/SSHFS microVM control
+(`lurker-sftp-proof-5s6tgli1/manifest.json`); its Lurker integration is still in
+progress. The control is not counted as an encrypted CLI pass.
+
+## Historical ext4/XFS round and earlier blocked attempts
+
 Host: `adjutant@buran`, macOS 27.2.1 (26B131), arm64, 2026-11-25.
 Remote evidence: `/tmp/lurker-filesystem-retest-macos-20261125`.
 Local evidence: `target/goal-validation/filesystem-retest/macos/`.
