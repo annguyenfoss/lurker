@@ -1,5 +1,10 @@
 # DragonFly filesystem round results
 
+Later missing-case-only retests are recorded in `DRAGONFLY_RETEST.md`.
+They establish a new LUKS1/ext4 read-only CLI pass on the official stock
+6.5 kernel/world with the stated 4 KiB compatibility profile. The 6.4.2
+results below remain historical; the FUSE-dependent CLI cells remain blocked.
+
 Implementation complete, 2026-11-25. All owned jobs are terminal; host ready for the fresh reviewer.
 
 ## Frozen artifacts and jobs
