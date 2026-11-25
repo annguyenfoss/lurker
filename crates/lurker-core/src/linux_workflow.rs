@@ -1340,6 +1340,9 @@ fn mount_open_mapper(
                 if let Ok(driver) = crate::trusted_system_executable("fuse-ufs") {
                     return mount_fuse_filesystem(ctx, &driver, &mapper_path, mountpoint, readonly);
                 }
+                if !readonly {
+                    return Err(AppError::new("Writable Linux UFS2 imports require fuse-ufs; native UFS2 writes are not qualified."));
+                }
                 options.push("ufstype=ufs2".into());
             }
             _ => {
