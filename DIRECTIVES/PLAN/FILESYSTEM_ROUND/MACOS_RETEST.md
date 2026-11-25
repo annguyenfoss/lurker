@@ -145,6 +145,29 @@ successfully on Buran. Verification found no macFUSE cask, package receipts or
 `/usr/local/lib/libfuse-t.dylib` remain present. No boot security setting was
 changed and no reboot was performed.
 
+After the operator brought Buran back, macFUSE 5.5.0 was present again from the
+operator's downloaded package (`~/Downloads/macfuse-5.5.0.dmg`), outside
+Homebrew. Read-only checks found the package receipts and bundle installed,
+but no loaded macFUSE kernel extension. The boot policy reports Full Security;
+the installation-time kernelmanagerd log reports that the extension is not
+approved to load. Package installation is complete; kernel-backend activation
+is not established. No boot-policy modification or extension-load attempt was
+made by this audit. FSKit remains a separate backend that does not require
+Reduced Security; fuse-ufs compatibility with it is not established.
+
+At the user's request to install missing tools through Homebrew, installed
+Cryptomator 1.19.7 (`cryptomator`) and VeraCrypt FUSE-T 1.26.31
+(`veracrypt-fuse-t`). Homebrew verified the upstream download checksums;
+both installed applications passed strict deep code-signature verification and
+Gatekeeper assessment as Notarized Developer ID applications. Existing FUSE-T
+was verified by receipt and library, then preserved using `--skip-cask-deps`
+for the VeraCrypt cask. These standalone apps do not replace Lurker's private
+backends. e2fsprogs, autoconf, automake, libtool, pkgconf, CMake, Ninja,
+libgcrypt, libgpg-error and mas were already installed. TT NTFS and OpenZFS
+were already present from upstream and were not reinstalled. macFUSE was left
+untouched. Install logs: `/tmp/lurker-homebrew-tools-20261125/` on Buran.
+No new filesystem capability or GUI workflow is qualified by these installs.
+
 License and pricing sources checked directly:
 
 - https://apps.apple.com/us/app/polydrive-disk-ntfs-linux/id6815775853?mt=12
