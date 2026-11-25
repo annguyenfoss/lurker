@@ -1,9 +1,10 @@
 # FreeBSD: missing writable filesystem routes retest
 
 2026-11-25. **No additional CLI filesystem pair qualifies.** Btrfs and XFS
-creation/writable mounts through GELI or VeraCrypt remain blocked by native
-driver prerequisites. No product, encryption engine, upstream source or kernel
-patch was made. Prior successful filesystems and RO imports were not repeated.
+creation/writable mounts through GELI or VeraCrypt remain unqualified in
+Lurker. A new native writer works, but its unauthenticated loopback bridge
+cannot protect a private Lurker mount. No product, encryption engine, upstream
+source or kernel patch was made. Prior successful routes were not repeated.
 
 ## Updated inputs and bounded alternatives
 
@@ -32,10 +33,10 @@ patch was made. Prior successful filesystems and RO imports were not repeated.
   fails. This is a build blocker, not a mount result. The older FreeBSD/NetBSD
   fork `a32c7413f337fc99d00c37640f15962588d91eed` returns ENOSYS from create
   and other write operations, so it is not another writable candidate.
-- Combining an NTFS formatter with installed `ntfs2btrfs` cannot resolve the
-  independently reproduced mount-write failure. No additional conversion or
-  formatter retry was run. The earlier btrfs-progs `getmntent` configure limit
-  and GELI/NTFS formatter limit remain under their original receipts.
+- Changing formatters cannot resolve LKL's independently reproduced append
+  failure. The later easy-candidate audit below tests `ntfs2btrfs` with a
+  different writer. The earlier btrfs-progs `getmntent` configure limit and
+  GELI/NTFS formatter limit remain under their original receipts.
 
 Primary upstream references:
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
@@ -61,15 +62,70 @@ before the ordinary append/add-file phase.
 | Btrfs | 4096 bytes, comparable to GELI | Initial write/fsync and normal close/reopen/hash succeed; append flush fails EBADF before fsync. |
 
 Both 512-byte cases also reject the ordinary `direct_io` FUSE option during
-initialization. No source workaround was attempted. These results leave all
-four requested encrypted create/RW pairs blocked; none completes the required
-append/add-file/final-reopen lifecycle.
+initialization. No source workaround was attempted. None of these LKL controls
+completes the required append/add-file/final-reopen lifecycle.
 
 Earlier attempts are preserved separately: the initial batch lacked the FUSE
 module; a background readiness check could race failed XFS/4096 initialization
 and is superseded by the foreground results. Its apparent local-directory
 writes are not filesystem evidence. Initial Btrfs detach-busy observations
 resolved after native shutdown; the foreground harness waits for driver exit.
+
+## Easy standard-tool follow-up
+
+The follow-up audit found one distinct ready-made writer, so it was tested
+before considering new runtime integration. Upstream `fileshare` v0.50.1
+publishes a static FreeBSD executable that serves its Btrfs/XFS image drivers
+over NFSv3. This is the most recent release with published native assets at
+audit time; v0.51.0 had none. No wrapper or upstream patch was needed.
+
+- Source tag commit: `a0a9b384e00b6da1cc5fcb6f306682ff858f9f59`.
+  Its module manifest pins Btrfs/XFS v0.5.0 and NFS v0.14.0.
+- Official archive SHA-256:
+  `f426a99073a81b014de83fb3f272972c0f160657b5d1f665b31b0a1a6246dcdd`,
+  verified against the release's published `SHA256SUMS`.
+  Executed administrator-owned binary SHA-256:
+  `6f377b773a7f467fb55d5c1bff717c8c9068b831e1990bb033da389f2b67bd33`.
+
+| Native candidate | Result |
+| --- | --- |
+| Existing independent Btrfs seed + fileshare/NFS | PDF/text write/fsync, reopen, append/add-file and final reopen/hash succeed. |
+| Native `mkfs.xfs -f -m crc=1` + fileshare/NFS | Fresh XFS v5 creation and the same complete content lifecycle succeed. |
+| Native `mkntfs -Q -F -s 512` + `ntfs2btrfs` + fileshare/NFS | Fresh 4 GiB sparse image converts and passes the complete content lifecycle. A separate 384 MiB conversion fails chunk-space allocation; minimum size is not qualified. |
+| xfuse, libfsxfs | Current upstream implementations are read-only. No redundant mount run. |
+| btrfs-fuse, btrfs4mac | Current upstream frontends are read-only. No redundant mount run. |
+| DSBMD/automount wrappers | Delegate these formats to LKL; they are not another filesystem writer. |
+
+These are **native content successes, not CLI pair passes**. FreeBSD's normal
+`umount` removes each NFS mount and flushes its data, then exits 1 because its
+separate mountd notification cannot find the standalone server through
+rpcbind. Receipts record this explicitly. The resumed two-case harness verifies
+the existing first write before continuing; it does not repeat that phase.
+No forced unmount, reboot or fault scenario was used.
+
+The existing `apfs_input(mapped)` check could mechanically supply VeraCrypt's
+regular decrypted FUSE image: it proves that image is the recorded md
+provider's backing vnode. This compatibility is an inference, not a tested
+encrypted route. Fileshare forces device inputs read-only, so GELI lacks that
+simple input route.
+
+The product blocker is local access isolation. The unauthenticated NFS export
+does not establish a caller's identity; any local process can send RPCs to the
+loopback listener independently of the private mountpoint. Fileshare refuses
+per-user-restricted NFS shares unless authenticated transport is configured.
+Enabling this bridge would weaken Lurker's private-container boundary.
+Authenticated transport or an independently qualified local mount frontend
+requires further work; no unauthenticated bridge was integrated.
+
+Primary references:
+https://github.com/go-fileshare/fileshare/releases/tag/v0.50.1
+https://github.com/go-fileshare/fileshare/blob/v0.50.1/serve_nfs.go
+https://github.com/go-filesystems/nfs
+https://github.com/KhaledEmaraDev/xfuse
+https://github.com/libyal/libfsxfs
+https://github.com/adam900710/btrfs-fuse
+https://github.com/gereoffy/btrfs4mac
+https://github.com/mrclksr/DSBMD
 
 ## Evidence and cleanup
 
@@ -79,10 +135,16 @@ resolved after native shutdown; the foreground harness waits for driver exit.
   rejected configuration attempts. Build logs, exact scripts, source/archive
   pins and package/module inventories are retained. `evidence.tar.gz` matches
   `evidence.sha256`; `cleanup-final.json` records the final live audit.
+- Follow-up receipts: `easy-candidates/evidence/fileshare-resume-results.json`
+  and `fileshare-conversion4g-results.json`; the initial two-case receipts
+  preserve the first write and unmount-notification failure. Release metadata,
+  exact scripts, formatter logs and SHA-verified `fileshare-evidence.tar.gz`
+  are in the same follow-up directory.
 - Build and fixtures used a new disposable 16 GiB UFS disk, serial
   `lurker-fs-retest-freebsd`, mounted at
   `/tmp/lurker-filesystem-retest-freebsd`. It was unmounted normally and its
-  live-only `vdb` attachment removed. Its source, binaries and failed fixtures
+  live-only `vdb` attachment removed, including after the follow-up audit.
+  Its source, binaries and fixtures
   remain in `/srv/build/lurker-filesystem-retest-freebsd/build.qcow2`, with
   size and full hash in `scratch-disk.json` and `scratch-disk.sha256`.
   The guest system disk was not resized or repartitioned.
@@ -91,4 +153,9 @@ resolved after native shutdown; the foreground harness waits for driver exit.
   `vfs.usermount=0`. The temporarily loaded FUSE module was unloaded to match
   preflight. Official build dependencies and the administrator-owned test
   runtime `/var/run/lurker-filesystem-retest-freebsd` remain documented.
+- No system NFS service/configuration was installed. All owned listeners stopped.
+  Nine pending mountd-notification cache rows were identified by this round's
+  exact loopback export and timestamps, backed up and removed; no unrelated
+  rows were removed. The native retry also could not contact rpcbind. Before,
+  after and cleanup receipts are retained; final `/var/db/mounttab` is empty.
 - No GUI, physical-device, SQLite, reboot or fault test was run. Host released.
