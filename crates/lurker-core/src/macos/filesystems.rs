@@ -1,11 +1,11 @@
-//! Optional login-user filesystem drivers over native encrypted Apple images.
-//! No driver or formatter in this module is ever elevated.
+//! Optional login-user ext4/XFS drivers over VeraCrypt's regular decrypted image.
+//! Native Apple filesystems retain hdiutil; no external tool is ever elevated.
 use super::*;
 use crate::CreateFilesystem;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::{Seek, SeekFrom};
 use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::process::CommandExt;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -13,28 +13,24 @@ use std::time::{Duration, Instant};
 enum Kind {
     Ext4,
     Xfs,
-    Ntfs,
 }
 impl Kind {
     fn name(self) -> &'static str {
         match self {
             Self::Ext4 => "ext4",
             Self::Xfs => "xfs",
-            Self::Ntfs => "ntfs",
         }
     }
     fn driver(self) -> &'static str {
         match self {
             Self::Ext4 => "fuse-ext2",
             Self::Xfs => "fuse-xfs",
-            Self::Ntfs => "ntfs-3g",
         }
     }
     fn formatter(self) -> &'static str {
         match self {
             Self::Ext4 => "mkfs.ext4",
             Self::Xfs => "mkfs.xfs",
-            Self::Ntfs => "mkntfs",
         }
     }
 }
@@ -42,7 +38,6 @@ fn requested(filesystem: Option<CreateFilesystem>) -> Option<Kind> {
     match filesystem {
         Some(CreateFilesystem::Ext4) => Some(Kind::Ext4),
         Some(CreateFilesystem::Xfs) => Some(Kind::Xfs),
-        Some(CreateFilesystem::Ntfs) => Some(Kind::Ntfs),
         _ => None,
     }
 }
@@ -62,11 +57,9 @@ fn tool(name: &str) -> AppResult<PathBuf> {
         .ok_or_else(|| AppError::new(format!("Private macOS filesystem tool {name} is missing. Install the qualified FUSE-T filesystem tools; no driver is run with sudo.")))
 }
 
-pub(super) fn create_args(
-    size: u64,
-    filesystem: Option<CreateFilesystem>,
-) -> AppResult<Option<Vec<OsString>>> {
-    let Some(kind) = requested(filesystem) else {
+pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<OsString>>> {
+    let Some(kind) = requested(c.filesystem).filter(|_| c.volume_type == VolumeType::Veracrypt)
+    else {
         return Ok(None);
     };
     tool(kind.driver())?;
@@ -76,43 +69,18 @@ pub(super) fn create_args(
             "External macOS filesystem containers require at least 384 MiB.",
         ));
     }
-    Ok(Some(args(&[
-        "create",
-        "-size",
-        &format!("{size}m"),
-        "-type",
-        "UDIF",
-        "-layout",
-        "NONE",
-        "-encryption",
-        "AES-256",
-        "-stdinpass",
-    ])))
-}
-
-#[derive(Deserialize)]
-struct Attachment {
-    #[serde(rename = "system-entities")]
-    entities: Vec<Entity>,
-}
-fn attach(source: &Path, pass: &[u8], readonly: bool) -> AppResult<Vec<Entity>> {
-    let mut a = args(&["attach", "-nomount", "-plist", "-stdinpass"]);
-    if readonly {
-        a.push("-readonly".into());
-    }
-    a.push(source.into());
-    let response = checked(Path::new(HDIUTIL), &a, Some(pass))?;
-    Ok(decode::<Attachment>(&response.stdout)?.entities)
-}
-fn detach_device(device: &Path) -> AppResult<()> {
-    checked(Path::new(HDIUTIL), &["detach".into(), device.into()], None)?;
-    Ok(())
+    let mut arguments =
+        crate::workflow::macos_veracrypt_create_args(c.cipher, size, c.keyfile.as_deref(), None)?;
+    let filesystem = arguments
+        .iter_mut()
+        .find(|argument| argument.to_string_lossy().starts_with("--filesystem="))
+        .ok_or_else(|| AppError::new("Missing VeraCrypt filesystem argument."))?;
+    *filesystem = "--filesystem=none".into();
+    Ok(Some(arguments))
 }
 fn detect(bytes: &[u8]) -> Option<Kind> {
     if bytes.starts_with(b"XFSB") {
         Some(Kind::Xfs)
-    } else if bytes.get(3..11) == Some(b"NTFS    ") {
-        Some(Kind::Ntfs)
     } else if bytes.get(1080..1082) == Some(&[0x53, 0xef])
         && bytes
             .get(1120..1124)
@@ -123,45 +91,120 @@ fn detect(bytes: &[u8]) -> Option<Kind> {
         None
     }
 }
-fn device_kind(device: &Path) -> Option<Kind> {
+fn image_kind(image: &Path) -> Option<Kind> {
     let mut bytes = [0; 4096];
-    let mut file = File::open(device).ok()?;
-    file.seek(SeekFrom::Start(0)).ok()?;
-    file.read_exact(&mut bytes).ok()?;
+    File::open(image).ok()?.read_exact(&mut bytes).ok()?;
     detect(&bytes)
+}
+fn close_crypto(source: &Path) -> AppResult<()> {
+    checked(
+        &require_veracrypt()?,
+        &[
+            "-t".into(),
+            "--non-interactive".into(),
+            "--dismount".into(),
+            source.into(),
+        ],
+        None,
+    )?;
+    Ok(())
+}
+fn open_image(
+    source: &Path,
+    pass: &[u8],
+    readonly: bool,
+    keyfile: Option<&Path>,
+) -> AppResult<PathBuf> {
+    let mut arguments = args(&[
+        "-t",
+        "--mount",
+        "--filesystem=none",
+        "--stdin",
+        "--non-interactive",
+        "--pim=0",
+        "-k",
+    ]);
+    arguments.push(crate::credentials::veracrypt_keyfiles(keyfile)?);
+    arguments.push("--protect-hidden=no".into());
+    if readonly {
+        arguments.push("--mount-options=ro".into());
+    }
+    arguments.push(source.into());
+    checked(&require_veracrypt()?, &arguments, Some(pass))?;
+    let result = (|| {
+        let volume = read_veracrypt_volumes(false)?
+            .into_iter()
+            .find(|volume| same_path(&volume.source, source))
+            .ok_or_else(|| AppError::new("VeraCrypt did not publish the authenticated volume."))?;
+        let device = volume.devices.first().ok_or_else(|| {
+            AppError::new("VeraCrypt has no identified auxiliary virtual device.")
+        })?;
+        let image = images()?
+            .into_iter()
+            .find(|image| image.entities.iter().any(|entity| &entity.device == device))
+            .ok_or_else(|| AppError::new("Cannot identify VeraCrypt's decrypted image."))?;
+        let path = existing(&image.path)?;
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|e| AppError::io("Cannot inspect decrypted image", e))?;
+        if !metadata.is_file()
+            || metadata.uid() != crate::effective_uid()
+            || metadata.mode() & 0o077 != 0
+            || path.file_name() != Some(std::ffi::OsStr::new("volume.dmg"))
+        {
+            return Err(AppError::new(
+                "VeraCrypt decrypted image must be a private regular file owned by the login user.",
+            ));
+        }
+        // The ordinary native virtual device exclusively locks this regular
+        // image. No native filesystem is mounted; detach only that identified
+        // device and retain VeraCrypt's live encryption/FUSE service.
+        checked(
+            Path::new(HDIUTIL),
+            &["detach".into(), device.as_os_str().into()],
+            None,
+        )?;
+        Ok(path)
+    })();
+    if result.is_err() {
+        close_crypto(source)?;
+    }
+    result
 }
 pub(super) fn format(
     source: &Path,
     filesystem: Option<CreateFilesystem>,
     pass: &[u8],
+    keyfile: Option<&Path>,
 ) -> AppResult<()> {
     let Some(kind) = requested(filesystem) else {
         return Ok(());
     };
-    let entities = attach(source, pass, false)?;
-    let device = entities
-        .first()
-        .ok_or_else(|| AppError::new("Blank encrypted image has no virtual device."))?
-        .device
-        .clone();
+    let image = open_image(source, pass, false, keyfile)?;
     let arguments = match kind {
-        Kind::Ext4 => vec!["-F".into(), device.as_os_str().into()],
-        Kind::Xfs => vec!["-f".into(), device.as_os_str().into()],
-        Kind::Ntfs => vec!["-F".into(), "-Q".into(), device.as_os_str().into()],
+        Kind::Ext4 => vec![
+            "-F".into(),
+            "-E".into(),
+            format!("root_owner={}:{}", crate::effective_uid(), unsafe {
+                libc::getegid()
+            })
+            .into(),
+            image.as_os_str().into(),
+        ],
+        Kind::Xfs => vec!["-f".into(), image.as_os_str().into()],
     };
     let result = checked(&tool(kind.formatter())?, &arguments, None).map(|_| ());
-    let close = detach_device(&device);
-    close?;
+    close_crypto(source)?;
     result
 }
-
 #[derive(Serialize, Deserialize)]
 struct Session {
     source: PathBuf,
     source_dev: u64,
     source_ino: u64,
-    device: PathBuf,
-    filesystem_device: PathBuf,
+    image: PathBuf,
+    image_dev: u64,
+    image_ino: u64,
+    auxiliary_mount: String,
     mountpoint: PathBuf,
     kind: Kind,
     readonly: bool,
@@ -289,6 +332,9 @@ fn save(path: &Path, session: &Session) -> AppResult<()> {
         .map_err(|e| AppError::io("Cannot publish filesystem session", e))
 }
 fn process_start(pid: u32) -> AppResult<Option<String>> {
+    if pid == 0 {
+        return Ok(None);
+    }
     let result = execute(
         Path::new("/bin/ps"),
         &args(&["-p", &pid.to_string(), "-o", "lstart=", "-o", "stat="]),
@@ -309,42 +355,39 @@ fn mount_identity(path: &Path) -> AppResult<Option<String>> {
         .find(|line| line.contains(&needle))
         .map(str::to_owned))
 }
-fn validate_image(session: &Session) -> AppResult<bool> {
+fn validate_image(session: &Session) -> AppResult<()> {
     let metadata = fs::metadata(&session.source)
-        .map_err(|e| AppError::io("Cannot inspect filesystem container", e))?;
+        .map_err(|e| AppError::io("Cannot inspect encrypted container", e))?;
     if metadata.dev() != session.source_dev || metadata.ino() != session.source_ino {
         return Err(AppError::new(
             "Container identity changed; preserving filesystem session.",
         ));
     }
-    let image = images()?
-        .into_iter()
-        .find(|image| same_path(&image.path, &session.source));
-    match image {
-        Some(image)
-            if image.encrypted
-                && image
-                    .owner
-                    .is_none_or(|owner| owner == crate::effective_uid())
-                && image
-                    .entities
-                    .iter()
-                    .any(|entity| entity.device == session.device)
-                && image
-                    .entities
-                    .iter()
-                    .any(|entity| entity.device == session.filesystem_device) =>
-        {
-            Ok(true)
-        }
-        Some(_) => Err(AppError::new(
-            "Encrypted virtual-device identity changed; preserving filesystem session.",
-        )),
-        None => Ok(false),
+    let image = fs::symlink_metadata(&session.image)
+        .map_err(|e| AppError::io("Cannot inspect decrypted image", e))?;
+    if !image.is_file()
+        || image.dev() != session.image_dev
+        || image.ino() != session.image_ino
+        || mount_identity(
+            session
+                .image
+                .parent()
+                .ok_or_else(|| AppError::new("Missing auxiliary directory."))?,
+        )?
+        .as_ref()
+            != Some(&session.auxiliary_mount)
+        || !read_veracrypt_volumes(false)?
+            .iter()
+            .any(|volume| same_path(&volume.source, &session.source))
+    {
+        return Err(AppError::new(
+            "VeraCrypt auxiliary image identity changed; preserving session.",
+        ));
     }
+    Ok(())
 }
 fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
-    let attached = validate_image(session)?;
+    validate_image(session)?;
     if let Some(identity) = mount_identity(&session.mountpoint)? {
         if session.mount_identity.as_ref() != Some(&identity)
             || session.mount_dev
@@ -356,11 +399,6 @@ fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
         {
             return Err(AppError::new(
                 "Filesystem mount identity changed; preserving encrypted container.",
-            ));
-        }
-        if !attached {
-            return Err(AppError::new(
-                "Encrypted device disappeared while its filesystem is mounted.",
             ));
         }
         checked(
@@ -404,25 +442,25 @@ fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
             ));
         }
     }
-    if attached {
-        detach_device(&session.device)?;
-    }
+    close_crypto(&session.source)?;
     fs::remove_dir_all(path).map_err(|e| AppError::io("Cannot remove closed filesystem session", e))
 }
 fn start(
     registry: &Registry,
     source: &Path,
     mountpoint: &Path,
-    entities: &[Entity],
+    image: &Path,
     readonly: bool,
 ) -> AppResult<bool> {
-    let Some((filesystem_device, kind)) = entities
-        .iter()
-        .find_map(|entity| device_kind(&entity.device).map(|kind| (entity.device.clone(), kind)))
-    else {
+    let Some(kind) = image_kind(image) else {
         return Ok(false);
     };
     let driver = tool(kind.driver())?;
+    if mount_identity(mountpoint)?.is_some() {
+        return Err(AppError::new(
+            "Refusing to replace an existing filesystem mount.",
+        ));
+    }
     if registry
         .sessions()?
         .iter()
@@ -441,9 +479,39 @@ fn start(
         .mode(0o700)
         .create(&path)
         .map_err(|e| AppError::io("Cannot reserve filesystem session", e))?;
+    let mut session = Session {
+        source: source.into(),
+        source_dev: metadata.dev(),
+        source_ino: metadata.ino(),
+        image: image.into(),
+        image_dev: fs::metadata(image)
+            .map_err(|e| AppError::io("Cannot inspect decrypted image", e))?
+            .dev(),
+        image_ino: fs::metadata(image)
+            .map_err(|e| AppError::io("Cannot inspect decrypted image", e))?
+            .ino(),
+        auxiliary_mount: mount_identity(
+            image
+                .parent()
+                .ok_or_else(|| AppError::new("Missing auxiliary mount directory."))?,
+        )?
+        .ok_or_else(|| AppError::new("Decrypted image has no auxiliary mount."))?,
+        mountpoint: mountpoint.into(),
+        kind,
+        readonly,
+        pid: 0,
+        process_start: String::new(),
+        mount_identity: None,
+        mount_dev: None,
+    };
+    // Publish recovery ownership before starting a process that can mount.
+    if let Err(error) = save(&path, &session) {
+        let _ = fs::remove_dir_all(&path);
+        return Err(error);
+    }
     let mut a: Vec<OsString> = match kind {
         Kind::Ext4 => vec![
-            filesystem_device.as_os_str().into(),
+            image.as_os_str().into(),
             mountpoint.as_os_str().into(),
             "-o".into(),
             if readonly {
@@ -458,7 +526,7 @@ fn start(
                 a.push("-rw".into());
             }
             a.extend([
-                filesystem_device.as_os_str().into(),
+                image.as_os_str().into(),
                 "--".into(),
                 mountpoint.as_os_str().into(),
                 "-f".into(),
@@ -471,16 +539,6 @@ fn start(
             ]);
             a
         }
-        Kind::Ntfs => vec![
-            "-o".into(),
-            if readonly {
-                "no_detach,backend=nfs,ro".into()
-            } else {
-                "no_detach,backend=nfs".into()
-            },
-            filesystem_device.as_os_str().into(),
-            mountpoint.as_os_str().into(),
-        ],
     };
     let log = OpenOptions::new()
         .write(true)
@@ -488,7 +546,8 @@ fn start(
         .mode(0o600)
         .open(path.join("driver.log"))
         .map_err(|e| AppError::io("Cannot open private filesystem log", e))?;
-    let mut child = Command::new(driver)
+    let mut command = Command::new(driver);
+    command
         .args(a.drain(..))
         .env("LC_ALL", "C")
         .env_remove("DYLD_INSERT_LIBRARIES")
@@ -497,34 +556,45 @@ fn start(
             log.try_clone()
                 .map_err(|e| AppError::io("Cannot clone filesystem log", e))?,
         ))
-        .stderr(Stdio::from(log))
+        .stderr(Stdio::from(log));
+    // The CLI's controlling terminal may close immediately after mount. Keep
+    // the long-lived driver out of that terminal's session and SIGHUP group.
+    // SAFETY: the child hook only calls the async-signal-safe setsid syscall.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() < 0 {
+                Err(std::io::Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        });
+    }
+    let mut child = command
         .spawn()
         .map_err(|e| AppError::io("Cannot start filesystem driver", e))?;
-    let mut session = Session {
-        source: source.into(),
-        source_dev: metadata.dev(),
-        source_ino: metadata.ino(),
-        device: entities[0].device.clone(),
-        filesystem_device,
-        mountpoint: mountpoint.into(),
-        kind,
-        readonly,
-        pid: child.id(),
-        process_start: process_start(child.id())?.unwrap_or_default(),
-        mount_identity: None,
-        mount_dev: None,
-    };
+    session.pid = child.id();
+    session.process_start = process_start(child.id())?.unwrap_or_default();
     save(&path, &session)?;
     let deadline = Instant::now() + Duration::from_secs(30);
+    let mut root_ready = false;
     loop {
         if let Some(identity) = mount_identity(mountpoint)? {
             let expected_transport = match kind {
                 Kind::Xfs => " (smbfs,",
-                Kind::Ntfs | Kind::Ext4 => " (nfs,",
+                Kind::Ext4 => " (nfs,",
             };
             if !identity.contains(expected_transport) {
                 return Err(AppError::new(
                     "Filesystem driver published an unexpected transport; preserving session.",
+                ));
+            }
+            if session
+                .mount_identity
+                .as_ref()
+                .is_some_and(|expected| expected != &identity)
+            {
+                return Err(AppError::new(
+                    "Filesystem mount changed during startup; preserving session.",
                 ));
             }
             session.mount_identity = Some(identity);
@@ -534,7 +604,13 @@ fn start(
                     .dev(),
             );
             save(&path, &session)?;
-            return Ok(true);
+            let readable = fs::read_dir(mountpoint)
+                .and_then(|entries| entries.collect::<Result<Vec<_>, _>>())
+                .is_ok();
+            if readable && root_ready {
+                return Ok(true);
+            }
+            root_ready = readable;
         }
         if child
             .try_wait()
@@ -557,13 +633,12 @@ fn start(
     }
 }
 
-/// Used only after the native mount reports an unknown filesystem. Native
-/// APFS/exFAT/FAT and read-only NTFS retain the original hdiutil route.
 pub(super) fn mount_missing(
     source: &Path,
     mountpoint: &Path,
     pass: &[u8],
     readonly: bool,
+    keyfile: Option<&Path>,
 ) -> AppResult<bool> {
     let registry = Registry::lock()?;
     if registry
@@ -575,57 +650,17 @@ pub(super) fn mount_missing(
             "Container already has an external filesystem session.",
         ));
     }
-    let entities = attach(source, pass, readonly)?;
-    let result = start(&registry, source, mountpoint, &entities, readonly);
-    if !matches!(result, Ok(true)) {
-        // A persisted session owns cleanup once a driver has started.
-        if !registry
+    let image = open_image(source, pass, readonly, keyfile)?;
+    let result = start(&registry, source, mountpoint, &image, readonly);
+    if !matches!(result, Ok(true))
+        && !registry
             .sessions()?
             .iter()
             .any(|(_, session)| same_path(&session.source, source))
-        {
-            if let Some(entity) = entities.first() {
-                detach_device(&entity.device)?;
-            }
-        }
+    {
+        close_crypto(source)?;
     }
     result
-}
-pub(super) fn replace_native_ntfs(
-    source: &Path,
-    mountpoint: &Path,
-    readonly: bool,
-) -> AppResult<()> {
-    if readonly {
-        return Ok(());
-    }
-    let Some(image) = images()?
-        .into_iter()
-        .find(|image| same_path(&image.path, source))
-    else {
-        return Ok(());
-    };
-    if !image
-        .entities
-        .iter()
-        .any(|entity| device_kind(&entity.device) == Some(Kind::Ntfs))
-    {
-        return Ok(());
-    }
-    let registry = Registry::lock()?;
-    tool(Kind::Ntfs.driver())?;
-    checked(
-        Path::new(DISKUTIL),
-        &["unmount".into(), mountpoint.into()],
-        None,
-    )?;
-    match start(&registry, source, mountpoint, &image.entities, false) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(AppError::new(
-            "Native NTFS volume has no verified NTFS signature.",
-        )),
-        Err(error) => Err(error),
-    }
 }
 pub(super) fn unmount(target: &Path, kind: VolumeType) -> AppResult<bool> {
     if !registry_path().exists() {
@@ -635,19 +670,14 @@ pub(super) fn unmount(target: &Path, kind: VolumeType) -> AppResult<bool> {
     let mut matches: Vec<_> = registry
         .sessions()?
         .into_iter()
-        .filter(|(_, session)| {
-            same_path(&session.source, target)
-                || session.mountpoint == target
-                || session.device == target
-                || session.filesystem_device == target
-        })
+        .filter(|(_, session)| same_path(&session.source, target) || session.mountpoint == target)
         .collect();
     if matches.is_empty() {
         return Ok(false);
     }
-    if matches.len() != 1 || !matches!(kind, VolumeType::Auto | VolumeType::Apple) {
+    if matches.len() != 1 || !matches!(kind, VolumeType::Auto | VolumeType::Veracrypt) {
         return Err(AppError::new(
-            "Target does not identify one matching external filesystem session.",
+            "Target does not identify one matching VeraCrypt filesystem session.",
         ));
     }
     let (path, session) = &mut matches[0];
@@ -660,13 +690,10 @@ pub(super) fn augment(volumes: &mut [Volume]) -> AppResult<()> {
     }
     let registry = Registry::lock()?;
     for (_, session) in registry.sessions()? {
-        if !validate_image(&session)? {
-            continue;
-        }
-        if let Some(volume) = volumes
-            .iter_mut()
-            .find(|volume| same_path(&volume.source, &session.source))
-        {
+        validate_image(&session)?;
+        if let Some(volume) = volumes.iter_mut().find(|volume| {
+            volume.kind == VolumeType::Veracrypt && same_path(&volume.source, &session.source)
+        }) {
             if session.mount_identity.as_ref() == mount_identity(&session.mountpoint)?.as_ref()
                 && session.mount_identity.is_some()
             {
@@ -678,16 +705,19 @@ pub(super) fn augment(volumes: &mut [Volume]) -> AppResult<()> {
     }
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn external_magic_does_not_guess_unknown_filesystems() {
         assert_eq!(detect(b"XFSB"), Some(Kind::Xfs));
-        assert_eq!(detect(b"\xeb\x52\x90NTFS    "), Some(Kind::Ntfs));
         assert_eq!(detect(b"APFS"), None);
         assert_eq!(detect(b"NTFS"), None);
         assert_eq!(detect(&[]), None);
+        let mut ext4 = [0; 4096];
+        ext4[1080..1082].copy_from_slice(&[0x53, 0xef]);
+        assert_eq!(detect(&ext4), None);
+        ext4[1120] = 0x40;
+        assert_eq!(detect(&ext4), Some(Kind::Ext4));
     }
 }

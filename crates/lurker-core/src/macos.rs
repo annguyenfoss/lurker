@@ -276,7 +276,7 @@ fn images() -> AppResult<Vec<Image>> {
 
 fn apple_volumes() -> AppResult<Vec<Volume>> {
     let uid = crate::effective_uid();
-    let mut volumes = images()?
+    Ok(images()?
         .into_iter()
         .filter(|i| i.encrypted && i.owner.is_none_or(|owner| owner == uid))
         .map(|i| {
@@ -295,9 +295,7 @@ fn apple_volumes() -> AppResult<Vec<Volume>> {
                 readonly: !i.writable,
             }
         })
-        .collect::<Vec<_>>();
-    filesystems::augment(&mut volumes)?;
-    Ok(volumes)
+        .collect())
 }
 
 fn parse_veracrypt_list(text: &str) -> AppResult<Vec<Volume>> {
@@ -395,13 +393,17 @@ fn read_veracrypt_volumes(allow_missing_fuse_t: bool) -> AppResult<Vec<Volume>> 
 }
 
 fn vera_volumes() -> AppResult<Vec<Volume>> {
-    read_veracrypt_volumes(false)
+    let mut volumes = read_veracrypt_volumes(false)?;
+    filesystems::augment(&mut volumes)?;
+    Ok(volumes)
 }
 
 fn volumes() -> AppResult<Vec<Volume>> {
     let mut result = apple_volumes()?;
     result.extend(apfs::list()?);
-    result.extend(read_veracrypt_volumes(true)?);
+    let mut veracrypt = read_veracrypt_volumes(true)?;
+    filesystems::augment(&mut veracrypt)?;
+    result.extend(veracrypt);
     Ok(result)
 }
 
@@ -574,11 +576,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         return Err(AppError::new("macOS containers must be at least 32 MiB."));
     }
     // Validate the inner filesystem before prompting or allocating a staging image.
-    let external_args = if c.volume_type == VolumeType::Apple {
-        filesystems::create_args(size, c.filesystem)?
-    } else {
-        None
-    };
+    let external_args = filesystems::create_args(&c, size)?;
     let external_format = external_args.is_some();
     let mut arguments = if let Some(arguments) = external_args {
         arguments
@@ -634,8 +632,8 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     arguments.push(temp.as_os_str().into());
     checked(&program, &arguments, Some(&pass))?;
     if external_format {
-        if let Err(error) = filesystems::format(&temp, c.filesystem, &pass) {
-            // Preserve a failed image if native detach also failed.
+        if let Err(error) = filesystems::format(&temp, c.filesystem, &pass, c.keyfile.as_deref()) {
+            // Preserve the recoverable ciphertext if crypto teardown failed.
             std::mem::forget(staging);
             return Err(error);
         }
@@ -819,15 +817,11 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         arguments.push(mountpoint.as_os_str().into());
     }
     if let Err(error) = checked(&program, &arguments, Some(&pass)) {
-        if kind == VolumeType::Apple
+        if kind == VolumeType::Veracrypt
             && (error.message.contains("no mountable file systems") || error.message.contains("Unable to invoke task"))
-            && filesystems::mount_missing(&source, &mountpoint, &pass, c.readonly)?
+            && filesystems::mount_missing(&source, &mountpoint, &pass, c.readonly, c.keyfile.as_deref())?
         {
-            output.msg2(&format!(
-                "Mounted {} at {}",
-                source.display(),
-                mountpoint.display()
-            ));
+            output.msg2(&format!("Mounted {} at {}", source.display(), mountpoint.display()));
             return Ok(());
         }
         // Native tools normally roll back failed mounts themselves. If one
@@ -853,20 +847,6 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             }
         }
         return Err(error);
-    }
-    if kind == VolumeType::Apple {
-        if let Err(error) = filesystems::replace_native_ntfs(&source, &mountpoint, c.readonly) {
-            // Leave an explicitly owned recoverable session intact on failure.
-            if !filesystems::unmount(&source, VolumeType::Apple)? {
-                for volume in apple_volumes()?
-                    .iter()
-                    .filter(|volume| same_path(&volume.source, &source))
-                {
-                    detach(volume)?;
-                }
-            }
-            return Err(error);
-        }
     }
     output.msg2(&format!(
         "Mounted {} at {}",
