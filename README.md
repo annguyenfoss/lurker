@@ -38,7 +38,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"> <sup>🛈</sup></td>
-      <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
@@ -48,7 +48,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
-      <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">Apple&nbsp;Encrypted<br>Disk&nbsp;Image</td>
@@ -205,6 +205,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 On macOS, `--type apfs` creates a plain disk image containing an encrypted APFS volume. Open and close unlock and lock that volume through `diskutil`. External data-partition creation requires `--force`. The complete flow is tested on disposable images and their virtual partitions. Physical hardware remains untested.
 
+
+LUKS1 and LUKS2 on Windows are planned via WSL 2.
 
 BitLocker on Linux, macOS, and FreeBSD is planned for opening existing volumes. Writable access depends on filesystem qualification.
 
