@@ -47,7 +47,7 @@ Follow the support and acceptance rules in `CODEBASE.md`.
 
 ### Windows roadmap
 
-Windows packaging and native qualification are planned. Use `cppcryptfs` for the gocryptfs format on Windows. BitLocker / BitLocker To Go and EFS are outside the approved integration scope, including BitLocker imports on Linux, macOS, and FreeBSD.
+Windows packaging and native qualification are planned. Use `cppcryptfs` for the gocryptfs format on Windows. Windows BitLocker (including BitLocker To Go) and EFS are planned. BitLocker imports on Linux, macOS, and FreeBSD remain outside the approved integration scope.
 
 ## Physical-device setup scope
 

@@ -111,6 +111,26 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
     </tr>
     <tr height="60">
+      <td align="left">BitLocker</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td>WIP</td>
+    </tr>
+    <tr height="60">
+      <td align="left">EFS</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td>WIP</td>
+    </tr>
+    <tr height="60">
       <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
