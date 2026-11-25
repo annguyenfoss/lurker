@@ -7,11 +7,13 @@ startup-security/extension approvals. OpenZFS 2.4.1 and macFUSE 5.5.0 now load;
 TT NTFS Native 0.4.2 is enabled. These results supersede the prerequisite blocks
 in the historical attempts below. No paid software was used.
 
-Implementation: `f3529d9295069e2686246843df249706a585740e`.
+Native NTFS/ZFS implementation: `f3529d9295069e2686246843df249706a585740e`.
+Btrfs implementation and final writable regression candidate: `278d246`.
 Evidence root on Buran: `~/Library/Caches/lurker-filesystem-setup-20261125/`.
 
 | Pair | Observed through actual Lurker CLI | Create + Read/Write goal | Receipt beneath `cli-cases/` |
 |---|---|---|---|
+| macOS / Btrfs | Create, read/write, three reopen cycles with PDF/text hashes and appended data; normal host/guest/native-device/crypto close | Achieved | `lurker-fs-cli-zgu7vbbs/result.json` |
 | macOS / NTFS | Create, read/write, three reopen cycles with PDF/text hashes and appended data; normal close | Achieved | `lurker-fs-cli-p0o0qha3/result.json` |
 | macOS / ZFS | Create, read/write, three reopen cycles with PDF/text hashes and appended data; normal unmount/export | Achieved | `lurker-fs-cli-bakecz9_/result.json` |
 | macOS / UFS2 | Historical reader-only import test; no creation or writes | Not achieved | `lurker-ufs2-ro-cli-wip9b1an/result.json` |
@@ -29,9 +31,28 @@ The native candidate's source files match the implementation commit above;
 CLI SHA-256 is `c6c7b08bfd305958d66dacf04a7dc384ac6545c2e0fc3917fa67701d748b90b0`.
 No owned crypto session remained after these tests.
 
-Btrfs has passed a separate plain-image authenticated SFTP/SSHFS microVM control
-(`lurker-sftp-proof-5s6tgli1/manifest.json`); its Lurker integration is still in
-progress. The control is not counted as an encrypted CLI pass.
+Btrfs now passes the actual encrypted CLI workflow through the installed free
+anylinuxfs Linux guest and native macFUSE SSHFS. It uses the exact file-backed
+hdiutil device, preserving upstream device locking; the SMB regular image does
+not support anylinuxfs's image-file lock. SFTP is key-authenticated with a pinned
+guest host key. The guest closes normally before native-device detach and crypto
+close. No plaintext user-data copy, upstream VM patch or elevated VM tool is used.
+
+The same final binary also passed all seven writable CLI actions for NTFS
+(`lurker-fs-cli-aivvujso`), ZFS (`lurker-fs-cli-eo201xu3`), ext4
+(`lurker-fs-cli-79ewk694`) and XFS (`lurker-fs-cli-w68cdn4f`). Final workspace
+check/tests passed: **122 passed, 0 failed, 11 ignored**. Compiled source inputs
+match `278d246`; CLI SHA-256 is
+`f35cb28dc2905cfb2f48dadca185cf4f4f74f704184b18209be33dc4d29fa25c`.
+Cleanup found zero owned mounts, crypto sessions, filesystem registry sessions
+or guest control directories. These remain development CLI artifacts; package,
+desktop lifecycle and physical-device qualification are separate.
+
+UFS2 creation/writing remains unachieved. A subsequent source audit found real
+upstream write methods; the earlier reader-only adapter is not proof that writes
+are impossible. Its missing flush/fsync callbacks and create-time formatter/root
+initialization are under investigation. Historical reader tests are not counted
+as success against the Create + Read/Write goal.
 
 ## Historical ext4/XFS round and earlier blocked attempts
 
