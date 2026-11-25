@@ -3,6 +3,7 @@
 User-authorized scope, 2026-11-25. Baseline: 671fa06 (native macOS APFS is already implemented). This round overrides broader historical release/fault-test requirements where they exceed the user's explicit scope.
 
 See [round results](RESULTS.md) for the observed matrix, individual OS reports, independent reviews and remaining upstream or prerequisite limits.
+See [unachieved-only retest results](RETEST_RESULTS.md) for later targeted fixes and the conditions of the new passes.
 
 ## Outcome and boundaries
 
