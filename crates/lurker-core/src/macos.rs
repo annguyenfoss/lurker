@@ -820,7 +820,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     }
     if let Err(error) = checked(&program, &arguments, Some(&pass)) {
         if kind == VolumeType::Apple
-            && error.message.contains("no mountable file systems")
+            && (error.message.contains("no mountable file systems") || error.message.contains("Unable to invoke task"))
             && filesystems::mount_missing(&source, &mountpoint, &pass, c.readonly)?
         {
             output.msg2(&format!(

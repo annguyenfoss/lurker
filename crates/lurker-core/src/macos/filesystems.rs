@@ -11,24 +11,28 @@ use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 enum Kind {
+    Ext4,
     Xfs,
     Ntfs,
 }
 impl Kind {
     fn name(self) -> &'static str {
         match self {
+            Self::Ext4 => "ext4",
             Self::Xfs => "xfs",
             Self::Ntfs => "ntfs",
         }
     }
     fn driver(self) -> &'static str {
         match self {
+            Self::Ext4 => "fuse-ext2",
             Self::Xfs => "fuse-xfs",
             Self::Ntfs => "ntfs-3g",
         }
     }
     fn formatter(self) -> &'static str {
         match self {
+            Self::Ext4 => "mkfs.ext4",
             Self::Xfs => "mkfs.xfs",
             Self::Ntfs => "mkntfs",
         }
@@ -36,6 +40,7 @@ impl Kind {
 }
 fn requested(filesystem: Option<CreateFilesystem>) -> Option<Kind> {
     match filesystem {
+        Some(CreateFilesystem::Ext4) => Some(Kind::Ext4),
         Some(CreateFilesystem::Xfs) => Some(Kind::Xfs),
         Some(CreateFilesystem::Ntfs) => Some(Kind::Ntfs),
         _ => None,
@@ -108,6 +113,12 @@ fn detect(bytes: &[u8]) -> Option<Kind> {
         Some(Kind::Xfs)
     } else if bytes.get(3..11) == Some(b"NTFS    ") {
         Some(Kind::Ntfs)
+    } else if bytes.get(1080..1082) == Some(&[0x53, 0xef])
+        && bytes
+            .get(1120..1124)
+            .is_some_and(|flags| u32::from_le_bytes(flags.try_into().unwrap()) & 0x40 != 0)
+    {
+        Some(Kind::Ext4)
     } else {
         None
     }
@@ -134,6 +145,7 @@ pub(super) fn format(
         .device
         .clone();
     let arguments = match kind {
+        Kind::Ext4 => vec!["-F".into(), device.as_os_str().into()],
         Kind::Xfs => vec!["-f".into(), device.as_os_str().into()],
         Kind::Ntfs => vec!["-F".into(), "-Q".into(), device.as_os_str().into()],
     };
@@ -429,7 +441,17 @@ fn start(
         .mode(0o700)
         .create(&path)
         .map_err(|e| AppError::io("Cannot reserve filesystem session", e))?;
-    let mut a = match kind {
+    let mut a: Vec<OsString> = match kind {
+        Kind::Ext4 => vec![
+            filesystem_device.as_os_str().into(),
+            mountpoint.as_os_str().into(),
+            "-o".into(),
+            if readonly {
+                "ro,debug,backend=nfs".into()
+            } else {
+                "rw+,debug,backend=nfs".into()
+            },
+        ],
         Kind::Xfs => {
             let mut a = Vec::new();
             if !readonly {
@@ -498,7 +520,7 @@ fn start(
         if let Some(identity) = mount_identity(mountpoint)? {
             let expected_transport = match kind {
                 Kind::Xfs => " (smbfs,",
-                Kind::Ntfs => " (nfs,",
+                Kind::Ntfs | Kind::Ext4 => " (nfs,",
             };
             if !identity.contains(expected_transport) {
                 return Err(AppError::new(
