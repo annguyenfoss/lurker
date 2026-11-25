@@ -81,7 +81,7 @@ offline-package qualified. Exact build/stage instructions are in
 
 | Missing case | New investigation or attempt | Disposition |
 |---|---|---|
-| Btrfs RW | Rechecked xlinuxfs `f9da28e8cfdf6a4574a31e8baa9ba1811ef4c2e4`: source system-mount tests require restricted FSKit provisioning. Its paid binary was not purchased. PolyDrive Disk 1.2.6 is Free and documents raw `.img`/`.dmg` plus RW Btrfs/ext4/XFS; `mas install 6815775853` did not complete and was stopped by exact owned process identity | No CLI pass. Free acquisition stall has no established cause; no account login was attempted. Normal manual FSKit enablement remains a documented operator prerequisite. btrfs4mac is RO, so it cannot satisfy the missing RW case |
+| Btrfs RW | Rechecked xlinuxfs `f9da28e8cfdf6a4574a31e8baa9ba1811ef4c2e4`: source system-mount tests require restricted FSKit provisioning. Its paid binary was not purchased. PolyDrive Disk 1.2.6 documents raw `.img`/`.dmg` plus RW Btrfs/ext4/XFS, but its free download is a three-day trial followed by a paid lifetime unlock; it is ineligible under the free-of-charge requirement | No CLI pass. The earlier download stall has no established cause, but completing installation would not resolve the paid-license restriction. btrfs4mac is RO, so it cannot satisfy the missing RW case |
 | UFS2 RO | Tried the upstream official `fuse2` feature for fuse-ufs `ee5c4a447da98220a11edb69a225d51379afc4fb`, then corrected ordinary header/API flags. fuse2rs 0.1.2 fails Darwin compilation with ten actual type/API errors. Default fuser still requires osxfuse >=2.6.0 while FUSE-T accurately advertises 1.2.9 | No mount/CLI pass. No false pkg-config version, dependency patch or macFUSE/KEXT substitution. UFS2Tool can format images but does not provide a macOS mount, so combining it cannot resolve the driver blocker |
 | NTFS RW | Built unmodified FUSE-T NTFS-3G `f0e5cb0274e30334dd03aefb4fd5a14c239e6756`. Raw regular-file NFS control passes three payload cycles; SMB control fails initial file flush with ENOSYS/EIO. Existing native formatter works | No encrypted CLI RW pass. NTFS-3G refuses unprivileged block devices; Darwin raw nodes fail its unaligned reads. Existing VeraCrypt auxiliary file rejects NTFS-3G's required record lock with Operation not supported. A separate signed FSKit driver still needs operator enablement. Prior successful NTFS RO persistence was not repeated |
 | ZFS create/RW | Rechecked existing matching signed OpenZFS installer/KEXT prerequisite; native OpenZFS needs excluded Apple-silicon security/restart setup. anylinuxfs uses an excluded microVM | No create/mount/CLI attempt after the unchanged prerequisite block; no false failure/pass claim |
@@ -120,7 +120,37 @@ achievements were not requalified. Any native RO NTFS attachment inside the new
 failed RW experiment was setup only, without repeating its prior RO payload
 verification. Buran is released for review.
 
+## Subsequent installation and license audit (2026-11-25)
+
+The user stopped installation after identifying the PolyDrive pricing error.
+Only read-only checks continued. The earlier cleanup section describes the
+retest checkpoint, before these subsequent installation attempts.
+
+| Tool | Free-of-charge requirement | Actual state when installation stopped |
+|---|---|---|
+| PolyDrive Disk | Excluded: App Store lists a three-day trial and $9.99 lifetime purchase. Free download does not mean free ongoing use | `/Applications/PolyDrive Disk.app` absent; owned `mas install` PID 89742 no longer running. No purchase was invoked by this work |
+| TT NTFS Native | Free NTFS read/write; upstream GPL-2.0 source and downloadable notarized binary | Existing app remains installed; previous actual mount reported its FSKit module disabled. No new successful writable mount |
+| OpenZFS on macOS | Free, CDDL-1.0; no paid feature unlock | Signed OpenZFS 2.4.1p2 macOS 27 arm64 package installed successfully; receipt `org.openzfsonosx.zfs`. No kernel-extension approval, reboot or pool qualification |
+| macFUSE | Free end-user use under upstream license. Bundling binaries with commercial software, including automatic installation in that context, requires separate permission | 5.5.0 installed through Homebrew; core and preference-pane receipts present. No extension approval or successful new UFS2 mount |
+| fuse-ufs | Free, BSD-2-Clause | Unmodified 0.6.0 build with the installed macFUSE SDK fails because `nix::unistd::daemon` is unavailable on Darwin. No UFS2 driver installed |
+
+Installation/build logs remain on Buran under
+`/tmp/lurker-macos-driver-install/`. These package installations do not establish
+any additional achieved filesystem pair. macFUSE is not a filesystem driver by
+itself, and this attempt does not change Lurker's approved FUSE-T runtime policy.
+
+License and pricing sources checked directly:
+
+- https://apps.apple.com/us/app/polydrive-disk-ntfs-linux/id6815775853?mt=12
+- https://github.com/dr-kbadawi/ttntfs
+- https://openzfsonosx.org/
+- https://github.com/openzfsonosx/openzfs/blob/development/LICENSE
+- https://raw.githubusercontent.com/macfuse/macfuse/release/macfuse/LICENSE.txt
+- https://github.com/realchonk/fuse-ufs/blob/main/LICENSE.md
+
 Primary references:
+
+- https://apps.apple.com/us/app/polydrive-disk-ntfs-linux/id6815775853?mt=12 (three-day trial and $9.99 lifetime purchase; checked 2026-11-25)
 
 - https://github.com/karan-vk/fuse-xfs
 - https://github.com/alperakcan/fuse-ext2
