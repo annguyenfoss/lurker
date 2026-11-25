@@ -97,10 +97,14 @@ def main():
         try:
             if fs == 'zfs':
                 command(['sudo', '-n', 'zpool', 'create', '-o', 'cachefile=none', '-m', mount, pool, image])
-            elif fs == 'ufs2':
+            elif fs in {'ufs1', 'ufs2'}:
                 seed = backing / 'seed'; seed.mkdir(mode=0o700)
-                command(['makefs-freebsd','-t','ffs','-B','little','-o','version=2,bsize=32768,fsize=4096','-s',str(512 * 1024**2),image,seed])
-                command(['sudo','-n','/usr/local/bin/fuse-ufs','-o',f'rw,allow_other,fsname={image}',image,mount])
+                version = 1 if fs == 'ufs1' else 2
+                command(['makefs-freebsd','-t','ffs','-B','little','-o',f'version={version},bsize=32768,fsize=4096','-s',str(512 * 1024**2),image,seed])
+                if fs == 'ufs1':
+                    command(['sudo','-n','mount','-i','-t','ufs','-o','loop,rw,ufstype=44bsd',image,mount])
+                else:
+                    command(['sudo','-n','/usr/local/bin/fuse-ufs','-o',f'rw,allow_other,fsname={image}',image,mount])
             else:
                 formatter = {'btrfs':['mkfs.btrfs','-q'], 'ext4':['mkfs.ext4','-q'], 'xfs':['mkfs.xfs','-q'],
                     'ntfs':['mkntfs','-Q','-F'], 'exfat':['mkfs.exfat'], 'fat32':['mkfs.fat','-F','32'],
