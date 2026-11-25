@@ -27,6 +27,8 @@ def main():
     p.add_argument("--root", required=True, type=Path)
     p.add_argument("--commit", required=True)
     p.add_argument("--filesystem", choices=["ext4", "ntfs"], action="append")
+    p.add_argument("--ext4-profile", choices=["baseline", "4k-compat"], default="baseline",
+                   help="4k-compat uses 4096-byte blocks and disables 64bit alongside checksum/orphan features")
     args = p.parse_args()
     failed = False
     for fs in args.filesystem or ["ext4", "ntfs"]:
@@ -42,6 +44,8 @@ def main():
         result = {"filesystem": fs, "backend": "luks1", "mode": "readonly", "commit": args.commit,
                   "binary_sha256": payload.file_hash(args.binary), "fixture": str(directory),
                   "status": "running", "commands": []}
+        if fs == "ext4":
+            result["ext4_profile"] = args.ext4_profile
         vnode = None
         mapping = "lurker_import_" + fs + "_" + secrets.token_hex(4)
         mapped = False
@@ -80,7 +84,10 @@ def main():
                 stream.truncate(payload_bytes)
             if fs == "ext4":
                 # Ordinary upstream feature profile; no driver/source patching.
-                run([args.tools / "sbin/mkfs.ext4", "-F", "-O", "^metadata_csum,^metadata_csum_seed,^orphan_file", cleartext])
+                options = ["-F", "-O", "^metadata_csum,^metadata_csum_seed,^orphan_file"]
+                if args.ext4_profile == "4k-compat":
+                    options = ["-F", "-b", "4096", "-O", "^64bit,^metadata_csum,^metadata_csum_seed,^orphan_file"]
+                run([args.tools / "sbin/mkfs.ext4", *options, cleartext])
                 for name in expected:
                     run([args.tools / "sbin/debugfs", "-w", "-R", f"write {directory / name} /{name}", cleartext])
             else:
