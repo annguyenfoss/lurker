@@ -1,0 +1,15 @@
+--- a/rufs/src/ufs/dir.rs
++++ b/rufs/src/ufs/dir.rs
+@@ -517,6 +517,12 @@
+ 
+ 		let inr = self.dir_lookup(s_dinr, s_name)?;
+ 
++		// Moving a directory between parents requires updating its ".." entry
++		// and both parent link counts, which this rename implementation does not do.
++		if s_dinr != d_dinr && self.inode_attr(inr)?.kind == InodeType::Directory {
++			return Err(err!(EOPNOTSUPP));
++		}
++
+ 		if !replace {
+ 			// User has requested to error if the destination already exists
+ 			match self.dir_lookup(s_dinr, s_name) {

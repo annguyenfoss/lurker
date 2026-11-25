@@ -1,0 +1,38 @@
+--- a/src/ll/fuse_abi.rs
++++ b/src/ll/fuse_abi.rs
+@@ -512,9 +512,19 @@
+ #[derive(Debug, FromBytes, KnownLayout, Immutable)]
+ pub struct fuse_rename_in {
+     pub newdir: u64,
+-    #[cfg(feature = "macfuse-4-compat")]
++    // fuser 0.16 does not negotiate macFUSE's extended rename capability.
++    // Our Darwin libfuse3 mount therefore receives the classic 8-byte input;
++    // retaining the 16-byte layout would consume eight source-name bytes.
++    // Keep the remaining macfuse-4-compat layouts and RENAME2 unchanged.
++    #[cfg(all(
++        feature = "macfuse-4-compat",
++        not(all(target_os = "macos", fuser_mount_impl = "libfuse3"))
++    ))]
+     pub flags: u32,
+-    #[cfg(feature = "macfuse-4-compat")]
++    #[cfg(all(
++        feature = "macfuse-4-compat",
++        not(all(target_os = "macos", fuser_mount_impl = "libfuse3"))
++    ))]
+     pub padding: u32,
+ }
+ 
+@@ -525,6 +535,13 @@
+     pub flags: u32,
+     pub padding: u32,
+ }
++
++// These are wire sizes, independent of the Darwin attribute compatibility.
++#[cfg(all(target_os = "macos", fuser_mount_impl = "libfuse3"))]
++const _: () = {
++    assert!(std::mem::size_of::<fuse_rename_in>() == 8);
++    assert!(std::mem::size_of::<fuse_rename2_in>() == 16);
++};
+ 
+ #[cfg(target_os = "macos")]
+ #[repr(C)]

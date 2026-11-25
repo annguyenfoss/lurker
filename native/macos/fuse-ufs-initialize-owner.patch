@@ -1,0 +1,67 @@
+--- a/fuse-ufs/src/cli.rs
++++ b/fuse-ufs/src/cli.rs
+@@ -13,7 +13,12 @@
+ 	/// Path to the device
+ 	pub device:     PathBuf,
+ 	/// Path to the mount point
+-	pub mountpoint: PathBuf,
++	#[arg(required_unless_present = "initialize_owner")]
++	pub mountpoint: Option<PathBuf>,
++
++	/// Initialize a freshly formatted image root owner and mode, then exit without mounting.
++	#[arg(long, value_name = "UID:GID", value_parser = parse_owner, conflicts_with = "mountpoint")]
++	pub initialize_owner: Option<(u32, u32)>,
+ 
+ 	#[command(flatten)]
+ 	pub verbose: Verbosity<WarnLevel>,
+@@ -134,3 +139,11 @@
+ 		Ok((opts, rw))
+ 	}
+ }
++
++fn parse_owner(value: &str) -> Result<(u32, u32), String> {
++	let (uid, gid) = value.split_once(':').ok_or("expected UID:GID")?;
++	Ok((
++		uid.parse().map_err(|_| "invalid UID")?,
++		gid.parse().map_err(|_| "invalid GID")?,
++	))
++}
+--- a/fuse-ufs/src/main.rs
++++ b/fuse-ufs/src/main.rs
+@@ -41,12 +41,25 @@
+ 
+ fn main() -> Result<()> {
+ 	let cli = Cli::parse();
+-	#[cfg(target_os = "macos")]
+-	anyhow::ensure!(cli.foreground, "macOS requires foreground mode (-f)");
+ 
+ 	env_logger::builder()
+ 		.filter_level(cli.verbose.log_level_filter())
+ 		.init();
++
++	if let Some((uid, gid)) = cli.initialize_owner {
++		let mut ufs = Ufs::open(&cli.device, true)?;
++		ufs.inode_modify(rufs::InodeNum::ROOT, |mut attr| {
++			attr.uid = uid;
++			attr.gid = gid;
++			attr.perm = 0o700;
++			attr
++		})?;
++		ufs.sync_all()?;
++		return Ok(());
++	}
++
++	#[cfg(target_os = "macos")]
++	anyhow::ensure!(cli.foreground, "macOS requires foreground mode (-f)");
+ 
+ 	let (opts, rw) = cli.options()?;
+ 
+@@ -54,7 +67,7 @@
+ 		ufs: Ufs::open(&cli.device, rw)?,
+ 	};
+ 
+-	let mp = &cli.mountpoint;
++	let mp = cli.mountpoint.as_ref().expect("mount point required by clap");
+ 	cfg_if! {
+ 		if #[cfg(all(feature = "fuse3", feature = "fuse2"))] {
+ 			compile_error!("more than one FUSE backend selected")

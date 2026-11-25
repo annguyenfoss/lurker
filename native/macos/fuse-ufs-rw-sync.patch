@@ -1,0 +1,116 @@
+--- a/rufs/src/blockreader.rs
++++ b/rufs/src/blockreader.rs
+@@ -37,6 +37,12 @@
+ 		#[cfg(not(unix))]
+ 		let bs = 4096;
+ 		Ok(BlockReader::new(file, bs, rw))
++	}
++
++	/// Flush the write-through buffer and synchronize the backing file.
++	pub fn sync_all(&mut self) -> IoResult<()> {
++		self.flush()?;
++		self.inner.sync_all().map_err(backend_err)
+ 	}
+ }
+ 
+@@ -136,16 +142,14 @@
+ 		let mut num = 0;
+ 		while num < self.block.len() {
+ 			match self.inner.write(&self.block[num..]).map_err(backend_err)? {
+-				0 => break,
++				0 => {
++					return Err(io::Error::new(
++						io::ErrorKind::WriteZero,
++						"failed to write complete block",
++					));
++				}
+ 				n => num += n,
+ 			}
+-		}
+-		if num < self.block.len() {
+-			let pos = self.inner.stream_position().map_err(backend_err)?;
+-			log::error!(
+-				"short write: pos={pos}, num={num}, len={}",
+-				self.block.len()
+-			);
+ 		}
+ 		self.dirty = false;
+ 		Ok(())
+--- a/rufs/src/decoder.rs
++++ b/rufs/src/decoder.rs
+@@ -63,6 +63,10 @@
+ 
+ 	pub fn inner(&self) -> &T {
+ 		&self.inner
++	}
++
++	pub(crate) fn inner_mut(&mut self) -> &mut T {
++		&mut self.inner
+ 	}
+ 
+ 	pub fn decode<X: Decode<()>>(&mut self) -> Result<X> {
+--- a/rufs/src/ufs/mod.rs
++++ b/rufs/src/ufs/mod.rs
+@@ -88,6 +88,11 @@
+ 	pub fn open(path: &Path, rw: bool) -> IoResult<Self> {
+ 		let file = BlockReader::open(path, rw)?;
+ 		Self::new(file)
++	}
++
++	/// Synchronize completed filesystem writes to the backing file.
++	pub fn sync_all(&mut self) -> IoResult<()> {
++		self.file.inner_mut().sync_all()
+ 	}
+ }
+ 
+--- a/fuse-ufs/src/fuse3.rs
++++ b/fuse-ufs/src/fuse3.rs
+@@ -37,6 +37,48 @@
+ 	}
+ 
+ 	fn destroy(&mut self) {}
++
++	fn flush(
++		&mut self,
++		_req: &Request<'_>,
++		_ino: u64,
++		_fh: u64,
++		_lock_owner: u64,
++		reply: ReplyEmpty,
++	) {
++		match run(|| self.ufs.sync_all()) {
++			Ok(()) => reply.ok(),
++			Err(e) => reply.error(e),
++		}
++	}
++
++	fn fsync(
++		&mut self,
++		_req: &Request<'_>,
++		_ino: u64,
++		_fh: u64,
++		_datasync: bool,
++		reply: ReplyEmpty,
++	) {
++		match run(|| self.ufs.sync_all()) {
++			Ok(()) => reply.ok(),
++			Err(e) => reply.error(e),
++		}
++	}
++
++	fn fsyncdir(
++		&mut self,
++		_req: &Request<'_>,
++		_ino: u64,
++		_fh: u64,
++		_datasync: bool,
++		reply: ReplyEmpty,
++	) {
++		match run(|| self.ufs.sync_all()) {
++			Ok(()) => reply.ok(),
++			Err(e) => reply.error(e),
++		}
++	}
+ 
+ 	fn getattr(&mut self, _req: &Request<'_>, ino: u64, _fh: Option<u64>, reply: fuser::ReplyAttr) {
+ 		let f = || {

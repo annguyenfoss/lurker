@@ -47,7 +47,7 @@ impl Kind {
             Self::Xfs => "mkfs.xfs",
             Self::Ntfs => "mkntfs",
             Self::Zfs => "zpool",
-            Self::Ufs2 => unreachable!("UFS2 imports are read-only; no formatter is selected"),
+            Self::Ufs2 => "ufs2tool",
         }
     }
 }
@@ -58,6 +58,7 @@ fn requested(filesystem: Option<CreateFilesystem>) -> Option<Kind> {
         Some(CreateFilesystem::Xfs) => Some(Kind::Xfs),
         Some(CreateFilesystem::Ntfs) => Some(Kind::Ntfs),
         Some(CreateFilesystem::Zfs) => Some(Kind::Zfs),
+        Some(CreateFilesystem::Ufs2) => Some(Kind::Ufs2),
         _ => None,
     }
 }
@@ -75,10 +76,29 @@ fn tool(name: &str) -> AppResult<PathBuf> {
     [directory.join("macos-filesystems").join(name), directory.join("../libexec/lurker/filesystems").join(name), directory.join("../Helpers/filesystems").join(name)]
         .into_iter().find(|path| executable(path))
         .ok_or_else(|| AppError::new(if name == "fuse-ufs" {
-            "Private macOS filesystem tool fuse-ufs is missing. Install the qualified foreground-only reader and approve the separately installed macFUSE kernel extension.".into()
+            "Private macOS filesystem tool fuse-ufs is missing. Install the qualified UFS2 build and approve the separately installed macFUSE kernel extension.".into()
+        } else if name == "ufs2tool" {
+            "Private macOS filesystem tool ufs2tool is missing. Install the patched free UFS2 formatter and its .NET runtime.".into()
         } else {
             format!("Private macOS filesystem tool {name} is missing. Install the qualified FUSE-T filesystem tools; no driver is run with sudo.")
         }))
+}
+
+fn ufs2_driver() -> AppResult<PathBuf> {
+    let driver = tool("fuse-ufs")?;
+    let output = checked(&driver, &args(&["--lurker-capabilities"]), None)?;
+    let capabilities: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|error| AppError::new(format!("Invalid UFS2 driver capabilities: {error}")))?;
+    if capabilities
+        .get("ufs2_write_protocol")
+        .and_then(serde_json::Value::as_u64)
+        != Some(1)
+    {
+        return Err(AppError::new(
+            "The UFS2 driver lacks the qualified write/sync implementation. Install the matching free private filesystem tools.",
+        ));
+    }
+    Ok(driver)
 }
 
 fn formatter(kind: Kind) -> AppResult<PathBuf> {
@@ -117,7 +137,9 @@ pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<
             "External macOS filesystem containers must be created as the login user.",
         ));
     }
-    if !matches!(kind, Kind::Btrfs | Kind::Ntfs | Kind::Zfs) {
+    if kind == Kind::Ufs2 {
+        ufs2_driver()?;
+    } else if !matches!(kind, Kind::Btrfs | Kind::Ntfs | Kind::Zfs) {
         tool(kind.driver())?;
     }
     if kind == Kind::Btrfs {
@@ -310,6 +332,9 @@ pub(super) fn format(
     if kind == Kind::Btrfs {
         return format_btrfs(source, pass, keyfile);
     }
+    if kind == Kind::Ufs2 {
+        return format_ufs2(source, pass, keyfile);
+    }
     if kind == Kind::Zfs {
         return format_zfs(source, pass, keyfile);
     }
@@ -335,11 +360,106 @@ pub(super) fn format(
             opened.device.as_os_str().into(),
         ],
         Kind::Zfs => unreachable!("ZFS uses its authenticated native device"),
-        Kind::Ufs2 => unreachable!("UFS2 creation is unsupported"),
+        Kind::Ufs2 => unreachable!("UFS2 uses its private blank-image formatter"),
     };
     let result = checked(&formatter(kind)?, &arguments, None).map(|_| ());
     close_identified_crypto(source, image)?;
     result
+}
+
+fn format_ufs2(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult<()> {
+    let driver = ufs2_driver()?;
+    let formatter = formatter(Kind::Ufs2)?;
+    let opened = open_image(source, pass, false, keyfile, true)?;
+    let raw = source
+        .parent()
+        .ok_or_else(|| AppError::new("Missing UFS2 staging directory."))?
+        .join("new-ufs2.raw");
+    let result = (|| -> AppResult<()> {
+        let size = fs::symlink_metadata(&opened.path)
+            .map_err(|error| AppError::io("Inspect new UFS2 crypto view", error))?
+            .len();
+        if size % 512 != 0 {
+            return Err(AppError::new(
+                "UFS2 requires an image aligned to 512-byte sectors.",
+            ));
+        }
+        let placeholder = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&raw)
+            .map_err(|error| AppError::io("Reserve private blank UFS2 image", error))?;
+        let original = placeholder
+            .metadata()
+            .map_err(|error| AppError::io("Inspect private blank UFS2 image", error))?;
+        drop(placeholder);
+        // The formatter creates a blank filesystem only. No existing plaintext
+        // or encryption credential is ever copied into this staging file.
+        let mut arguments = args(&["newfs", "-O", "2", "-b", "32768", "-f", "4096", "-s"]);
+        arguments.extend([(size / 512).to_string().into(), raw.as_os_str().into()]);
+        checked(&formatter, &arguments, None)?;
+        let metadata = fs::symlink_metadata(&raw)
+            .map_err(|error| AppError::io("Inspect formatted UFS2 image", error))?;
+        if !metadata.is_file()
+            || metadata.dev() != original.dev()
+            || metadata.ino() != original.ino()
+            || metadata.uid() != crate::effective_uid()
+            || metadata.mode() & 0o077 != 0
+            || metadata.nlink() != 1
+            || metadata.len() != size
+        {
+            return Err(AppError::new(
+                "UFS2 formatter changed its private output identity or geometry.",
+            ));
+        }
+        checked(
+            &driver,
+            &[
+                "--initialize-owner".into(),
+                format!("{}:{}", crate::effective_uid(), unsafe { libc::getegid() }).into(),
+                raw.as_os_str().into(),
+            ],
+            None,
+        )?;
+        let mut input = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(&raw)
+            .map_err(|error| AppError::io("Open initialized UFS2 image", error))?;
+        let mut image = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(&opened.path)
+            .map_err(|error| AppError::io("Open new UFS2 crypto view", error))?;
+        let image_size = image
+            .metadata()
+            .map_err(|error| AppError::io("Inspect new UFS2 crypto view", error))?
+            .len();
+        if image_size != size
+            || std::io::copy(&mut input, &mut image)
+                .map_err(|error| AppError::io("Initialize encrypted UFS2 filesystem", error))?
+                != size
+            || image
+                .metadata()
+                .map_err(|error| AppError::io("Verify UFS2 image size", error))?
+                .len()
+                != size
+        {
+            return Err(AppError::new(
+                "UFS2 initialization did not preserve the encrypted image geometry.",
+            ));
+        }
+        image
+            .sync_all()
+            .map_err(|error| AppError::io("Sync new UFS2 filesystem", error))
+    })();
+    close_identified_crypto(source, &opened.path)?;
+    result?;
+    fs::remove_file(raw)
+        .map_err(|error| AppError::io("Remove blank UFS2 initialization image", error))
 }
 #[derive(Serialize, Deserialize)]
 struct Session {
@@ -1105,12 +1225,11 @@ fn start(
     else {
         return Ok(false);
     };
-    if kind == Kind::Ufs2 && !readonly {
-        return Err(AppError::new(
-            "The installed macOS UFS2 reader cannot create or write this filesystem.",
-        ));
-    }
-    let driver = tool(kind.driver())?;
+    let driver = if kind == Kind::Ufs2 {
+        ufs2_driver()?
+    } else {
+        tool(kind.driver())?
+    };
     let (path, mut session) =
         reserve_session(registry, source, mountpoint, image, kind, readonly, None)?;
     let mut a: Vec<OsString> = match kind {
@@ -1149,7 +1268,11 @@ fn start(
         Kind::Ufs2 => vec![
             "-f".into(),
             "-o".into(),
-            "ro,nodev,nosuid".into(),
+            if readonly {
+                "ro,nodev,nosuid".into()
+            } else {
+                "rw,nodev,nosuid".into()
+            },
             image.as_os_str().into(),
             mountpoint.as_os_str().into(),
         ],
@@ -1222,9 +1345,9 @@ fn start(
                     .dev(),
             );
             save(&path, &session)?;
-            if kind == Kind::Ufs2 && !mount_is_readonly(mountpoint)? {
+            if kind == Kind::Ufs2 && mount_is_readonly(mountpoint)? != readonly {
                 return Err(AppError::new(
-                    "UFS2 reader published a writable mount; preserving its identified session for normal close.",
+                    "UFS2 driver did not provide the expected access capability; preserving its identified session for normal close.",
                 ));
             }
             let readable = fs::read_dir(mountpoint)
@@ -1410,7 +1533,7 @@ mod tests {
             image[OFFSET..OFFSET + 4].copy_from_slice(&[0x54, 0x19, 0x01, 0]);
             assert_eq!(read_image_kind(&mut Cursor::new(&image)), None);
         }
-        assert_eq!(requested(Some(CreateFilesystem::Ufs2)), None);
+        assert_eq!(requested(Some(CreateFilesystem::Ufs2)), Some(Kind::Ufs2));
     }
 
     #[test]

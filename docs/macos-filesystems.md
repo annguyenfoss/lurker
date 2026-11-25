@@ -2,8 +2,9 @@
 
 The CLI can create and mount VeraCrypt file containers with `--filesystem ext4`
 or `--filesystem xfs` when the optional private tools below are staged beside the
-CLI or helper. Native NTFS and ZFS create/RW routes are also available with the
-prerequisites below. UFS2 remains reader-only and cannot satisfy Create + Read/Write.
+CLI or helper. Native NTFS, ZFS, UFS2 and guest-backed Btrfs create/RW routes
+are also available with the prerequisites below. The UFS2 writer remains experimental; see its
+limitations below.
 Existing Apple, APFS and exFAT
 defaults are unchanged. These are source-built development tools; current release
 packages do not bundle them.
@@ -33,7 +34,7 @@ They add inner-filesystem support without changing encryption profiles.
 |---|---|---|---|
 | NTFS | `--filesystem ntfs`; login-user `mkntfs` formats the identified hdiutil device | Read/write through TT NTFS Native FSKit; Apple's reader alone is insufficient | Homebrew `gromgit/fuse/ntfs-3g-mac` and enabled TT NTFS Native extension |
 | ZFS | `--filesystem zfs`; native `zpool` creates one pool on the identified hdiutil device | Read/write native OpenZFS | Matching OpenZFSonOsX package, approved kernel extension and administrator authorization |
-| UFS2 | Unavailable | Cannot write; reader control is diagnostic evidence, not a completed Create + Read/Write workflow | Private patched `fuse-ufs` reader and separately installed, approved macFUSE kernel extension |
+| UFS2 | `--filesystem ufs2`; patched UFS2Tool creates a private blank filesystem | Read/write through patched fuse-ufs; experimental upstream writer, cross-parent directory moves refused | Private patched formatter/driver, free Homebrew `dotnet@8`, separately installed and approved macFUSE kernel extension |
 
 NTFS formatting and mounting run as the login user. ZFS elevates only trusted,
 administrator-owned installed system/OpenZFS tools through `sudo -n`; it requires
@@ -42,10 +43,13 @@ pool and sole-vdev GUIDs, imports only that device, and normally unmounts and
 exports the pool before closing encryption. Multi-device pools and additional
 datasets are outside this adapter's scope.
 
-Stage `fuse-ufs` in the same private filesystem directory described below.
-Its pinned source and the two small Darwin compatibility patches are documented
-in `native/macos/fuse-ufs.md`. macFUSE is an additional optional filesystem
-runtime; VeraCrypt continues to use FUSE-T. On Apple silicon, enabling these
+Stage `fuse-ufs`, `ufs2tool` and its runtime files in the same private filesystem
+directory described below. Pinned sources, compatibility/write fixes and build
+commands are documented in `native/macos/fuse-ufs.md`. The upstream writer warns
+of data loss; ordinary payload tests do not qualify complete metadata semantics
+or production use. The adapter refuses cross-parent directory moves before
+mutation; ordinary same-parent renames and regular-file moves pass controls.
+macFUSE is an additional optional filesystem runtime; VeraCrypt continues to use FUSE-T. On Apple silicon, enabling these
 kernel extensions requires the operator's startup-security and extension
 approval steps. The tools remain free of charge.
 

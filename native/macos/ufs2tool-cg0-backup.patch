@@ -1,0 +1,13 @@
+--- a/Ufs2ImageCreator.cs
++++ b/Ufs2ImageCreator.cs
+@@ -801,8 +801,8 @@
+             sbData = SerializeSuperblock(superblock);
+             target.WriteAligned(sbData, Ufs2Constants.SuperblockOffset);
+ 
+-            // Update backup superblocks with final counts
+-            for (int cg = 1; cg < numCylGroups; cg++)
++            // Update backup superblocks with final counts, including CG 0.
++            for (int cg = 0; cg < numCylGroups; cg++)
+             {
+                 long cgStartByte = (long)cg * fragsPerGroup * FragmentSize;
+                 long backupSbOffset = cgStartByte + (long)sblkno * FragmentSize;
