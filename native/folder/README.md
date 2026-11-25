@@ -70,8 +70,8 @@ open. A visible kernel mount can precede Java's close-hook registration; returni
 early lets an immediate unmount terminate the JVM without a close acknowledgement.
 
 Per-user `/tmp/lurker-folders-UID` state contains no credentials. It records source
-device/inode, mount identity, process birth identity and readonly mode. Busy or
-uncertain sessions remain recoverable. Changed mount identities refuse detach;
+device/inode, mount identity, process birth identity and filesystem access state.
+Busy or uncertain sessions remain recoverable. Changed mount identities refuse detach;
 reused PIDs refuse signalling. Mount timeout does not kill an uncertain mounted
 filesystem. If a mount appeared after its readiness timeout without a confirmed
 identity, manual native inspection is required. No forced/lazy unmount is used.
@@ -88,7 +88,7 @@ not coordinated by this local registry.
 `scripts/test-folder-backends.py /path/to/lurker BACKEND...` runs the actual CLI
 with PTY credential prompts in private `/tmp` directories. It tests initialization,
 existing targets, bad credentials, aliased duplicate sources, Unicode/binary
-fsync, SQLite WAL, rename, busy close, durable reopen and readonly. Successful
+fsync, SQLite WAL, rename, busy close and durable writable reopen. Successful
 fixtures are removed; failed ones remain and results contain concise references.
 Run runtime tests only on dedicated test hosts, never the active endeavour host.
 These tests do not claim crash/ENOSPC qualification or substitute for native tests

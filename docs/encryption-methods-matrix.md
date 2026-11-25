@@ -382,7 +382,7 @@ Privileges depend on the operation. A normal user may read a header or encrypt a
 
 Disk protection, file containers, folder protection, file encryption, and backups have different storage and recovery workflows. Cipher names alone do not describe these capabilities.
 
-Open validation questions for each backend/OS pair include create/open/close, wrong credentials, reboot/session recovery, read-only behavior, credential changes, recovery-metadata backup/restore, interrupted writes, full storage, busy locks/unmounts, Unicode names, permissions, and minimum dependency versions. Source or package availability alone does not establish native runtime behavior or frontend portability.
+Open validation questions for each backend/OS pair include create/open/close, wrong credentials, reboot/session recovery, credential changes, recovery-metadata backup/restore, interrupted writes, full storage, busy locks/unmounts, Unicode names, permissions, and minimum dependency versions. Source or package availability alone does not establish native runtime behavior or frontend portability.
 
 ## Sources
 

@@ -4,6 +4,11 @@ Status: complete. Best-effort dependency installation, Lurker CLI integration, n
 
 ## Scope and interpretation
 
+This is a historical work-round report. Completion of that round does not mean
+all filesystem goals were achieved. The global goal is Create + Read/Write;
+reader-only or import-only results below are shortcomings, not desired features
+or complete support. Separate read-only-mode tests are no longer required.
+
 Ten filesystems: ext4, Btrfs, XFS, APFS, UFS1/FFSv1, UFS2/FFSv2, HAMMER2, NTFS, exFAT and ZFS/OpenZFS. Eleven native targets: six Linux distributions, four BSDs and Buran/macOS. Existing integrated encryption methods only. Windows, physical storage, GUI, SQLite, forced dismount, power loss, performance tuning, security audit and release packaging are outside this round.
 
 `--filesystem NAME` selects the inner filesystem for CLI file-container creation where supported by the installed native route. Omitting it preserves existing defaults and crypto profiles. Native APFS encryption is necessarily APFS-only. Directory encryption methods have no inner-filesystem selection; their separate backing-filesystem tests are counted separately. Auxiliary FAT32 regressions are not counted as requested filesystem coverage.

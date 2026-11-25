@@ -131,7 +131,7 @@ comparison. https://github.com/macos-fuse-t/fuse-t/wiki
 | --- | --- |
 | Direct backend smoke test | Confirm the FUSE-T runtime and transport on the mounted fixture. Create, mount, sync a write, close normally, reopen, and compare bytes. |
 | SQLite WAL | Confirm SQLite actually enters WAL mode. Commit with `synchronous=FULL`, exercise a second connection and checkpoint, close the vault, reopen, and verify committed rows and `PRAGMA integrity_check`. Retain the SQLite version and exact error for failures. |
-| Lurker CLI | Exercise explicit and Auto mount and close, wrong credentials, existing-target protection, aliased duplicates, read-only access, and busy close. Repeat ordinary close and reopen, including an immediate close after mount. |
+| Lurker CLI | Exercise explicit and Auto mount and close, wrong credentials, existing-target protection, aliased duplicates, and busy close. Repeat ordinary close and reopen, including an immediate close after mount. |
 | Durable payload | Pin hashes for `bitcoin.pdf`, `ethereum.pdf`, `lamport.pdf`, and `page.txt`. Run the payload harness `write` phase, close and reopen, then run `append` to verify the originals, append to the text, and add a fifth file. Close and reopen to run `verify`, then repeat close, reopen, and verification on Buran. |
 | Candidate app, if packaging proceeds | Use a private app copy extracted from the exact DMG. Test the packaged CLI and Slint desktop helper, dependency resolution, and a fresh Firefox profile. Exercise scoped recovery only if the changes touch recovery and there is a macOS harness that can identify its owned process. |
 

@@ -57,12 +57,12 @@ and devices are gone before starting the next case.
 python3 "scripts/$SUITE" --binary "$CLI" --backend veracrypt \
   --cipher "$CIPHER" --filesystem hammer2 --size-gb 0.5 --root "$FIXTURE_PARENT" \
   --native-dismount \
-  --commit "$COMMIT" --expect-readonly-unsupported
+  --commit "$COMMIT"
 ```
 
 Replay with `--filesystem fat32` for the exchange profile. The suite records
 its skipped application workload and tests synced ASCII-file persistence,
-duplicate opens, busy close, invalid credentials, and read-only refusal.
+duplicate opens, busy close, and invalid credentials.
 With `--native-dismount`, it issues a native unmount, closes the remaining
 journaled resources through the CLI, and checks payload contents after reopen.
 
@@ -85,7 +85,7 @@ run `test-mounted-payload.py write MOUNTPOINT PAYLOAD_DIR`, and close by source.
 Reopen with `--type auto`, run the `append` phase, and close by mountpoint. Reopen
 again and run `verify` to record all five SHA-256 values. Record any failed sync
 from `write` or `append` even if `verify` finds the expected bytes. Probe a
-65-byte password, a wrong credential, and `--readonly` while the image is closed.
+65-byte password and a wrong credential while the image is closed.
 Compare its ciphertext hash and the native inventories before and after each
 rejection. Verify the original credential still opens the image.
 
@@ -137,7 +137,7 @@ desktop callbacks. [Qualification plan](../DIRECTIVES/PLAN/DRAGONFLY_VERACRYPT.m
 ## Common options
 
 `--auto-detect` retains the known format for create and sends `--type auto` for
-mount/unmount, including incorrect-credential, alias, busy and read-only cases.
+mount/unmount, including incorrect-credential, alias and busy cases.
 Results identify `detection_mode` as `auto` or `explicit`; keep these qualification
 runs distinct. A new empty vault has no header to detect, so create stays explicit.
 
@@ -179,7 +179,7 @@ filesystem receipts are under `target/freebsd-veracrypt-full-storage/`.
 The suite checks create, protection of an existing destination, unlock, Unicode
 and spaces, fsync, atomic rename/truncation, SQLite WAL and integrity, duplicate and aliased-source
 attachment refusal, busy close refusal, close, wrong credentials, reopen and
-persisted contents, and read-only storage. Passwords are generated only in memory
+persisted contents. Passwords are generated only in memory
 and sent through a controlling PTY only after terminal echo is disabled; missing
 no-echo readiness fails within a bounded wait. Logs redact credentials and echoing
 fails the suite. The script never supplies sudo/administrator passwords. Native container
@@ -284,19 +284,14 @@ are under `target/netbsd-firefox-e607cc7/`.
 
 https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/x86_64/11.0_2026Q3/
 
-For a native API that cannot attach read-only, use
-`--expect-readonly-unsupported` (for example, OpenBSD softraid). This **executes**
-the read-only CLI request and requires both a nonzero exit and no mount at the
-owned target. A writable fallback, unexpected success, or attached resource
-fails the case. `readonly_expectation: "unsupported"` records that this tests
-safe rejection rather than read-only operation support.
+Qualification follows one mount/unmount action, without a user-selectable RO/RW
+mode. Require writable create, use, close and reopen for a complete result.
+Reader-only access or unavailable creation is a degraded capability, not a
+separate acceptance mode. Historical read-only receipts remain evidence of the
+operations actually performed; they do not establish writable support.
 
-A backend without a native read-only operation may alternatively be tested with
-`--skip-readonly 'concrete native limitation'`. That case remains **skipped** with
-its reason and is not evidence of read-only support. This option and
-`--expect-readonly-unsupported` are mutually exclusive. Every other required failure
-stops the suite. A timeout signals only the owned CLI child and retains its storage
-for inspection; a dead CLI does not prove mounts or backend processes are gone.
+Every required failure stops the suite. A timeout signals only the owned CLI
+child and retains its storage for inspection; a dead CLI does not prove mounts or backend processes are gone.
 
 This is a fast lifecycle/application-I/O suite. It does not qualify every keyfile,
 stale-session or PID-reuse case, full storage, abrupt shutdown, signing, dependency

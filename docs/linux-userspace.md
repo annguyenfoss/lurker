@@ -2,6 +2,10 @@
 
 Findings recorded on 2026-10-23 against the source revisions below. This document distinguishes stock VeraCrypt from Lurker’s two Linux routes. Functional verification and architectural security conclusions are recorded separately.
 
+The current product has one mount/unmount action and no user-selectable RO/RW
+mode. Historical read-only receipts below remain diagnostic evidence, not a
+separate qualification target. Writable creation and use remain the goal.
+
 The desktop header selects Privileged or Unprivileged. The CLI uses `--unprivileged`; missing JSON/CLI mode retains the original privileged behavior. The selector is hidden on macOS. Desktop still calls `lurker-helper`, never the CLI. An unprivileged request runs directly as the login user and cannot fall back to elevation.
 
 ## Stock VeraCrypt already supports FUSE
@@ -53,7 +57,7 @@ Before any root execution or block-device elevation, discovery canonicalizes the
 
 Build only the creator with `python scripts/build-linux-userspace.py --only-creator`; the full build produces all three helpers. `creator-source.json` records the source revision, pinned archive checksum, patch hash and output hash, with the VeraCrypt license beside it. Host dynamic library dependencies still require packaging qualification; this build does not claim a portable static executable.
 
-`python scripts/test-linux-bundled.py --cli /path/to/lurker --result /tmp/lurker-result.json` runs the native CLI matrix as root **inside a disposable test VM**. It uses private `/tmp/lurker-bundled-test-*` images, checks all three algorithms for LUKS2, LUKS1 and VeraCrypt, and tests persistence, SQLite WAL, rename, incorrect keys, duplicate mounts, no-clobber create and readonly. It does not invoke a separately installed VeraCrypt. Logs/results survive failure, and backing storage is retained when safe unmount fails. The runner also checks native mounts/loop attachments before removing fixtures and preserves uncertain state after an operation timeout. This is additional coverage; optional stock-VeraCrypt interoperability tests remain separate. `python scripts/test-linux-creator.py --creator /path/to/lurker-veracrypt-create` checks rejection of mount/service/formatter operations, option injection and unsupported crypto arguments without creating a volume. Adding `--cli /path/to/lurker` as root in the test VM also verifies a backend beneath writable `/tmp` is rejected before execution.
+`python scripts/test-linux-bundled.py --cli /path/to/lurker --result /tmp/lurker-result.json` runs the native CLI matrix as root **inside a disposable test VM**. It uses private `/tmp/lurker-bundled-test-*` images, checks all three algorithms for LUKS2, LUKS1 and VeraCrypt, and tests persistence, SQLite WAL, rename, incorrect keys, duplicate mounts and no-clobber create. It does not invoke a separately installed VeraCrypt. Logs/results survive failure, and backing storage is retained when safe unmount fails. The runner also checks native mounts/loop attachments before removing fixtures and preserves uncertain state after an operation timeout. This is additional coverage; optional stock-VeraCrypt interoperability tests remain separate. `python scripts/test-linux-creator.py --creator /path/to/lurker-veracrypt-create` checks rejection of mount/service/formatter operations, option injection and unsupported crypto arguments without creating a volume. Adding `--cli /path/to/lurker` as root in the test VM also verifies a backend beneath writable `/tmp` is rejected before execution.
 
 ### Native validation recorded 2026-11-14
 
@@ -73,7 +77,7 @@ The native protocol-3 helpers are byte-identical to those that passed all **3** 
 
 - Create normal VeraCrypt file containers with AES, Serpent or Twofish, SHA-512, PIM 0 and either a password or one binary keyfile. Cipher profiles match the privileged route. Files are fully initialized, protected with mode 0600, and contain Btrfs; minimum size is 128 MiB.
 - Mount existing normal password- or keyfile-protected VeraCrypt files, including headers using hashes other than the create default. Validated filesystem drivers are Btrfs, ext4, exFAT, FAT, NTFS3 and XFS. The ext4 driver also supports ext2/3 formats; those variants have not had separate integration runs.
-- Read/write, read-only at both layers, Unicode paths and passphrases, preserved spaces, source symlinks, same-directory staged creation, atomic no-clobber publication and forced replacement after successful initialization.
+- Read/write, Unicode paths and passphrases, preserved spaces, source symlinks, same-directory staged creation, atomic no-clobber publication and forced replacement after successful initialization.
 - Btrfs zstd compression and ordinary file operations, including user ownership, permissions, directories, links, rename, truncate, sparse files, and fsync. The driver uses the login uid inside its userspace kernel; an existing filesystem's stored ownership is not rewritten.
 - Active volume discovery after restarting the desktop/helper, and unmount by source, mountpoint or decrypted image. Busy filesystems and raw images remain open for a later retry. Unmount does not require the crypto or filesystem executables still to be installed.
 
@@ -201,7 +205,7 @@ python scripts/test-linux-frontends.py target/release --unprivileged
 
 Run the userspace suite as a normal user. It creates its own runtime directory and fresh `/tmp/lurker-userspace-test-*` containers; escalation/kernel-tool commands are denied in its PATH. It does not accept existing user volumes as fixtures. The existing personal vault is excluded from all operations.
 
-The real suite covers all three create ciphers, Unicode and padded secrets, POSIX operations, zstd-compressed extents, duplicate/busy/overwrite guards, automatic and explicit types, readonly crypto and filesystem writes, source aliases, standard cryptsetup header compatibility without mapping, exFAT/FAT/ext4 interoperability, injected formatter failures, stale mount identities, partial-unmount recovery when helpers are unavailable, and recovery after killing the filesystem driver.
+The real suite covers all three create ciphers, Unicode and padded secrets, POSIX operations, zstd-compressed extents, duplicate/busy/overwrite guards, automatic and explicit types, source aliases, standard cryptsetup header compatibility without mapping, exFAT/FAT/ext4 interoperability, injected formatter failures, stale mount identities, partial-unmount recovery when helpers are unavailable, and recovery after killing the filesystem driver.
 
 Optional NTFS/XFS interoperability coverage uses locally available formatters, without installing packages:
 

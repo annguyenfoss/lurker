@@ -47,13 +47,13 @@ The frontend runner creates its own independent temporary files and uses a pseud
 | Suite | Scenarios |
 | --- | --- |
 | Create matrix | LUKS2 and normal VeraCrypt; AES, Serpent, Twofish; file and loop-backed block sources: 12 combinations; file length and permissions; header cipher/KDF inspection; direct native VeraCrypt interoperability |
-| Lifecycle in every matrix case | Explicit and automatic type selection; wrong type and wrong password; write/remount/read persistence; Btrfs zstd compression; readonly mapper flag and rejected writes; busy unmount; duplicate mount; force-create protection; source, mountpoint and mapper unmount; source symlinks; LUKS tags; VeraCrypt tag rejection; no leftover temporary file |
+| Lifecycle in every matrix case | Explicit and automatic type selection; wrong type and wrong password; write/remount/read persistence; Btrfs zstd compression; busy unmount; duplicate mount; force-create protection; source, mountpoint and mapper unmount; source symlinks; LUKS tags; VeraCrypt tag rejection; no leftover temporary file |
 | Failure recovery | Injected mkfs and mount failures; preservation of an existing destination; mapper cleanup; missing VeraCrypt and blkid; filesystem detection through lsblk; random invalid sources; failed lsblk inspection; mounted raw-device protection |
-| External volumes | LUKS1 and SHA-256 VeraCrypt headers created outside Lurker; ext4 mounts without Btrfs options; persistence and readonly; opened but unmounted mapper recovery; missing paths; no passphrase/TTY; invalid size/type/passphrase; symlink create rejection |
+| External volumes | LUKS1 and SHA-256 VeraCrypt headers created outside Lurker; ext4 mounts without Btrfs options; writable persistence; opened but unmounted mapper recovery; missing paths; no passphrase/TTY; invalid size/type/passphrase; symlink create rejection |
 | Holders | Refuse destructive create on a device with an active unmounted holder; leave unsupported mapper types open |
-| Partitions | Fresh GPT disk/partition; both formats; create/mount/persistence/readonly/unmount; parent disk protected while a child has an active holder |
-| Portable hosts | LUKS file on FAT and VeraCrypt file on exFAT; atomic no-clobber creation and forced replacement; persistence and readonly; secure host permission masks |
-| Frontends | Actual CLI create password/confirmation/open prompts, bare relative filenames, automatic mount, readonly and unmount; helper JSON success, wrong password, missing password and malformed JSON; secrets absent from terminal output/helper logs |
+| Partitions | Fresh GPT disk/partition; both formats; create/mount/writable persistence/unmount; parent disk protected while a child has an active holder |
+| Portable hosts | LUKS file on FAT and VeraCrypt file on exFAT; atomic no-clobber creation and forced replacement; writable persistence; secure host permission masks |
+| Frontends | Actual CLI create password/confirmation/open prompts, bare relative filenames, automatic mount and unmount; helper JSON success, wrong password, missing password and malformed JSON; secrets absent from terminal output/helper logs |
 | Desktop | Live release event loop on isolated Wayland and X11/Xwayland; form-to-command conversions; exact passphrase whitespace preservation; confirmation mismatch; password/keyfile exclusivity and LUKS credential forms; software rendering of create/mount/manage views for both formats at 100%, 125% and 150%; text zoom regression |
 
 ## Findings fixed

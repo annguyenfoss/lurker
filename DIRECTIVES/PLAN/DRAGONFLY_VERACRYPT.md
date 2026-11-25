@@ -55,10 +55,10 @@ current project test baseline.
    mappings through the trusted native interface. Keep passwords, keyfile bytes, and
    volume keys out of arguments, environment, session journals, command output, and
    logs.
-4. Prove read-only at the mapper and at the filesystem independently, including rejected
-   writes and an unchanged ciphertext digest. If the native interface cannot enforce
-   both, reject read-only before attachment and report the limitation explicitly. Verify
-   that unsupported KDFs, unsupported ciphers and wrong credentials leave the source
+4. Provide one mount/unmount action with writable access where the filesystem and
+   driver support it, without a user-selectable RO/RW mode. Reader-only access or
+   unavailable creation is degraded capability, not a completed writable workflow.
+   Verify that unsupported KDFs, unsupported ciphers and wrong credentials leave the source
    unchanged. Where the engine cannot distinguish an incompatible encrypted header from
    a wrong credential, present both possibilities in the diagnostic.
 
@@ -123,13 +123,13 @@ applicable skipped cases.
 | --- | --- |
 | Core lifecycle | Run all six cipher and credential pairs through the installed CLI with explicit and Auto open. Write the [standard mounted payload](../../scripts/test-mounted-payload.py), close and reopen, append, then reopen and check all five expected hashes. Exercise close by source and mountpoint, repeated cycles, wrong and missing credentials, binary keyfiles with NUL and newline bytes, and UTF-8 passwords at the 64-byte boundary. Verify the 65-byte case fails before attachment and the correct credential still opens the same image. |
 | Cross-platform exchange | Use the same qualified FAT filesystem in both directions. For Linux, FreeBSD, OpenBSD, and macOS, create with VeraCrypt, open in Lurker on DragonFly, write a marker, and reopen in the creator to verify it. Create with the installed Lurker package and repeat the exchange in reverse. Cover all three ciphers on DragonFly and Linux and at least AES on each additional OS. Use Windows when a native test environment is available, otherwise record Windows as unverified. Keep upstream and Lurker console builds identified in the receipts. |
-| Unsupported imports and read-only | Test Argon2id, BLAKE2s, Camellia, changed PBKDF2 iteration counts and an 80-byte VeraCrypt password as incompatible fixtures. Test a compatible header with an unqualified inner filesystem separately. Confirm an actionable error, unchanged ciphertext and no resources left behind. For read-only, test rejected writes at both layers and unchanged ciphertext, or explicit early refusal when that mode is unavailable. |
+| Unsupported imports | Test Argon2id, BLAKE2s, Camellia, changed PBKDF2 iteration counts and an 80-byte VeraCrypt password as incompatible fixtures. Test a compatible header with an unqualified inner filesystem separately. Confirm an actionable error, unchanged ciphertext and no resources left behind. |
 | Ownership, busy close and concurrency | Exercise concurrent independent vaults, duplicate open, symlink and hardlink aliases, source replacement, stale name or vnode reuse, and a foreign mapper present. Hold an open file or working directory across a close attempt and verify it fails without detaching. Release it and retry normally. Compare inventories and unrelated image digests before and after. |
 | Application behavior and capacity | Use the [backend conformance harness](../../scripts/test-backends.py) on HAMMER2 to verify directory and file renames, fsync, and SQLite WAL with `synchronous=FULL`, including exact committed rows and `integrity_check` after reopen. Exercise FAT32's synced file lifecycle and file-size boundary. Exhaust inner and outer space independently with isolated fixtures. Require a visible write or sync failure when appropriate and preservation of previously committed bytes after space is freed. |
 | Interruption and recovery | Interrupt after staging, vnode attach, mapper activation, format, mount, unmount, and mapper removal. Exercise both an orderly cancellation and abrupt exit where applicable. Dismount the filesystem with the native command and verify that Lurker can close and reopen its journaled mapper and vnode. Verify atomic publication and existing-destination preservation, correct ownership, retryable journals, safe close of verified resources, and refusal to detach a reused device. Run the DragonFly LUKS1 regression suite after changes to shared discovery or recovery. |
 | Ordinary reboot | Leave qualified test vaults mounted on a dedicated KVM guest, record boot and mount identities, and perform an ordinary reboot. Reopen through the installed product and verify payload hashes and committed rows. Record any manual reconciliation or filesystem repair separately. A busy or interrupted shutdown gets its own case. |
 | Abrupt power loss | Follow the [power-loss runbook](../../docs/vm-powerloss-testing.md). Use a disposable clone with a previously published vault and cut power after the host observes acknowledged file and directory fsync and a SQLite FULL/WAL commit. Check sparse and fully allocated images on representative HAMMER2 and UFS backing stores. Retain the cut disk and test a hash-verified copy. Compare with stock `tcplay` using the same workload and filesystem, and record read-only recovery, writable reopen, repair and missing bytes separately. Judge normal application durability from the ordinary workload and use extra flushes only to diagnose failures. |
-| Installed package and desktop | Install the exact candidate on a clean DragonFly guest and confirm offline operation, trusted wrapper and library resolution, accurate package requirements, and unrelated backends still working. Run the packaged Slint desktop and actual login-user helper callback through create, open, list, write, close and reopen. Check credentials, busy-close feedback, read-only availability, uninstall behavior, and clean inventories. |
+| Installed package and desktop | Install the exact candidate on a clean DragonFly guest and confirm offline operation, trusted wrapper and library resolution, accurate package requirements, and unrelated backends still working. Run the packaged Slint desktop and actual login-user helper callback through create, open, list, write, close and reopen. Check credentials, busy-close feedback, uninstall behavior, and clean inventories. |
 
 Reconcile every result before promotion. A write or sync acknowledged before a
 controlled cut and later lost is a failed durability check. DragonFly's LUKS1 power-loss
@@ -143,7 +143,7 @@ reproducer in [cross-platform status](CROSS_PLATFORMS_STATUS.md).
 1. Keep the README entry planned until the native package passes the required gates.
    Once qualified, update the DragonFly VeraCrypt cell and its short footnote in
    `README.md`. Identify the supported file-container profile, inner filesystem, 64-byte
-   password limit, import limits, read-only behavior, and any verified reliability
+   password limit, import limits, filesystem/driver access limits, and any verified reliability
    limitation that applies to the shipped route. Preserve the single OS dependency
    table. List only actual installable dependencies and built-in binaries, and represent
    the engine as bundled if Lurker ships the private wrapper.

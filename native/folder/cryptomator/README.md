@@ -2,7 +2,7 @@
 
 This independently licensed helper uses Cryptomator CryptoFS 2.8.0 and FUSE-NIO
 5.1.0. It implements protocol 1: `init EXISTING_EMPTY_DIRECTORY`,
-`mount VAULT MOUNTPOINT [--readonly]`, `--version`, and `--capabilities`.
+`mount VAULT MOUNTPOINT`, `--version`, and `--capabilities`.
 Initialization and mount consume one nonempty UTF-8 password line on stdin.
 There is no password argument/environment option, WebDAV fallback, or runtime
 download. The process stays in the foreground after mounting. Lurker must verify
@@ -19,8 +19,8 @@ https://github.com/cryptomator/fuse-nio-adapter/blob/5.1.0/CHANGELOG.md
 The format profile is Cryptomator vault format 8, SIV-GCM (AES-SIV filenames,
 AES-GCM contents), upstream scrypt masterkey protection, standard
 `vault.cryptomator`/`masterkey.cryptomator` filenames, no implicit migration.
-Read-only applies to CryptoFS and the FUSE mount. Password storage is erased after
-unlock where the Java API permits; this does not promise that the JVM has no
+The product exposes one mount/unmount action, with writable access and no RO/RW
+selector. Password storage is erased after unlock where the Java API permits; this does not promise that the JVM has no
 temporary copies. Plaintext is accessible to processes running as the user while
 mounted.
 

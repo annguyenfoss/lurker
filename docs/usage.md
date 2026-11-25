@@ -22,9 +22,14 @@ lurker/
 ```text
 lurker create [--type TYPE] [--cipher CIPHER] <file> <size-gb> [-F|--force]
 lurker create [--type TYPE] [--cipher CIPHER] <block-device> [-F|--force]
-lurker mount [--type TYPE] [--readonly] [-t TAG] <source> <mountpoint>
+lurker mount [--type TYPE] [-t TAG] <source> <mountpoint>
 lurker unmount [--type TYPE] [-t TAG] <target>
 ```
+
+Mount and unmount are single actions, with no RO/RW selector or `--readonly`
+option. Mount uses writable access where the filesystem and driver support it.
+Reader-only access or unavailable creation is a degraded capability, not a
+completed create-and-write workflow.
 
 File-container creation also accepts `--filesystem NAME`. Names are `ext4`,
 `btrfs`, `xfs`, `apfs`, `ufs1`, `ufs2`, `hammer2`, `ntfs`, `exfat`, and `zfs`;
@@ -195,7 +200,7 @@ The CLI exposes the same route:
 ./target/release/lurker unmount --unprivileged ~/Lurker-mount
 ```
 
-Mount points must be empty. A missing final directory is created when its parent exists. New containers belong to your user. Existing containers preserve their permissions. Read-only mounts protect both the encryption and filesystem layers. Standard user FUSE support, including access to `/dev/fuse` and the installed `fusermount3` helper, is required; that system helper performs the restricted FUSE mount without prompting for administrator credentials.
+Mount points must be empty. A missing final directory is created when its parent exists. New containers belong to your user. Existing containers preserve their permissions. Standard user FUSE support, including access to `/dev/fuse` and the installed `fusermount3` helper, is required; that system helper performs the restricted FUSE mount without prompting for administrator credentials.
 
 Native userspace components require transport protocol 4. It keeps an exclusive
 source-inode lock to prevent duplicate kernel/userspace attachment and forwards
@@ -285,8 +290,7 @@ FAT32 allows files up to 4 GiB minus one byte. Its ownership and permissions
 come from each mount and apply to the invoking user. On DragonFly 6.4.2, use
 portable ASCII filenames. Native FAT32 rejects directory `fsync` and lacks the
 locking SQLite needs. On DragonFly 6.4.2, abrupt power loss can lose writes
-after `fsync` reports success on either filesystem. DragonFly VeraCrypt
-rejects `--readonly` before attaching the container.
+after `fsync` reports success on either filesystem. The DragonFly 6.4.2 native mapper cannot enforce a read-only mapping.
 
 When a sparse HAMMER2 container's backing UFS runs out of space, writes can
 still report success and close can stall. Free space on the filesystem that
@@ -354,7 +358,7 @@ lurker unmount "$HOME/vault-mount"
 
 macOS create supports regular files only (minimum 32 MiB). Mount points must be empty; the final directory is created by the native tool if it is missing and its parent exists. It refuses physical disks, partitions, symlink targets, and overwriting an attached container. `--force` can replace an existing unmounted regular file only after creation succeeds. Apple images accept only `--cipher aes`, which selects AES-256. Passphrases are passed through stdin, never command arguments; spaces are preserved and embedded NUL/newline characters are rejected.
 
-The desktop offers Apple Encryption and VeraCrypt on macOS, uses the same create/mount/unmount flows, and supports read-only mounts. Its active list includes the current user's encrypted Apple disk images and VeraCrypt volumes, including containers mounted outside Lurker. Unmount accepts the container file, mountpoint, or its virtual device and detaches that one container. Tags remain Linux LUKS-only.
+The desktop offers Apple Encryption and VeraCrypt on macOS, uses the same create/mount/unmount flows with no RO/RW selector. Its active list includes the current user's encrypted Apple disk images and VeraCrypt volumes, including containers mounted outside Lurker. Unmount accepts the container file, mountpoint, or its virtual device and detaches that one container. Tags remain Linux LUKS-only.
 
 Existing Linux LUKS containers require Linux. Existing Linux VeraCrypt containers created by Lurker contain Btrfs, which macOS cannot mount natively. New macOS VeraCrypt containers use exFAT; Linux can read them with VeraCrypt. Apple disk images require macOS.
 
@@ -375,7 +379,6 @@ VeraCrypt command reference: https://veracrypt.io/en/Command%20Line%20Usage%20fo
 - VeraCrypt create supports the same three single-cipher choices and keeps `SHA-512` fixed. Device creation uses the full device size detected by VeraCrypt, with quick format.
 - On Linux, `mount` recognizes LUKS metadata first; other sources are authenticated as VeraCrypt when opening. Encrypted VeraCrypt headers cannot be identified without the unlock credential. `unmount` reads the active mapper type. Use `--type` to pin the format.
 - Privileged Linux VeraCrypt mounts use `cryptsetup --type tcrypt --veracrypt`, with the same `lurker_*` mapper naming, active-volume listing, filesystem handling, and cleanup as LUKS. Unprivileged mode uses the file-only userspace helpers.
-- `mount --readonly` opens the mapper and mounts the filesystem read-only. The desktop readonly checkbox does the same.
 - VeraCrypt supports normal volumes with either a password or one keyfile, using the default PIM. Password and keyfile together are deliberately unsupported. Hidden-volume controls and custom PIM are not exposed.
 - Supplied passwords cannot be empty or contain NUL or line breaks. Leading/trailing spaces and Unicode are preserved. VeraCrypt keyfile-only authentication uses an empty native password internally.
 - `-t TAG` is supported for LUKS source-path mount/unmount.
@@ -424,11 +427,11 @@ cargo test --workspace --locked
 cargo test -p lurker-core --test keyslots_native -- --ignored --test-threads=1
 cargo build -p lurker-cli -p lurker-helper
 python scripts/test-credentials.py target/debug
-# Linux: keyfile create/mount/readonly matrix using disposable loops and files
+# Linux: keyfile create/mount/persistence matrix using disposable loops and files
 ./scripts/test-linux-core.sh keyfile_round_trips
 # Linux: run as your normal user after building the userspace helpers
 ./scripts/test-linux-userspace.sh
-# macOS: native create/mount/read-only/remount/error tests using disposable files
+# macOS: native create/mount/remount/error tests using disposable files
 cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 cargo test -p lurker-helper --test macos_native -- --include-ignored --test-threads=1
 cargo build -p lurker-cli

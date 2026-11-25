@@ -112,7 +112,12 @@ Build dependencies may include C/C++, Go, a JDK, platform SDKs, wxWidgets base a
 | PEFS | Wrap utility with a matching kernel-module package | Kernel/OS version compatibility; qualify directory and optional login integration |
 | DragonFly LUKS1 | Wrap the OS's native cryptsetup implementation after qualification | Verify actual version, local patches, profiles, file attachment and filesystem behavior; no copied Linux binary |
 
-The implementation must not assume every backend supports password changes, keyfiles, keyslots, tags, every cipher family, read-only mode or the same filesystems. Advertise only the operations demonstrated for that backend/OS combination. Never pass Linux LUKS2/Argon2id options to LUKS1 or map LUKS/VeraCrypt profiles onto folder formats.
+The implementation must not assume every backend supports password changes, keyfiles, keyslots, tags, every cipher family or the same filesystems. Advertise only the operations demonstrated for that backend/OS combination. Never pass Linux LUKS2/Argon2id options to LUKS1 or map LUKS/VeraCrypt profiles onto folder formats.
+
+Expose one mount/unmount action, without a user-selectable RO/RW mode. The goal
+is creation and writable use. Mount uses writable access where the filesystem
+and driver support it; reader-only access or unavailable creation is degraded
+capability and does not complete that goal.
 
 Keep upstream formats interoperable. Do not invent Lurker-specific cryptography, modify format primitives, or make another implementation unable to open the storage merely to simplify integration. Retain normal-volume VeraCrypt AES/Serpent/Twofish, SHA-512, PIM 0 and password-or-keyfile policy.
 
@@ -174,7 +179,7 @@ Keep existing Linux pkexec/TTY-sudo behavior while developing platform-specific 
 
 Generalize the existing session model without weakening its checks: source identity, owner uid, mount identity, backing device identity, backend version, process identity/start time and current lifecycle stage. Persist only non-secret metadata atomically in a private per-user directory. Lock against duplicate opens and cross-mode attachment.
 
-For layered storage, drain/unmount the application filesystem before closing the decrypted image or detaching the backing device. Apply read-only at every applicable layer. Preserve busy or partially failed sessions for a safe retry; no routine forced/lazy unmount and no blanket process killing. Track resources acquired by this operation so cleanup cannot close an unrelated pre-existing mount.
+For layered storage, drain/unmount the application filesystem before closing the decrypted image or detaching the backing device. Use one mount/unmount action without a user-selectable access mode. Prefer writable access where the filesystem and driver support it. If the available driver is reader-only, preserve that restriction at every applicable layer and report the capability as degraded; it does not satisfy the create-and-write goal. Preserve busy or partially failed sessions for a safe retry; no routine forced/lazy unmount and no blanket process killing. Track resources acquired by this operation so cleanup cannot close an unrelated pre-existing mount.
 
 Retain existing same-directory staged file creation, private permissions and atomic publication. Directory backends need equivalent failure handling for their configuration/data directories; do not overwrite a partially initialized or existing vault blindly. Never publish a create as successful before its storage is durably initialized and closed.
 
@@ -216,7 +221,7 @@ Exit: a clean Mac with the qualified FUSE runtime, no VeraCrypt.app and no devel
 
 1. Integrate gocryptfs first through its documented CLI ABI. Use the supported Go-only build on Linux where appropriate; qualify native macOS/FreeBSD builds separately instead of assuming Linux static-build settings apply everywhere.
 2. Integrate CryFS stable 1.x with a pinned C++/CMake/Conan build and private dependency closure. Test filesystem semantics and known crash/full-storage behavior before recommending it for live application data.
-3. Implement a shared folder-vault lifecycle: create, unlock, active discovery, read-only where supported, busy-safe close and recovery after frontend exit.
+3. Implement a shared folder-vault lifecycle: create, unlock, writable access, active discovery, busy-safe close and recovery after frontend exit.
 4. Expose format-specific capabilities and failures through the existing CLI/helper/desktop flow. Do not pass generic `--cipher` options to a format that does not implement them.
 
 Exit: each released OS/backend pair works without separately installed gocryptfs/CryFS, using only its documented host FUSE prerequisites. Application-file semantics, mount recovery and clean shutdown pass. macOS beta/FreeBSD basic status remains visible in release qualification until evidence supports stronger claims.
@@ -324,7 +329,7 @@ Run Rust checks for implementation changes: `cargo check --workspace`, `cargo te
 For every backend/OS pair that will be advertised:
 
 - Test the **packaged artifact** in a clean VM or native test machine. Remove/uninstall separate VeraCrypt for its tests; exclude other separately installed bundled backends and language runtimes. Use execution/dependency inspection as well as PATH manipulation.
-- Exercise create, unlock, write, fsync, close, reopen, incorrect credentials, supported keyfiles, Unicode/spaces, read-only, duplicate/aliased sources, existing destination protection and frontend restart.
+- Exercise create, unlock, write, fsync, close, reopen, incorrect credentials, supported keyfiles, Unicode/spaces, duplicate/aliased sources, existing destination protection and frontend restart.
 - Exercise open files, busy directories, mount replacement, stale session records, PID reuse protection, cancellation, lost frontend/helper and backend exit. Cleanup must touch only resources owned by the identified session.
 - Test SQLite WAL/locking, atomic rename, truncation, permissions and relevant application profiles. Include browser-profile workloads; a simple text-file test is insufficient. Verify unsupported concurrent writers are rejected or explicitly documented.
 - Test full storage, interrupted create, SIGKILL of individual backend layers and abrupt VM shutdown using dedicated disposable storage. Verify readable data that was durably committed, characterize incomplete writes and retain recovery metadata. Do not promise immunity to corruption or run filesystem repairs on user data automatically.

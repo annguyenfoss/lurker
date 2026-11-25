@@ -2,8 +2,9 @@
 
 The CLI can create and mount VeraCrypt file containers with `--filesystem ext4`
 or `--filesystem xfs` when the optional private tools below are staged beside the
-CLI or helper. Native NTFS and ZFS create/RW routes and UFS2 read-only imports
-are also available with the prerequisites below. Existing Apple, APFS and exFAT
+CLI or helper. Native NTFS and ZFS create/RW routes are also available with the
+prerequisites below. UFS2 remains reader-only and cannot satisfy Create + Read/Write.
+Existing Apple, APFS and exFAT
 defaults are unchanged. These are source-built development tools; current release
 packages do not bundle them.
 The native receipts are in
@@ -18,7 +19,7 @@ SMB; ext4 uses FUSE-T NFS. Neither route requires enabling an FSKit module or
 running a private executable as root.
 
 Create requires at least 384 MiB. Alternate Apple-image filesystem creation
-remains unavailable. NTFS read-only imports keep the native route.
+remains unavailable. There is one mount/unmount workflow without an access-mode selector.
 Only AES/password PDF/text persistence was exercised for these new
 routes; no desktop, physical-device, reboot, SQLite, recovery or metadata-parity
 qualification is implied.
@@ -30,9 +31,9 @@ They add inner-filesystem support without changing encryption profiles.
 
 | Filesystem | Creation | Mounted access | Additional free prerequisites |
 |---|---|---|---|
-| NTFS | `--filesystem ntfs`; login-user `mkntfs` formats the identified hdiutil device | Read/write through TT NTFS Native FSKit; read-only imports can use Apple's native driver | Homebrew `gromgit/fuse/ntfs-3g-mac` and enabled TT NTFS Native extension |
-| ZFS | `--filesystem zfs`; native `zpool` creates one pool on the identified hdiutil device | Read/write or read-only native OpenZFS | Matching OpenZFSonOsX package, approved kernel extension and administrator authorization |
-| UFS2 | Not offered | Read-only imports with `--readonly`; writable requests are rejected | Private patched `fuse-ufs` reader and separately installed, approved macFUSE kernel extension |
+| NTFS | `--filesystem ntfs`; login-user `mkntfs` formats the identified hdiutil device | Read/write through TT NTFS Native FSKit; Apple's reader alone is insufficient | Homebrew `gromgit/fuse/ntfs-3g-mac` and enabled TT NTFS Native extension |
+| ZFS | `--filesystem zfs`; native `zpool` creates one pool on the identified hdiutil device | Read/write native OpenZFS | Matching OpenZFSonOsX package, approved kernel extension and administrator authorization |
+| UFS2 | Unavailable | Cannot write; reader control is diagnostic evidence, not a completed Create + Read/Write workflow | Private patched `fuse-ufs` reader and separately installed, approved macFUSE kernel extension |
 
 NTFS formatting and mounting run as the login user. ZFS elevates only trusted,
 administrator-owned installed system/OpenZFS tools through `sudo -n`; it requires

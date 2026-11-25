@@ -80,9 +80,8 @@ on the designated BSD guests.
 `scripts/test-bsd-veracrypt.py --backend /absolute/path/lurker-veracrypt-bsd`
 is an opt-in **engine-only** qualification suite for the designated guests.
 It runs as root, creates unique `/tmp` files, exercises AES/Serpent/Twofish,
-native filesystem writes and fsync/reopen, incorrect credentials and FreeBSD
-read-only mappings. OpenBSD read-only attachment is explicitly unsupported by
-this upstream adapter. Failures preserve owned resources and concise evidence;
+native filesystem writes and fsync/reopen, and incorrect credentials. OpenBSD
+read-only attachment is explicitly unsupported by this upstream adapter. Failures preserve owned resources and concise evidence;
 the script never force-detaches them. Lurker CLI conformance remains a separate
 gate; engine tests cannot substitute for it.
 

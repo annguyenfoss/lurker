@@ -1,5 +1,9 @@
 # Optional macOS UFS2 reader build
 
+This reader-only component is diagnostic and degraded capability. It does not
+achieve Lurker's goal of creating and using writable storage, and it adds no
+user-selectable RO/RW mode.
+
 Upstream: https://github.com/realchonk/fuse-ufs
 
 The tested source is `ee5c4a447da98220a11edb69a225d51379afc4fb` (0.6.0,
@@ -32,7 +36,8 @@ Review the lockfile change: only fuser's source identity should change. Add
 `/usr/local/lib/libfuse3.4.dylib`. On Buran with macFUSE 5.5.0, the patched reader
 mounted a populated disposable UFS2 image read-only, returned its expected
 payload hash, and exited successfully after ordinary `diskutil unmount`.
-Lurker's separate CLI import test covers the encrypted-container lifecycle.
+The historical CLI import test covered the encrypted-container reader lifecycle;
+it did not establish UFS2 creation or writable support.
 
 macFUSE is an optional filesystem-driver prerequisite, installed separately.
 The existing VeraCrypt encryption transport continues to use FUSE-T.
