@@ -139,6 +139,12 @@ Installation/build logs remain on Buran under
 any additional achieved filesystem pair. macFUSE is not a filesystem driver by
 itself, and this attempt does not change Lurker's approved FUSE-T runtime policy.
 
+Subsequently, at the user's request, `brew uninstall --cask macfuse` completed
+successfully on Buran. Verification found no macFUSE cask, package receipts or
+`/Library/Filesystems/macfuse.fs` bundle. FUSE-T 1.2.9 core/FSKit receipts and
+`/usr/local/lib/libfuse-t.dylib` remain present. No boot security setting was
+changed and no reboot was performed.
+
 License and pricing sources checked directly:
 
 - https://apps.apple.com/us/app/polydrive-disk-ntfs-linux/id6815775853?mt=12
