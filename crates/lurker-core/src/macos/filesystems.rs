@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 enum Kind {
+    Btrfs,
     Ext4,
     Xfs,
     Ntfs,
@@ -21,6 +22,7 @@ enum Kind {
 impl Kind {
     fn name(self) -> &'static str {
         match self {
+            Self::Btrfs => "btrfs",
             Self::Ext4 => "ext4",
             Self::Xfs => "xfs",
             Self::Ntfs => "ntfs",
@@ -30,6 +32,7 @@ impl Kind {
     }
     fn driver(self) -> &'static str {
         match self {
+            Self::Btrfs => "anylinuxfs",
             Self::Ext4 => "fuse-ext2",
             Self::Xfs => "fuse-xfs",
             Self::Ntfs => "ttntfs",
@@ -39,6 +42,7 @@ impl Kind {
     }
     fn formatter(self) -> &'static str {
         match self {
+            Self::Btrfs => unreachable!("Btrfs is formatted in its Linux guest"),
             Self::Ext4 => "mkfs.ext4",
             Self::Xfs => "mkfs.xfs",
             Self::Ntfs => "mkntfs",
@@ -49,6 +53,7 @@ impl Kind {
 }
 fn requested(filesystem: Option<CreateFilesystem>) -> Option<Kind> {
     match filesystem {
+        Some(CreateFilesystem::Btrfs) => Some(Kind::Btrfs),
         Some(CreateFilesystem::Ext4) => Some(Kind::Ext4),
         Some(CreateFilesystem::Xfs) => Some(Kind::Xfs),
         Some(CreateFilesystem::Ntfs) => Some(Kind::Ntfs),
@@ -112,10 +117,12 @@ pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<
             "External macOS filesystem containers must be created as the login user.",
         ));
     }
-    if !matches!(kind, Kind::Ntfs | Kind::Zfs) {
+    if !matches!(kind, Kind::Btrfs | Kind::Ntfs | Kind::Zfs) {
         tool(kind.driver())?;
     }
-    if kind == Kind::Zfs {
+    if kind == Kind::Btrfs {
+        vm_filesystem::available()?;
+    } else if kind == Kind::Zfs {
         zfs::available()?;
     } else {
         formatter(kind)?;
@@ -152,17 +159,26 @@ fn detect(bytes: &[u8]) -> Option<Kind> {
 fn image_kind(image: &Path) -> Option<Kind> {
     read_image_kind(&mut File::open(image).ok()?)
 }
+fn opened_image_kind(image: &OpenImage) -> Option<Kind> {
+    image_kind(&image.path).or_else(|| read_image_kind(&mut File::open(&image.device).ok()?))
+}
 fn read_image_kind(image: &mut (impl Read + Seek)) -> Option<Kind> {
     let mut bytes = [0; 4096];
     image.read_exact(&mut bytes).ok()?;
     if let Some(kind) = detect(&bytes) {
         return Some(kind);
     }
+    // Btrfs's primary superblock starts at 64 KiB; its magic is at +64.
+    // Read aligned sectors so the same probe works on native virtual devices.
+    image.seek(SeekFrom::Start(65536)).ok()?;
+    let mut superblock = [0; 2048];
+    image.read_exact(&mut superblock).ok()?;
+    if &superblock[64..72] == b"_BHRfS_M" {
+        return Some(Kind::Btrfs);
+    }
     // FreeBSD UFS2's primary superblock starts at 64 KiB. The magic is
     // 1372 bytes into it; the reader supports both filesystem byte orders.
-    image.seek(SeekFrom::Start(65536 + 1372)).ok()?;
-    let mut magic = [0; 4];
-    image.read_exact(&mut magic).ok()?;
+    let magic: [u8; 4] = superblock[1372..1376].try_into().ok()?;
     matches!(magic, [0x19, 0x01, 0x54, 0x19] | [0x19, 0x54, 0x01, 0x19]).then_some(Kind::Ufs2)
 }
 fn close_crypto(source: &Path) -> AppResult<()> {
@@ -291,12 +307,16 @@ pub(super) fn format(
     let Some(kind) = requested(filesystem) else {
         return Ok(());
     };
+    if kind == Kind::Btrfs {
+        return format_btrfs(source, pass, keyfile);
+    }
     if kind == Kind::Zfs {
         return format_zfs(source, pass, keyfile);
     }
     let opened = open_image(source, pass, false, keyfile, kind != Kind::Ntfs)?;
     let image = &opened.path;
     let arguments = match kind {
+        Kind::Btrfs => unreachable!("Btrfs uses its Linux guest"),
         Kind::Ext4 => vec![
             "-F".into(),
             "-E".into(),
@@ -341,6 +361,10 @@ struct Session {
     native_device: Option<PathBuf>,
     #[serde(default)]
     zfs_pool: Option<zfs::PoolIdentity>,
+    #[serde(default)]
+    vm_protocol: Option<u32>,
+    #[serde(default)]
+    vm_closed: bool,
 }
 struct Registry {
     path: PathBuf,
@@ -761,6 +785,70 @@ fn format_zfs(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult<(
     fs::remove_dir(&target).map_err(|error| AppError::io("Remove ZFS initialization mount", error))
 }
 
+fn format_btrfs(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult<()> {
+    let registry = Registry::lock()?;
+    let target = source
+        .parent()
+        .ok_or_else(|| AppError::new("Missing Btrfs staging directory."))?
+        .join("btrfs-initialize");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&target)
+        .map_err(|error| AppError::io("Create private Btrfs initialization directory", error))?;
+    let image = open_image(source, pass, false, keyfile, false)?;
+    let (path, mut session) = reserve_session(
+        &registry,
+        source,
+        &target,
+        &image.path,
+        Kind::Btrfs,
+        false,
+        Some(image.device.clone()),
+    )?;
+    vm_filesystem::format(
+        &path,
+        &image.path,
+        &image.device,
+        crate::effective_uid(),
+        unsafe { libc::getegid() },
+    )?;
+    close_session(&path, &mut session)?;
+    fs::remove_dir(&target)
+        .map_err(|error| AppError::io("Remove Btrfs initialization directory", error))
+}
+
+fn start_btrfs(
+    registry: &Registry,
+    source: &Path,
+    mountpoint: &Path,
+    image: &OpenImage,
+    readonly: bool,
+) -> AppResult<bool> {
+    vm_filesystem::available()?;
+    let (path, mut session) = reserve_session(
+        registry,
+        source,
+        mountpoint,
+        &image.path,
+        Kind::Btrfs,
+        readonly,
+        Some(image.device.clone()),
+    )?;
+    session.pid = vm_filesystem::start(&path, &image.path, &image.device, mountpoint, readonly)?;
+    session.process_start = process_start(session.pid)?.ok_or_else(|| {
+        AppError::new("Btrfs VM supervisor exited; preserving its recovery journal.")
+    })?;
+    vm_filesystem::verify_mount(&path, mountpoint, readonly)?;
+    session.mount_identity = mount_identity(mountpoint)?;
+    session.mount_dev = Some(
+        fs::metadata(mountpoint)
+            .map_err(|error| AppError::io("Inspect Btrfs host mount", error))?
+            .dev(),
+    );
+    save(&path, &session)?;
+    Ok(true)
+}
+
 fn start_native_zfs(
     registry: &Registry,
     source: &Path,
@@ -794,6 +882,60 @@ fn start_native_zfs(
 
 fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
     validate_image(session)?;
+    if session.kind == Kind::Btrfs {
+        if session.vm_protocol != Some(vm_filesystem::PROTOCOL) {
+            return Err(AppError::new(
+                "Unsupported Btrfs VM session protocol; preserving encrypted storage.",
+            ));
+        }
+        if mount_identity(&session.mountpoint)?.is_some() {
+            vm_filesystem::verify_mount(path, &session.mountpoint, session.readonly)?;
+            if session.mount_identity.is_none() {
+                session.mount_identity = mount_identity(&session.mountpoint)?;
+                session.mount_dev = Some(
+                    fs::metadata(&session.mountpoint)
+                        .map_err(|error| AppError::io("Inspect recovered Btrfs mount", error))?
+                        .dev(),
+                );
+                save(path, session)?;
+            }
+            validate_session_mount(session)?;
+            checked(
+                Path::new(DISKUTIL),
+                &["unmount".into(), session.mountpoint.as_os_str().into()],
+                None,
+            )?;
+            if mount_identity(&session.mountpoint)?.is_some() {
+                return Err(AppError::new(
+                    "Btrfs host mount remains; preserving the VM and encrypted storage.",
+                ));
+            }
+        }
+        session.mount_identity = None;
+        session.mount_dev = None;
+        save(path, session)?;
+        if !session.vm_closed {
+            vm_filesystem::request_close(path)?;
+            session.vm_closed = true;
+            save(path, session)?;
+        }
+        validate_image(session)?;
+        if let Some(device) = &session.native_device {
+            checked(
+                Path::new(HDIUTIL),
+                &["detach".into(), device.as_os_str().into()],
+                None,
+            )?;
+            session.native_device = None;
+            save(path, session)?;
+        }
+        File::open(&session.image)
+            .and_then(|image| image.sync_all())
+            .map_err(|error| AppError::io("Sync closed Btrfs crypto image", error))?;
+        close_identified_crypto(&session.source, &session.image)?;
+        return fs::remove_dir_all(path)
+            .map_err(|error| AppError::io("Remove closed Btrfs session", error));
+    }
     if session.kind == Kind::Zfs {
         let device = session.native_device.clone().ok_or_else(|| {
             AppError::new("Missing native ZFS device; preserving the encrypted session.")
@@ -941,6 +1083,8 @@ fn reserve_session(
         mount_dev: None,
         native_device,
         zfs_pool: None,
+        vm_protocol: (kind == Kind::Btrfs).then_some(vm_filesystem::PROTOCOL),
+        vm_closed: false,
     };
     // Publish recovery ownership before starting a process that can mount.
     if let Err(error) = save(&path, &session) {
@@ -956,7 +1100,8 @@ fn start(
     image: &Path,
     readonly: bool,
 ) -> AppResult<bool> {
-    let Some(kind) = image_kind(image).filter(|kind| !matches!(kind, Kind::Ntfs | Kind::Zfs))
+    let Some(kind) =
+        image_kind(image).filter(|kind| !matches!(kind, Kind::Btrfs | Kind::Ntfs | Kind::Zfs))
     else {
         return Ok(false);
     };
@@ -969,6 +1114,7 @@ fn start(
     let (path, mut session) =
         reserve_session(registry, source, mountpoint, image, kind, readonly, None)?;
     let mut a: Vec<OsString> = match kind {
+        Kind::Btrfs => unreachable!("Btrfs uses its supervised Linux guest"),
         Kind::Ext4 => vec![
             image.as_os_str().into(),
             mountpoint.as_os_str().into(),
@@ -1048,6 +1194,7 @@ fn start(
     loop {
         if let Some(identity) = mount_identity(mountpoint)? {
             let expected_transport = match kind {
+                Kind::Btrfs => unreachable!("Btrfs has its own mount lifecycle"),
                 Kind::Xfs => " (smbfs,",
                 Kind::Ext4 => " (nfs,",
                 Kind::Ntfs => unreachable!("native NTFS has its own mount lifecycle"),
@@ -1128,10 +1275,13 @@ pub(super) fn mount_missing(
     }
     let image = open_image(source, pass, readonly, keyfile, false)?;
     let result = (|| {
-        if image_kind(&image.path) == Some(Kind::Ntfs) {
+        let kind = opened_image_kind(&image);
+        if kind == Some(Kind::Ntfs) {
             start_native_ntfs(&registry, source, mountpoint, &image, readonly)
+        } else if kind == Some(Kind::Btrfs) {
+            start_btrfs(&registry, source, mountpoint, &image, readonly)
         } else {
-            if image_kind(&image.path).is_none() && Path::new("/usr/local/zfs/bin/zdb").exists() {
+            if kind.is_none() && Path::new("/usr/local/zfs/bin/zdb").exists() {
                 if let Some((device, pool)) = zfs::resolve_device(&image.device, &image.path)? {
                     let native = OpenImage {
                         path: image.path.clone(),
@@ -1231,18 +1381,33 @@ mod tests {
     }
 
     #[test]
+    fn btrfs_probe_requires_the_primary_superblock_magic() {
+        use std::io::Cursor;
+        const OFFSET: usize = 65536 + 64;
+        let mut image = vec![0; 65536 + 2048];
+        image[OFFSET..OFFSET + 8].copy_from_slice(b"_BHRfS_M");
+        assert_eq!(read_image_kind(&mut Cursor::new(&image)), Some(Kind::Btrfs));
+        assert_eq!(
+            read_image_kind(&mut Cursor::new(&image[..OFFSET + 7])),
+            None
+        );
+        image[OFFSET] = 0;
+        assert_eq!(read_image_kind(&mut Cursor::new(&image)), None);
+    }
+
+    #[test]
     fn ufs2_probe_reads_its_real_superblock_magic_in_both_byte_orders() {
         use std::io::Cursor;
         const OFFSET: usize = 65536 + 1372;
         for magic in [[0x19, 0x01, 0x54, 0x19], [0x19, 0x54, 0x01, 0x19]] {
-            let mut image = vec![0; OFFSET + 4];
-            image[OFFSET..].copy_from_slice(&magic);
+            let mut image = vec![0; 65536 + 2048];
+            image[OFFSET..OFFSET + 4].copy_from_slice(&magic);
             assert_eq!(read_image_kind(&mut Cursor::new(&image)), Some(Kind::Ufs2));
             assert_eq!(
                 read_image_kind(&mut Cursor::new(&image[..OFFSET + 3])),
                 None
             );
-            image[OFFSET..].copy_from_slice(&[0x54, 0x19, 0x01, 0]);
+            image[OFFSET..OFFSET + 4].copy_from_slice(&[0x54, 0x19, 0x01, 0]);
             assert_eq!(read_image_kind(&mut Cursor::new(&image)), None);
         }
         assert_eq!(requested(Some(CreateFilesystem::Ufs2)), None);

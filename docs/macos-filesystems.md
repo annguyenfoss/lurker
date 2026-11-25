@@ -49,6 +49,37 @@ runtime; VeraCrypt continues to use FUSE-T. On Apple silicon, enabling these
 kernel extensions requires the operator's startup-security and extension
 approval steps. The tools remain free of charge.
 
+## Btrfs through a Linux guest
+
+The optional Btrfs route uses a small Linux VM supplied by the free `anylinuxfs`
+package. Lurker opens the encrypted container first and gives the guest only
+the identified file-backed native virtual disk supplied by `hdiutil`. It retains
+the decrypted image's private inode identity throughout the session. Linux formats and mounts Btrfs; the Mac
+accesses its files through key-authenticated SFTP and macFUSE SSHFS. This route
+does not use anylinuxfs's default NFS export. The encryption engine and profiles
+remain unchanged.
+
+Prerequisites on Apple-silicon macOS are Homebrew
+`nohajc/anylinuxfs/anylinuxfs`, its initialized Alpine rootfs with
+`openssh-server` and `openssh-sftp-server`, Homebrew `gromgit/fuse/sshfs-mac`,
+and the approved macFUSE kernel extension. Install or update these separately;
+Lurker does not download a guest or packages while opening storage. The
+supervisor is native Rust within the CLI/helper; no Python runtime is required.
+
+Create selects `--filesystem btrfs`. The adapter supports a single-device raw
+Btrfs filesystem inside a VeraCrypt file container. Partition-table images,
+multi-device Btrfs and direct physical-device input are not qualified by this
+route. One filesystem VM per login user is allowed at a time. Existing ext4/XFS
+routes remain available independently.
+
+Each VM gets fresh SSH keys and a pinned guest host key. Private host state is
+owned by the login user; guest keys and server configuration live in guest
+memory. There is no selectable read-only mode. Normal close unmounts the Mac filesystem first,
+requests a normal guest unmount, waits for the guest-close acknowledgement and
+VM exit, normally detaches that native virtual disk, syncs its decrypted image,
+and only then closes encryption. Busy or incomplete closure retains
+the session for retry.
+
 ## Reproduce the native tool builds
 
 Build as the login user on macOS with FUSE-T 1.2.9, Xcode command-line tools,

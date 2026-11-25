@@ -17,7 +17,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 mod apfs;
 mod filesystems;
+mod vm_filesystem;
 mod zfs;
+
+pub(super) fn run_filesystem_supervisor_if_requested() -> Option<i32> {
+    vm_filesystem::dispatch()
+}
 
 const HDIUTIL: &str = "/usr/bin/hdiutil";
 const DISKUTIL: &str = "/usr/sbin/diskutil";

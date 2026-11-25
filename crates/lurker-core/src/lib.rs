@@ -351,3 +351,15 @@ pub fn run_folder_supervisor_if_requested() -> Option<i32> {
         None
     }
 }
+
+/// Internal frontend entry point for an optional macOS filesystem VM monitor.
+pub fn run_macos_filesystem_supervisor_if_requested() -> Option<i32> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::run_filesystem_supervisor_if_requested()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+}
