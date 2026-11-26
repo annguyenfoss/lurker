@@ -17,6 +17,7 @@ Use the same option names across Lurker wherever the operation supports the cred
 - `--key-file FILE` supplies a shared credential from a file. GnuPG reads the first line as the passphrase. OpenSSL CMS reads the AES key material.
 - `--passphrase` selects interactive passphrase entry. The option takes no value.
 - `--public-key RECIPIENT` selects a public-key recipient for encryption. Repeat it for multiple recipients. Use a local key fingerprint or public-key file for GnuPG, a recipient file for age, and an X.509 certificate file for OpenSSL CMS.
+- `--private-key FILE` selects a private key for decryption where the backend accepts a private-key file. Use an age identity file for age or a matching private-key file for OpenSSL CMS. GnuPG resolves the matching private key through the user's existing GnuPG setup.
 
 ## age
 
