@@ -1,7 +1,7 @@
 # macOS fresh native qualification checkpoint
 
 Status: in progress. These are newly executed observations, not a release pass.
-Buran was not rebooted. The two representative physical USB samples passed;
+Buran was not rebooted. The three representative physical USB samples passed;
 frozen-candidate package validation remains pending. Private evidence is under
 `target/goal-validation/native-fresh-20261127/hosts/macos/`; the corresponding
 remote root is `/tmp/lurker-native-fresh-20261127-macos`.
@@ -191,14 +191,53 @@ proof of CoW. Journaling/replay observations stay separate from format flags.
   cells from product outcome/adapter status and source, driver, provisioning or
   crypto-facility blockers. It will be reconciled to the final package receipts.
 
-## Remaining work
+## Native physical VeraCrypt integration
 
-Assess the remaining native VeraCrypt data-partition route on an identified
-disposable virtual partition before considering another small Toshiba sample.
-Package the final frozen candidate, verify CLI/helper and desktop default
-callbacks, finish workspace checks and the complete applicable matrix, reconcile
-all 130 cells, and inspect owned resource cleanup. Reboot persistence remains
-unexercised on Buran by instruction.
+- `479dee5` adds native VeraCrypt data-partition create/open/close with an
+  administrator-controlled private engine and the existing native authorization
+  service. It binds the selected unmounted writable GPT data partition to its
+  parent, offset, size, UUID, model, transport and hardware serial read through
+  the selected media's IOKit ancestry. Whole/internal/system/reserved devices
+  are rejected. Owned virtual partitions instead bind the exact backing-image
+  inode and native hdiutil association. Physical creation uses exFAT without a
+  file-size operand; foreign file-only filesystem adapters remain excluded.
+- Direct native controls passed on ordinary, root-restricted and native-service
+  virtual partitions. Product virtual-partition controls passed four downloaded
+  payload opens, wrong password, duplicate/busy close, whole-disk, missing-force
+  and foreign-filesystem refusals. The actual Slint callbacks passed through an
+  administrator-controlled helper. The production IOKit reader independently
+  matched the inventoried Toshiba serial.
+- After rechecking the exact Toshiba model, size, transport, serial, existing
+  partition UUIDs and geometry, the round added a separate approximately 1 GiB
+  partition in previously unallocated space. Its native product VeraCrypt
+  create, wrong password and four downloaded-payload opens passed. The original
+  APFS and exFAT directory samples were preserved. All samples closed normally;
+  the new partition's root:operator 0640 node ownership was restored. Receipts
+  and before/after identities are in `device/toshiba-veracrypt/`.
+- Coordinator `3bfed46` adds the corresponding manual partition controls and
+  guarded CLI/helper API filesystem allowance. Actual callbacks and software
+  create/open snapshots at 100% and 120% passed against the executed overlays.
+  Executed and later test-only formatting hashes remain separate in
+  `build/device-executed-frontend-manifest.json` and
+  `build/device-frontend-postformat.json`.
+
+## Frozen package validation in progress
+
+The named final Mac candidate is `3bfed465c77d2b859761dc3fb37ff25d9da80123`;
+other hosts' later working-tree changes are excluded. Native run
+`20261126T231244Z-1c26f1a8` passed workspace check and 144 tests, with no failures
+and 12 ignored optional tests, using Rust 1.100.0 and one build worker. The DMG
+built and passed hdiutil verification. SHA-256:
+`08959e888f994de5adbdd2b045e2c7c0af0d0824241af8e5cec5c679c42b52c8`.
+
+The extracted application passed deep/strict signature verification. Its exact
+240-file administrator-owned qualification copy preserves all packaged bytes;
+its directory/file group and other write bits were removed before privileged
+backend testing, and signatures still verify. The package is ad-hoc signed,
+not notarized. The final package conformance profiles, applicable filesystem
+matrix, installed CLI/helper/desktop callbacks and owned cleanup audit are
+running. All 130 ledger cells will be reconciled to those receipts. Reboot
+persistence remains unexercised on Buran by instruction.
 
 Primary eligibility sources:
 https://github.com/macos-fuse-t/fuse-t
