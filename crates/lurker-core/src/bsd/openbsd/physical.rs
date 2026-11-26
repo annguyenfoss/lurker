@@ -1,7 +1,8 @@
 //! Native whole-disk sources retain disklabel and kernel-device identities.
 use super::{args, exec};
 use crate::{AppError, AppResult};
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 
@@ -181,6 +182,43 @@ pub(in super::super) fn ensure_physical_idle(source: &Path) -> AppResult<()> {
         return Err(AppError::new(
             "OpenBSD physical disk changed during its idle check.",
         ));
+    }
+    Ok(())
+}
+
+/// Initialize the one native RAID chunk used by CRYPTO or mirrored RAID1C.
+/// The shared lifecycle must already require explicit destructive confirmation.
+pub(in super::super) fn prepare_physical(source: &Path) -> AppResult<()> {
+    ensure_physical_idle(source)?;
+    let physical = physical_device(source)?;
+    let unit = disk_unit(&physical.source)?;
+    let mut disk = OpenOptions::new()
+        .write(true)
+        .open(format!("/dev/r{unit}c"))
+        .map_err(|e| AppError::io("Open verified physical softraid disk", e))?;
+    disk.write_all(&vec![0; 1024 * 1024])
+        .map_err(|e| AppError::io("Initialize physical softraid label area", e))?;
+    disk.sync_all()
+        .map_err(|e| AppError::io("Sync physical softraid label area", e))?;
+    drop(disk);
+    exec("/sbin/fdisk", &args(&["-iy", unit]), None)?;
+    exec(
+        "/sbin/disklabel",
+        &args(&["-wAT-", unit]),
+        Some(b"RAID *\n"),
+    )?;
+    if let Some(id) = physical.metadata_id {
+        let input = format!("i\n{id}\nw\nq\n");
+        exec(
+            "/sbin/disklabel",
+            &args(&["-E", unit]),
+            Some(input.as_bytes()),
+        )?;
+        if physical_device(source)?.metadata_id.as_deref() != Some(id.as_str()) {
+            return Err(AppError::new(
+                "Physical disklabel identity changed during softraid initialization.",
+            ));
+        }
     }
     Ok(())
 }

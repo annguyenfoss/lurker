@@ -13,7 +13,7 @@ pub(super) use filesystems::{
     close_filesystem, filesystem_has_posix_ownership, make_selected_filesystem,
     matches_filesystem_mount, mount_filesystem, validate_filesystem,
 };
-pub(super) use physical::{ensure_physical_idle, physical_device};
+pub(super) use physical::{ensure_physical_idle, physical_device, prepare_physical};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::fd::AsRawFd;
@@ -204,42 +204,14 @@ pub(super) fn format(
     // Validate credentials before writing any label.
     let _ = password(credential)?;
     let name = backing_unit(device)?;
-    let original_id = if name.starts_with("sd") {
-        ensure_physical_idle(Path::new(device))?;
-        let physical = physical_device(Path::new(device))?;
-        let mut disk = OpenOptions::new()
-            .write(true)
-            .open(format!("/dev/r{name}c"))
-            .map_err(|e| AppError::io("Open verified physical softraid disk", e))?;
-        disk.write_all(&vec![0; 1024 * 1024])
-            .map_err(|e| AppError::io("Initialize physical softraid label area", e))?;
-        disk.sync_all()
-            .map_err(|e| AppError::io("Sync physical softraid label area", e))?;
-        drop(disk);
-        exec("/sbin/fdisk", &args(&["-iy", name]), None)?;
-        physical.metadata_id
+    if name.starts_with("sd") {
+        prepare_physical(Path::new(device))?;
     } else {
-        None
-    };
-    exec(
-        "/sbin/disklabel",
-        &args(&["-wAT-", name]),
-        Some(b"RAID *\n"),
-    )?;
-    if let Some(id) = original_id {
-        // Destructive layout preparation must preserve an existing durable
-        // backing identity. Fresh blank disks receive their first native DUID.
-        let input = format!("i\n{id}\nw\nq\n");
         exec(
             "/sbin/disklabel",
-            &args(&["-E", name]),
-            Some(input.as_bytes()),
+            &args(&["-wAT-", name]),
+            Some(b"RAID *\n"),
         )?;
-        if physical_device(Path::new(device))?.metadata_id.as_deref() != Some(id.as_str()) {
-            return Err(AppError::new(
-                "Physical disklabel identity changed during softraid initialization.",
-            ));
-        }
     }
     // Return the newly initialized mapping to the shared lifecycle without an
     // internal detach/reopen. The caller journals this resource before
