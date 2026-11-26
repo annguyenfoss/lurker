@@ -67,6 +67,36 @@ def observe_features(mount, native=False):
     return features
 
 
+def payload_phase(harness, mount, expected, phase, native):
+    """Run each phase in the common harness's bounded, owned I/O worker."""
+    updated = dict(expected)
+    if phase == 'append':
+        updated['page.txt'] += b'\nFresh Debian second-mount append.\n'
+        updated['second.txt'] = b'Fresh Debian second-mount new file.\n'
+
+    def operation():
+        observed = {}
+        if phase == 'write':
+            metadata = mount.stat()
+            observed['root_metadata'] = {'uid': metadata.st_uid, 'gid': metadata.st_gid,
+                                         'mode': oct(metadata.st_mode & 0o7777)}
+            directory = mount / 'Lurker payload'
+            directory.mkdir(mode=0o700)
+            for name, contents in updated.items():
+                harness.payload_write(directory / name, contents)
+            observed['features'] = observe_features(mount, native=native)
+        else:
+            harness.verify_payload(mount, expected)
+            if phase == 'append':
+                harness.payload_write(mount / 'Lurker payload/page.txt',
+                                      b'\nFresh Debian second-mount append.\n', append=True)
+                harness.payload_write(mount / 'Lurker payload/second.txt', updated['second.txt'])
+        observed[phase + '_sha256'] = harness.verify_payload(mount, updated)
+        return observed
+
+    return harness.bounded_payload_call(operation, 90), updated
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -177,8 +207,10 @@ def main():
                     command('mount', [backing_source, backing_mount], kind=backing_kind)
                     if not os.path.ismount(backing_mount):
                         raise RuntimeError('Backing mount absent')
-                    result['backing_mount_identity'] = require_native_filesystem(backing_mount, fs)
-                    result['backing_features'] = observe_features(backing_mount, native=True)
+                    result['backing_mount_identity'] = harness.bounded_payload_call(
+                        lambda: require_native_filesystem(backing_mount, fs), 10)
+                    result['backing_features'] = harness.bounded_payload_call(
+                        lambda: observe_features(backing_mount, native=True), 30)
                     source = backing_mount / 'encrypted'
                     result.update(source=str(source), backing_source=str(backing_source), backing_source_kind='file')
                     command('create', [source])
@@ -196,30 +228,19 @@ def main():
                     if not os.path.ismount(mount):
                         raise RuntimeError('Mount absent; refusing underlay access')
                     if backend not in DIRECTORIES:
-                        require_native_filesystem(mount, fs)
+                        harness.bounded_payload_call(lambda: require_native_filesystem(mount, fs), 10)
                     result.setdefault('mounts', []).append(subprocess.check_output(['findmnt', '-rn', '-M', str(mount), '-o', 'SOURCE,FSTYPE,OPTIONS'], text=True).strip())
-                    if phase == 'write':
-                        result['root_metadata'] = {'uid': mount.stat().st_uid, 'gid': mount.stat().st_gid, 'mode': oct(mount.stat().st_mode & 0o7777)}
-                        directory = mount / 'Lurker payload'
-                        directory.mkdir(mode=0o700)
-                        for name, contents in expected.items():
-                            harness.payload_write(directory / name, contents)
-                        result['features'] = observe_features(mount, native=backend not in DIRECTORIES)
-                    else:
-                        harness.verify_payload(mount, expected)
-                        if phase == 'append':
-                            addition = b'\nFresh Debian second-mount append.\n'
-                            harness.payload_write(mount / 'Lurker payload/page.txt', addition, append=True)
-                            expected['page.txt'] += addition
-                            expected['second.txt'] = b'Fresh Debian second-mount new file.\n'
-                            harness.payload_write(mount / 'Lurker payload/second.txt', expected['second.txt'])
-                    result[phase + '_sha256'] = harness.verify_payload(mount, expected)
+                    observed, expected = payload_phase(harness, mount, expected, phase,
+                                                       native=backend not in DIRECTORIES)
+                    result.update(observed)
                     command('unmount', [mount])
                     if os.path.ismount(mount):
                         raise RuntimeError('Normal unmount left mount active')
                 result['status'] = 'passed'
             except Exception as error:
                 result.update(status='failed', error=str(error))
+                if isinstance(error, harness.PayloadWorkerError):
+                    result.setdefault('payload_workers', []).append(error.worker)
             finally:
                 for target, kind in [(mount, backend), (backing_mount, backing_kind)]:
                     if target is not None and os.path.ismount(target):
