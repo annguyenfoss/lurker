@@ -17,6 +17,23 @@ def command(args, **kw):
     return completed
 
 
+def ntfs_mount_driver():
+    if any(line.split()[-1:] == ['ntfs3'] for line in Path('/proc/filesystems').read_text().splitlines()):
+        return 'ntfs3'
+    modinfo = shutil.which('modinfo')
+    if modinfo and subprocess.run([modinfo, 'ntfs3'], stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL).returncode == 0:
+        return 'ntfs3'
+    if modinfo:
+        description = subprocess.run([modinfo, '-F', 'description', 'ntfs'],
+                                     capture_output=True, text=True)
+        if description.returncode == 0 and any(
+                line.strip() == 'NTFS read-write filesystem driver'
+                for line in description.stdout.splitlines()):
+            return 'ntfs'
+    return 'ntfs-3g'
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--binary', type=Path, required=True)
@@ -42,7 +59,8 @@ def main():
     os.environ['PATH'] = '/usr/local/sbin:/usr/sbin:/sbin:' + os.environ.get('PATH', '')
     os.environ['LURKER_BACKEND_DIR'] = str(a.backends)
     os.environ['LURKER_USERSPACE_DIR'] = str(a.userspace_backends or a.backends)
-    result = {'commit': a.commit, 'started': time.time(), 'pid': os.getpid(), 'cases': [], 'status': 'running'}
+    ntfs_driver = ntfs_mount_driver()
+    result = {'commit': a.commit, 'started': time.time(), 'pid': os.getpid(), 'cases': [], 'status': 'running', 'ntfs_driver': ntfs_driver}
     receipt = a.root / 'matrix.json'
 
     def save():
@@ -123,7 +141,9 @@ def main():
                     options += [f'uid={os.getuid()}', f'gid={os.getgid()}', 'umask=0077']
                 if fs == 'apfs': options.append('readwrite')
                 args = ['sudo', '-n', 'mount', '-o', ','.join(options)]
-                if fs == 'ntfs': args += ['-t','ntfs-3g']
+                if fs == 'ntfs':
+                    if ntfs_driver != 'ntfs-3g': args.append('-i')
+                    args += ['-t', ntfs_driver]
                 if fs in {'apfs', 'hammer2'}: args += ['-i', '-t', fs]
                 command([*args, image, mount])
             deadline = time.monotonic() + 5

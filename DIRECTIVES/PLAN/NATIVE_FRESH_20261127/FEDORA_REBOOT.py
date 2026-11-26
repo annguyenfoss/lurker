@@ -19,6 +19,7 @@ def main():
     spec = importlib.util.spec_from_file_location('h', a.harness)
     h = importlib.util.module_from_spec(spec); spec.loader.exec_module(h)
     matrix = json.loads(a.matrix.read_text())
+    ntfs_driver = matrix.get('ntfs_driver', 'ntfs-3g')
     a.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     result = dict(host=os.uname().nodename, kernel=os.uname().release,
         phase='prepare' if a.prepare else 'verify', before_boot_id=a.before_boot_id, after_boot_id=boot,
@@ -102,7 +103,9 @@ def main():
                 if fs == 'apfs': options += ['readwrite']
                 if fs == 'ufs1': options += ['rw', 'ufstype=44bsd']
                 args = ['mount', '-o', ','.join(options)]
-                if fs == 'ntfs': args += ['-t', 'ntfs-3g']
+                if fs == 'ntfs':
+                    if ntfs_driver != 'ntfs-3g': args.append('-i')
+                    args += ['-t', ntfs_driver]
                 if fs in {'apfs', 'hammer2'}: args += ['-i', '-t', fs]
                 if fs == 'ufs1': args += ['-i', '-t', 'ufs']
                 native([*args, image, mount])
