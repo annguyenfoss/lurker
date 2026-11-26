@@ -147,6 +147,8 @@ impl CreateCommand {
                     ))
                 || (os == "freebsd"
                     && matches!(self.volume_type, VolumeType::Geli | VolumeType::Veracrypt))
+                || (os == "dragonfly"
+                    && matches!(self.volume_type, VolumeType::Luks1 | VolumeType::Veracrypt))
                 || (os == "netbsd" && self.volume_type == VolumeType::Cgd));
         if !matches!(
             os,
@@ -383,10 +385,6 @@ mod tests {
         assert!(command.validate_filesystem("macos").is_ok());
         command.filesystem = Some(CreateFilesystem::Exfat);
         assert!(command.validate_filesystem("macos").is_err());
-        for (os, backend) in [("dragonfly", VolumeType::Luks1)] {
-            command.volume_type = backend;
-            assert!(command.validate_filesystem(os).is_err());
-        }
         command.volume_type = VolumeType::Cgd;
         command.filesystem = Some(CreateFilesystem::Ufs2);
         assert!(command.validate_filesystem("netbsd").is_ok());
@@ -395,6 +393,43 @@ mod tests {
         command.privilege_mode = PrivilegeMode::Privileged;
         command.volume_type = VolumeType::Gocryptfs;
         assert!(command.validate_filesystem("linux").is_err());
+    }
+
+    #[test]
+    fn dragonfly_device_filesystem_selection_requires_qualified_privileged_backend() {
+        let mut command: CreateCommand = serde_json::from_value(serde_json::json!({
+            "target": "/dev/vbd0s1", "source_kind": "block", "force": true,
+            "volume_type": "luks1", "filesystem": "ufs1", "passphrase": null,
+            "size_gb": null
+        }))
+        .unwrap();
+        for backend in [VolumeType::Luks1, VolumeType::Veracrypt] {
+            command.volume_type = backend;
+            for filesystem in [
+                CreateFilesystem::Ufs1,
+                CreateFilesystem::Hammer2,
+                CreateFilesystem::Ext4,
+                CreateFilesystem::Ntfs,
+                CreateFilesystem::Exfat,
+            ] {
+                command.filesystem = Some(filesystem);
+                command.privilege_mode = PrivilegeMode::Privileged;
+                assert!(command.validate_filesystem("dragonfly").is_ok());
+                command.privilege_mode = PrivilegeMode::Unprivileged;
+                assert!(command.validate_filesystem("dragonfly").is_err());
+            }
+        }
+        command.privilege_mode = PrivilegeMode::Privileged;
+        for backend in [
+            VolumeType::Luks,
+            VolumeType::Geli,
+            VolumeType::Cgd,
+            VolumeType::Gocryptfs,
+            VolumeType::Cryfs,
+        ] {
+            command.volume_type = backend;
+            assert!(command.validate_filesystem("dragonfly").is_err());
+        }
     }
 
     #[test]
