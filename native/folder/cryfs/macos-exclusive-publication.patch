@@ -1,0 +1,25 @@
+diff --git a/src/blockstore/implementations/ondisk/OnDiskBlockStore2.cpp b/src/blockstore/implementations/ondisk/OnDiskBlockStore2.cpp
+--- a/src/blockstore/implementations/ondisk/OnDiskBlockStore2.cpp
++++ b/src/blockstore/implementations/ondisk/OnDiskBlockStore2.cpp
+@@ -69,10 +69,18 @@
+   file.sync();
+   if (noReplace) {
+-    if (::link(name.data(), path.c_str()) < 0) {
++    // Native exclusive rename also works on drivers without hardlinks.
++    // An existing winner must never be replaced, even on a fallback route.
++    if (::renamex_np(name.data(), path.c_str(), RENAME_EXCL) < 0) {
+       if (errno == EEXIST) return false;
+-      throw std::system_error(errno, std::generic_category(), "publish new encrypted block");
++      if (errno != ENOTSUP && errno != EINVAL && errno != ENOSYS) {
++        throw std::system_error(errno, std::generic_category(), "publish new encrypted block");
++      }
++      if (::link(name.data(), path.c_str()) < 0) {
++        if (errno == EEXIST) return false;
++        throw std::system_error(errno, std::generic_category(), "publish new encrypted block");
++      }
++      if (::unlink(name.data()) < 0) throw std::system_error(errno, std::generic_category(), "remove encrypted block temporary");
+     }
+-    if (::unlink(name.data()) < 0) throw std::system_error(errno, std::generic_category(), "remove encrypted block temporary");
+   } else if (::rename(name.data(), path.c_str()) < 0) {
+     throw std::system_error(errno, std::generic_category(), "replace encrypted block");
+   }
