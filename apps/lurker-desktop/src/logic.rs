@@ -69,7 +69,9 @@ pub fn validate_create_platform(
     if command.source_kind == SourceKind::Block
         && (!(os == "macos" && command.volume_type == VolumeType::Apfs)
             && !(os == "netbsd" && command.volume_type == VolumeType::Cgd)
-            && !(os == "freebsd" && command.volume_type == VolumeType::Geli)
+            && !(os == "freebsd"
+                && mode == lurker_core::PrivilegeMode::Privileged
+                && matches!(command.volume_type, VolumeType::Geli | VolumeType::Veracrypt))
             && (os != "linux" || mode == lurker_core::PrivilegeMode::Unprivileged))
     {
         return Err("Physical-device creation requires a supported native device backend.".into());
@@ -590,13 +592,14 @@ mod tests {
             "",
         )
         .unwrap();
-        for os in ["macos", "freebsd", "netbsd", "openbsd", "dragonfly"] {
+        for os in ["macos", "netbsd", "openbsd", "dragonfly"] {
             assert!(super::validate_create_platform(&raw, os, PrivilegeMode::Privileged).is_err());
         }
         assert!(
             super::validate_create_platform(&raw, "linux", PrivilegeMode::Unprivileged).is_err()
         );
         super::validate_create_platform(&raw, "linux", PrivilegeMode::Privileged).unwrap();
+        super::validate_create_platform(&raw, "freebsd", PrivilegeMode::Privileged).unwrap();
     }
 
     #[test]
@@ -868,6 +871,47 @@ mod tests {
         assert!(command.size_gb.is_none());
         super::validate_create_platform(&command, "freebsd", lurker_core::PrivilegeMode::Privileged)
             .unwrap();
+        assert!(super::validate_create_platform(
+            &command,
+            "netbsd",
+            lurker_core::PrivilegeMode::Privileged
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn freebsd_veracrypt_partition_preserves_cipher_and_keyfile_without_a_file_size() {
+        let command = build_create_command(
+            "partition",
+            "vera",
+            "",
+            "",
+            "/dev/da1p2",
+            "",
+            "GB",
+            "twofish",
+            "",
+            "",
+            "key",
+            "/tmp/native-volume.key",
+        )
+        .unwrap();
+        assert_eq!(command.source_kind, SourceKind::Block);
+        assert!(command.force);
+        assert!(command.size_gb.is_none());
+        assert_eq!(command.cipher, lurker_core::CreateCipher::Twofish);
+        assert_eq!(
+            command.keyfile.as_deref(),
+            Some(std::path::Path::new("/tmp/native-volume.key"))
+        );
+        super::validate_create_platform(&command, "freebsd", lurker_core::PrivilegeMode::Privileged)
+            .unwrap();
+        assert!(super::validate_create_platform(
+            &command,
+            "freebsd",
+            lurker_core::PrivilegeMode::Unprivileged
+        )
+        .is_err());
         assert!(super::validate_create_platform(
             &command,
             "netbsd",
