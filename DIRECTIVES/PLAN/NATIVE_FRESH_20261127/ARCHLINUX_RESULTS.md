@@ -37,8 +37,10 @@ typed source field was excluded; its logs remain under
 `cases/baseline/`.
 
 Known issues awaiting the complete initial batch: stock UFS1 omits
-`CONFIG_UFS_FS_WRITE`; the shared HAMMER2 fixture size is below the formatter's
-1 GiB minimum; stable OpenZFS 2.4.4 lacks Linux 7.3 compatibility. A current
+`CONFIG_UFS_FS_WRITE`; stable OpenZFS 2.4.4 lacks Linux 7.3 compatibility.
+HAMMER2 has passed the first LUKS2 lifecycle using the shared 0.5 GiB fixture;
+the formatter's stated 1 GiB minimum for explicit `-s` is not an observed
+automatic-size limitation. A current
 OpenZFS development source advertising Linux 7.3 support has been fetched for
 ordinary external-module assessment. Custom kernels remain deferred. Debian
 also reproduced a shared kmod applet-name bug when canonicalizing modinfo and
