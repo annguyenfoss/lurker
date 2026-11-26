@@ -16,11 +16,11 @@ pub(in super::super) fn validate_filesystem(
         return Err(AppError::new("NetBSD filesystem selection requires CGD."));
     }
     match fs.unwrap_or(CreateFilesystem::Ufs2) {
+        CreateFilesystem::Ntfs => ensure_ntfs_socket_limit(),
         CreateFilesystem::Ufs1
         | CreateFilesystem::Ufs2
         | CreateFilesystem::Ext4
         | CreateFilesystem::Exfat
-        | CreateFilesystem::Ntfs
         | CreateFilesystem::Fat32
         | CreateFilesystem::Hammer2
         | CreateFilesystem::Zfs => Ok(()),
@@ -29,6 +29,28 @@ pub(in super::super) fn validate_filesystem(
             other.as_str()
         ))),
     }
+}
+
+fn validate_ntfs_socket_limit(value: &str) -> AppResult<()> {
+    let bytes = value
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| AppError::new("Cannot determine the NetBSD NTFS kernel socket limit."))?;
+    if bytes < 4 * 1024 * 1024 {
+        return Err(AppError::new(
+            "NetBSD NTFS requires kern.sbmax >= 4194304 for the native libperfuse socket queues. Set kern.sbmax=4194304 with sysctl and persist it in /etc/sysctl.conf before retrying.",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_ntfs_socket_limit() -> AppResult<()> {
+    // libperfuse's default queues exceed the stock kernel socket limit. A
+    // failed SO_SNDBUF leaves tiny queues and can stall ordinary payload I/O.
+    // Diagnose the host prerequisite before formatting or starting the driver;
+    // never silently change system configuration or reduce native flush work.
+    let value = exec("/sbin/sysctl", &args(&["-n", "kern.sbmax"]), None)?;
+    validate_ntfs_socket_limit(&value)
 }
 fn raw(device: &str) -> String {
     format!("/dev/r{}", device.trim_start_matches("/dev/"))
@@ -289,6 +311,7 @@ pub(in super::super) fn mount_filesystem(
             "/usr/pkg/sbin/mount.exfat"
         }
         "ntfs" => {
+            ensure_ntfs_socket_limit()?;
             argv = args(&["-o", &options]);
             "/usr/pkg/bin/ntfs-3g"
         }
@@ -412,6 +435,25 @@ pub(in super::super) fn mount_filesystem(
         exec(tool, &argv, None)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_ntfs_socket_limit;
+
+    #[test]
+    fn ntfs_requires_socket_queues_that_fit_the_native_driver() {
+        for value in ["262144", "135168", "4194303"] {
+            let error = validate_ntfs_socket_limit(value).unwrap_err();
+            assert!(error.message.contains("kern.sbmax >= 4194304"));
+        }
+        for value in ["4194304\n", "8388608", "18446744073709551615"] {
+            validate_ntfs_socket_limit(value).unwrap();
+        }
+        for value in ["", "kern.sbmax = 4194304", "-1", "18446744073709551616"] {
+            assert!(validate_ntfs_socket_limit(value).is_err());
+        }
+    }
 }
 pub(in super::super) fn matches_filesystem_mount(mapped: &str, mounted: &Mounted) -> bool {
     let Ok((device, kind)) = probe(mapped) else {
