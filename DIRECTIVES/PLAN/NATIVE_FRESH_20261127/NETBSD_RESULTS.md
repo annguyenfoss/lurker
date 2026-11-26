@@ -90,7 +90,7 @@ and the system root became `/dev/dk2`; every later destructive case resolves the
 recorded GPT identity again instead of reusing a device basename.
 
 The 130-cell applicability ledger records every requested filesystem/backend pair.
-Stable CryFS native source integration remains blocked/unqualified. Native driver
+Stable CryFS product integration remains pending; a fresh native source and ReFUSE payload control is now proven separately below. Native driver
 limitations and unavailable encryption engines are not counted as support.
 Private evidence is under `target/goal-validation/native-fresh-20261127/hosts/netbsd/`;
 its checkpoint identifies artifact hashes, receipts, resource identities and next work.
@@ -141,8 +141,14 @@ The frozen-candidate real GUI callback test passed 1/1 through that helper, and
 the actual installed desktop opened its Slint software window under Xvfb as UID
 1300. The screenshot was collected and viewed. The second temporary authorization
 rule was removed and both helper and unrelated sudo commands were denied again.
-The complete installed CLI filesystem matrix remains pending; the earlier staged
-14-case pass is not relabeled as package validation.
+The installed CLI separately passed all fourteen container/device filesystem
+lifecycles. Twelve passed initially; two exFAT cases were rerun after replacing
+an argv-only driver identification assumption with kernel executable-path and
+open-device descriptor evidence. Both fresh exFAT retests passed. The original
+harness failures and their fixtures are retained; the staged 14-case result is
+kept separate. Each installed case additionally captures native filesystem
+identity: FFS version magic from dumpfs, ext4 extent/journal superblock flags,
+exFAT/NTFS OEM signatures and driver identity, HAMMER2 magic, or matching ZFS labels.
 
 The frozen staged candidate passed ordinary mounted-reboot persistence for NTFS,
 ext4 and HAMMER2 containers and a physical UFS2 partition. The persisted NTFS
@@ -161,6 +167,41 @@ change or ineffective product prerequisite guard was applied. Failed encrypted
 ZFS fixtures remain intact. This cell is blocked for reboot qualification even
 though its ordinary file/device lifecycle passes; a base-module repair is deferred
 until the ordinary-route assessment is complete.
+
+Stable CryFS 1.0.3, pinned commit
+`5d0cc36785d93e12250696a3ffc928042f2e8d61`, was built with ordinary native
+CMake/system dependencies after adapting the memory-query and pthread APIs.
+The ordinary pkgsrc libperfuse engine built, but its user daemon first failed
+on device access and then aborted while creating its mandatory trace under
+`/var/run`. A stock system perfused daemon could mount it, but the root-owned
+mount denied ordinary-user payload creation. These failures are preserved and
+provide no product pass or privilege bridge. An owned worker left by the
+failed system-daemon test was found in the full mount inventory and closed
+with normal root umount after recording its source, fsid, process identities
+and descriptors; no force flag was used.
+
+The separate base ReFUSE API 29 route passed all downloaded-payload phases,
+normal user umount, engine exit, reopen and digest verification as UID 1300.
+A NetBSD-specific chmod adapter preserves the existing node type when ReFUSE
+supplies only permission bits; regular-file 0600 and directory 0750 types,
+ownership and modes then survived both reopens without assertion logs.
+Its qualified engine is SHA-256
+`ebe561341c63098ad8ccdb7fc2974c742309938109b6efb511c22d1b099f5077`.
+The common durability patch is unchanged; platform adaptations are committed
+in `32a04b4` and `7e8a7eb`. The actual native headers and `__fuse_main` dispatch
+were verified, and ldd shows base librefuse rather than pkgsrc libfuse. Native
+mounts report `/dev/puffs`, a truncated `puffs|cryfs@...` type, distinct fsids
+and owner 1300; their plaintext root was 1300:1300 mode 0700.
+
+This control temporarily enabled `vfs.generic.usermount=1` and gave only group
+1300 access to the root-owned `/dev/putter` node with mode 0660. Both kernel
+setting and original device owner/group/mode were restored afterward. It does
+not establish default ordinary-user host policy. The ReFUSE engine has no
+privileged execution route. Core lifecycle, packaging and backing-filesystem
+matrix integration remain pending, so these native controls do not become ten
+CryFS product passes. The current 130-cell ledger therefore has six completed
+CGD cells, one ZFS reboot block, ten pending CryFS cells, 53 unavailable cells
+and 60 platform-inapplicable cells.
 
 Eligibility references:
 
