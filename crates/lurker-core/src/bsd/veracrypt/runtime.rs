@@ -354,6 +354,17 @@ fn resolved_fuse_paths(text: &str) -> AppResult<Vec<PathBuf>> {
     Ok(paths)
 }
 
+fn verify_fuse_resolution(resolved: &Path, host: &HostFuse) -> AppResult<()> {
+    if resolved.parent() != host.path.parent()
+        || host_provider(resolved)? != verify_host_fuse(host)?
+    {
+        return Err(AppError::new(
+            "BSD loader resolves FUSE outside the qualified host prerequisite.",
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn validate(program: &Path) -> AppResult<()> {
     let (layout, inventory) = validate_assets(program)?;
     let bytes = crate::trust::trusted_runtime_file(program, 64 * 1024 * 1024)?;
@@ -398,15 +409,7 @@ pub(super) fn validate(program: &Path) -> AppResult<()> {
         std::time::Duration::from_secs(30),
         None,
     )?;
-    let resolved = resolved_fuse_paths(&text)?.remove(0);
-    if fs::canonicalize(resolved).map_err(|e| AppError::io("Resolve loaded FUSE provider", e))?
-        != inventory.host_fuse.path
-    {
-        return Err(AppError::new(
-            "BSD loader resolves FUSE outside the qualified host prerequisite.",
-        ));
-    }
-    verify_host_fuse(&inventory.host_fuse).map(|_| ())
+    verify_fuse_resolution(&resolved_fuse_paths(&text)?.remove(0), &inventory.host_fuse)
 }
 
 /// Older OpenBSD engines abort while enumerating physical disks. Require the
@@ -569,9 +572,18 @@ mod tests {
         fs::write(&second, b"updated compatible provider fixture").unwrap();
         std::os::unix::fs::symlink(first.file_name().unwrap(), &alias).unwrap();
         assert_eq!(host_provider(&alias).unwrap(), first);
+        let host = HostFuse {
+            library: "libfuse.so.2".into(),
+            path: alias.clone(),
+        };
+        let trace = format!("libfuse.so.2 => {} (0x10)\n", first.display());
+        verify_fuse_resolution(&resolved_fuse_paths(&trace).unwrap()[0], &host).unwrap();
+        assert!(verify_fuse_resolution(&second, &host).is_err());
         fs::remove_file(&alias).unwrap();
         std::os::unix::fs::symlink(second.file_name().unwrap(), &alias).unwrap();
         assert_eq!(host_provider(&alias).unwrap(), second);
+        verify_fuse_resolution(&second, &host).unwrap();
+        assert!(verify_fuse_resolution(&first, &host).is_err());
         fs::set_permissions(&second, fs::Permissions::from_mode(0o666)).unwrap();
         assert!(host_provider(&alias).is_err());
         fs::set_permissions(&second, fs::Permissions::from_mode(0o644)).unwrap();
