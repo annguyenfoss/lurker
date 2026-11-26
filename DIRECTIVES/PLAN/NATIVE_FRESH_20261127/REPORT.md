@@ -146,6 +146,58 @@ under target/goal-validation/native-fresh-20261127/.
   per-mount `rw` does not override superblock `ro`. The parser and payload-gate
   correction are being tested before any completed Linux qualification claim.
 
+## Current candidate qualifications
+
+The six Linux follow-up sweeps use `576505d`, including the mountinfo correction:
+a filesystem is read-only if either its VFS flags or its superblock flags say so.
+An actual encrypted UFS1 mount exposed `rw` VFS flags with a `ro` superblock;
+create and Auto reopen now reject that state without publishing new storage.
+The fresh full sweeps supersede the earlier `ca7d213` candidate only for cases
+actually rerun. Debian and openSUSE have completed all 60 configured-host
+container cells;
+their UFS1 uses pre-existing non-stock write-enabled modules. Ubuntu and Gentoo
+have completed 54 writable container cells each, with stock UFS1 limitations
+recorded separately. Physical-device, conformance and mounted-reboot batches
+remain in progress across the six distributions. Resource-pressure and harness
+failures retain their original receipts and require explicit rerun results.
+
+macOS candidate `3bfed46` includes native Apple encrypted-image ext4/NTFS/ZFS
+integration and guarded VeraCrypt external GPT data partitions. Its workspace
+checks passed (144 tests, no failures, 12 ignored) and its DMG was built and
+verified. Extracted-package qualification remains in progress. The native
+desktop callback and 100%/120% form snapshots passed before the freeze. A third
+small Toshiba sample passed the VeraCrypt payload lifecycle and restored native
+device ownership after normal close. Buran has not been rebooted.
+
+NetBSD's installed CGD artifact has now passed all seven container and seven
+device filesystem cases, plus four representative mounted-reboot cases. This
+does not remove the separate upstream ZFS reboot limitation. `7d00998` adds a
+native process identity reader with live/zombie/reaped controls. The CryFS core
+preview has passed a login-user PDF write/close/reopen/append/reopen lifecycle
+using host ReFUSE. SQLite WAL fails because native shared writable mapping
+returns `EOPNOTSUPP`; the stock ReFUSE implementation disables the puffs page
+cache. The failed fixture and native mapping control are preserved. No cache or
+durability requirement has been weakened. Factory packaging, desktop checks
+and the remaining backing-filesystem combinations are not complete.
+
+OpenBSD physical CRYPTO, RAID1C and VeraCrypt have each passed their four
+applicable filesystem lifecycles. An additional RAID1C fixture passed explicit
+one-member recovery. Native desktop physical forms are under validation.
+DragonFly has booted its updated stock world/kernel and passed native physical
+controls; product physical creation is still under integration.
+
+BSD SDK/stager changes `782a088`, `88d9315` and `c7f7092` keep FUSE on the host
+and validate its ABI instead of packaging it privately. FreeBSD's fresh package
+passed workspace checks and install/delete/reinstall checks, but a runtime
+symlink-alias comparison defect was found during the native regression. A fix
+and new artifact qualification are required before that package is accepted.
+
+FreeBSD Btrfs/XFS controls using a separately installed in-process LKL FUSE
+driver passed with direct I/O. They remain a separate eligibility assessment:
+LKL embeds Linux kernel code in a native process. They do not establish native
+product support, and new product integration is held pending the user's
+clarification about that architecture.
+
 ## Work still required
 
 Host owners are performing current update inventories, builds, applicable
@@ -154,15 +206,14 @@ builds use `8adcdcf` or the recorded later script-only revision; record harness
 and independent engine identities separately rather than rebuilding unchanged
 product inputs or relabeling old engines as new builds.
 
-NetBSD CGD physical dispatch is implemented. FreeBSD, OpenBSD and DragonFly
-physical create dispatch and BSD character-device classification are undergoing
-integration and native validation. Native controls inform those adapters;
-file-container results cannot close the device requirement. DragonFly's native
-NTFS/exFAT/ext4 adapters now pass applicable file-container payload flows with
-the documented host prerequisites. Its normal stock base update is still
-building. macOS has a freshly built native macFUSE VeraCrypt route, avoiding
-the ineligible SMB transport. Native hdiutil foreign-filesystem controls have
-also exposed remaining Apple-image filesystem integration work.
+NetBSD CGD, FreeBSD GELI/VeraCrypt and OpenBSD CRYPTO/RAID1C/VeraCrypt physical
+dispatch are implemented with native proofs. Their final packaged matrices
+remain distinct gates. DragonFly physical product dispatch is being qualified.
+Native controls inform those adapters; file-container results cannot close the
+device requirement. DragonFly's native NTFS/exFAT/ext4 adapters pass applicable
+file-container payload flows with the documented host prerequisites. macOS uses
+native macFUSE VeraCrypt and native hdiutil foreign-filesystem routes; final
+extracted-package validation remains open.
 
 DragonFly's discarded manual mount-label prototype caused a kernel panic by
 violating the native FUSE vnode close contract. A fresh unmodified-helper
