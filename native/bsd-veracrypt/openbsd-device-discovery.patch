@@ -1,0 +1,101 @@
+--- a/src/Core/Unix/OpenBSD/CoreOpenBSD.cpp
++++ b/src/Core/Unix/OpenBSD/CoreOpenBSD.cpp
+@@ -13,6 +13,11 @@
+  code distribution packages.
+ */
+-
++
++#include <fcntl.h>
++#include <sys/dkio.h>
++#include <sys/disklabel.h>
++#include <sys/ioctl.h>
++#include <sys/sysctl.h>
+ #include <fstream>
+ #include <iostream>
+ #include <stdio.h>
+@@ -102,10 +107,81 @@
+ 		}
+ 	}
+-
++
+-	// not sure what this is used for
+ 	HostDeviceList CoreOpenBSD::GetHostDevices (bool pathListOnly) const
+ 	{
+-		throw;
++		// OpenBSD device nodes also exist for absent disks and unused
++		// partitions. Enumerate the live kernel inventory and its disklabels.
++		int mib[] = { CTL_HW, HW_DISKNAMES };
++		size_t namesLength = 0;
++		throw_sys_if (sysctl (mib, 2, nullptr, &namesLength, nullptr, 0) == -1);
++		if (namesLength == 0)
++			throw ParameterIncorrect (SRC_POS);
++		vector <char> namesBuffer (namesLength);
++		throw_sys_if (sysctl (mib, 2, namesBuffer.data(), &namesLength, nullptr, 0) == -1);
++		string names (namesBuffer.data(), namesLength);
++		if (!names.empty() && names.back() == '\0')
++			names.pop_back();
++
++		HostDeviceList devices;
++		uint32 systemNumber = 0;
++		foreach (const string &entry, StringConverter::Split (names, ","))
++		{
++			size_t colon = entry.find (':');
++			if (colon == string::npos)
++				throw ParameterIncorrect (SRC_POS);
++			string unit = entry.substr (0, colon);
++			if (unit.size() < 3 || (unit.substr (0, 2) != "sd" && unit.substr (0, 2) != "wd")
++				|| unit.find_first_not_of ("0123456789", 2) != string::npos)
++				continue;
++
++			string rawPath = "/dev/r" + unit + "c";
++			int handle = open (rawPath.c_str(), O_RDONLY | O_CLOEXEC);
++			throw_sys_sub_if (handle == -1, wstring (FilePath (rawPath)));
++			struct disklabel label;
++			int query = ioctl (handle, DIOCGDINFO, &label);
++			int queryError = errno;
++			close (handle);
++			errno = queryError;
++			throw_sys_sub_if (query == -1, wstring (FilePath (rawPath)));
++
++			uint64 sectors = DL_GETDSIZE (&label);
++			uint64 sectorSize = label.d_secsize;
++			if (label.d_npartitions > MAXPARTITIONS || sectorSize < 512 || sectorSize > 65536
++				|| (sectorSize & (sectorSize - 1)) != 0 || sectors == 0
++				|| sectors > (~uint64 (0)) / sectorSize)
++				throw ParameterIncorrect (SRC_POS);
++
++			make_shared_auto (HostDevice, device);
++			device->Path = "/dev/" + unit + "c";
++			device->Name = wstring (unit.begin(), unit.end());
++			device->Size = sectors * sectorSize;
++			device->SystemNumber = systemNumber++;
++			if (!pathListOnly)
++				device->MountPoint = GetDeviceMountPoint (device->Path);
++
++			for (int number = 0; number < label.d_npartitions; number++)
++			{
++				const auto &part = label.d_partitions[number];
++				uint64 count = DL_GETPSIZE (&part);
++				uint64 offset = DL_GETPOFFSET (&part);
++				if (number == RAW_PART || part.p_fstype == FS_UNUSED || count == 0)
++					continue;
++				if (offset > sectors || count > sectors - offset)
++					throw ParameterIncorrect (SRC_POS);
++				string path = "/dev/" + unit + char ('a' + number);
++				if (!FilesystemPath (path).IsBlockDevice())
++					throw ParameterIncorrect (SRC_POS);
++				make_shared_auto (HostDevice, partition);
++				partition->Path = path;
++				partition->Size = count * sectorSize;
++				partition->SystemNumber = device->SystemNumber;
++				if (!pathListOnly)
++					partition->MountPoint = GetDeviceMountPoint (partition->Path);
++				device->Partitions.push_back (partition);
++			}
++			devices.push_back (device);
++		}
++		return devices;
+ 	}
+-
++
+ 	MountedFilesystemList CoreOpenBSD::GetMountedFilesystems (const DevicePath &devicePath, const DirectoryPath &mountPoint) const
