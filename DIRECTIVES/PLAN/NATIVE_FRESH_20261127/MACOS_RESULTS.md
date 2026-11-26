@@ -142,8 +142,8 @@ proof of CoW. Journaling/replay observations stay separate from format flags.
   `510d4d943b7dc30ef8b025da7b0e14ade901a9bf80d4e1a79d1e7ab6d19dc178`;
   engine SHA-256:
   `70be02d79bf048afc38288b3bd7d99ab4934e4b5d6052e2f34dc13923762d94c`.
-  The higher-level CryFS/Cryptomator UFS2 directory publication still needs the
-  separate shared-core fix; direct engine success is not a product pass.
+  The later higher-level fix below separately qualifies product publication;
+  these direct engine receipts remain independent proof for the C++ patch.
 - `a540fcc` documents a macFUSE-only fuse-ext2 xattr callback shim. The separately
   installed root-owned ext4 MacFUSE driver supports all three directory engines,
   including CryFS, unlike the preferred FSKit route's atomic publication limits.
@@ -158,11 +158,46 @@ proof of CoW. Journaling/replay observations stay separate from format flags.
   commit, child harness hashes, actual lifecycle receipts and downloaded payload.
   Its remote unit test and real 20-case receipt validation passed.
 
+## Native product integration follow-through
+
+- `383c47b` adds an anchored, exclusive Mac directory publication fallback only
+  when the ordinary native cross-parent directory rename reports unsupported.
+  It refuses existing destinations, symlinks and special nodes; preserves
+  directory attributes through open descriptors; syncs the destination and
+  source parents; and leaves configuration publication last. Partial failures
+  remain inspectable. Four native unit tests passed, including collision,
+  partial-error and attribute controls. Native product CryFS/Cryptomator UFS2
+  payload cases now pass, alongside APFS regressions and exFAT Cryptomator.
+  CryFS on exFAT still lacks the required atomic engine publication primitive.
+- `7984df0` implements native Apple encrypted-image ext4/NTFS/ZFS creation and
+  mounting. It uses the fixed AES-256 profile centralized in `workflow.rs`,
+  separately installed host tools and a crypto-specific private recovery
+  journal. This closes the earlier Apple product adapter gaps for those three
+  filesystems. The desktop keeps its existing native default; explicit foreign
+  filesystem selection is currently a CLI/helper API capability.
+- All three new Apple routes passed normal downloaded-payload CLI lifecycles
+  with Auto detection. The helper API passed 13 requests per filesystem,
+  including wrong password, no overwrite, duplicate mount and busy close, plus
+  four payload opens per filesystem. Every test closed normally. On the newer
+  frozen-source overlay, 70 core tests passed, existing Apple APFS/exFAT and
+  VeraCrypt ext4/UFS2/ZFS regressions passed, and the centralized-profile ext4
+  smoke passed. These are staged-artifact results; final package validation
+  remains pending.
+- A read-only round-owned session observer independently captured UFS2
+  superblock magic and OpenZFS sole-vdev labels during the native VeraCrypt
+  regressions. It retains the actual mount transport and source/device/inode
+  association rather than treating generic FUSE labels as filesystem proof.
+- `applicability.json` now separates every one of the 130 native applicability
+  cells from product outcome/adapter status and source, driver, provisioning or
+  crypto-facility blockers. It will be reconciled to the final package receipts.
+
 ## Remaining work
 
-Reconcile remaining driver/backend failures, package the frozen candidate and
-verify its CLI/helper, finish final remote workspace checks and the complete
-applicable matrix, and inspect all owned resource cleanup. Reboot persistence remains
+Assess the remaining native VeraCrypt data-partition route on an identified
+disposable virtual partition before considering another small Toshiba sample.
+Package the final frozen candidate, verify CLI/helper and desktop default
+callbacks, finish workspace checks and the complete applicable matrix, reconcile
+all 130 cells, and inspect owned resource cleanup. Reboot persistence remains
 unexercised on Buran by instruction.
 
 Primary eligibility sources:
