@@ -1,5 +1,9 @@
 # File encryption working notes
 
+## File workflow
+
+OpenSSL CMS, age, and GnuPG each take one input file and produce one output file per operation. Archive creation and extraction, compression, and decompression are out of scope.
+
 The shell functions shared in discussion describe a personal workflow. Reproducing them and integrating `tar`, `pigz`, or `pv` are out of scope.
 
 ## GnuPG
