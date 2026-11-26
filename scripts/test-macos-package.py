@@ -11,18 +11,46 @@ import sys
 import tempfile
 
 
+def verify_suite(summary, binary, commit, payload, keyfile):
+    """Bind a successful suite to its artifact and required lifecycle receipts."""
+    assert summary["status"] == "passed"
+    detail = json.loads(Path(summary["result"]).read_text())
+    assert detail["status"] == "passed" and detail["source_commit"] == commit
+    assert Path(detail["binary"]).resolve() == binary.resolve()
+    assert detail["binary_sha256"] == hashlib.sha256(binary.read_bytes()).hexdigest()
+    cases = detail["cases"]
+    names = {case["name"] for case in cases if case["status"] == "passed"}
+    required = {"create", "no-overwrite", "unlock", "application-io", "duplicate",
+                "aliased-duplicate", "busy", "close", "reopen", "persistence", "reclose",
+                "wrong-keyfile" if keyfile else "wrong-password"}
+    if payload:
+        required |= {"payload-write", "payload-append", "payload-reopen", "payload-verify",
+                     "payload-close", "payload-repeat-reopen", "payload-repeat-verify",
+                     "payload-repeat-close"}
+    assert required <= names, "Missing required lifecycle cases: " + str(sorted(required - names))
+    assert all(case["status"] == "passed" for case in cases)
+    assert summary["counts"] == detail["counts"] == {"passed": len(cases), "failed": 0, "skipped": 0}
+    return len(cases)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dmg", type=Path, required=True)
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--expected-uid", type=int, required=True)
+    parser.add_argument("--payload", type=Path, help="Downloaded bitcoin/ethereum/transformer PDFs and page.txt")
     parser.add_argument("--resume", type=Path, help="Resume this exact package after preserving its failed attempt")
     args = parser.parse_args()
     assert platform.system() == "Darwin" and os.geteuid() == args.expected_uid != 0
     assert len(args.commit) == 40 and all(c in "0123456789abcdef" for c in args.commit)
     dmg = args.dmg.resolve(strict=True)
     assert hashlib.sha256(dmg.read_bytes()).hexdigest() == args.sha256
+    payload_hashes = None
+    if args.payload:
+        args.payload = args.payload.resolve(strict=True)
+        payload_hashes = {name: hashlib.sha256((args.payload / name).read_bytes()).hexdigest()
+                          for name in ["bitcoin.pdf", "ethereum.pdf", "transformer.pdf", "page.txt"]}
     previous = None
     if args.resume:
         assert not args.resume.is_symlink()
@@ -32,6 +60,7 @@ def main():
         previous = json.loads(args.resume.read_text())
         assert previous["source_commit"] == args.commit and previous["dmg_sha256"] == args.sha256
         assert previous["status"] == "failed"
+        assert previous.get("payload_sha256") == payload_hashes
     else:
         root = Path(tempfile.mkdtemp(prefix="lurker-macos-package-", dir="/private/tmp"))
     root.chmod(0o700)
@@ -42,7 +71,7 @@ def main():
     result = {"status": "failed", "source_commit": args.commit, "dmg_sha256": args.sha256,
               "os": platform.platform(), "architecture": platform.machine(), "uid": os.geteuid(),
               "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-              "root": str(root), "app": str(app), "cases": []}
+              "root": str(root), "app": str(app), "payload_sha256": payload_hashes, "cases": []}
     environment = {k: v for k, v in os.environ.items()
                    if not k.startswith(("DYLD_", "LURKER_BACKEND_")) and k not in
                    {"JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "CLASSPATH", "LD_PRELOAD"}}
@@ -84,12 +113,14 @@ def main():
             if previous and index < len(previous["cases"]):
                 prior = previous["cases"][index]
                 if (prior["case"] == phase and prior["exit"] == 0 and prior["summary"]["status"] == "passed"
-                        and prior["summary"]["counts"] == {"passed": 13, "failed": 0, "skipped": 0}
                         and prior["harness_sha256"] == hashlib.sha256(harness.read_bytes()).hexdigest()):
+                    verify_suite(prior["summary"], binary, args.commit, args.payload, keyfile)
                     result["cases"].append(prior)
                     continue
             command = [sys.executable, str(harness), "--binary", str(binary), "--backend", backend,
                        "--commit", args.commit, "--root", str(root)]
+            if args.payload:
+                command += ["--payload", str(args.payload)]
             if cipher:
                 command += ["--cipher", cipher]
             if auto:
@@ -101,7 +132,7 @@ def main():
             result["cases"].append({"case": phase, "exit": run.returncode, "summary": summary,
                                     "log": str(log), "harness_sha256": hashlib.sha256(harness.read_bytes()).hexdigest()})
             assert run.returncode == 0 and summary["status"] == "passed", str(log)
-            assert summary["counts"] == {"passed": 13, "failed": 0, "skipped": 0}, str(summary)
+            verify_suite(summary, binary, args.commit, args.payload, keyfile)
         result["status"] = "passed"
     except Exception as error:
         result.update(failed_stage=phase, error=str(error)[:2048])
