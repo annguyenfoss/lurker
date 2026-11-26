@@ -26,6 +26,36 @@ def atomic(path, value):
     os.replace(temporary, path)
 
 
+def observe_features(mount, native=False):
+    """Small probes, retaining observations rather than inferring from exit codes."""
+    feature = mount / 'feature-check'
+    feature.write_text('permissions and ACL probe\n')
+    features = {'ownership': {'uid': feature.stat().st_uid, 'gid': feature.stat().st_gid}}
+    for name, argv in [('permissions', ['chmod', '600', str(feature)]),
+                       ('acl', ['setfacl', '-m', 'u:65534:r', str(feature)]),
+                       ('reflink', ['cp', '--reflink=always', str(feature), str(mount / 'reflink-check')])]:
+        observed = subprocess.run(argv, capture_output=True, text=True)
+        features[name] = {'command': argv, 'yes': observed.returncode == 0,
+                          'observation': observed.stderr.strip()}
+        if name == 'permissions':
+            features[name]['observed_mode'] = oct(feature.stat().st_mode & 0o7777)
+            features[name]['yes'] &= (feature.stat().st_mode & 0o7777) == 0o600
+    acl = subprocess.run(['getfacl', '-cp', str(feature)], capture_output=True, text=True)
+    features['acl']['getfacl'] = acl.stdout.strip()
+    features['journaling'] = {'status': 'unknown' if native else 'not-applicable',
+                              'observation': 'Directory-engine layer' if not native else 'No journal-specific probe for this filesystem'}
+    row = subprocess.check_output(['findmnt', '-rn', '-M', str(mount), '-o', 'SOURCE,FSTYPE,OPTIONS'], text=True).strip()
+    features['mount'] = row
+    parts = row.split()
+    if native and len(parts) >= 2 and parts[1] in ('ext4', 'xfs'):
+        argv = ['/usr/bin/sudo', '-n'] + (['/usr/sbin/tune2fs', '-l', parts[0]] if parts[1] == 'ext4' else ['/usr/sbin/xfs_info', str(mount)])
+        observed = subprocess.run(argv, capture_output=True, text=True)
+        lines = [line for line in observed.stdout.splitlines() if 'Filesystem features:' in line or 'log' in line]
+        features['journaling'] = {'command': argv, 'status': 'yes' if observed.returncode == 0 and any('has_journal' in line or 'log      =' in line for line in lines) else 'unknown',
+                                  'observation': '\n'.join(lines) or observed.stderr.strip()}
+    return features
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -98,6 +128,8 @@ def main():
                       'fixture': str(fixture), 'source_kind': 'device' if args.mode == 'device' else 'file',
                       'cipher': args.cipher, 'authentication': 'keyfile' if args.keyfile else 'password',
                       'private_fixture_credential': str(credential),
+                      'tool_inventory': str(root / 'tools.json'),
+                      'common_harness_sha256': harness.file_hash(args.harness),
                       'operations': [], 'status': 'running'}
             backing_mount = None
             backing_source = None
@@ -126,6 +158,7 @@ def main():
                     command('mount', [backing_source, backing_mount], kind=backing_kind)
                     if not os.path.ismount(backing_mount):
                         raise RuntimeError('Backing mount absent')
+                    result['backing_features'] = observe_features(backing_mount, native=True)
                     source = backing_mount / 'encrypted'
                     command('create', [source])
                 else:
@@ -148,13 +181,7 @@ def main():
                         directory.mkdir(mode=0o700)
                         for name, contents in expected.items():
                             harness.payload_write(directory / name, contents)
-                        feature = mount / 'feature-check'
-                        feature.write_text('permissions and ACL probe\n')
-                        features = {}
-                        for name, argv in [('permissions', ['chmod', '600', str(feature)]), ('acl', ['setfacl', '-m', 'u:65534:r', str(feature)]), ('reflink', ['cp', '--reflink=always', str(feature), str(mount / 'reflink-check')])]:
-                            observed = subprocess.run(argv, capture_output=True, text=True)
-                            features[name] = {'command': argv, 'yes': observed.returncode == 0, 'observation': observed.stderr.strip()}
-                        result['features'] = features
+                        result['features'] = observe_features(mount, native=backend not in DIRECTORIES)
                     else:
                         harness.verify_payload(mount, expected)
                         if phase == 'append':
@@ -180,7 +207,10 @@ def main():
                 result['mount_remaining'] = os.path.ismount(mount) or bool(backing_mount and os.path.ismount(backing_mount))
                 result['finished'] = time.time()
                 atomic(result_path, result)
-                if args.archive_to and not result['mount_remaining']:
+                loops = subprocess.run(['/usr/bin/sudo', '-n', '/sbin/losetup', '--list', '--json', '--output', 'BACK-FILE'], capture_output=True, text=True)
+                result['owned_loop_remaining'] = loops.returncode != 0 or str(fixture) in loops.stdout
+                atomic(result_path, result)
+                if args.archive_to and not result['mount_remaining'] and not result['owned_loop_remaining']:
                     # Keep the original evidence paths valid. Mounted or failed
                     # teardown fixtures stay in place for investigation.
                     retained = args.archive_to / 'retained'
@@ -189,6 +219,8 @@ def main():
                     shutil.move(str(fixture), str(target))
                     fixture.symlink_to(target, target_is_directory=True)
                 print(json.dumps({'case': label, 'status': result['status'], 'receipt': str(result_path), 'mount_remaining': result['mount_remaining']}), flush=True)
+                if args.mode == 'device' and (result['mount_remaining'] or result['owned_loop_remaining']):
+                    return 1
 
 
 if __name__ == '__main__':
