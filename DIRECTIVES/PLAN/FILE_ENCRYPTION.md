@@ -39,6 +39,18 @@ These are candidates from the initial SSH probe. Confirm version, package owners
 | OpenBSD `openbsd-core-01` | LibreSSL in base and OpenSSL 3.5.9 as `/usr/local/bin/eopenssl`. Select packaged OpenSSL and its matching library. Install `gnupg` using `pkg_add` if missing. |
 | macOS `buran` | LibreSSL in base and Homebrew OpenSSL 3.5.9 under `/opt/homebrew/opt/openssl@3`. Select the brew executable and matching library. Install Homebrew `gnupg` if missing. Use the configured Rust toolchain and Homebrew paths on SSH. |
 
+### Prerequisite changes made
+
+| Host | Package action |
+| --- | --- |
+| Arch, Ubuntu, Fedora, openSUSE, Gentoo | Existing GnuPG and OpenSSL installations met the preflight requirements. No package changes. |
+| Debian | Installed GnuPG 2.4.7, its agent and `pinentry-curses` through APT. Retained OpenSSL 3.5.9. |
+| FreeBSD | Installed quarterly `gnupg` 2.5.24 and dependencies via `pkg`. Retained base OpenSSL 3.5.9. |
+| NetBSD | Staged official pkgsrc `gnupg2` 2.5.22 and dependencies in a private prefix because the guest denied sudo. Used base OpenSSL 3.5.7. |
+| DragonFly | Staged official `gnupg` 2.5.24 and dependencies in a private prefix because the guest has no sudo or doas. Used OpenSSL 3.5.9 from `/usr/local`. |
+| OpenBSD | Staged signed `gnupg` 2.5.24p0 and dependencies in a private prefix because the guest denied sudo. Used `eopenssl` 3.5.9. |
+| Buran | Installed Homebrew `gnupg` 2.5.24_1 and dependencies. Used Homebrew `openssl@3` 3.5.9. |
+
 ## 4. Validation and delivery
 
 1. Finish the shared implementation and review the atomic commits before freezing the test revision. Use private native run directories and the existing remote runner. Build `lurker-cli` and run the scoped core/CLI checks without compiling desktop targets.
