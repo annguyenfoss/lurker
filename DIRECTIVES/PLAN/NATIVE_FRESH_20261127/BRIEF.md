@@ -125,6 +125,14 @@ tool versions, operations, expected/actual hashes, quick feature observations,
 outcome, log paths and cleanup. Use passed/failed/blocked/unavailable/not-applicable
 honestly. A missing receipt is incomplete. Keep manifests/checkpoints atomic.
 
+Freeze harness inputs from a named commit (for example with `git show REV:path`)
+before uploading them; other host owners may be editing the shared worktree.
+Record the executed script hash as well as its base revision. Payload hashes
+alone do not prove filesystem identity: capture native mount and backing-store
+types. Reject mismatches, and retain driver/superblock evidence for generic FUSE
+or UFS-family labels. Bound payload I/O as well as CLI subprocesses; retain
+stalled worker identities and failed storage for scoped normal recovery.
+
 Freeze baseline from the commit containing these handoffs; capture it before
 archiving. Coordinator owns shared docs and shared Rust dispatch/model/profiles.
 Host ownership is in HOSTS.md. Linux shared changes belong to Arch's owner;

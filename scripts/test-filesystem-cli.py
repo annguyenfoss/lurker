@@ -323,10 +323,67 @@ def verify_payload(mountpoint, expected):
     return result
 
 
-def payload_phase(mountpoint, expected, phase):
+def linux_mount_record(text, path):
+    target = str(path)
+    matches = []
+    for line in text.splitlines():
+        left, separator, right = line.partition(" - ")
+        before, after = left.split(), right.split()
+        if not separator or len(before) < 6 or len(after) < 2:
+            continue
+        point = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), before[4])
+        if target != point and not target.startswith(point.rstrip("/") + "/"):
+            continue
+        matches.append({"mountpoint": point, "filesystem": after[0],
+                        "source": re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), after[1]),
+                        "options": before[5].split(","), "mount_id": before[0]})
+    if not matches:
+        raise RuntimeError("Native Linux mount identity is missing")
+    longest = max(len(row["mountpoint"]) for row in matches)
+    matches = [row for row in matches if len(row["mountpoint"]) == longest]
+    if len(matches) != 1:
+        raise RuntimeError("Native Linux mount identity is ambiguous")
+    return matches[0]
+
+
+def check_linux_filesystem(record, requested):
+    if "rw" not in record["options"]:
+        raise RuntimeError("Native mount is not read/write")
+    if not requested:
+        return "recorded"
+    expected = {
+        "ext4": {"ext4"}, "btrfs": {"btrfs"}, "xfs": {"xfs"}, "apfs": {"apfs"},
+        "hammer2": {"hammer2"}, "exfat": {"exfat", "fuseblk", "fuse.exfat"},
+        "zfs": {"zfs"}, "fat32": {"vfat"}, "ufs1": {"ufs"},
+        "ufs2": {"fuse.rufs", "fuse.fuse-ufs", "fuse", "fuseblk"},
+        "ntfs": {"ntfs3", "ntfs", "fuseblk", "fuse.ntfs-3g"},
+    }
+    if record["filesystem"] not in expected.get(requested, set()):
+        raise RuntimeError(f"Requested {requested} but native mount reports {record['filesystem']}")
+    # Generic FUSE labels and UFS family names need the driver's/superblock's
+    # independent identity evidence; mount type alone cannot prove that format.
+    if record["filesystem"] in {"fuse", "fuseblk", "ufs"} or requested == "ufs2":
+        return "driver-or-superblock-proof-required"
+    return "native-type-verified"
+
+
+def payload_phase(mountpoint, expected, phase, filesystem=None, backend=None, source=None):
     if not os.path.ismount(mountpoint):
         raise RuntimeError("Mount missing; refusing payload write to underlay")
     result = {}
+    if platform.system() == "Linux":
+        mountinfo = Path("/proc/self/mountinfo").read_text()
+        mounted = linux_mount_record(mountinfo, mountpoint)
+        if mounted["mountpoint"] != str(mountpoint):
+            raise RuntimeError("Native mount table does not contain the plaintext mountpoint")
+        result[phase + "_mount"] = mounted
+        identity = mounted
+        if backend in DIRECTORIES:
+            if source is None:
+                raise RuntimeError("Directory filesystem verification needs its ciphertext source")
+            identity = linux_mount_record(mountinfo, source)
+            result[phase + "_backing_mount"] = identity
+        result[phase + "_filesystem_identity"] = check_linux_filesystem(identity, filesystem)
     if phase == "write":
         metadata = mountpoint.stat()
         result["initial_root_metadata"] = {
@@ -459,7 +516,8 @@ def main():
             result["payload_phase"] = phase
             atomic_json(receipt, result)
             result.update(bounded_payload_call(
-                lambda: payload_phase(mountpoint, expected, phase), args.timeout))
+                lambda: payload_phase(mountpoint, expected, phase, args.filesystem,
+                                      args.backend, source), args.timeout))
             if phase == "append":
                 expected["page.txt"] += APPEND
                 expected["second.txt"] = SECOND

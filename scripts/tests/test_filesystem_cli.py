@@ -81,5 +81,33 @@ class PayloadWorkerTests(unittest.TestCase):
             suite.os.waitpid(failure.exception.worker["pid"], suite.os.WNOHANG)
 
 
+class NativeFilesystemTests(unittest.TestCase):
+    def test_selected_ext4_cannot_pass_when_formatter_produces_ext2(self):
+        record = {"filesystem": "ext2", "options": ["rw", "relatime"]}
+        with self.assertRaisesRegex(RuntimeError, "Requested ext4.*ext2"):
+            suite.check_linux_filesystem(record, "ext4")
+        record["filesystem"] = "ext4"
+        self.assertEqual(suite.check_linux_filesystem(record, "ext4"), "native-type-verified")
+        record["options"] = ["ro"]
+        with self.assertRaisesRegex(RuntimeError, "not read/write"):
+            suite.check_linux_filesystem(record, "ext4")
+
+    def test_backing_identity_uses_longest_native_mount_and_decodes_escapes(self):
+        mounts = ("1 0 8:0 / / rw - ext4 /dev/root rw\n"
+                  "2 1 7:0 / /test\\040backing rw - xfs /dev/loop0 rw\n"
+                  "3 2 0:2 / /plaintext rw - fuse.gocryptfs gocryptfs rw\n")
+        backing = suite.linux_mount_record(mounts, Path("/test backing/vault"))
+        plaintext = suite.linux_mount_record(mounts, Path("/plaintext"))
+        self.assertEqual(backing["filesystem"], "xfs")
+        self.assertEqual(backing["mountpoint"], "/test backing")
+        self.assertEqual(plaintext["filesystem"], "fuse.gocryptfs")
+        self.assertEqual(suite.check_linux_filesystem(backing, "xfs"), "native-type-verified")
+
+    def test_generic_fuse_is_not_full_format_identity_proof(self):
+        record = {"filesystem": "fuseblk", "options": ["rw"]}
+        self.assertEqual(suite.check_linux_filesystem(record, "ntfs"),
+                         "driver-or-superblock-proof-required")
+
+
 if __name__ == "__main__":
     unittest.main()
