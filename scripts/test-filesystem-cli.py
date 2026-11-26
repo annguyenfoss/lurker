@@ -355,7 +355,7 @@ def check_linux_filesystem(record, requested):
         "ext4": {"ext4"}, "btrfs": {"btrfs"}, "xfs": {"xfs"}, "apfs": {"apfs"},
         "hammer2": {"hammer2"}, "exfat": {"exfat", "fuseblk", "fuse.exfat"},
         "zfs": {"zfs"}, "fat32": {"vfat"}, "ufs1": {"ufs"},
-        "ufs2": {"fuse.rufs", "fuse.fuse-ufs", "fuse", "fuseblk"},
+        "ufs2": {"ufs", "fuse.ufs", "fuse.rufs", "fuse.fuse-ufs", "fuse", "fuseblk"},
         "ntfs": {"ntfs3", "ntfs", "fuseblk", "fuse.ntfs-3g"},
     }
     if record["filesystem"] not in expected.get(requested, set()):

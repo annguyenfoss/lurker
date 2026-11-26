@@ -107,6 +107,10 @@ class NativeFilesystemTests(unittest.TestCase):
         record = {"filesystem": "fuseblk", "options": ["rw"]}
         self.assertEqual(suite.check_linux_filesystem(record, "ntfs"),
                          "driver-or-superblock-proof-required")
+        for filesystem in ("ufs", "fuse.ufs"):
+            record["filesystem"] = filesystem
+            self.assertEqual(suite.check_linux_filesystem(record, "ufs2"),
+                             "driver-or-superblock-proof-required")
 
 
 if __name__ == "__main__":
