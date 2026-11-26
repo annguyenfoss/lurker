@@ -145,3 +145,42 @@ Pre-Alpha with its last published files dated 2004-02-23. References:
 prepared; generated test-only credentials remain private mode0600 outside logs.
 Device, reboot persistence, broader runtime conformance and final frozen-candidate
 validation are pending; this report does not claim completion.
+
+## UFS2 prerequisite follow-up and intermediate product evidence
+
+The fresh raw kernel-UFS2 control also passed using the existing configured
+write-enabled module. That observation is separate from stock Fedora and from
+the FUSE route used over 4096-byte LUKS mappings. A scoped exact-kernel depmod
+override now selects the inspected existing write-enabled module after reboot;
+its contents are tracked in `FEDORA_UFS_PREREQUISITE.conf`.
+
+The fresh upstream FUSE driver source is pinned to
+`ee5c4a447da98220a11edb69a225d51379afc4fb`. Native tests exposed an incorrect
+rename destination lookup and an omitted FUSE ABI feature. The host-only
+`FEDORA_FUSE_UFS_NOREPLACE.patch` (SHA256
+`c9d71d6a6c24f69b0e1d64653983ad9995e9fd8e7b0b3409dc8deabdc352dc13`)
+fixes those two issues. Seven native rename/collision checks and the full raw
+payload cycle pass. Cryptomator/UFS2 now completes its ordinary payload cycle.
+
+The additional host-only `FEDORA_FUSE_UFS_BARRIER.patch` (SHA256
+`292718aec4842afc10668c293dc5d3137abaad77bae49fed8e539be5325932a7`)
+forwards file and directory fsync through the driver cache to the scoped
+backing-file `File::sync_all`. Errors propagate to callers. The final driver
+SHA256 is `e7c2e1686387c66c3b13310486cbd8120972d9be0d8a64f37d48e5a1dc45dd27`;
+28 rufs unit tests pass. Native strace observations confirm a new backing-file
+fsync for both client operations; injected EIO reaches the client and a retry
+succeeds. Fresh full raw payload write/append/verify and normal reopens pass,
+with no remaining mount. This proves the observed barrier forwarding, not an
+exhaustive filesystem durability audit. An exploratory destroy-time sync caused
+a daemon teardown/reopen race and was removed before this qualified patch.
+The installed source commits are `1dd06ad` (rename) and `b9779da` (barriers).
+These remain explicitly configured host prerequisites; upstream labels writing
+experimental. No filesystem implementation is bundled into Lurker.
+
+The intermediate exact `8714ef5` product physical sweep completes **29/30**;
+only LUKS2/UFS1 retains the pre-change geometry rejection. All other cells pass
+full real-payload normal close/reopen cycles. A narrowly scoped native VeraCrypt
+Quick Format confirmation was added to the device harness; it responds only
+for the verified scratch device, create, VeraCrypt and explicit force. Earlier
+interrupted device attempts remain forensic evidence, not completed sweeps.
+The final source qualification and reboot evidence remain pending.
