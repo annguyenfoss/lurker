@@ -142,7 +142,8 @@ from an installed package's results.
    math or computer science PDF, and about one page of plain text. Pin the
    input hashes and expected hashes after appending. The
    [payload harness](../../scripts/test-mounted-payload.py) expects
-   `bitcoin.pdf`, `ethereum.pdf`, `lamport.pdf`, and `page.txt`. Run its
+   `bitcoin.pdf`, `ethereum.pdf`, `transformer.pdf` (or legacy `lamport.pdf`),
+   and `page.txt`. Run its
    `write` phase on the verified mount, then close and reopen the vault.
    The `append` phase verifies the original bytes before it updates the
    text and syncs both that update and the new file. Use `verify` after the

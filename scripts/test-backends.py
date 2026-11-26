@@ -902,7 +902,7 @@ def parse_args(argv=None):
     parser.add_argument("--commit", help="Source SHA supplied by the verified build coordinator")
     parser.add_argument("--firefox", type=Path, help="Run a fresh headless Firefox profile on the encrypted mount as the login user")
     parser.add_argument("--payload", type=Path,
-                        help="Directory containing bitcoin.pdf, ethereum.pdf, lamport.pdf, and page.txt")
+                        help="Directory containing bitcoin.pdf, ethereum.pdf, transformer.pdf (or legacy lamport.pdf), and page.txt")
     parser.add_argument("--unprivileged", action="store_true", help="Use Linux's explicit VeraCrypt user route")
     parser.add_argument("--auto-detect", action="store_true",
                         help="Use --type auto for mount/unmount while creating the explicitly selected format")

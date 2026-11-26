@@ -9,7 +9,6 @@ from pathlib import Path
 import sys
 
 
-FILES = ("bitcoin.pdf", "ethereum.pdf", "lamport.pdf", "page.txt")
 APPEND = b"\nThe second mount appended this entry before restarting.\n"
 SECOND = b"This file was created and synced on the second mount.\n"
 
@@ -58,13 +57,18 @@ def main():
     parser.add_argument("phase", choices=("write", "append", "verify"))
     parser.add_argument("mountpoint", type=Path)
     parser.add_argument("payload", type=Path, help="Directory containing the three PDFs and page.txt")
+    parser.add_argument("--third-paper", choices=("lamport.pdf", "transformer.pdf"),
+                        help="Third PDF name; defaults to transformer.pdf when present, otherwise lamport.pdf")
     args = parser.parse_args()
 
     mountpoint = args.mountpoint.resolve(strict=True)
     if mountpoint == mountpoint.parent or not os.path.ismount(mountpoint):
         parser.error(f"Expected a mounted disposable volume at {mountpoint}")
     directory = mountpoint / "Lurker test payload"
-    expected = {name: (args.payload / name).read_bytes() for name in FILES}
+    third_paper = args.third_paper or (
+        "transformer.pdf" if (args.payload / "transformer.pdf").is_file() else "lamport.pdf")
+    names = ("bitcoin.pdf", "ethereum.pdf", third_paper, "page.txt")
+    expected = {name: (args.payload / name).read_bytes() for name in names}
 
     if args.phase == "write":
         directory.mkdir(mode=0o700)
