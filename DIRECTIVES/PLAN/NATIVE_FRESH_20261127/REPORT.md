@@ -176,24 +176,42 @@ checks passed (144 tests, no failures, 12 ignored) and its DMG was built and
 verified. Extracted-package qualification remains in progress. The native
 desktop callback and 100%/120% form snapshots passed before the freeze. A third
 small Toshiba sample passed the VeraCrypt payload lifecycle and restored native
-device ownership after normal close. Buran has not been rebooted.
+device ownership after normal close. The frozen DMG subsequently passed all
+280 profile-conformance checks and twelve inner-filesystem lifecycles. Its
+directory matrix reproduced a CryFS/UFS2 publication failure: a native
+AppleDouble companion disappeared after its associated directory moved. That
+failed receipt is preserved; a narrow anchored-publisher correction and a new
+package freeze are still required. Buran has not been rebooted.
 
 NetBSD's installed CGD artifact has now passed all seven container and seven
 device filesystem cases, plus four representative mounted-reboot cases. This
 does not remove the separate upstream ZFS reboot limitation. `7d00998` adds a
 native process identity reader with live/zombie/reaped controls. The CryFS core
-preview has passed a login-user PDF write/close/reopen/append/reopen lifecycle
+route is committed at `bd65b08`, with factory/stager registration at `d806711`
+and desktop directory forms at `cca3c17`. It has passed a login-user PDF
+write/close/reopen/append/reopen lifecycle
 using host ReFUSE. SQLite WAL fails because native shared writable mapping
 returns `EOPNOTSUPP`; the stock ReFUSE implementation disables the puffs page
 cache. The failed fixture and native mapping control are preserved. No cache or
-durability requirement has been weakened. Factory packaging, desktop checks
-and the remaining backing-filesystem combinations are not complete.
+durability requirement has been weakened. Actual prerequisite-denial tests
+left the new target absent and its parent unchanged. Native desktop tests and
+the ordinary-user real-helper callback passed, with the host policy restored.
+The callback needed a temporary exact-helper rule for native inventory listing;
+the engine itself stayed unprivileged. The immutable `cca3c17` workspace passed
+124 tests with no failures and five ignored tests. Final installed-package and
+full backing-filesystem qualification remain in progress.
 
 OpenBSD physical CRYPTO, RAID1C and VeraCrypt have each passed their four
 applicable filesystem lifecycles. An additional RAID1C fixture passed explicit
-one-member recovery. Native desktop physical forms are under validation.
-DragonFly has booted its updated stock world/kernel and passed native physical
-controls; product physical creation is still under integration.
+one-member recovery. Desktop forms are committed at `9d2b057`: forty native
+tests and a 24-frame render probe passed, followed by all three real
+ordinary-user physical callbacks. The coordinator inspected the 120% mirror
+forms and verified all six source overlays against executed inputs, accounting
+separately for the already qualified NetBSD changes.
+DragonFly has booted its updated stock world/kernel. Product physical creation
+is committed at `6a4b88c`, with explicit filesystem API admission at `34872dd`.
+Both methods passed all five applicable physical inner filesystems. Its desktop
+physical forms are being tested in a separate source overlay.
 
 BSD SDK/stager changes `782a088`, `88d9315` and `c7f7092` keep FUSE on the host
 and validate its ABI instead of packaging it privately. FreeBSD's fresh package
@@ -202,6 +220,13 @@ symlink-alias comparison defect was found during the native regression. Fix
 `d601bc5` validates the resolved provider through the trusted host ABI alias and
 has a native versioned-provider/alias-update regression. New artifact
 qualification is required before that package is accepted.
+The replacement `d601bc5` package has now passed the install cycles, 139
+workspace tests, four native root audits and an actual ordinary-user desktop
+window. Its fourteen physical GELI/VeraCrypt filesystem cases passed. The
+coordinator independently matched all original payload hashes, final appended
+hashes, invoking-user ownership and closed-mount results in those fourteen
+receipts. Remaining container/backing, helper, variation and reboot gates
+continue on that installed artifact.
 
 FreeBSD Btrfs/XFS controls using a separately installed in-process LKL FUSE
 driver passed with direct I/O. They remain a separate eligibility assessment:
