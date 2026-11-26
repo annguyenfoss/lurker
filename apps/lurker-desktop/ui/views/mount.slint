@@ -91,7 +91,7 @@ export component MountView inherits Card {
 
         if root.supports-directories || root.is-linux || root.is-netbsd || root.is-freebsd: Segmented {
             value: root.source-kind;
-            options: root.is-netbsd ? root.partition-sources : (root.is-macos || root.is-freebsd || (root.is-linux && !root.unprivileged)) ? root.linux-sources : root.file-sources;
+            options: root.is-netbsd ? (root.supports-directories ? root.linux-sources : root.partition-sources) : (root.is-macos || root.is-freebsd || (root.is-linux && !root.unprivileged)) ? root.linux-sources : root.file-sources;
             selected(v) => { root.source-kind = v; root.source = ""; }
         }
 
