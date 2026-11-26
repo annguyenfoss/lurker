@@ -51,11 +51,19 @@ def main():
                     if not os.path.ismount(m):raise RuntimeError("OS mount missing; refusing underlay writes")
                     view=subprocess.check_output(["findmnt","-rn","-M",str(m),"-o","SOURCE,FSTYPE,OPTIONS"],text=True).strip();row.setdefault("mounts",[]).append(view)
                     if "rw" not in view.split()[-1].split(","):raise RuntimeError("Mount is not read/write")
-                    row.update(h.bounded_payload_call(lambda:h.payload_phase(m,wanted,phase,fs,backend,a.device),45))
                     proof=subprocess.run(["blkid","-p",view.split()[0]],capture_output=True,text=True,timeout=15)
                     row.setdefault("superblocks",[]).append({"source":view.split()[0],"code":proof.returncode,"stdout":proof.stdout,"stderr":proof.stderr})
                     if fs in {"ufs1","ufs2"} and (proof.returncode or ('VERSION="'+("1" if fs=="ufs1" else "2")+'"') not in proof.stdout):raise RuntimeError("Independent UFS superblock version mismatch")
-                    row["filesystem_driver"]=subprocess.run(["modinfo",{"ufs1":"ufs","ufs2":"ufs","ntfs":"ntfs3"}.get(fs,fs)],capture_output=True,text=True,timeout=15).stdout
+                    actual=view.split()[1]
+                    driver={'mount_filesystem':actual,'running_kernel':os.uname().release}
+                    if fs=='ufs2' and actual.startswith('fuse'):
+                        binary=Path('/usr/local/bin/fuse-ufs');assert binary.stat().st_uid==0 and not binary.stat().st_mode&0o022
+                        driver.update(kind='host-fuse-ufs',binary=str(binary),binary_sha256=h.file_hash(binary))
+                    else:
+                        module={'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs)
+                        driver.update(kind='kernel',module=module,modinfo=subprocess.run(['modinfo',module],capture_output=True,text=True,timeout=15).stdout)
+                    row['filesystem_driver']=driver
+                    row.update(h.bounded_payload_call(lambda:h.payload_phase(m,wanted,phase,fs,backend,a.device),45))
                     if phase=="append":wanted['page.txt']+=h.APPEND;wanted['second.txt']=h.SECOND
                     cli("unmount",[m],"auto")
                 row["status"]="passed"
