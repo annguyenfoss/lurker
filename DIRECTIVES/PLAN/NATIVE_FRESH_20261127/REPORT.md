@@ -30,6 +30,15 @@ under target/goal-validation/native-fresh-20261127/.
   encryption passes. UFS1 used an existing write-enabled external module and
   must not be presented as stock Fedora support. Quick feature observations
   remain qualified by actual filesystem settings and probe semantics.
+- Harness variations: `22c7ecb` adds cipher, generated private binary-keyfile and
+  Auto reopen options; focused checks passed remotely on Ubuntu. `cfcfd5f`
+  preserves the actual Transformer filename in the mounted-payload conformance
+  suite, with legacy Lamport compatibility. Both payload-name routes passed
+  write/append/verify on separate actual openSUSE mounts with normal cleanup.
+- First product fix: `a815e10` allows explicit filesystem selection through
+  existing privileged Linux LUKS1/LUKS2/VeraCrypt device creation and existing
+  macOS APFS partition creation. Remote formatting and focused core/CLI tests
+  passed on Arch. Physical-device runtime qualification is still pending.
 
 ## Work still required
 
@@ -46,6 +55,12 @@ DragonFly has newly demonstrated writable host-local FUSE controls that its
 current adapter does not yet expose. On macOS, the owner is investigating an
 eligible macFUSE VeraCrypt route after loading the installed driver without a
 reboot; a FUSE-T SMB mount cannot satisfy the network-filesystem exclusion.
+
+DragonFly's discarded manual mount-label prototype caused a kernel panic by
+violating the native FUSE vnode close contract. A fresh unmodified-helper
+failed-mount control subsequently closed normally without a panic. This is
+evidence against presenting the prototype failure as an upstream FUSE defect.
+The owner is testing a corrected adapter using the actual FUSE device vnode.
 
 No complete host matrix, final candidate validation, scratch-device qualification,
 whole-round cleanup or deferred customized-kernel assessment is claimed yet.
