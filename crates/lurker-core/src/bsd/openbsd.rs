@@ -1,6 +1,6 @@
 //! OpenBSD's base-system softraid CRYPTO adapter.
 //!
-//! Only Lurker-owned vnode files are accepted. This adapter uses one CRYPTO
+//! Lurker-owned vnode files and verified idle physical disks use one CRYPTO
 //! chunk; `raid1c_native` composes the same identity and filesystem helpers for
 //! explicitly identified two-member native RAID1C arrays.
 use super::{args, exec, Credential, Registry, Session};
@@ -8,14 +8,16 @@ use crate::{AppError, AppResult, CreateCipher, VolumeType};
 use serde::{Deserialize, Serialize};
 
 mod filesystems;
+mod physical;
 pub(super) use filesystems::{
     close_filesystem, filesystem_has_posix_ownership, make_selected_filesystem,
     matches_filesystem_mount, mount_filesystem, validate_filesystem,
 };
+pub(super) use physical::{ensure_physical_idle, physical_device};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::fd::AsRawFd;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
@@ -42,6 +44,10 @@ fn device_name<'a>(value: &'a str, prefix: &str) -> AppResult<&'a str> {
             "Unexpected OpenBSD device identity; refusing device operation.",
         ))
     }
+}
+
+pub(super) fn backing_unit(device: &str) -> AppResult<&str> {
+    device_name(device, "vnd").or_else(|_| device_name(device, "sd"))
 }
 
 fn password(credential: &Credential) -> AppResult<Vec<u8>> {
@@ -132,8 +138,23 @@ pub(super) fn vnode_identity(device: &str) -> AppResult<Option<(u64, u64)>> {
 
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     let metadata = fs::metadata(path).map_err(|e| AppError::io("Inspect vnode source", e))?;
+    if metadata.file_type().is_block_device() {
+        let source = physical_device(path)?;
+        let backing = physical_device(Path::new(device))?;
+        if source.source != backing.source
+            || source.bytes != backing.bytes
+            || source.metadata_id != backing.metadata_id
+        {
+            return Err(AppError::new(
+                "OpenBSD physical backing identity changed; refusing operation.",
+            ));
+        }
+        return Ok(());
+    }
     if !metadata.is_file() {
-        return Err(AppError::new("Vnode backing must be a regular file."));
+        return Err(AppError::new(
+            "Backing must be a regular vnode file or verified physical disk.",
+        ));
     }
     // Do not trust vnconfig's cached display pathname or a /dev name for the
     // backing filesystem: hard links can change the displayed path, and FUSE
@@ -147,6 +168,11 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
 }
 
 pub(super) fn detach_file(device: &str) -> AppResult<()> {
+    if backing_unit(device)?.starts_with("sd") {
+        // Physical storage has no acquired vnode lease to detach.
+        physical_device(Path::new(device))?;
+        return Ok(());
+    }
     let name = device_name(device, "vnd")?;
     exec("/sbin/vnconfig", &args(&["-u", name]), None)?;
     Ok(())
@@ -177,12 +203,44 @@ pub(super) fn format(
     }
     // Validate credentials before writing any label.
     let _ = password(credential)?;
-    let name = device_name(device, "vnd")?;
+    let name = backing_unit(device)?;
+    let original_id = if name.starts_with("sd") {
+        ensure_physical_idle(Path::new(device))?;
+        let physical = physical_device(Path::new(device))?;
+        let mut disk = OpenOptions::new()
+            .write(true)
+            .open(format!("/dev/r{name}c"))
+            .map_err(|e| AppError::io("Open verified physical softraid disk", e))?;
+        disk.write_all(&vec![0; 1024 * 1024])
+            .map_err(|e| AppError::io("Initialize physical softraid label area", e))?;
+        disk.sync_all()
+            .map_err(|e| AppError::io("Sync physical softraid label area", e))?;
+        drop(disk);
+        exec("/sbin/fdisk", &args(&["-iy", name]), None)?;
+        physical.metadata_id
+    } else {
+        None
+    };
     exec(
         "/sbin/disklabel",
         &args(&["-wAT-", name]),
         Some(b"RAID *\n"),
     )?;
+    if let Some(id) = original_id {
+        // Destructive layout preparation must preserve an existing durable
+        // backing identity. Fresh blank disks receive their first native DUID.
+        let input = format!("i\n{id}\nw\nq\n");
+        exec(
+            "/sbin/disklabel",
+            &args(&["-E", name]),
+            Some(input.as_bytes()),
+        )?;
+        if physical_device(Path::new(device))?.metadata_id.as_deref() != Some(id.as_str()) {
+            return Err(AppError::new(
+                "Physical disklabel identity changed during softraid initialization.",
+            ));
+        }
+    }
     // Return the newly initialized mapping to the shared lifecycle without an
     // internal detach/reopen. The caller journals this resource before
     // filesystem formatting or cleanup, keeping interrupted creation recoverable.
@@ -193,7 +251,7 @@ pub(super) fn format(
 /// label: Auto dispatch may try VeraCrypt only when this returns false, never
 /// after native authentication fails. Other storage I/O errors fail closed.
 pub(super) fn probe_crypto_header(device: &str) -> AppResult<bool> {
-    let name = device_name(device, "vnd")?;
+    let name = backing_unit(device)?;
     let mut file = match File::open(format!("/dev/r{name}a")) {
         Ok(file) => file,
         // Unlabeled/random/VeraCrypt images need not expose partition 'a'.
@@ -247,7 +305,7 @@ fn is_raid1c_header(bytes: &[u8; 56]) -> bool {
 }
 
 fn assemble(device: &str, credential: &Credential, creating: bool) -> AppResult<String> {
-    let name = device_name(device, "vnd")?;
+    let name = backing_unit(device)?;
     let chunk = format!("/dev/{name}a");
     let input = password(credential)?;
     let mut argv = args(&["-s", "-C", "noauto", "-c", "C"]);
@@ -276,11 +334,11 @@ pub(super) fn unlock(device: &str, readonly: bool, credential: &Credential) -> A
 
 pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
     let name = device_name(mapped, "sd")?;
-    let vnode = device_name(backing, "vnd")?;
+    let vnode = backing_unit(backing)?;
     let output = exec("/sbin/bioctl", &args(&[name]), None)?;
     if !mapping_matches(&output, name, vnode) {
         return Err(AppError::new(
-            "Softraid mapping no longer belongs to the recorded vnode; refusing operation.",
+            "Softraid mapping no longer belongs to its recorded backing; refusing operation.",
         ));
     }
     Ok(())
@@ -325,12 +383,18 @@ pub(super) fn disk_is_absent(mapped: &str) -> AppResult<bool> {
     let mut found = false;
     for item in listing.split(',') {
         let Some((name, duid)) = item.split_once(':') else {
-            return Err(AppError::new("Unexpected OpenBSD disk inventory; preserving the journal."));
+            return Err(AppError::new(
+                "Unexpected OpenBSD disk inventory; preserving the journal.",
+            ));
         };
-        if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric())
-            || (!duid.is_empty() && (duid.len() != 16 || !duid.bytes().all(|b| b.is_ascii_hexdigit())))
+        if name.is_empty()
+            || !name.bytes().all(|b| b.is_ascii_alphanumeric())
+            || (!duid.is_empty()
+                && (duid.len() != 16 || !duid.bytes().all(|b| b.is_ascii_hexdigit())))
         {
-            return Err(AppError::new("Unexpected OpenBSD disk inventory; preserving the journal."));
+            return Err(AppError::new(
+                "Unexpected OpenBSD disk inventory; preserving the journal.",
+            ));
         }
         found |= name == recorded;
     }
@@ -344,7 +408,8 @@ pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> Ap
     let conflict = || {
         AppError::new("OpenBSD detach intent conflicts with its session; preserving the journal.")
     };
-    if session.backend != VolumeType::Softraid || session.mounted.is_some()
+    if session.backend != VolumeType::Softraid
+        || session.mounted.is_some()
         || !session.identity.matches(&session.source)
     {
         return Err(conflict());
@@ -357,7 +422,10 @@ pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> Ap
             if !disk_is_absent(mapped)? {
                 return Ok(());
             }
-            if super::mounts()?.iter().any(|mount| mount.source == Path::new(mapped)) {
+            if super::mounts()?
+                .iter()
+                .any(|mount| mount.source == Path::new(mapped))
+            {
                 return Err(conflict());
             }
             session.mapped = None;
@@ -366,7 +434,9 @@ pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> Ap
             if session.mapped.is_some() {
                 return Err(conflict());
             }
-            if vnode_identity(backing)?.is_some() {
+            if backing_unit(backing)?.starts_with("sd") {
+                verify_backing(backing, &session.source)?;
+            } else if vnode_identity(backing)?.is_some() {
                 return Ok(());
             }
             session.backing = None;
@@ -412,7 +482,10 @@ mod tests {
         let work = std::env::temp_dir().join(format!("lurker-openbsd-detach-{}", unique_id()));
         fs::DirBuilder::new().mode(0o700).create(&work).unwrap();
         let source = work.join("owned.img");
-        File::create(&source).unwrap().set_len(128 * 1024 * 1024).unwrap();
+        File::create(&source)
+            .unwrap()
+            .set_len(128 * 1024 * 1024)
+            .unwrap();
         let registry = Registry {
             directory: work.clone(),
             _lock: File::create(work.join("lock")).unwrap(),
