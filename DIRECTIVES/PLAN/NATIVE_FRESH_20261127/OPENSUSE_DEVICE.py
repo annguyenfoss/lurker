@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Destructive product cases fenced to the fresh openSUSE scratch serial."""
-import argparse, hashlib, importlib.util, json, os, secrets, shutil, subprocess, time
+import argparse, hashlib, importlib.util, inspect, json, os, secrets, shutil, subprocess, time
 from pathlib import Path
 
 # sudo secure_path excludes locally installed, administrator-owned native tools.
@@ -10,6 +10,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     for arg in ("binary","harness","payload","root","device"):p.add_argument("--"+arg,type=Path,required=True)
     p.add_argument("--commit",required=True)
+    p.add_argument("--harness-commit",required=True)
     p.add_argument("--backends",default="luks,luks1,veracrypt")
     p.add_argument("--filesystems",default="ext4,btrfs,xfs,apfs,ufs1,ufs2,hammer2,ntfs,exfat,zfs")
     p.add_argument("--serial",required=True,help="Observed guest serial recorded with the new domain attachment")
@@ -22,9 +23,10 @@ def main():
     if identity.split()[0]!=a.serial or a.serial not in {"lurker-fresh-opensuse","lurker-fresh-opensus"} or identity.split()[-1]!="disk":p.error("Scratch disk serial/type mismatch")
     if int(subprocess.check_output(["blockdev","--getsize64",str(a.device)],text=True))!=a.size_bytes:p.error("Scratch size mismatch")
     spec=importlib.util.spec_from_file_location("h",a.harness);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
+    if not a.skip_block and "veracrypt" in a.backends.split(",") and "confirm_quick_format" not in inspect.signature(h.terminal).parameters:p.error("Use the frozen scratch-only native Quick Format consent harness")
     a.root.mkdir(parents=True,exist_ok=True)
     expected={name:(a.payload/name).read_bytes() for name in ("bitcoin.pdf","ethereum.pdf","transformer.pdf","page.txt")}
-    result={"host":os.uname().nodename,"kernel":os.uname().release,"commit":a.commit,"binary":str(a.binary),"binary_sha256":h.file_hash(a.binary),"device":str(a.device),"identity":identity,"cases":[],"status":"running","pid":os.getpid()}
+    result={"host":os.uname().nodename,"kernel":os.uname().release,"commit":a.commit,"binary":str(a.binary),"binary_sha256":h.file_hash(a.binary),"harness":str(a.harness),"harness_commit":a.harness_commit,"harness_sha256":h.file_hash(a.harness),"script_sha256":h.file_hash(Path(__file__)),"device":str(a.device),"identity":identity,"cases":[],"status":"running","pid":os.getpid()}
     receipt=a.root/"device.json"
     def save():h.atomic_json(receipt,result)
     for fs in ([] if a.skip_block else a.filesystems.split(",")):
@@ -35,7 +37,7 @@ def main():
             secret="Lurker9!"+secrets.token_urlsafe(24)
             def cli(action,operands,kind=None):
                 log=d/(str(len(row["operations"]))+"-"+action+".log")
-                r=h.terminal([str(a.binary),action,"--type",kind or backend,"--color=never",*map(str,operands)],secret,180,log)
+                r=h.terminal([str(a.binary),action,"--type",kind or backend,"--color=never",*map(str,operands)],secret,180,log,confirm_quick_format=action=="create" and backend=="veracrypt")
                 row["operations"].append({"action":action,"log":str(log),**r});save()
                 if r["exit_code"] or r["timed_out"]:raise RuntimeError("CLI "+action+" failed")
             try:
