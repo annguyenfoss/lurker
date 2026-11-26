@@ -26,6 +26,8 @@ def main():
     p.add_argument('--root', required=True, type=Path)
     p.add_argument('--harness', required=True, type=Path)
     p.add_argument('--qualifier', required=True, type=Path)
+    p.add_argument('--driver', choices=('ntfs-3g', 'ntfs3', 'exfat', 'fuse-ufs'), action='append')
+    p.add_argument('--attempt', default='')
     args = p.parse_args()
     root = args.root.resolve(strict=True)
     harness = load('payload', args.harness)
@@ -38,7 +40,9 @@ def main():
     rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
     rename.restype = ctypes.c_int
     for fs, driver in [('ntfs', 'ntfs-3g'), ('ntfs', 'ntfs3'), ('exfat', 'exfat'), ('ufs2', 'fuse-ufs')]:
-        fixture = controls / (fs + '-' + driver)
+        if args.driver and driver not in args.driver:
+            continue
+        fixture = controls / (fs + '-' + driver + ('-' + args.attempt if args.attempt else ''))
         fixture.mkdir(mode=0o700)
         image, mount = fixture / 'backing.img', fixture / 'mount'
         mount.mkdir(mode=0o700)
@@ -47,6 +51,9 @@ def main():
         result = {'host': 'debian', 'kernel': os.uname().release, 'route': 'native-tool-control',
                   'filesystem': fs, 'driver': driver, 'source_kind': 'file', 'source': str(image),
                   'fixture': str(fixture), 'commands': [], 'status': 'running'}
+        result['tool_versions'] = json.loads((root / 'tools.json').read_text())
+        if driver == 'fuse-ufs':
+            result['driver_sha256'] = harness.file_hash(Path('/usr/local/bin/fuse-ufs'))
         receipt = fixture / 'result.json'
 
         def command(argv):
