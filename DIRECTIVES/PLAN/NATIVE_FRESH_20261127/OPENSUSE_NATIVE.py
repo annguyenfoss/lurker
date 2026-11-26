@@ -18,6 +18,7 @@ def main():
     a.add_argument("--payload", required=True, type=Path)
     a.add_argument("--device", type=Path)
     a.add_argument("--serial")
+    a.add_argument("--ufs2-native",action="store_true",help="Assess the installed Linux UFS2 kernel writer separately from FUSE")
     a.add_argument("--filesystems", default=",".join(FILES))
     x = a.parse_args()
     if os.uname().nodename != "opensuse-core-01" or os.geteuid() != 0:
@@ -38,7 +39,7 @@ def main():
     for fs in x.filesystems.split(","):
         d=x.root/fs;d.mkdir(exist_ok=True);m=d/"mount";m.mkdir(exist_ok=True)
         image=x.device or d/"native.img"
-        row={"filesystem":fs,"role":"native filesystem control","source_kind":"device" if x.device else "container","source":str(image),"operations":[],"status":"running"}
+        row={"filesystem":fs,"role":"native filesystem control","source_kind":"device" if x.device else "container","source":str(image),"ufs2_native":x.ufs2_native if fs=="ufs2" else None,"operations":[],"status":"running"}
         if x.device:row["identity"]=identity
         result["cases"].append(row);save();mounted=False
         pool="lrkf_opensuse_"+str(os.getpid())+"_"+fs
@@ -49,12 +50,13 @@ def main():
         def mount():
             nonlocal mounted
             if fs=="zfs":cmd(["zpool","import","-d",str(image.parent),pool])
-            elif fs=="ufs2":cmd(["/usr/local/bin/fuse-ufs","-o","rw,allow_other,fsname="+str(image),image,m])
+            elif fs=="ufs2" and not x.ufs2_native:cmd(["/usr/local/bin/fuse-ufs","-o","rw,allow_other,fsname="+str(image),image,m])
             else:
                 opts=[] if x.device else ["loop"]
                 if fs=="apfs":opts += ["readwrite"]
                 if fs=="ufs1":opts += ["rw","ufstype=44bsd"]
-                c=["mount",*(["-i"] if fs!="ntfs" else []),"-t",{"ufs1":"ufs","ntfs":"ntfs-3g"}.get(fs,fs)]
+                if fs=="ufs2":opts += ["rw","ufstype=ufs2"]
+                c=["mount",*(["-i"] if fs!="ntfs" else []),"-t",{"ufs1":"ufs","ufs2":"ufs","ntfs":"ntfs-3g"}.get(fs,fs)]
                 if opts:c += ["-o",",".join(opts)]
                 cmd(c+[image,m])
             for _ in range(100):
