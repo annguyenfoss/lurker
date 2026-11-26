@@ -269,6 +269,64 @@ def verify_bsd_patches(manifest, source):
         fail("BSD VeraCrypt artifact patch provenance differs from exact source")
 
 
+def administrator_file(path):
+    """Resolve every symlink while validating the full administrator-owned chain."""
+    path = Path(path)
+    if not path.is_absolute() or ".." in path.parts:
+        fail("host prerequisite path must be absolute and normalized")
+    pending = list(path.parts[1:])
+    current, links = Path("/"), 0
+    while True:
+        info = current.lstat()
+        if info.st_uid != 0 or (not stat.S_ISLNK(info.st_mode) and info.st_mode & 0o022):
+            fail("host prerequisite is not administrator-controlled: " + str(current))
+        if stat.S_ISLNK(info.st_mode):
+            links += 1
+            if links > 40:
+                fail("host prerequisite symlink loop")
+            target = Path(os.readlink(current))
+            remaining = list(target.parts[1:] if target.is_absolute() else target.parts) + pending
+            current = Path("/") if target.is_absolute() else current.parent
+            pending = remaining
+            continue
+        if not pending:
+            if not stat.S_ISREG(info.st_mode):
+                fail("host prerequisite must resolve to a regular file")
+            return current
+        if not stat.S_ISDIR(info.st_mode):
+            fail("host prerequisite ancestor is not a directory")
+        component = pending.pop(0)
+        current = current.parent if component == ".." else current / component
+
+
+def verify_bsd_host_fuse(root, manifest):
+    host = manifest.get("host_fuse", {})
+    system = platform.system()
+    library = host.get("library", "")
+    pattern = r"libfuse\.so\.2" if system == "FreeBSD" else r"libfuse\.so\.[1-9][0-9]*\.[0-9]+"
+    directory = Path("/usr/local/lib") if system == "FreeBSD" else Path("/usr/lib")
+    if (host.get("api") != "fuse2" or not re.fullmatch(pattern, library)
+            or host.get("path") != str(directory / library)
+            or not re.fullmatch(r"[0-9a-f]{64}", host.get("sha256", ""))):
+        fail("BSD VeraCrypt requires native host FUSE ABI provenance")
+    provider = administrator_file(Path(host["path"]))
+    if provider.parent != directory:
+        fail("host FUSE alias must stay in the native library directory")
+    readelf = shutil.which("readelf") or shutil.which("llvm-readelf")
+    if not readelf:
+        fail("readelf is required to validate the native host FUSE ABI")
+    info = elf_info(provider, readelf)
+    engine = elf_info(root / "lurker-veracrypt-bsd", readelf)
+    if (not info or info.get("soname") != [library] or not engine
+            or [name for name in engine.get("needed", []) if name.startswith("libfuse")] != [library]):
+        fail("native host FUSE SONAME/engine ABI differs")
+    # The producer hash is historical build provenance. Compatible root-managed
+    # host updates are accepted; record the provider used for this staging run.
+    return {"api": "fuse2", "library": library, "path": host["path"],
+            "resolved_path": str(provider), "sha256": digest(provider),
+            "build_sha256": host["sha256"]}
+
+
 def verify_folder_patches(kind, manifest, source):
     paths = source.constant("scripts/build-folder-backends.py", "PATCHES").get(kind, [])
     platform_patches = source.constant("scripts/build-folder-backends.py", "PLATFORM_PATCHES")
@@ -554,6 +612,7 @@ def validate_backend(kind, directory, source):
         manifest = json_file(root / "bsd-veracrypt-source.json")
         verify_platform(manifest)
         verify_bsd_patches(manifest, source)
+        verify_bsd_host_fuse(root, manifest)
         pins = source.constant("scripts/build-bsd-backends.py", "PINS")
         actual_pins = manifest.get("sources", {})
         expected_pins = {key: value for key, value in pins.items() if key != "libiconv" or platform.system() == "FreeBSD"}
@@ -1096,9 +1155,12 @@ def stage(args):
                         target.mkdir(exist_ok=True)
                         copied_file(name, target / name)
         dependencies = audit_dependencies(prefix)
+        host_fuse = ({"veracrypt-bsd": verify_bsd_host_fuse(artifacts["veracrypt-bsd"],
+                         json_file(artifacts["veracrypt-bsd"] / "bsd-veracrypt-source.json"))}
+                     if "veracrypt-bsd" in artifacts else {})
         manifest = {"schema": 1, "source_commit": source.commit, "os": system, "architecture": platform.machine(),
                     "selected_backends": sorted(selected), "bundled_artifacts": sorted(artifacts),
-                    "host_tools": requirements, "native_dependencies": dependencies,
+                    "host_tools": requirements, "native_dependencies": dependencies, "host_fuse": host_fuse,
                     "desktop_authorization": authorization,
                     "desktop_runtime": desktop_display_requirements(system, args.desktop),
                     "host_tool_requirements": {backend: TOOLS.get(system, {}).get(backend, []) for backend in sorted(selected)},
@@ -1113,6 +1175,7 @@ def stage(args):
                            if system == "FreeBSD" and selected & {"gocryptfs", "cryfs"} else [])
                         + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])
                         + (["VeraCrypt userspace/LKL requires the FUSE kernel interface and fusermount3"] if "veracrypt-userspace" in artifacts else [])
+                        + (["VeraCrypt requires the declared native host FUSE2 userspace library and kernel interface"] if "veracrypt-bsd" in artifacts else [])
                         + (["PEFS module must match the FreeBSD kernel"] if "pefs" in selected else [])
                         + (["LUKS1 requires the stock DragonFly dm_target_linear kernel module"] if system == "DragonFly" and "luks1" in selected else [])
                         + (["VeraCrypt requires the stock DragonFly dm_target_crypt kernel module"] if system == "DragonFly" and "veracrypt" in selected else []),

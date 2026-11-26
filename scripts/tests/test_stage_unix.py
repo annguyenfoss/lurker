@@ -496,7 +496,7 @@ Version needs section '.gnu.version_r' contains 2 entries:
                     "files": {engine.name: stager.digest(engine), "licenses/wxWidgets.txt": stager.digest(exception)}}
         receipt = self.root / "bsd-veracrypt-source.json"
         receipt.write_text(json.dumps(manifest))
-        with mock.patch.object(stager, "verify_platform"), mock.patch.object(stager, "verify_bsd_patches"):
+        with mock.patch.object(stager, "verify_platform"), mock.patch.object(stager, "verify_bsd_patches"), mock.patch.object(stager, "verify_bsd_host_fuse"):
             with self.assertRaisesRegex(ValueError, "wxWidgets license texts are missing"):
                 stager.validate_backend("veracrypt-bsd", self.root, source)
             library_license = "licenses/wxWidgets-LGPL.txt"
@@ -504,6 +504,65 @@ Version needs section '.gnu.version_r' contains 2 entries:
             manifest["files"][library_license] = stager.digest(self.root / library_license)
             receipt.write_text(json.dumps(manifest))
             self.assertEqual(self.root, stager.validate_backend("veracrypt-bsd", self.root, source))
+
+    def test_bsd_host_fuse_accepts_compatible_updates_and_records_current_provider(self):
+        provider = self.root / "provider"
+        provider.write_bytes(b"updated administrator-installed compatible library")
+        host = {"api": "fuse2", "library": "libfuse.so.2", "path": "/usr/local/lib/libfuse.so.2", "sha256": "a" * 64}
+        info = {"soname": [host["library"]]}
+        engine = {"needed": [host["library"], "libc.so.7"]}
+        with mock.patch.object(stager.platform, "system", return_value="FreeBSD"), \
+                mock.patch.object(stager, "administrator_file", return_value=Path("/usr/local/lib/libfuse.so.2.9")), \
+                mock.patch.object(stager.shutil, "which", return_value="/usr/bin/readelf"), \
+                mock.patch.object(stager, "elf_info", side_effect=[info, engine]), \
+                mock.patch.object(stager, "digest", return_value=stager.digest(provider)):
+            observed = stager.verify_bsd_host_fuse(self.root, {"host_fuse": host})
+        self.assertEqual(observed["sha256"], stager.digest(provider))
+        self.assertEqual(observed["build_sha256"], "a" * 64)
+        self.assertNotEqual(observed["sha256"], observed["build_sha256"])
+        for field, invalid in (("api", "fuse3"), ("path", "/tmp/libfuse.so.2"), ("library", "libfuse.so.3"), ("sha256", "bad")):
+            with mock.patch.object(stager.platform, "system", return_value="FreeBSD"):
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, "ABI provenance"):
+                    stager.verify_bsd_host_fuse(self.root, {"host_fuse": {**host, field: invalid}})
+        with mock.patch.object(stager.platform, "system", return_value="FreeBSD"), \
+                mock.patch.object(stager, "administrator_file", return_value=Path("/usr/local/lib/libfuse.so.2")), \
+                mock.patch.object(stager.shutil, "which", return_value="/usr/bin/readelf"), \
+                mock.patch.object(stager, "elf_info", side_effect=[{"soname": ["libfuse.so.3"]}, engine]):
+            with self.assertRaisesRegex(ValueError, "SONAME/engine ABI"):
+                stager.verify_bsd_host_fuse(self.root, {"host_fuse": host})
+
+    def test_host_prerequisite_checks_symlink_target_and_all_ancestors(self):
+        provider = self.root / "libfuse.so.2.9"
+        provider.write_bytes(b"host fixture")
+        alias = self.root / "libfuse.so.2"
+        alias.symlink_to(provider.name)
+        real_lstat = Path.lstat
+        def administrator_stat(path):
+            original = real_lstat(path)
+            values = list(original)
+            values[4] = 0
+            values[0] &= ~0o022
+            return os.stat_result(values)
+        with mock.patch.object(Path, "lstat", administrator_stat):
+            self.assertEqual(stager.administrator_file(alias), provider)
+        def writable_target(path):
+            info = administrator_stat(path)
+            values = list(info)
+            if path == provider:
+                values[0] |= 0o020
+            return os.stat_result(values)
+        with mock.patch.object(Path, "lstat", writable_target):
+            with self.assertRaisesRegex(ValueError, "administrator-controlled"):
+                stager.administrator_file(alias)
+        def unowned_ancestor(path):
+            info = administrator_stat(path)
+            values = list(info)
+            if path == self.root:
+                values[4] = 1234
+            return os.stat_result(values)
+        with mock.patch.object(Path, "lstat", unowned_ancestor):
+            with self.assertRaisesRegex(ValueError, "administrator-controlled"):
+                stager.administrator_file(alias)
 
     def test_rust_notices_follow_the_build_receipt_and_verify_registry_bytes(self):
         source = mock.Mock(root=self.root / "project", commit="a" * 40)
