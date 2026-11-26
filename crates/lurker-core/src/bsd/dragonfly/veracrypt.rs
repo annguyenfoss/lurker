@@ -394,6 +394,15 @@ pub(in crate::bsd) fn make_filesystem(
     filesystem: CreateFilesystem,
 ) -> AppResult<()> {
     mapping_name(mapped)?;
+    if matches!(filesystem, CreateFilesystem::Ntfs | CreateFilesystem::Exfat) {
+        super::filesystems::make_selected_filesystem(mapped, Some(filesystem))?;
+        if probe_filesystem(mapped, payload_sectors(size)?)? != filesystem {
+            return Err(AppError::new(
+                "The formatter produced an unexpected VeraCrypt filesystem.",
+            ));
+        }
+        return Ok(());
+    }
     let (formatter, mut options) = match filesystem {
         CreateFilesystem::Hammer2 => ("/sbin/newfs_hammer2", args(&["-L", "DATA"])),
         CreateFilesystem::Ufs1 => ("/sbin/newfs", Vec::new()),
@@ -500,13 +509,17 @@ fn probe_filesystem(mapped: &str, sectors: u64) -> AppResult<CreateFilesystem> {
     if fat32(&boot, sectors) {
         return Ok(CreateFilesystem::Fat32);
     }
-    if let Ok(filesystem @ (CreateFilesystem::Hammer2 | CreateFilesystem::Ufs1)) =
-        super::filesystems::probe(mapped)
+    if let Ok(
+        filesystem @ (CreateFilesystem::Hammer2
+        | CreateFilesystem::Ufs1
+        | CreateFilesystem::Ntfs
+        | CreateFilesystem::Exfat),
+    ) = super::filesystems::probe(mapped)
     {
         return Ok(filesystem);
     }
     Err(AppError::new(
-        "DragonFly VeraCrypt requires UFS1, HAMMER2 with a DATA label or FAT32 with 4 KiB or larger clusters and a 4 KiB-aligned data region.",
+        "DragonFly VeraCrypt requires a supported native filesystem or FAT32 with 4 KiB or larger clusters and a 4 KiB-aligned data region.",
     ))
 }
 
@@ -537,12 +550,16 @@ pub(in crate::bsd) fn matches_mount(session: &Session, mounted: &Mounted) -> boo
         CreateFilesystem::Ufs1 => {
             mounted.filesystem == "ufs" && mounted.source == Path::new(mapped)
         }
+        CreateFilesystem::Ntfs | CreateFilesystem::Exfat => {
+            super::filesystems::matches_filesystem_mount(mapped, mounted)
+        }
         _ => false,
     }
 }
 
 pub(in crate::bsd) fn mount_uses_mapper(mounted: &Mounted, mapped: &str) -> bool {
     mounted.source == Path::new(mapped)
+        || super::filesystems::fuse_mount_uses_mapper(mapped, mounted)
         || (mounted.filesystem == "hammer2"
             && mounted
                 .source
@@ -572,7 +589,7 @@ pub(in crate::bsd) fn mount(
     if filesystem == CreateFilesystem::Hammer2 {
         return mount_hammer2_local(mapped, target, false);
     }
-    if filesystem == CreateFilesystem::Ufs1 {
+    if filesystem != CreateFilesystem::Fat32 {
         return super::filesystems::mount_filesystem(mapped, target, false);
     }
     let mut options = args(&[
@@ -643,13 +660,13 @@ pub(in crate::bsd) fn verify_access(
     let metadata =
         fs::metadata(target).map_err(|e| AppError::io("Inspect mounted VeraCrypt root", e))?;
     match mounted_filesystem(session) {
-        Some(CreateFilesystem::Fat32)
+        Some(CreateFilesystem::Fat32 | CreateFilesystem::Ntfs | CreateFilesystem::Exfat)
             if metadata.uid() != owner.uid
                 || metadata.gid() != owner.gid
                 || metadata.mode() & 0o777 != 0o700 =>
         {
             Err(AppError::new(
-                "Mounted FAT32 root does not have the invoking user's private access permissions.",
+                "Mounted filesystem root does not have the invoking user's private access permissions.",
             ))
         }
         Some(CreateFilesystem::Hammer2 | CreateFilesystem::Ufs1)
