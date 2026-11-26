@@ -124,9 +124,9 @@ def main():
                     argv=['sudo','-n','-u','adjutant','--','/usr/bin/python3',a.harness,'--binary',a.binary,'--backend',backend,'--filesystem',fs,'--commit',a.commit,'--root',m,'--mount-root',plain,'--payload-dir',a.payload,'--timeout','90']
                     c=subprocess.run(list(map(str,argv)),capture_output=True,text=True,timeout=900)
                     case={'backend':backend,'code':c.returncode,'stdout':c.stdout[-4000:],'stderr':c.stderr[-4000:]};row['cases'].append(case)
-                    summary=json.loads(c.stdout.splitlines()[-1]);receipt=Path(summary['receipt']);case['receipt']=json.loads(receipt.read_text());case['status']=case['receipt']['status'];failed|=case['status']!='passed'
+                    summary=json.loads(c.stdout.splitlines()[-1]);case_receipt=Path(summary['receipt']);case['receipt']=json.loads(case_receipt.read_text());case['status']=case['receipt']['status'];failed|=case['status']!='passed'
                     evidence=d/backend;evidence.mkdir()
-                    for entry in receipt.parent.iterdir():
+                    for entry in case_receipt.parent.iterdir():
                         if entry.is_file() and (entry.name=='result.json' or entry.suffix=='.log'):shutil.copy2(entry,evidence/entry.name)
                     case['copied_evidence']=str(evidence);save()
                     if case['receipt'].get('payload_worker',{}).get('remaining') or case['receipt'].get('mount_remaining'):raise RuntimeError('Directory case retains live worker or mount; preserve scratch')
