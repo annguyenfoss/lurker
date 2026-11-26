@@ -329,14 +329,15 @@ def linux_mount_record(text, path):
     for line in text.splitlines():
         left, separator, right = line.partition(" - ")
         before, after = left.split(), right.split()
-        if not separator or len(before) < 6 or len(after) < 2:
+        if not separator or len(before) < 6 or len(after) < 3:
             continue
         point = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), before[4])
         if target != point and not target.startswith(point.rstrip("/") + "/"):
             continue
         matches.append({"mountpoint": point, "filesystem": after[0],
                         "source": re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), after[1]),
-                        "options": before[5].split(","), "mount_id": before[0]})
+                        "options": before[5].split(","),
+                        "superblock_options": after[2].split(","), "mount_id": before[0]})
     if not matches:
         raise RuntimeError("Native Linux mount identity is missing")
     longest = max(len(row["mountpoint"]) for row in matches)
@@ -347,7 +348,7 @@ def linux_mount_record(text, path):
 
 
 def check_linux_filesystem(record, requested):
-    if "rw" not in record["options"]:
+    if "rw" not in record["options"] or "ro" in record.get("superblock_options", []):
         raise RuntimeError("Native mount is not read/write")
     if not requested:
         return "recorded"

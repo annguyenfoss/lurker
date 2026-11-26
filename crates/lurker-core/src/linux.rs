@@ -461,7 +461,10 @@ fn parse_mountinfo_line(line: &str) -> Option<MountInfo> {
         mount_id: left_parts[0].parse().ok()?,
         readonly: left_parts
             .get(5)
-            .is_some_and(|options| options.split(',').any(|o| o == "ro")),
+            .is_some_and(|options| options.split(',').any(|o| o == "ro"))
+            || right_parts
+                .get(2)
+                .is_some_and(|options| options.split(',').any(|o| o == "ro")),
         mount_point: PathBuf::from(unescape_mount_field(left_parts[4])),
         source: Some(PathBuf::from(unescape_mount_field(right_parts[1]))),
         fs_type: right_parts[0].to_string(),
@@ -559,5 +562,18 @@ mod tests {
             std::path::Path::new("/dev/mapper/lurker_test")
         );
         assert_eq!(entry.fs_type, "btrfs");
+    }
+
+    #[test]
+    fn mountinfo_readonly_includes_vfs_and_superblock_options() {
+        for (vfs, superblock, readonly) in [
+            ("rw,relatime", "rw,errors=remount-ro", false),
+            ("rw,relatime", "ro,ufstype=44bsd", true),
+            ("ro,relatime", "rw", true),
+            ("ro,relatime", "ro", true),
+        ] {
+            let line = format!("123 456 0:45 / /mnt/test {vfs} - ufs /dev/loop0 {superblock}");
+            assert_eq!(parse_mountinfo_line(&line).unwrap().readonly, readonly);
+        }
     }
 }

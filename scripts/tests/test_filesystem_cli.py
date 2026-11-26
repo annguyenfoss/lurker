@@ -82,6 +82,22 @@ class PayloadWorkerTests(unittest.TestCase):
 
 
 class NativeFilesystemTests(unittest.TestCase):
+    def test_superblock_readonly_rejects_a_writable_vfs_view(self):
+        for vfs, superblock, readonly in (
+                ("rw,relatime", "ro,ufstype=44bsd", True),
+                ("ro,relatime", "rw", True),
+                ("rw,relatime", "rw,errors=remount-ro", False)):
+            mounts = f"1 0 7:0 / /native {vfs} - ufs /dev/loop0 {superblock}\n"
+            record = suite.linux_mount_record(mounts, Path("/native"))
+            self.assertEqual(record["options"], vfs.split(","))
+            self.assertEqual(record["superblock_options"], superblock.split(","))
+            if readonly:
+                with self.assertRaisesRegex(RuntimeError, "not read/write"):
+                    suite.check_linux_filesystem(record, "ufs1")
+            else:
+                self.assertEqual(suite.check_linux_filesystem(record, "ufs1"),
+                                 "driver-or-superblock-proof-required")
+
     def test_selected_ext4_cannot_pass_when_formatter_produces_ext2(self):
         record = {"filesystem": "ext2", "options": ["rw", "relatime"]}
         with self.assertRaisesRegex(RuntimeError, "Requested ext4.*ext2"):
