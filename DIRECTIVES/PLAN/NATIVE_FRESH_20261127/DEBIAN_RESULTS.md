@@ -34,8 +34,8 @@ The atomic checkpoint there identifies the live job and next work.
 
 ## Initial batch findings
 
-The initial ten-filesystem × three disk-encryption sweep is running with fresh
-independent fixtures. Every successful case mounts a real filesystem, writes
+The initial ten-filesystem × three disk-encryption sweep used fresh
+independent fixtures. Operationally completed cases mounted a real filesystem, wrote
 the three downloaded PDFs and text, closes normally, reopens with Auto, verifies,
 appends and creates a second file, then closes/reopens and verifies again.
 Receipts retain hashes, mount identities, permissions/ACL/reflink probes and logs.
@@ -43,7 +43,7 @@ Receipts retain hashes, mount identities, permissions/ACL/reflink probes and log
 Native APFS revealed a shared product defect before storage mutation:
 canonicalizing the `modinfo` and `modprobe` symlinks to `kmod` loses their
 multicall invocation name. Native `modinfo apfs` and `modprobe apfs` succeed.
-The Linux owner is preparing the shared repair; initial failed receipts remain.
+The shared repair is committed; final-candidate validation remains pending.
 An inherited writable directory mode in the newly copied private prefix caused
 the first ext4/VeraCrypt attempt to fail its trust check. The owned prefix mode
 was corrected; that failed attempt also remains for a separate retest.
@@ -61,7 +61,8 @@ shared raw-backing harness invokes `mkfs.ext4` directly and is a separate route.
 The initial 30 disk-container operations finished: 22 completed their lifecycle
 and eight failed operations. After filesystem-identity review, only 20 qualify
 for their requested filesystem; two completed on the wrong filesystem. The
-initial directory sweep is still running. Current Linux-patched Cryptomator has
+initial directory sweep also finished with 22 operational completions and eight
+operation failures; two completions used the wrong ext4 backing. Cryptomator has
 passed Btrfs; its initial ext4 attempt failed because my raw image copy retained
 private Java-library modes after root ownership. The owned staged copy has been
 normalized to ordinary staged executable/data permissions. The failure is retained
@@ -73,6 +74,47 @@ stock Debian capability. LUKS2/UFS1 is blocked by the fixed default logical-sect
 profile; no profile has been weakened. UFS2 uses separately installed native
 FUSE `fuse-ufs` 0.6.0. Its upstream describes experimental writes and no ACLs;
 successful small lifecycle results do not remove that upstream limitation.
+
+## Native prerequisites and portable CryFS donor
+
+Fresh source builds installed APFS v0.3.22 for official 6.12 and HAMMER2 for
+official 7.3, preserving original driver bytes. No kernel source or configuration
+was changed. The host now runs `7.3.4+deb13-cloud-amd64`. Its native `ntfs`
+read/write driver and explicit native HAMMER2 mounting passed fresh raw
+three-PDF/text write/close/reopen/append/verify controls. Native ntfs3 supports
+exclusive rename, while NTFS-3G rejects it. exFAT supports exclusive rename but
+not hardlinks. These are native controls, separately identified from product passes.
+
+The optional fuse-ufs prerequisite was rebuilt from upstream
+`ee5c4a447da98220a11edb69a225d51379afc4fb` with the recorded namespace and barrier
+patches. Debian passed 28 rufs tests, seven native rename/collision controls,
+full raw payload reopens, forwarded file/directory fsync traces, and injected
+file/directory EIO with successful retries. Driver SHA-256:
+`b8518fe1e4f4b664929232bfca6aa7c39cfdd8ff458e39e335f592960fef1a49`.
+Cryptomator and new CryFS product payloads subsequently passed on UFS2; CryFS
+passed again through the mapped backing after the barrier repair. This is a
+patched experimental host prerequisite, not a bundled filesystem or stock
+Debian capability.
+
+Debian built the shared Linux CryFS donor as login user, one worker, from exact
+Lurker inputs `195b56be87b38361aaa45a085954e794338ba09a`, stable upstream 1.0.3
+and the three inventoried Linux patches. The copied Conan cache passed integrity
+checks. Current stager, all 16 license/notice files, ELF and provider checks
+passed, with no RPATH/RUNPATH. Fresh exFAT and patched-UFS2 product payloads passed.
+
+- Binary SHA-256: `2ec7b6f5bd7b999b81750fec75ffb3ca13174f4643d2326ba250143e9f444a14`.
+- Shared closure: `target/goal-validation/native-fresh-20261127/hosts/debian/build/cryfs-linux-debian-195b56b.tar.gz`.
+- Archive SHA-256: `fa5e8f14e008b0df5bb5faff6247bbac0810af4e04c32dc1d074a5f9e5744db2`.
+- Built on glibc 2.41; required symbols GLIBC 2.38 / GLIBCXX 3.4.32.
+  Manifest, library-provider audit and runtime receipts accompany the archive;
+  all five other Linux owners received the handoff for independent validation.
+
+Three Btrfs-backed directory vaults were verified and intentionally left mounted
+before the orderly boot from `76968973-6ed7-4502-a634-a65e0905e301` to
+`c70701ba-a2bf-49f1-bb3c-82dd225b5f3c`. After mounting the identified fixture
+storage, all three reopened, matched all five hashes and closed normally.
+This is baseline-artifact reboot evidence; candidate validation remains pending.
+The preexisting default 6.12 boot choice was preserved.
 
 ## Owned storage and remaining work
 
@@ -86,10 +128,10 @@ checked before resizing its ext4 filesystem. It is mounted at
 fixtures are retained there with their original evidence paths preserved.
 The later destructive device matrix will use a separately identified scratch disk.
 
-Pending: finish the initial container sweep; all eligible directory/backing
-cases; native failure controls; supported-kernel HAMMER2 assessment; cipher and
-credential/conformance cases; ordinary reboot persistence; new scratch-device
-cases; affected retests and complete frozen-candidate validation; final cleanup
+Pending: final Linux source freeze and workspace build; complete repaired
+candidate containers in both kernel cohorts; cipher and credential/conformance
+cases; candidate reboot persistence; new scratch-device cases; final validation
+and cleanup
 and reconciliation of all 130 applicability cells. No complete-host pass is claimed.
 
 Current upstream evidence is retained with fetch times and hashes. Primary routes:
