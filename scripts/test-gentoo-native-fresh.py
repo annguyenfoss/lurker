@@ -44,7 +44,7 @@ def features(mountpoint):
         row["journaling"]["status"] = ("yes" if "has_journal" in row["journaling"].get("stdout", "") else "unknown")
     elif filesystem == "xfs":
         row["journaling"] = {"status": "yes", "observation": probe(["xfs_info", mountpoint])}
-    elif filesystem in {"btrfs", "zfs", "apfs"}:
+    elif filesystem in {"btrfs", "zfs", "apfs", "hammer2"}:
         row["journaling"] = {"status": "not-applicable", "reason": "Copy-on-write transaction filesystem"}
     elif filesystem in {"exfat", "vfat"}:
         row["journaling"] = {"status": "no", "reason": "Filesystem has no journal"}
@@ -71,8 +71,8 @@ def features(mountpoint):
             clone.write_bytes(b"Independent clone update.\n")
             cow["source_unchanged"] = original.read_bytes() == b"Original native feature sample.\n"
         cow["reflink_status"] = "yes" if cow.get("exit_code") == 0 and cow.get("source_unchanged") else "no"
-        cow["status"] = "yes" if filesystem in {"btrfs", "zfs", "apfs"} else cow["reflink_status"]
-        if filesystem in {"btrfs", "zfs", "apfs"}:
+        cow["status"] = "yes" if filesystem in {"btrfs", "zfs", "apfs", "hammer2"} else cow["reflink_status"]
+        if filesystem in {"btrfs", "zfs", "apfs", "hammer2"}:
             cow["reason"] = "Native filesystem uses copy-on-write; reflink result recorded separately"
         row["cow"] = cow
         if filesystem == "zfs":
