@@ -35,8 +35,10 @@ Baseline `8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d` workspace run
 `85d30dfaa47e2a734a1301f3cc8bf08a8d13a1c20339597ca06f5622fafedc34`.
 
 - A later managed-toolchain refresh upgraded stable Rust from 1.99.1 to
-  1.100.0. Final workspace/package run `20261126T211340Z-01ca4a1c` uses
-  frozen candidate `836bf84` and one Cargo worker.
+  1.100.0. Workspace run `20261126T211340Z-01ca4a1c` checked frozen candidate
+  `836bf84`: 124 tests passed, none failed, 11 ignored. Its package stage was
+  deliberately cancelled to incorporate the later fixes; it is not a package
+  pass. The final package will use a new frozen revision and one Cargo worker.
 - `d78799c`: explicit audited macFUSE VeraCrypt build option, preserving the
   FUSE-T default and fixed directory FSKit policy. Eighteen Mac build/package
   tests passed remotely. Fresh pinned VeraCrypt 1.26.31 macFUSE build and all
@@ -86,7 +88,11 @@ normal closes/reopens, append and second-file results. Final validation is pendi
   control passed, whereas regular-file and VeraCrypt reopen cases lost a file.
   A retained native-device integration experiment did not fix this and was not
   committed. A separate host-driver fsync experiment also failed; it was not
-  installed or counted as a repair. XFS remains incomplete.
+  installed or counted as a repair. Commit `8a401a3` now refuses XFS create
+  before prompts, tools or allocation, and refuses an authenticated XFS open
+  before filesystem writes while cleaning up encryption normally. Native guard
+  regression retained unchanged ciphertext and an empty unmounted target. XFS
+  remains unavailable pending a trustworthy persistence-capable host driver.
 - Btrfs has no eligible native route identified; its existing VM compatibility
   branch ran once in the reused initial sweep and is explicitly excluded.
   UFS1/HAMMER2 native create/read-write routes remain unavailable. GELI/PEFS,
@@ -122,6 +128,35 @@ drivers refused ACL additions. NTFS ignored private modes as above. Direct
 a native ZFS snapshot retained old bytes after a live overwrite. The original
 `cp -c` control silently fell back on unsupported filesystems and is not used as
 proof of CoW. Journaling/replay observations stay separate from format flags.
+
+## Later native repairs and controls
+
+- `5e2c01c` repairs host fuse-ufs directory enumeration after the first page and
+  requires both advertised UFS2 write and directory protocol capabilities.
+  A fresh root-owned host build passed direct CryFS UFS2 write/append/verify/verify.
+  The regular-file UFS2 route passes; block-device fsync returns ENOTTY/EIO and
+  is not qualified.
+- Coordinator `175ea1c` adds a Darwin-only CryFS exclusive regular-file publication
+  patch after the unchanged common durability patch. APFS product regression
+  and direct UFS2 full payload proof passed. Patch SHA-256:
+  `510d4d943b7dc30ef8b025da7b0e14ade901a9bf80d4e1a79d1e7ab6d19dc178`;
+  engine SHA-256:
+  `70be02d79bf048afc38288b3bd7d99ab4934e4b5d6052e2f34dc13923762d94c`.
+  The higher-level CryFS/Cryptomator UFS2 directory publication still needs the
+  separate shared-core fix; direct engine success is not a product pass.
+- `a540fcc` documents a macFUSE-only fuse-ext2 xattr callback shim. The separately
+  installed root-owned ext4 MacFUSE driver supports all three directory engines,
+  including CryFS, unlike the preferred FSKit route's atomic publication limits.
+- Installed NTFS3G with native macFUSE and explicit private uid/gid/umask supports
+  all three directory engines. This distinct driver route resolves the TT NTFS
+  mode limitation without claiming that TT NTFS retains private modes.
+- Fresh final plain-native controls on both installed ext4 MacFUSE and NTFS3G
+  completed four payload phases across normal backing filesystem closes/reopens.
+  Receipts: `cases/native-ext4-macfuse-final/receipt.json` and
+  `cases/native-ntfs-macfuse-final/receipt.json`.
+- `6d27510` binds the package conformance harness to the exact extracted binary,
+  commit, child harness hashes, actual lifecycle receipts and downloaded payload.
+  Its remote unit test and real 20-case receipt validation passed.
 
 ## Remaining work
 
