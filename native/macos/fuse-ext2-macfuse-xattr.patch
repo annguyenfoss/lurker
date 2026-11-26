@@ -1,0 +1,23 @@
+--- a/fuse-ext2/fuse-ext2.h
++++ b/fuse-ext2/fuse-ext2.h
+@@ -178,7 +178,7 @@
+ 
+ int op_getattr (const char *path, struct stat *stbuf);
+ 
+-int op_getxattr(const char *path, const char *name, char *value, size_t size);
++int op_getxattr(const char *path, const char *name, char *value, size_t size, uint32_t position);
+ 
+ ext2_file_t do_open (ext2_filsys e2fs, const char *path, int flags);
+ 
+--- a/fuse-ext2/op_getxattr.c
++++ b/fuse-ext2/op_getxattr.c
+@@ -15,7 +15,8 @@
+ static int do_getxattr(ext2_filsys e2fs, struct ext2_inode *node, const char *name,
+ 		char *value, size_t size);
+ 
+-int op_getxattr(const char *path, const char *name, char *value, size_t size) {
++int op_getxattr(const char *path, const char *name, char *value, size_t size, uint32_t position) {
++	if (position != 0) return -EINVAL;
+ 	int rt;
+ 	ext2_ino_t ino;
+ 	struct ext2_inode inode;
