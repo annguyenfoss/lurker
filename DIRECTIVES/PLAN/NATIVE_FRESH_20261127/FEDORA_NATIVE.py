@@ -84,10 +84,13 @@ def main():
                     for name,data in expected.items():
                         with (p/name).open("xb") as f:f.write(data);f.flush();os.fsync(f.fileno())
                     probe=m/"feature-probe";probe.write_text("feature probe\n");os.chmod(probe,0o600)
-                    row["features"]={"acl":cmd(["setfacl","-m","u:1300:rw",probe],False),"permissions":cmd(["stat","-c","%u:%g %a",probe],False),"cow":cmd(["cp","--reflink=always",probe,m/"reflink-probe"],False)}
+                    row["features"]={"acl":cmd(["setfacl","-m","u:1300:rw",probe],False),"chmod":cmd(["chmod","640",probe],False),"chown":cmd(["chown","1300:1300",probe],False),"ownership_after":cmd(["stat","-c","%u:%g %a",probe],False),"reflink":cmd(["cp","--reflink=always",probe,m/"reflink-probe"],False)}
                     if fs=="ext4":row["features"]["journaling"]=cmd(["tune2fs","-l",image],False)
                     elif fs=="xfs":row["features"]["journaling"]=cmd(["xfs_info",m],False)
-                    elif fs=="zfs":row["features"]["properties"]=cmd(["zfs","get","sync,acltype,xattr,compression",pool],False)
+                    elif fs=="zfs":
+                        row["features"]["properties"]=cmd(["zfs","get","sync,acltype,xattr,compression",pool],False)
+                        row["features"]["enable_scoped_acl"]=cmd(["zfs","set","acltype=posixacl",pool],False)
+                        row["features"]["configured_acl"]=cmd(["setfacl","-m","u:1300:rw",probe],False)
                     elif fs in {"btrfs","apfs","hammer2"}:row["features"]["journaling"]="not-applicable: CoW filesystem; no journal assertion"
                     else:row["features"]["journaling"]="unknown"
                 for name,data in wanted.items():
