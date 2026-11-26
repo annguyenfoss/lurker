@@ -148,6 +148,7 @@ def main():
                     last['evidence'] = str(evidence)
                     save()
         except Exception as error:
+            preserve = True
             result['cases'].append({'filesystem':fs,'route':'directory-backing-setup','status':'failed','error':str(error)})
             save()
         finally:
