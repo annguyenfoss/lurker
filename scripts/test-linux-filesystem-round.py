@@ -27,6 +27,8 @@ def main():
     p.add_argument('--directory-filesystems', default='btrfs,ext4,xfs,ntfs,exfat,fat32')
     p.add_argument('--backends', type=Path, required=True)
     p.add_argument('--userspace-backends', type=Path)
+    p.add_argument('--payload-dir', type=Path,
+                   help='Downloaded common payload directory for the native qualification round')
     p.add_argument('--skip-block', action='store_true')
     p.add_argument('--only-userspace', action='store_true')
     a = p.parse_args()
@@ -50,6 +52,8 @@ def main():
             '--root', str(root or a.root), '--size-gb', '0.5' if fs in {'xfs', 'hammer2'} else '0.25', '--timeout', '90']
         if directory:
             args.extend(['--mount-root', str(a.root)])
+        if a.payload_dir:
+            args.extend(['--payload-dir', str(a.payload_dir)])
         if backend == 'veracrypt' and not privileged:
             args.append('--unprivileged')
         started = time.time()
