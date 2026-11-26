@@ -206,6 +206,27 @@ def payload_write(path, data, append=False):
         os.fsync(stream.fileno())
 
 
+def load_payload(payload_dir=None, pdf=None):
+    if payload_dir is not None:
+        if pdf is not None:
+            raise ValueError("Choose --payload-dir or --pdf, not both")
+        expected = {}
+        for name in ("bitcoin.pdf", "ethereum.pdf", "transformer.pdf", "page.txt"):
+            path = payload_dir / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("Missing regular payload file: " + str(path))
+            contents = path.read_bytes()
+            if not contents or (name.endswith(".pdf") and not contents.startswith(b"%PDF-")):
+                raise ValueError("Invalid payload file: " + str(path))
+            expected[name] = contents
+        return expected
+    contents = pdf.read_bytes() if pdf else sample_pdf()
+    if not contents.startswith(b"%PDF-"):
+        raise ValueError("Payload must be a PDF")
+    return {"paper.pdf": contents,
+            "page.txt": ("Lurker filesystem payload.\nUnicode: Việt Nam — 日本語.\n" * 32).encode()}
+
+
 def verify_payload(mountpoint, expected):
     if not os.path.ismount(mountpoint):
         raise RuntimeError("CLI did not establish an OS mount; refusing underlay access")
@@ -229,9 +250,15 @@ def main():
     parser.add_argument("--size-gb", default="0.5")
     parser.add_argument("--commit", required=True)
     parser.add_argument("--pdf", type=Path)
+    parser.add_argument("--payload-dir", type=Path,
+                        help="Common bitcoin.pdf, ethereum.pdf, transformer.pdf and page.txt inputs")
     parser.add_argument("--unprivileged", action="store_true")
     parser.add_argument("--timeout", type=int, default=240)
     args = parser.parse_args()
+    try:
+        expected = load_payload(args.payload_dir, args.pdf)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
     binary = args.binary.resolve(strict=True)
     parent = args.root.resolve(strict=True)
     directory = Path(tempfile.mkdtemp(prefix="lurker-fs-cli-", dir=parent))
@@ -247,15 +274,14 @@ def main():
     peer = directory / "peer.img"
     # Meet ordinary host password policies without changing their settings.
     password = "Lurker9!" + secrets.token_urlsafe(24)
-    pdf = args.pdf.read_bytes() if args.pdf else sample_pdf()
-    if not pdf.startswith(b"%PDF-"):
-        parser.error("Payload must be a PDF")
-    expected = {"paper.pdf": pdf, "page.txt": ("Lurker filesystem payload.\nUnicode: Việt Nam — 日本語.\n" * 32).encode()}
     result = {"schema": 1, "os": platform.system(), "release": platform.release(),
               "machine": platform.machine(), "commit": args.commit,
               "binary": str(binary), "binary_sha256": file_hash(binary),
               "backend": args.backend, "filesystem": args.filesystem,
               "unprivileged": args.unprivileged,
+              "payload_dir": str(args.payload_dir.resolve()) if args.payload_dir else None,
+              "input_sha256": {name: hashlib.sha256(data).hexdigest()
+                               for name, data in expected.items()},
               "source": str(source), "mountpoint": str(mountpoint),
               "fixture": str(directory), "cases": [], "status": "running"}
     receipt = directory / "result.json"

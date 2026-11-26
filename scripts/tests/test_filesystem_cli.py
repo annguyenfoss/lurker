@@ -32,5 +32,29 @@ sys.exit(0 if secret == 'test-secret' else 2)
             self.assertNotIn("test-secret", (Path(root) / "terminal.log").read_text())
 
 
+class PayloadTests(unittest.TestCase):
+    def test_downloaded_payload_requires_every_paper_and_records_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root)
+            for name in ("bitcoin.pdf", "ethereum.pdf", "transformer.pdf"):
+                (directory / name).write_bytes(b"%PDF-1.4\n" + name.encode())
+            (directory / "page.txt").write_bytes(b"Text including \x00 binary boundary\n")
+            expected = suite.load_payload(directory)
+            self.assertEqual(set(expected), {"bitcoin.pdf", "ethereum.pdf", "transformer.pdf", "page.txt"})
+            self.assertEqual(expected["page.txt"], (directory / "page.txt").read_bytes())
+            (directory / "transformer.pdf").unlink()
+            with self.assertRaises(ValueError):
+                suite.load_payload(directory)
+
+    def test_invalid_paper_and_ambiguous_input_are_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root)
+            (directory / "bitcoin.pdf").write_bytes(b"<html>download failed</html>")
+            with self.assertRaises(ValueError):
+                suite.load_payload(directory)
+            with self.assertRaises(ValueError):
+                suite.load_payload(directory, directory / "paper.pdf")
+
+
 if __name__ == "__main__":
     unittest.main()
