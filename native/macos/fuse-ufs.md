@@ -2,7 +2,8 @@
 
 This development adapter combines a free formatter and a free writable driver.
 UFS2Tool creates the filesystem; fuse-ufs mounts it. Both are BSD-2-Clause.
-macFUSE is installed and approved separately. VeraCrypt continues to use FUSE-T.
+macFUSE is installed and approved separately. VeraCrypt can use the explicitly
+selected native macFUSE build; FUSE-T remains the default build option.
 There is one mount/unmount action, with no selectable access mode.
 
 The upstream writer is **very experimental** and warns of data loss. Passing
@@ -86,14 +87,20 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1
   -c Release -o /absolute/private/ufs2tool-runtime
 ```
 
-In a private filesystem tool directory supported by Lurker (for example
-`<CLI-or-helper-directory>/macos-filesystems/`), stage:
+Install these host prerequisites separately under
+`/usr/local/libexec/lurker-filesystems/`; Lurker does not package filesystem tools
+or discover them relative to its CLI/app. Stage the following files in a private
+build directory, then copy them into that administrator-owned host directory:
 
 - `fuse-ufs`: the patched release executable, mode 0755.
 - `ufs2tool`: this directory's `ufs2tool.sh`, copied with mode 0755.
 - `ufs2tool-runtime/`: the complete .NET build output, including `.dll`,
   `.deps.json`, `.runtimeconfig.json` and dependencies.
 - Original license notices from all three pinned sources.
+
+Build the tools as the login user. Administrator authorization is needed only
+to install the reviewed files and keep the host directory administrator-owned;
+never execute a user-writable private driver or formatter with sudo.
 
 The development launcher uses the separately installed Homebrew .NET 8 runtime;
 this stage is not a relocatable or offline-qualified release package. The
