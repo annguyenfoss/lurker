@@ -75,8 +75,10 @@ a nested VeraCrypt creator copy and root-owned Java libraries retaining private
 0600 modes. All four affected Cryptomator backings passed independent followups.
 The same original Cryptomator engine also passed UFS2 with the corrected host
 driver and NTFS with kernel ntfs3. The old NTFS-3G EIO and unpatched-UFS2 EIO
-remain in original receipts. CryFS's UFS2/exFAT publication failures await the
-coordinator's source/artifact fix.
+remain in original receipts. The fresh Debian-built CryFS donor from source `195b56b`, including all three
+current Linux patches, passed independent exFAT and corrected-UFS2 payload
+retests. The UFS2 rerun used the common harness's explicit `fuse.ufs` alias
+acceptance and independent driver/superblock proof.
 
 Native feature controls passed nine filesystems, including real ext4 journal
 and extent flags, Btrfs CoW identification and XFS reflink/internal-log flags.
@@ -100,9 +102,31 @@ scratch disk is still required.
 
 The persistent reboot harness passed a six-backend Btrfs pilot with private
 0600 test credentials, correct backing mounts, all payload hashes and normal
-closure. **OS reboot is still unexercised.** Next: receive the frozen candidate
-and rebuilt CryFS artifact, validate that exact candidate, finish applicable
-containers and variations, run the identified scratch-device matrix, prepare
-persistent fixtures, perform the ordinary reboot, reopen/hash-check and inspect
-final cleanup. Full private evidence and resumable state remain under
+closure. **OS reboot is still unexercised.** The exact final Linux candidate
+`ca7d2137fca741008648360e98acc06ce559de3d` passed fresh workspace check/test/build:
+156 tests passed, none failed, 15 ignored; the explicitly enabled native kmod
+applet regression separately passed. Its CLI SHA-256 is
+`17e6a478bef121eddc581f58cbfd0bf6514c166000ceb509f55a5677204ebbbe`,
+helper `57ad52b994cfa6c3e77b3b2208175d6264c6204e05b22574b804e8843f575fb4`,
+and desktop `802fd54f71e6e946b1644b8e83cabaec2e5574210f975488c3ecac0c24337df3`.
+The formal native-selection package includes verified private engines and Rust
+notices; its separately installed private prefix preserves system Lurker. A real
+X11/winit window and the real gocryptfs GUI/helper callback lifecycle passed as
+UID 1300. The frozen stager emitted group-writable generated metadata under the
+login umask; VeraCrypt correctly rejected it. Tightening only those modes to
+0644 is recorded, and the already committed stager correction `7c48a25` will
+produce the replacement archive. This is packaging evidence, not a crypto failure.
+
+The host UFS2 driver now also includes the reviewed file/directory barrier patch
+SHA-256 `292718aec4842afc10668c293dc5d3137abaad77bae49fed8e539be5325932a7`.
+Upstream `make prepare`, 28 library tests and native payload reopens passed.
+Native file/directory fsync forwarding, injected EIO propagation and retry all
+passed. Installed SHA-256 is
+`4a30f1c6f3d874d67fe06e8a9341f0996faf711fc69284dfdc1ec15d53975f71`.
+
+The final complete container matrix is running as PID 147126; sequential
+variation/conformance/helper followups wait as PID 162747. Next: finish those
+container gates, prepare the 54 persistent fixtures, perform an ordinary reboot
+and normal hash-checked reopen/close, then attach and test the separately
+identified destructive scratch disk and inspect final cleanup. Full private evidence and resumable state remain under
 `target/goal-validation/native-fresh-20261127/hosts/ubuntu/` and its checkpoint.
