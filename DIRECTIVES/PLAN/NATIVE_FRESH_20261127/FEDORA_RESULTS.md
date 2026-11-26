@@ -93,11 +93,10 @@ Private local evidence:
 - `native-container/native.json`: first 10/10 native controls.
 - `native-container-features/native.json`: fresh 10/10 with explicit ownership
   changes and scoped ZFS ACL retry.
-- `product-container/matrix.json`: initial applicable Lurker container matrix
-  running. Privileged ext4/Btrfs/XFS/APFS, UFS2 and HAMMER2 passed all three
-  backends; UFS1 passed LUKS1/VeraCrypt and rejected LUKS2 because its default
-  logical-sector geometry is incompatible. This is a product adapter gap,
-  separately from the native configured-UFS driver observation.
+- `product-container/matrix.json`: initial required matrix finished **57/60**.
+  All 30 combinations were attempted for privileged inner filesystems and all 30
+  directory/backing combinations. The three failures are LUKS2/UFS1, CryFS/UFS2,
+  and CryFS/exFAT. Every other required cell passed the downloaded-payload cycle.
 - Incidental LKL comparison attempts reject the old userspace helper. These
   are excluded comparison evidence and are outside native acceptance.
 - `logs/backend-cache-validation.json`: newer VC creator/LKL cache verified
@@ -117,9 +116,32 @@ Private local evidence:
 No qcow2 has been attached or overwritten yet. All applicable container cases
 precede scratch-device work. Native device runner verifies the unique scratch
 serial and active children immediately before destructive product creation.
-Native LUKS2/UFS1 research with explicit 512-byte sectors and unchanged approved
-AES/key-size/Argon costs is queued after the initial batch, before any product
-geometry decision. A retained final-sweep wrapper and post-reboot verifier are
+Native LUKS2/UFS1 research after the initial batch **passed** with explicit
+512-byte sectors and unchanged approved AES-XTS/plain64, 512-bit key and Argon2id
+cost requests (1048576 KiB, 5000 ms). Metadata confirms 512-byte sectors and
+1048576 KiB Argon memory; all downloaded/append hashes matched after normal
+reopens. This is geometry research, not an additional product pass.
+
+Both CryFS failures report `publish new encrypted block: Operation not permitted`.
+The bundled durability patch currently publishes new blocks through hard links.
+A fresh native no-clobber rename control succeeds on exFAT, including an EEXIST
+collision preserving both original files. UFS2/fuse-ufs refuses absent-target
+`renameat2(RENAME_NOREPLACE)` with EINVAL; its collision probe preserves both
+files. These findings have been sent to the shared Linux/core owners. No
+unsupported publication/durability fallback has been accepted.
+
+VeraCrypt AES, Serpent and Twofish password suites and binary-keyfile/Auto suites
+all passed: six suites, 72 subcases, including wrong credentials, duplicate and
+aliased sources, destination protection and busy close.
+
+Additional fresh research assessed MIT-licensed fstool: encrypted DMG creation
+and rekeying exist as library APIs, but its encrypted payload backend is read-only.
+This does not establish Create + Read/Write. Historical `cgd-linux` is marked
+Pre-Alpha with its last published files dated 2004-02-23. References:
+
+- https://github.com/KarpelesLab/fstool#encryption
+- https://sourceforge.net/projects/cgd-linux/files/
+ A retained final-sweep wrapper and post-reboot verifier are
 prepared; generated test-only credentials remain private mode0600 outside logs.
 Device, reboot persistence, broader runtime conformance and final frozen-candidate
 validation are pending; this report does not claim completion.
