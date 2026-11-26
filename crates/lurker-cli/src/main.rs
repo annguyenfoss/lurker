@@ -18,7 +18,7 @@ fn main() {
 
 fn main_entry() -> i32 {
     let args: Vec<_> = std::env::args_os().collect();
-    if let Some(code) = file_cli::run_if_selected(&args[1..]) {
+    if let Some(code) = file_cli::run_if_selected(args.get(1..).unwrap_or_default()) {
         return code;
     }
     match cli::parse_env_args(args) {
