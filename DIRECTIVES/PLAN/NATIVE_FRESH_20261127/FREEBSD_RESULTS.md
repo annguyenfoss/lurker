@@ -75,7 +75,7 @@ failures are identified below. This is not 41 eligible passing combinations.
 | UFS1 | Passed | Passed | Passed | Passed | Passed |
 | UFS2 | Passed | Passed | Passed | Passed | Passed |
 | HAMMER2 | Passed | Passed | Passed | Passed | Passed |
-| NTFS | Fixed-sector native failure | Passed | Native backing failure | Passed | Product publication gap |
+| NTFS | Passed scoped retest | Passed | Native backing failure | Passed | Product publication gap |
 | exFAT | Passed | Passed | Native backing failure | Passed | Product publication gap |
 | ZFS | Passed | Passed | Passed | Passed | Passed |
 | Btrfs | Guard/native append failure | Guard/native append failure | Ineligible backing | Ineligible backing | Ineligible backing |
@@ -86,9 +86,22 @@ Fresh native package controls created XFS and Btrfs, mounted through packaged
 LKL, wrote payload, closed and reopened. Both then failed append with `EBADF`;
 these are not Create + Read/Write passes. Corrected controls are in
 `native-filesystems-1795725868`; preliminary setup failures are retained.
-Native GELI/NTFS with the fixed 4096-byte encrypted sector timed out in
-`mkntfs` after 90 seconds, consistent with the product guard; metadata/profile
-was not weakened. Native PEFS over fresh NTFS failed a nested Bitcoin write
+Initial GELI/NTFS formatting timed out with the native port's default cache;
+that receipt and the original product guard are retained. A later 512-byte
+sector control also timed out after 120 seconds. Scoped `truss` exposed an
+infinite UBLIO retry: a 262144-byte read at the provider's last cache block
+repeatedly returns 261632 bytes. The installed port's `README.FreeBSD`
+documents `NTFS_USE_UBLIO=0`; using it passes the complete native physical
+NTFS payload lifecycle with **unchanged 4096-byte AES-XTS-256 GELI**.
+Shared commit `68b768c` sets this only for the exact trusted native `mkntfs`
+and `ntfs-3g` paths after clearing the environment. With the owned guard
+removed, product container (seven operations) and physical partition (14
+operations) lifecycles both pass, including Auto and conformance guards.
+This was an ordinary driver cache configuration gap, not an OS or sector-size
+impossibility. These are scoped overlay retests; final frozen replay remains
+pending. Native fixture is `native-geli4096-ntfs-noublio-1795731158`, product
+container `lurker-fs-cli-miq3lut4`, physical `product-geli-preview-1795731313`
+on `/dev/vtbd2p7`. Native PEFS over fresh NTFS failed a nested Bitcoin write
 with `EBADF`; over exFAT it failed opening the nested payload with `ENOENT`.
 These controls did not use Lurker's metadata symlink, so removing that symlink
 would not establish a valid lifecycle.
@@ -113,7 +126,9 @@ work is deferred by the round instructions until the complete ordinary-route
 assessment is reported. No such custom build has started.
 
 The private `cases/applicability.json` enumerates all **130 method/filesystem
-cells**; its final receipt reconciliation is pending. OS-specific hdiutil,
+cells**, with initial receipts and scoped retests. GELI/NTFS now raises the
+current successful pair count to 31; the initial 41 attempts remain 30 passes
+and 11 non-passes. Final frozen receipt reconciliation is pending. OS-specific hdiutil,
 diskutil, CGD and softraid methods are not FreeBSD providers. No eligible native
 LUKS1/LUKS2 read/write implementation has been established: libluksde is an
 experimental read-only LUKS1 reader and explicitly excludes LUKS2. libfsapfs is
@@ -183,3 +198,4 @@ to its original zero after each batch. No orderly reboot has yet been counted.
 - https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.1/sys/kern/vfs_syscalls.c
 - https://raw.githubusercontent.com/tuxera/ntfs-3g/2022.10.3/src/ntfs-3g.c
 - https://raw.githubusercontent.com/relan/exfat/v1.4.0/fuse/main.c
+- https://raw.githubusercontent.com/freebsd/freebsd-ports/main/filesystems/ntfs/files/README.FreeBSD

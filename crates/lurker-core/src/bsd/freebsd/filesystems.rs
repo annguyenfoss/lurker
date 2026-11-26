@@ -1,6 +1,6 @@
 //! FreeBSD inner filesystems. Native kernel drivers are preferred; FUSE engines
 //! are system packages and receive an explicit source name for mount identity.
-use super::super::{Mounted, args, exec};
+use super::super::{args, exec, Mounted};
 use crate::{AppError, AppResult, CreateFilesystem, VolumeType};
 use std::{
     fs::File,
@@ -8,12 +8,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(super) fn validate(selected: Option<CreateFilesystem>, backend: VolumeType) -> AppResult<()> {
-    if selected == Some(CreateFilesystem::Ntfs) && backend == VolumeType::Geli {
-        return Err(AppError::new(
-            "FreeBSD's packaged mkntfs does not complete on GELI's fixed 4096-byte providers; NTFS creation requires VeraCrypt.",
-        ));
-    }
+pub(super) fn validate(selected: Option<CreateFilesystem>, _backend: VolumeType) -> AppResult<()> {
     if selected == Some(CreateFilesystem::Xfs) {
         return Err(AppError::new(
             "The packaged FreeBSD LKL driver supports read-only XFS imports only; its append writes fail, so XFS creation is unavailable.",
@@ -46,7 +41,9 @@ pub(super) fn format(mapped: &str, selected: Option<CreateFilesystem>) -> AppRes
         CreateFilesystem::Xfs => exec("/usr/local/sbin/mkfs.xfs", &args(&["-f", mapped]), None)?,
         CreateFilesystem::Ntfs => {
             // ntfs-3g's FreeBSD formatter otherwise assumes 512-byte sectors,
-            // which cannot be written through the fixed 4096-byte GELI profile.
+            // while GELI may expose 4096-byte logical sectors. Native NTFS commands
+            // also disable the port's UBLIO cache in the shared executor: its
+            // partial final-block retry loops on GELI's shorter provider.
             let info = exec("/usr/sbin/diskinfo", &args(&[mapped]), None)?;
             let sector = sector_size(mapped, &info)?;
             let sectors = info
@@ -370,6 +367,7 @@ mod tests {
     use super::*;
     #[test]
     fn ntfs_sector_geometry_must_describe_the_exact_decrypted_device() {
+        assert!(validate(Some(CreateFilesystem::Ntfs), VolumeType::Geli).is_ok());
         assert_eq!(
             sector_size("/dev/md0.eli", "/dev/md0.eli 4096 536866816 131071 0 0").unwrap(),
             4096
