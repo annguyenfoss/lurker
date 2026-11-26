@@ -1364,32 +1364,28 @@ fn mount_open_mapper(
     args.push(mountpoint.as_os_str().to_os_string());
     let mount = ctx.mount_path()?.to_path_buf();
     ctx.run_command(&mount, &args, true, false, "Failed to mount filesystem")?;
+    let mounted = wait_for_native_mount(&mapper_path, mountpoint, readonly)?;
     // A UFS module compiled without writes can silently accept a writable
     // request as a read-only mount. Do not report that request as successful.
-    if filesystem_type.as_deref() == Some("ufs") && !readonly {
-        if let Some(mounted) = read_mountinfo()?
-            .into_iter()
-            .find(|m| m.mount_point == mountpoint && m.readonly)
-        {
-            let directory = OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
-                .open(mountpoint)
-                .map_err(|e| AppError::io("Inspect read-only UFS mount", e))?;
-            if descriptor_mount_id(&directory)? != mounted.mount_id {
-                return Err(AppError::new("UFS mount identity changed; preserving it."));
-            }
-            drop(directory);
-            let umount = crate::trusted_system_executable("umount")?;
-            ctx.run_command(
-                &umount,
-                &[mountpoint.as_os_str().to_os_string()],
-                true,
-                false,
-                "Close read-only UFS mount",
-            )?;
-            return Err(AppError::new("Writable UFS1 requires CONFIG_UFS_FS_WRITE in the matching kernel module; the installed driver mounted read-only."));
+    if filesystem_type.as_deref() == Some("ufs") && !readonly && mounted.readonly {
+        let directory = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(mountpoint)
+            .map_err(|e| AppError::io("Inspect read-only UFS mount", e))?;
+        if descriptor_mount_id(&directory)? != mounted.mount_id {
+            return Err(AppError::new("UFS mount identity changed; preserving it."));
         }
+        drop(directory);
+        let umount = crate::trusted_system_executable("umount")?;
+        ctx.run_command(
+            &umount,
+            &[mountpoint.as_os_str().to_os_string()],
+            true,
+            false,
+            "Close read-only UFS mount",
+        )?;
+        return Err(AppError::new("Writable UFS1 requires CONFIG_UFS_FS_WRITE in the matching kernel module; the installed driver mounted read-only."));
     }
     Ok(())
 }
@@ -1990,6 +1986,14 @@ fn mount_fuse_filesystem(
         ctx.output
             .warn(String::from_utf8_lossy(&output.stderr).trim());
     }
+    wait_for_native_mount(mapper, mountpoint, readonly).map(|_| ())
+}
+
+fn wait_for_native_mount(
+    mapper: &Path,
+    mountpoint: &Path,
+    readonly: bool,
+) -> AppResult<crate::linux::MountInfo> {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if let Some(mount) = read_mountinfo()?
@@ -2005,7 +2009,7 @@ fn mount_fuse_filesystem(
             {
                 return Err(AppError::new("Native filesystem driver published an unexpected mount identity; preserving it."));
             }
-            return Ok(());
+            return Ok(mount);
         }
         if Instant::now() >= deadline {
             return Err(AppError::new(
