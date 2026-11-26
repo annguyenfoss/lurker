@@ -17,8 +17,9 @@ remain pending.
 - A November 26 base snapshot is available. DragonFly documents source-based
   base upgrades; a newer running base is pending.
 - Fresh exact-baseline CLI/helper build completed in run
-  `20261126T205225Z-98c4aa71`, with one Cargo worker. Its workspace checks/tests
-  are still running. Flags: incremental disabled, development/test debug info 0.
+  `20261126T205225Z-98c4aa71`, with one Cargo worker. The remaining baseline workspace build was cancelled when the
+  adapter batch was ready; no workspace pass is claimed. Final complete workspace
+  validation remains pending. Flags: incremental disabled, development/test debug info 0.
 - CLI SHA-256:
   `fdf41eee9f994aa6dfaf6aa73edac6e284752400c4739ef60ac3da0e826f30c7`.
   Helper SHA-256:
@@ -46,7 +47,7 @@ an append and a second reopen. Their host-local FUSE mounts were closed.
 Btrfs, XFS, APFS, UFS2 and ZFS require separate availability/applicability
 reconciliation; no pass is claimed for them.
 
-Installed native filesystem candidates and provenance:
+Initial native filesystem candidates and provenance (later host updates follow):
 
 | Candidate | Version/license | Source and observation |
 | --- | --- | --- |
@@ -75,7 +76,61 @@ through `/tmp/lurker-native-fresh-20261127-dragonflybsd`.
 `cases/baseline-cases.jsonl` names all 20 receipts; `cases/native-*/receipt.json`
 contains the three native filesystem controls. Failed fixtures are retained.
 
-Next: verify the owned ext4/NTFS/exFAT adapter changes remotely, commit coherent
-fixes, rebuild once for the input batch, and run affected lifecycle/cipher/keyfile
-and conformance cases before verified new qcow2 device tests. Complete all 130
-applicability cells and final frozen-candidate validation before closing the round.
+## Native filesystem adapter and host prerequisite fixes
+
+- `cf6841a` adds NTFS/exFAT native formatting and FUSE mounts. Each mount has a
+  root-private alias of `/dev/fuse`, an exact native identity and normal close.
+  NTFS geometry comes from key-free mapper status. Synthetic ownership is private
+  to the invoking user.
+- The packaged NTFS 2022.10.3 library rejected unsupported advisory locks on raw
+  DragonFly character devices. A native host package, `fusefs-ntfs-2026.2.25_1`,
+  was built from the current upstream stable archive and pinned BSD port patches.
+  A narrow DragonFly compatibility patch tolerates only unsupported raw-device
+  locks; regular-file locking remains effective. A held regular-image lock
+  rejected mount, left no mount and preserved the ciphertext hash.
+  Source: https://download.tuxera.com/opensource/ntfs-3g_ntfsprogs-2026.2.25.tgz
+  Archive SHA-256:
+  `7754f3b32e8baf9c472459b4e9c981e3ae0f5039107cdd8d8201aed0a949008a`.
+- ext4 formatting requires explicit mapper block geometry. The ordinary native
+  FUSE driver also failed flush on raw devices: tracing found a two-byte
+  superblock write at offset 1036, rejected with EINVAL; device fsync returned 0.
+  A host `fusefs-ext2-0.0.11_3` package enables the existing libext2fs aligned I/O
+  path for DragonFly character devices. This preserves real flush/fsync and
+  leaves regular-image behavior unchanged. Upstream source:
+  https://github.com/alperakcan/fuse-ext2/commit/ae35afb9ab08d87c66c1e021df792b3a7c4308b0
+- `1f627f9` adds ext4 formatting/mounting and initializes VeraCrypt ext4 root
+  ownership through the shared journaled initialization mount. Targeted native
+  core checks and 10 DragonFly unit tests passed (2 existing ignored tests).
+- Full downloaded-payload Auto-open, append and second-reopen checks passed for
+  NTFS/exFAT with both backends using passwords, and ext4 with both backends using
+  binary keyfiles. Payload writes ran as uid 1300. These are development candidate
+  receipts with recorded source input manifests and binary hashes; complete
+  frozen-commit qualification remains pending.
+- Filesystem tools are installed as host prerequisites outside Lurker's private
+  prefix. Both original filesystem packages are preserved as rollback archives.
+  Patch, source, package, binary and dependency identities are in `build/` and
+  `inventory/`; no cipher, KDF or encryption default was weakened.
+- Official sudo was installed for the desktop helper path. A temporary narrow
+  sudoers policy permits only this round's administrator-controlled helper paths;
+  its removal remains part of cleanup. Helper capabilities run as the login user
+  through that policy; full frontend lifecycle validation remains pending.
+
+## Current continuation
+
+The unmodified stock base at `e17b9176356e3afb3427d71c21108a8a849cd4d5` is building
+with two jobs and a 2 GiB free-space guard. Persistent state:
+`updates/base-build-state.json`; supervisor PID 23445. No new kernel/base has yet
+been installed or booted.
+
+A new 1 GiB qcow2 is attached persistently as libvirt `vda`, with requested serial
+`lurker-fresh-dragonflybsd`, at
+`/srv/build/lurker-native-fresh-20261127/dragonflybsd/scratch.qcow2`.
+The current guest has not enumerated that hotplugged disk. Guest identity and all
+destructive operations await the planned updated-base reboot. No existing disk
+is a test target, and no scratch-device result is claimed.
+
+Next: finish the stock base update and reboot, verify the new disk identity,
+perform native device controls and the physical adapter, and run the final exact
+candidate workspace, cipher/credential/conformance and persistence matrix.
+Complete all 130 applicability cells, frontend/package checks and cleanup before
+closing the round.
