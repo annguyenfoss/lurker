@@ -11,14 +11,14 @@ def main():
     helper=a.prefix/'bin/lurker-helper';assert helper.stat().st_uid==0 and not helper.stat().st_mode&0o022
     a.root.mkdir(mode=0o700,parents=True,exist_ok=False)
     spec=importlib.util.spec_from_file_location('h',a.harness);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
-    j={'commit':a.commit,'host':os.uname().nodename,'kernel':os.uname().release,'uid':os.geteuid(),'helper':str(helper),'helper_sha256':h.file_hash(helper),'harness_sha256':h.file_hash(a.harness),'pid':os.getpid(),'started':time.time(),'status':'running','cases':[]}
+    j={'commit':a.commit,'host':os.uname().nodename,'kernel':os.uname().release,'uid':os.geteuid(),'route':'normal-login-user-direct-helper-with-native-elevation','helper':str(helper),'helper_sha256':h.file_hash(helper),'harness_sha256':h.file_hash(a.harness),'pid':os.getpid(),'started':time.time(),'status':'running','cases':[]}
     def save():h.atomic_json(a.root/'result.json',j)
     save()
     for backend in ['luks','luks1','veracrypt']:
         d=a.root/backend;d.mkdir(mode=0o700);key=d/'binary key Việt Nam.bin';key.write_bytes(b'\0\xff\n\r'+secrets.token_bytes(252));key.chmod(0o600);source=d/'vault.img';m=d/'mount';m.mkdir(mode=0o700)
         row={'backend':backend,'filesystem':'btrfs','filesystem_role':'inner','source_kind':'container','source':str(source),'keyfile_sha256':h.file_hash(key),'operations':[],'status':'running'};j['cases'].append(row);save()
         def action(request):
-            c=subprocess.run(['sudo','-n',str(helper),'run'],input=json.dumps(request).encode(),capture_output=True,timeout=300)
+            c=subprocess.run([str(helper),'run'],input=json.dumps(request).encode(),capture_output=True,timeout=300)
             name=str(len(row['operations']))+'-'+request['action'];(d/(name+'.stdout')).write_bytes(c.stdout);(d/(name+'.stderr')).write_bytes(c.stderr)
             row['operations'].append({'action':request['action'],'exit_code':c.returncode,'stdout':str(d/(name+'.stdout'))});save()
             response=json.loads(c.stdout);row['operations'][-1].update(strict_full_stdout_json=True,ok=response.get('ok'));save()
