@@ -404,16 +404,37 @@ fn native_filesystem_available(name: &str) -> bool {
     }) {
         return true;
     }
-    crate::trusted_system_executable("modinfo")
+    linux_module_invocation("modinfo", &[name.into()])
         .ok()
-        .is_some_and(|program| {
+        .is_some_and(|(program, arguments)| {
             Command::new(program)
-                .arg(name)
+                .args(arguments)
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()
                 .is_ok_and(|status| status.success())
         })
+}
+
+/// kmod selects its applet from argv[0], which canonical executable resolution
+/// intentionally removes. A trusted env launcher preserves that name even when
+/// sudo starts the canonical executable on our behalf.
+pub(crate) fn linux_module_invocation(
+    applet: &str,
+    arguments: &[OsString],
+) -> AppResult<(PathBuf, Vec<OsString>)> {
+    if !matches!(applet, "modinfo" | "modprobe") {
+        return Err(AppError::new("Unsupported Linux module applet."));
+    }
+    let program = crate::trusted_system_executable(applet)?;
+    let launcher = crate::trusted_system_executable("env")?;
+    let mut args = vec![
+        format!("--argv0={applet}").into(),
+        "--".into(),
+        program.into_os_string(),
+    ];
+    args.extend_from_slice(arguments);
+    Ok((launcher, args))
 }
 
 /// Explicit native Linux formatters. Unsupported selections fail before staging
@@ -752,6 +773,25 @@ mod tests {
         assert!(super::find_executable_with_path("true", None).is_some());
         assert!(super::find_executable_with_path("true", Some("".into())).is_none());
         assert!(super::find_executable_with_path("lurker-no-such-tool", None).is_none());
+    }
+
+    #[test]
+    #[ignore = "requires native Linux kmod and an env launcher supporting --argv0"]
+    fn canonical_linux_module_tools_keep_the_requested_applet() {
+        for applet in ["modinfo", "modprobe"] {
+            let (program, arguments) =
+                super::linux_module_invocation(applet, &["--version".into()]).unwrap();
+            let output = std::process::Command::new(program)
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{applet}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(String::from_utf8_lossy(&output.stdout).contains("kmod"));
+        }
     }
 
     fn subprocess_context() -> super::AppContext {

@@ -61,10 +61,11 @@ fn create_device(ctx: &mut AppContext, command: CreateCommand) -> AppResult<()> 
         if !Path::new("/sys/module").join(module).exists() {
             // Resolve module/signing prerequisites before creating a header,
             // especially for explicitly destructive physical-device requests.
-            let modprobe = crate::trusted_system_executable("modprobe")?;
+            let (modprobe, arguments) =
+                crate::system::linux_module_invocation("modprobe", &[module.into()])?;
             let loaded = ctx.capture_command(
                 &modprobe,
-                &[module.into()],
+                &arguments,
                 true,
                 "Load filesystem driver before storage mutation",
             )?;
