@@ -3,6 +3,9 @@
 import argparse, hashlib, importlib.util, json, os, secrets, subprocess, time
 from pathlib import Path
 
+# sudo secure_path excludes locally installed, administrator-owned native tools.
+os.environ["PATH"]="/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin"
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for arg in ("binary","harness","payload","root","device"):p.add_argument("--"+arg,type=Path,required=True)

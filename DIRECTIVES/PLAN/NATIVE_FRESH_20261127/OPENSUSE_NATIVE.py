@@ -3,6 +3,9 @@
 import argparse, hashlib, json, os, shutil, subprocess, time
 from pathlib import Path
 
+# sudo secure_path excludes locally installed, administrator-owned native tools.
+os.environ["PATH"]="/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin"
+
 FILES = ("ext4", "btrfs", "xfs", "apfs", "ufs1", "ufs2", "hammer2", "ntfs", "exfat", "zfs")
 
 def run(argv, **kw):

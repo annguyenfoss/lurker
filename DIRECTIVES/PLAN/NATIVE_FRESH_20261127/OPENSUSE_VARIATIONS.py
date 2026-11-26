@@ -3,6 +3,9 @@
 import hashlib,json,os,subprocess,time
 from pathlib import Path
 
+# sudo secure_path excludes locally installed, administrator-owned native tools.
+os.environ["PATH"]="/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin"
+
 ROOT=Path('/var/tmp/lurker-native-fresh-20261127-opensuse')
 PREFIX=Path('/usr/local/lib/lurker-native-fresh-20261127-opensuse')
 COMMIT='8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d'
