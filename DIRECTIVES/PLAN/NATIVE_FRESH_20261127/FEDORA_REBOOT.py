@@ -92,7 +92,7 @@ def main():
                 if fs == 'ufs1': options += ['rw', 'ufstype=44bsd']
                 args = ['mount', '-o', ','.join(options)]
                 if fs == 'ntfs': args += ['-t', 'ntfs-3g']
-                if fs == 'apfs': args += ['-i', '-t', 'apfs']
+                if fs in {'apfs', 'hammer2'}: args += ['-i', '-t', fs]
                 if fs == 'ufs1': args += ['-i', '-t', 'ufs']
                 native([*args, image, mount])
             if not os.path.ismount(mount): raise RuntimeError('Backing mount missing')
