@@ -67,7 +67,9 @@ pub fn validate_create_platform(
         ));
     }
     if command.source_kind == SourceKind::Block
-        && (!(os == "macos" && command.volume_type == VolumeType::Apfs)
+        && (!(os == "macos"
+            && mode == lurker_core::PrivilegeMode::Privileged
+            && matches!(command.volume_type, VolumeType::Apfs | VolumeType::Veracrypt))
             && !(os == "netbsd" && command.volume_type == VolumeType::Cgd)
             && !(os == "freebsd"
                 && mode == lurker_core::PrivilegeMode::Privileged
@@ -592,7 +594,7 @@ mod tests {
             "",
         )
         .unwrap();
-        for os in ["macos", "netbsd", "openbsd", "dragonfly"] {
+        for os in ["netbsd", "openbsd", "dragonfly"] {
             assert!(super::validate_create_platform(&raw, os, PrivilegeMode::Privileged).is_err());
         }
         assert!(
@@ -600,6 +602,7 @@ mod tests {
         );
         super::validate_create_platform(&raw, "linux", PrivilegeMode::Privileged).unwrap();
         super::validate_create_platform(&raw, "freebsd", PrivilegeMode::Privileged).unwrap();
+        super::validate_create_platform(&raw, "macos", PrivilegeMode::Privileged).unwrap();
     }
 
     #[test]
@@ -877,6 +880,38 @@ mod tests {
             lurker_core::PrivilegeMode::Privileged
         )
         .is_err());
+    }
+
+    #[test]
+    fn macos_veracrypt_partition_requires_the_native_mode_and_omits_size() {
+        let command = build_create_command(
+            "partition",
+            "vera",
+            "",
+            "",
+            "/dev/disk9s1",
+            "",
+            "GB",
+            "aes",
+            "password",
+            "password",
+            "pass",
+            "",
+        )
+        .unwrap();
+        assert_eq!(command.source_kind, SourceKind::Block);
+        assert!(command.force);
+        assert!(command.size_gb.is_none());
+        super::validate_create_platform(&command, "macos", lurker_core::PrivilegeMode::Privileged)
+            .unwrap();
+        assert!(
+            super::validate_create_platform(
+                &command,
+                "macos",
+                lurker_core::PrivilegeMode::Unprivileged
+            )
+            .is_err()
+        );
     }
 
     #[test]

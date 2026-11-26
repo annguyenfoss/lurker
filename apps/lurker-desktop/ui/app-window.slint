@@ -287,6 +287,7 @@ export component MainWindow inherits Window {
                                 width: UiTheme.work-wrap-max;
 
                             if root.current-view == "create": CreateView {
+                                is-macos: root.is-macos;
                                 is-linux: root.is-linux;
                                 is-netbsd: root.platform-os == "netbsd";
                                 is-freebsd: root.platform-os == "freebsd";

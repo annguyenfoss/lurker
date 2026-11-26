@@ -678,7 +678,17 @@ mod tests {
         }
         let fixture = fixture_parent.join(format!("gui-{}", std::process::id()));
         std::fs::create_dir(&fixture).unwrap();
-        let source = fixture.join("encrypted");
+        let partition = std::env::var_os("LURKER_DESKTOP_NATIVE_PARTITION");
+        let physical_partition = partition.is_some();
+        let source = if let Some(partition) = partition {
+            use std::os::unix::fs::FileTypeExt;
+            assert!(cfg!(target_os = "macos") && backend == lurker_core::VolumeType::Veracrypt);
+            let partition = std::path::PathBuf::from(partition).canonicalize().unwrap();
+            assert!(partition.starts_with("/dev") && std::fs::metadata(&partition).unwrap().file_type().is_block_device());
+            partition
+        } else {
+            fixture.join("encrypted")
+        };
         let peer = fixture.join("encrypted-peer");
         let mountpoint = fixture.join("mount");
         std::fs::DirBuilder::new()
@@ -737,7 +747,9 @@ mod tests {
             }.into());
             render(&window);
             ui.set_create_target_kind(
-                if backend.is_directory() {
+                if physical_partition {
+                    "partition"
+                } else if backend.is_directory() {
                     "directory"
                 } else {
                     "file"
@@ -746,6 +758,9 @@ mod tests {
             );
             ui.set_create_file_path(fixture.to_string_lossy().as_ref().into());
             ui.set_create_file_name("encrypted".into());
+            if physical_partition {
+                ui.set_create_partition(source.to_string_lossy().as_ref().into());
+            }
             if mirrored {
                 ui.set_create_peer_source(peer.to_string_lossy().as_ref().into());
             }
@@ -770,7 +785,9 @@ mod tests {
             render(&window);
             let mount = |include_peer| {
                 ui.set_mount_source_kind(
-                    if backend.is_directory() {
+                    if physical_partition {
+                        "partition"
+                    } else if backend.is_directory() {
                         "directory"
                     } else {
                         "file"
@@ -863,6 +880,50 @@ mod tests {
             std::panic::resume_unwind(failure);
         }
         std::fs::remove_dir_all(&fixture).unwrap();
+    }
+
+    #[test]
+    fn macos_veracrypt_partition_forms_render_at_native_scales() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        super::configure_platform(&ui, "macos");
+        ui.show().unwrap();
+        ui.set_create_format("vera".into());
+        render(&window);
+        ui.set_create_target_kind("partition".into());
+        ui.set_create_partition("/dev/disk42s2".into());
+        ui.set_mount_source_kind("partition".into());
+        ui.set_mount_source("/dev/disk42s2".into());
+        ui.set_mount_point("/Volumes/Work".into());
+        for scale in [1.0, 1.2] {
+            ui.set_ui_scale(scale);
+            ui.set_current_view("create".into());
+            ui.window().dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                position: slint::LogicalPosition::new(1000.0, 500.0), delta_x: 0.0, delta_y: 10000.0,
+            });
+            render(&window);
+            assert_eq!(ui.get_create_target_kind(), "partition");
+            snapshot(&window, &format!("macos-vc-partition-create-{scale}"));
+            ui.window().dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                position: slint::LogicalPosition::new(1000.0, 500.0), delta_x: 0.0, delta_y: -10000.0,
+            });
+            render(&window);
+            snapshot(&window, &format!("macos-vc-partition-create-bottom-{scale}"));
+            ui.set_current_view("manage".into());
+            ui.window().dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                position: slint::LogicalPosition::new(1000.0, 500.0), delta_x: 0.0, delta_y: 10000.0,
+            });
+            render(&window);
+            assert_eq!(ui.get_mount_source_kind(), "partition");
+            snapshot(&window, &format!("macos-vc-partition-open-{scale}"));
+            ui.window().dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                position: slint::LogicalPosition::new(1000.0, 500.0), delta_x: 0.0, delta_y: -10000.0,
+            });
+            render(&window);
+            snapshot(&window, &format!("macos-vc-partition-open-bottom-{scale}"));
+        }
+        ui.hide().unwrap();
     }
 
     #[test]

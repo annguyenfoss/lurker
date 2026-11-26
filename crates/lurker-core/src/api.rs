@@ -138,7 +138,8 @@ impl CreateCommand {
                     self.volume_type,
                     VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
                 ))
-                || (os == "macos" && self.volume_type == VolumeType::Apfs)
+                || (os == "macos"
+                    && matches!(self.volume_type, VolumeType::Apfs | VolumeType::Veracrypt))
                 || (os == "openbsd"
                     && matches!(
                         self.volume_type,
@@ -331,6 +332,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn macos_veracrypt_device_filesystem_uses_the_native_route() {
+        let mut command: CreateCommand = serde_json::from_value(serde_json::json!({
+            "target": "/dev/disk9s1", "source_kind": "block", "force": true,
+            "volume_type": "veracrypt", "filesystem": "exfat", "passphrase": null,
+            "size_gb": null
+        }))
+        .unwrap();
+        assert!(command.validate_filesystem("macos").is_ok());
+        command.privilege_mode = PrivilegeMode::Unprivileged;
+        assert!(command.validate_filesystem("macos").is_err());
+        command.privilege_mode = PrivilegeMode::Privileged;
+        command.volume_type = VolumeType::Apple;
+        assert!(command.validate_filesystem("macos").is_err());
+    }
+
+    #[test]
     fn filesystem_selection_accepts_privileged_bsd_physical_veracrypt() {
         let mut command: CreateCommand = serde_json::from_value(serde_json::json!({
             "target": "/dev/test-disk", "source_kind": "block", "force": true,
@@ -366,9 +383,7 @@ mod tests {
         assert!(command.validate_filesystem("macos").is_ok());
         command.filesystem = Some(CreateFilesystem::Exfat);
         assert!(command.validate_filesystem("macos").is_err());
-        for (os, backend) in [
-            ("dragonfly", VolumeType::Luks1),
-        ] {
+        for (os, backend) in [("dragonfly", VolumeType::Luks1)] {
             command.volume_type = backend;
             assert!(command.validate_filesystem(os).is_err());
         }
@@ -388,7 +403,8 @@ mod tests {
             "target": "/dev/test-data", "source_kind": "block", "force": true,
             "volume_type": "geli", "filesystem": "ufs2", "passphrase": null,
             "size_gb": null
-        })).unwrap();
+        }))
+        .unwrap();
         assert!(command.validate_filesystem("freebsd").is_ok());
         command.privilege_mode = PrivilegeMode::Unprivileged;
         assert!(command.validate_filesystem("freebsd").is_err());
