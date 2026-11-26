@@ -13,6 +13,7 @@ import {
 export component CreateView inherits Card {
     in property <bool> is-linux: true;
     in property <bool> is-netbsd: false;
+    in property <bool> is-freebsd: false;
     in property <bool> is-dragonfly: false;
     in property <[string]> formats: ["luks", "vera"];
     in property <bool> unprivileged: false;
@@ -35,7 +36,7 @@ export component CreateView inherits Card {
     out property <bool> directory-format: root.format == "gocryptfs" || root.format == "cryfs" || root.format == "cryptomator" || root.format == "pefs";
     out property <bool> variable-cipher: root.format == "luks" || root.format == "luks1" || root.format == "vera";
     out property <bool> supports-keyfile: root.variable-cipher || root.format == "geli" || root.format == "pefs";
-    private property <bool> supports-partition: (root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs" || (root.is-netbsd && root.format == "cgd");
+    private property <bool> supports-partition: (root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs" || (root.is-netbsd && root.format == "cgd") || (root.is-freebsd && root.format == "geli");
     changed format => {
         root.target-kind = root.directory-format ? "directory" : "file";
         if !root.variable-cipher { root.cipher = "aes"; }
@@ -155,7 +156,8 @@ export component CreateView inherits Card {
                 required: true;
                 if root.format == "apfs": ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/diskNsM"; }
                 if root.is-netbsd && root.format == "cgd": ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/dkN"; }
-                if root.format != "apfs" && !(root.is-netbsd && root.format == "cgd"): DevicePicker {
+                if root.is-freebsd && root.format == "geli": ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/daNpM"; }
+                if root.format != "apfs" && !(root.is-netbsd && root.format == "cgd") && !(root.is-freebsd && root.format == "geli"): DevicePicker {
                     devices: root.devices;
                     value <=> root.partition;
                     selected-label: root.partition-label;

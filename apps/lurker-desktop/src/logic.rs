@@ -69,6 +69,7 @@ pub fn validate_create_platform(
     if command.source_kind == SourceKind::Block
         && (!(os == "macos" && command.volume_type == VolumeType::Apfs)
             && !(os == "netbsd" && command.volume_type == VolumeType::Cgd)
+            && !(os == "freebsd" && command.volume_type == VolumeType::Geli)
             && (os != "linux" || mode == lurker_core::PrivilegeMode::Unprivileged))
     {
         return Err("Physical-device creation requires a supported native device backend.".into());
@@ -840,6 +841,36 @@ mod tests {
         assert!(super::validate_create_platform(
             &command,
             "linux",
+            lurker_core::PrivilegeMode::Privileged
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn geli_partition_uses_the_native_helper_without_a_file_size() {
+        let command = build_create_command(
+            "partition",
+            "geli",
+            "",
+            "",
+            "/dev/da1p1",
+            "",
+            "GB",
+            "aes",
+            "password",
+            "password",
+            "pass",
+            "",
+        )
+        .unwrap();
+        assert_eq!(command.source_kind, SourceKind::Block);
+        assert!(command.force);
+        assert!(command.size_gb.is_none());
+        super::validate_create_platform(&command, "freebsd", lurker_core::PrivilegeMode::Privileged)
+            .unwrap();
+        assert!(super::validate_create_platform(
+            &command,
+            "netbsd",
             lurker_core::PrivilegeMode::Privileged
         )
         .is_err());

@@ -289,6 +289,7 @@ export component MainWindow inherits Window {
                             if root.current-view == "create": CreateView {
                                 is-linux: root.is-linux;
                                 is-netbsd: root.platform-os == "netbsd";
+                                is-freebsd: root.platform-os == "freebsd";
                                 is-dragonfly: root.platform-os == "dragonfly";
                                 formats: root.create-formats;
                                 unprivileged: root.unprivileged;
@@ -335,6 +336,7 @@ export component MainWindow inherits Window {
                                 is-macos: root.is-macos;
                                 is-linux: root.is-linux;
                                 is-netbsd: root.platform-os == "netbsd";
+                                is-freebsd: root.platform-os == "freebsd";
                                 supports-directories: root.is-linux || root.is-macos || root.platform-os == "freebsd";
                                 supports-keyfile: root.platform-os != "netbsd";
                                 supports-raid1c: root.platform-os == "openbsd";
