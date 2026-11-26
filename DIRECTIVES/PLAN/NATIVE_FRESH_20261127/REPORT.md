@@ -92,7 +92,12 @@ under target/goal-validation/native-fresh-20261127/.
   passed (19 passed), and the actual device preview passed 14 operations. The
   coordinator matched all original payload hashes and final appended hashes,
   verified the invoking user's private filesystem root and clean final mount
-  inventory. Desktop controls and full device-matrix qualification are separate.
+  inventory. `2e93f78` adds desktop GELI partition controls. The actual UI exposed
+  a pre-existing scroll-area sizing defect at 120% zoom, fixed in `ca14341`.
+  Native desktop tests passed (35 product tests and one private software probe);
+  ordinary-user helper/GUI execution passed. The coordinator inspected both
+  120% scrolled screenshots and matched all five production source hashes to
+  the executed inputs. Full device-matrix and installed-package gates remain.
 - FreeBSD CryFS backing qualification: ext4, UFS1, UFS2, HAMMER2 and ZFS passed.
   Both NTFS and exFAT passed equivalent unmodified upstream CryFS payload
   controls, while the bundled durability patch failed during hardlink
@@ -121,14 +126,25 @@ under target/goal-validation/native-fresh-20261127/.
   synchronization have distinct receipts.
 - NetBSD's final workspace and seven-container/seven-device batch passed on
   `dac5010`. The subsequent mounted-reboot batch exposed native ZFS import
-  refusal when the host has no persistent nonzero `kern.hostid`. The original
-  pool is preserved; ordinary host configuration and a fresh no-force reboot
-  control are being investigated before any new pass or final claim.
+  refusal. A persistent nonzero `kern.hostid` did not fix it: source inspection
+  identified a native macro that shadows the global host identity with a local
+  zero value. The stock service does not export pools during shutdown. Failed
+  pools are preserved; no forced import, ineffective preflight guard or custom
+  shutdown hook is used. A module-source correction remains deferred until the
+  ordinary assessment is complete. Native package installation, packaged helper
+  and actual desktop-window checks passed; an installed-artifact matrix rerun
+  is still required because its binaries differ from the earlier matrix build.
 - All eleven applicability ledgers now contain 130 unique normalized cells.
   The coordinator's private structural audit verifies coverage of the requested
   method/filesystem names only. It does not establish runtime completion or
   the correctness of any availability claim; source-build gaps and remaining
   native qualifications continue to be audited individually.
+- Linux core/CLI/helper candidate `ca7d213` is frozen for all six distributions.
+  Full workspace checks and the first installed native package gates have
+  passed on several hosts; complete final container/device/reboot sweeps are
+  running. The subsequent UFS1 negative cases exposed a mountinfo parsing gap:
+  per-mount `rw` does not override superblock `ro`. The parser and payload-gate
+  correction are being tested before any completed Linux qualification claim.
 
 ## Work still required
 
