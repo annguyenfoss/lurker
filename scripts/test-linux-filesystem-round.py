@@ -31,7 +31,11 @@ def main():
                    help='Downloaded common payload directory for the native qualification round')
     p.add_argument('--skip-block', action='store_true')
     p.add_argument('--only-userspace', action='store_true')
+    p.add_argument('--skip-userspace', action='store_true',
+                   help='Run host-native filesystem routes without the LKL compatibility route')
     a = p.parse_args()
+    if a.only_userspace and a.skip_userspace:
+        p.error('--only-userspace and --skip-userspace are mutually exclusive')
     if os.geteuid() == 0:
         p.error('Run the coordinator as the login user; only block cases use sudo')
     a.root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -86,7 +90,7 @@ def main():
             if not a.only_userspace:
                 for backend in ('luks', 'luks1', 'veracrypt'):
                     run_case(backend, fs, True)
-            if fs in {'btrfs', 'ext4', 'xfs', 'ntfs', 'exfat', 'fat32'}:
+            if not a.skip_userspace and fs in {'btrfs', 'ext4', 'xfs', 'ntfs', 'exfat', 'fat32'}:
                 run_case('veracrypt', fs)
     # Directory formats have their own layout. The label below names their
     # disposable backing filesystem, never an alternate inner format.
