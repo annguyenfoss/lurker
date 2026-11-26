@@ -8,7 +8,9 @@ this round. Private evidence is under
 The host is OpenBSD 8.0 amd64. `syspatch` installed `80-023_vnode` and
 `80-024_swpgonly` successfully; `pkg_add -u` completed successfully with no
 package changes reported. The updated GENERIC.MP#14 kernel is running after an orderly reboot. SSH key authentication as root provides scoped privilege;
-no sudo/doas configuration was changed.
+no broad authentication policy was changed. The later desktop callback gate used
+a temporary policy limited to two roles of one verified root-owned helper;
+the exact original sudoers bytes were restored after the gate (details below).
 
 The exact-baseline `cargo check --workspace` passed in job
 `20261126T203457Z-ddbc94db`. Its test compilation was explicitly cancelled
@@ -132,12 +134,45 @@ dumpfs observations confirmed degraded health and FFSv2. No peers were rebuilt;
 no arrays or plaintext mounts remained. Native core tests passed 71 cases,
 CLI unit tests passed 19, and the designated block/raw parser probe passed one.
 
-Complete workspace tests and frozen-candidate container/device/reboot validation
-remain pending. The earlier native workspace-test attempt hit the login shell's
-1.5 GiB datasize limit during desktop LLVM code generation; no full pass was
-claimed. Exact source `5b251f4` is running the scoped 3 GiB-datasize, one-worker
-workspace check/test/product-build recipe in `20261126T224319Z-87bcd67d`.
-Do not reboot until its processes terminate and all logs/artifacts are retained.
+Exact source `5b251f4` passed workspace check, workspace tests (135 passed,
+zero failed, 21 ignored), and builds of CLI/helper/desktop in immutable job
+`20261126T224319Z-87bcd67d`. A previous attempt hit the login shell's 1.5 GiB
+datasize limit during LLVM code generation; the successful job used a scoped
+3 GiB datasize limit and one worker. The failed compiler core, successful
+artifacts and complete later logs were archived before retiring only terminal
+job artifacts to recover guest disk space. Frozen final-candidate
+container/device/reboot/installed-package qualification remains pending.
+
+Commits `782a088` and `d601bc5` replace private FUSE libraries with an explicit
+administrator-controlled host prerequisite. The OpenBSD provider is base
+`/usr/lib/libfuse.so.4.0`, ABI FUSE2.8, qualification SHA-256
+`b0ae957e10c0619ebf517abfcdda6f52d10f5575d4175061dde8963b2b433c12`.
+The build hash records provenance; compatible administrator security updates
+remain eligible. Runtime checks trusted ancestors, library ABI, engine NEEDED
+entries and actual cleared-environment loader resolution. The existing engine
+bytes remain `d4cd476c...`. Ten producer tests, 73 core tests and three actual
+root runtime/inventory/alias tests passed natively; the FreeBSD owner separately
+verified its stable library alias and actual provider after `d601bc5`.
+
+The desktop physical overlay from exact `c7f7092`, with runtime fix `d601bc5`,
+passed 40 native desktop tests (one ignored) and its additional 24-frame software
+render probe at 100% and 120%. The actual ordinary UID 1300 GUI callbacks then
+passed create, mount, ownership/mode assertions, payload write, normal close,
+reopen and final close for physical CRYPTO, two-member RAID1C and VeraCrypt.
+These used the independently verified new qcow2 targets and a reviewed helper
+under a root-owned `/opt/lurker-native-fresh-20261127-openbsd-desktop` prefix.
+The exact six formatted overlay files and all logs/fixtures are retained under
+`desktop/`; parent commit `9d2b057` records that overlay. No array, plaintext
+mount or engine remained afterward.
+
+For that ordinary-user callback gate only, a temporary sudoers rule authorized
+`--as-root run` and `--as-root list-native` of that exact helper. An unrelated
+command remained denied. After all three passes, the exact original policy
+was restored and revalidated, SHA-256
+`28f3746d63428eb2326ceac0febc23082b10dccb7b1a3a452db902c89ba44f41`;
+subsequent helper elevation again required authorization. The restoration
+receipt is in `desktop/callback-logs-fixtures-and-restoration.tar.gz`.
+These are native source-overlay desktop results, not an installed package pass.
 No complete host qualification is claimed.
 
 The installed NTFS-3G and exfat-fuse packages provide writable candidates;
@@ -149,12 +184,19 @@ exists. Stable 1.0.3 was fetched at verified commit
 Official native CMake 4.3.5, Ninja 1.11.1, Boost 1.91, range-v3 0.12 and spdlog
 1.17 dependencies were installed. Native configuration found base libfuse 2.8.0
 and succeeded. An isolated actual source compile failed at the upstream
-get_total_memory.cpp unsupported-platform guard; OpenBSD's native physical-page
-and page-size sysconf values are available, so a small explicit port is being
-assessed rather than declaring OS impossibility. The installed fuse_mount(3)
-manual requires root for mount/unmount; login-user folder policy therefore also
-needs a trusted privileged integration if source/runtime controls succeed.
-No native CryFS lifecycle or product pass is claimed yet. Other requested
+get_total_memory.cpp unsupported-platform guard. Explicit OpenBSD ports for
+native sysconf memory values, pthread names and libc++ ordering then produced a
+real native CLI. Its first runtime control exposed the bundled Crypto++ use of
+removed `/dev/srandom`; an OpenBSD-only build definition selects the real kernel
+CSPRNG `/dev/urandom` without creating substitute devices. That control mounted
+through the stock base FUSE kernel but its first regular-file write exposed
+upstream's unimplemented MKNOD callback. A narrowly scoped regular-file
+MKNOD-to-existing-create/release port is now being built and assessed.
+Failed source/runtime receipts and fixtures are preserved; no native CryFS
+payload lifecycle or product pass is claimed yet. The installed fuse_mount(3)
+manual requires root for mount/unmount, so a successful engine control would
+also require a trusted privileged product lifecycle before enabling this OS.
+Other requested
 portable engines retain their explicit per-cell assessment in the ledger.
 
 Upstream capability references reviewed this round:
