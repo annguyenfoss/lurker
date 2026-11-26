@@ -20,14 +20,17 @@ PRIVATE = Path("usr/lib/lurker")
 REQUIRED_BACKENDS = {
     "luks", "luks1", "veracrypt", "gocryptfs", "cryfs", "cryptomator",
 }
-REQUIRED_ARTIFACTS = {"veracrypt-userspace", "gocryptfs", "cryfs", "cryptomator"}
+REQUIRED_ARTIFACTS = {"gocryptfs", "cryfs", "cryptomator"}
+VERACRYPT_ARTIFACTS = {"veracrypt-create", "veracrypt-userspace"}
 PRODUCTS = ("lurker", "lurker-desktop", "lurker-helper")
 RPM_DISTROS = {"fedora", "opensuse-leap"}
 
 
 def require_full_package(prefix, manifest):
+    artifacts = set(manifest["bundled_artifacts"])
     if (set(manifest["selected_backends"]) != REQUIRED_BACKENDS
-            or set(manifest["bundled_artifacts"]) != REQUIRED_ARTIFACTS):
+            or artifacts - VERACRYPT_ARTIFACTS != REQUIRED_ARTIFACTS
+            or len(artifacts & VERACRYPT_ARTIFACTS) != 1):
         raise ValueError("A full Linux package with all locked routes is required")
     for product in PRODUCTS:
         STAGE.require_executable(prefix / "bin" / product)

@@ -95,7 +95,8 @@ def main():
         parser.error("External VeraCrypt/Java/Go present; use a clean runtime VM or explicitly label a prepared-host run")
     ciphers = ["aes", "serpent", "twofish"] if args.all_ciphers else ["aes"]
     cases = [(backend, cipher, False) for backend in ["luks", "luks1", "veracrypt"] for cipher in ciphers] if args.route == "kernel" else [
-        *[("veracrypt", cipher, True) for cipher in ciphers],
+        *([("veracrypt", cipher, True) for cipher in ciphers]
+          if "veracrypt-userspace" in manifest["bundled_artifacts"] else []),
         ("gocryptfs", None, False), ("cryfs", None, False), ("cryptomator", None, False)]
     job = Path(tempfile.mkdtemp(prefix="lurker-package-qualification-", dir="/tmp"))
     report = {"schema": 1, "source_commit": args.commit, "route": args.route, "prefix": str(prefix),
@@ -103,6 +104,10 @@ def main():
               "package_manifest_sha256": digest(prefix / "share/lurker/manifest.json"),
               "binary_sha256": digest(prefix / "bin/lurker"), "suite_sha256": digest(args.suite),
               "fixture_size_gb": args.size_gb, "suites": [], "logs": str(job)}
+    if args.route == "user" and "veracrypt-userspace" not in manifest["bundled_artifacts"]:
+        report["excluded_routes"] = [{"backend": "veracrypt", "route": "userspace",
+                                      "status": "not-applicable",
+                                      "reason": "Package includes the native creator, not the optional userspace engine"}]
     args.result.parent.mkdir(parents=True, exist_ok=True)
     save(args.result, report)
     env = os.environ.copy()
