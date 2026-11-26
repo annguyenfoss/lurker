@@ -1134,16 +1134,11 @@ fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
                 "Filesystem process identity changed; preserving encrypted container.",
             ));
         }
-        // The verified filesystem is already drained and unmounted. Stop only
-        // this session's exact backend; this is orderly transport cleanup.
-        // SAFETY: start identity was checked immediately before the signal.
-        if unsafe { libc::kill(session.pid as libc::pid_t, libc::SIGTERM) } != 0 {
-            return Err(AppError::io(
-                "Cannot stop filesystem transport",
-                std::io::Error::last_os_error(),
-            ));
-        }
-        let deadline = Instant::now() + Duration::from_secs(5);
+        // Disk Arbitration can acknowledge FSKit unmount before the driver's
+        // destroy callback has flushed its filesystem buffers. Let it exit
+        // normally before closing the decrypted image; SIGTERM here can lose
+        // newly written XFS directory entries.
+        let deadline = Instant::now() + Duration::from_secs(10);
         while process_start(session.pid)?.as_deref() == Some(&session.process_start)
             && Instant::now() < deadline
         {
@@ -1151,7 +1146,7 @@ fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
         }
         if process_start(session.pid)?.as_deref() == Some(&session.process_start) {
             return Err(AppError::new(
-                "Filesystem process has not stopped; preserving encrypted device.",
+                "Filesystem driver is still draining after unmount; preserving encrypted storage. Retry normal close after it exits.",
             ));
         }
     }
