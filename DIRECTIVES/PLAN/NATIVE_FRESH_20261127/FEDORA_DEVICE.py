@@ -10,12 +10,14 @@ def main():
     p.add_argument("--filesystems",default="ext4,btrfs,xfs,apfs,ufs1,ufs2,hammer2,ntfs,exfat,zfs")
     a=p.parse_args()
     if os.geteuid()!=0 or os.uname().nodename!="fedora-core-01":p.error("Run with sudo on fedora-core-01")
+    supplied_device=str(a.device)
+    a.device=a.device.resolve(strict=True)
     identity=subprocess.check_output(["lsblk","-dn","-o","SERIAL,SIZE,TYPE",str(a.device)],text=True).strip()
     if identity.split()[0]!="lurker-fresh-fedora" or identity.split()[-1]!="disk":p.error("Scratch disk serial/type mismatch")
     spec=importlib.util.spec_from_file_location("h",a.harness);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
     a.root.mkdir(parents=True,exist_ok=True)
     expected={name:(a.payload/name).read_bytes() for name in ("bitcoin.pdf","ethereum.pdf","transformer.pdf","page.txt")}
-    result={"host":os.uname().nodename,"kernel":os.uname().release,"commit":a.commit,"binary":str(a.binary),"binary_sha256":h.file_hash(a.binary),"device":str(a.device),"identity":identity,"cases":[],"status":"running","pid":os.getpid()}
+    result={"host":os.uname().nodename,"kernel":os.uname().release,"commit":a.commit,"binary":str(a.binary),"binary_sha256":h.file_hash(a.binary),"device":str(a.device),"supplied_device":supplied_device,"identity":identity,"cases":[],"status":"running","pid":os.getpid()}
     receipt=a.root/"device.json"
     def save():h.atomic_json(receipt,result)
     for fs in a.filesystems.split(","):
