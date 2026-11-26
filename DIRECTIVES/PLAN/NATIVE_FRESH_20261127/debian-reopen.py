@@ -52,14 +52,19 @@ def main():
                 p.error('Prepare accepts only passed file-backed fixtures')
             records.append({'receipt': str(receipt), 'record': record})
         state = {'status': 'preparing', 'host': 'debian', 'boot_before': boot_id,
-                 'binary_sha256': harness.file_hash(binary), 'cases': records, 'operations': []}
+                 'kernel_before': os.uname().release,
+                 'binary_sha256': harness.file_hash(binary),
+                 'reopener_sha256': harness.file_hash(Path(__file__)),
+                 'qualifier_sha256': harness.file_hash(args.qualifier),
+                 'payload_harness_sha256': harness.file_hash(args.harness),
+                 'cases': records, 'operations': []}
     else:
         state = json.loads(state_path.read_text())
         if state['status'] != 'reboot_ready' or state['boot_before'] == boot_id:
             p.error('Verification requires an actual different boot after preparation')
         if state['binary_sha256'] != harness.file_hash(binary):
             p.error('Runtime binary changed across the reboot')
-        state.update(status='verifying', boot_after=boot_id)
+        state.update(status='verifying', boot_after=boot_id, kernel_after=os.uname().release)
     expected = harness.load_payload(root / 'payload')
     expected['page.txt'] += b'\nFresh Debian second-mount append.\n'
     expected['second.txt'] = b'Fresh Debian second-mount new file.\n'
@@ -113,9 +118,10 @@ def main():
             opened.append((source, mount, backend, record))
             if backend not in qualifier.DIRECTORIES:
                 qualifier.require_native_filesystem(mount, fs)
-            row[args.phase + '_sha256'] = harness.verify_payload(mount, expected)
+            row[args.phase + '_sha256'] = harness.bounded_payload_call(
+                lambda: harness.verify_payload(mount, expected), 90)
         if args.phase == 'prepare':
-            subprocess.run(['/usr/bin/sync'], check=True)
+            subprocess.run(['/usr/bin/sync'], check=True, timeout=120)
             state['status'] = 'reboot_ready'
         else:
             for source, mount, backend, record in reversed(opened):
@@ -124,6 +130,8 @@ def main():
             state['status'] = 'passed'
     except Exception as error:
         state.update(status='failed', error=str(error))
+        if isinstance(error, harness.PayloadWorkerError):
+            state.setdefault('payload_workers', []).append(error.worker)
         for source, mount, backend, record in reversed(opened):
             if os.path.ismount(mount):
                 try:
