@@ -479,7 +479,7 @@ mod tests {
             ("linux", "luks", 6),
             ("macos", "apple", 6),
             ("freebsd", "geli", 5),
-            ("netbsd", "cgd", 1),
+            ("netbsd", "cgd", 2),
             ("openbsd", "softraid", 3),
             ("dragonfly", "luks1", 2),
         ] {
