@@ -22,7 +22,8 @@ def main():
     if identity.split()[0]!=a.serial or a.serial not in {"lurker-fresh-fedora"} or identity.split()[-1]!="disk":p.error("Scratch disk serial/type mismatch")
     if int(subprocess.check_output(["blockdev","--getsize64",str(a.device)],text=True))!=a.size_bytes:p.error("Scratch size mismatch")
     spec=importlib.util.spec_from_file_location("h",a.harness);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
-    a.root.mkdir(parents=True,exist_ok=True)
+    a.root.mkdir(mode=0o711,parents=True,exist_ok=True)
+    a.root.chmod(0o711)
     expected={name:(a.payload/name).read_bytes() for name in ("bitcoin.pdf","ethereum.pdf","transformer.pdf","page.txt")}
     result={"host":os.uname().nodename,"kernel":os.uname().release,"commit":a.commit,"binary":str(a.binary),"binary_sha256":h.file_hash(a.binary),"device":str(a.device),"supplied_device":supplied_device,"identity":identity,"cases":[],"status":"running","pid":os.getpid()}
     matrix_receipt=a.root/"device-directories.json"
