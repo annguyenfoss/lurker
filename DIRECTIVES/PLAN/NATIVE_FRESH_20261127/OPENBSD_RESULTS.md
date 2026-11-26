@@ -45,9 +45,53 @@ The first kernel-activation reboot cleared OpenBSD `/tmp` (`/var/tmp` links
 there). Both build result receipts and source archives survived locally, but
 remote full compile logs were not collected before that reboot and are missing.
 
-Cipher/credential/error conformance is running. Scratch disks are newly created
-and still unattached. Physical native controls, product device fixes and final
-workspace tests remain pending. No complete host qualification is claimed.
+Cipher/credential/error conformance passed eight suites and 102 assertions
+with zero failures: CRYPTO AES, VeraCrypt AES/Serpent/Twofish each with password
+and binary keyfile credentials, and RAID1C. Three additional real-helper JSON
+UFS2 lifecycles, one per backend, passed the downloaded-payload reopen flow.
+
+Two new 512 MiB qcow2 members were attached to this domain as vdb/vdc, serials
+`lurker-fresh-openbsd1` and `lurker-fresh-openbsd2`. An orderly reboot enumerated
+them as sd1/sd2. Independent first-sector UUID sentinels matched both exact
+images before any destructive operation. All eight native physical controls
+passed: CRYPTO and two-member RAID1C each with UFS1, UFS2, NTFS and exFAT,
+including the downloaded payload and two normal reopen verifications. Baseline
+product device requests failed before changing those sentinels; native control
+successes are not Lurker device passes.
+
+The private VeraCrypt device control exposed a pinned upstream
+`CoreOpenBSD::GetHostDevices` stub containing a bare `throw`, which aborted its
+privileged child. A syscall-only trace and a backtrace with frame arguments
+hidden established the cause; private cores remain mode 0600. Commits
+`49c7729` and `20efd78` replace the stub with real kernel disk inventory and
+checked disklabel partition discovery, preserving the upstream refusal to
+create over a partitioned whole disk. The frozen patch SHA-256 is
+`3385c98e25cbb7be03ab814dbfc984dd77705e256cb14c79393213e654887130`.
+Its rebuilt private engine SHA-256 is
+`1f360e2066ddc9efffd7d7f381cab4d8c7083b56ac1566be1f4c102df22b3754`.
+Eight builder provenance tests passed. Stager verification of the new
+OpenBSD-only patch inventory landed separately in `906102a`.
+
+A new native VeraCrypt physical-partition control then passed AES/SHA-512/PIM0
+password creation, native FFS2 read/write, downloaded payload, normal close,
+reopen/compare, append/new file and final reopen/compare. The outer disklabel
+DUID remained unchanged. This control uses sd1a starting at sector 2048. Earlier
+trial partitions at sectors 0 and 64 overlapped the outer label and disappeared
+on reopen; both failed ciphertext images and diagnostics were preserved before
+reinitialization. Here the OpenBSD slice starts at 64 and its disklabel is at
+65, so merely using a nonzero partition offset is insufficient.
+
+Owned adapter commits `ce72060`, `ad18cf3` and `7cf6293` add checked physical
+backing identities, idle/mounted/swap/native-holder guards, shared CRYPTO/RAID1C
+chunk preparation, and partition geometry with explicit outer-label overlap
+rejection. Four pure native parser tests passed; a separately root-owned test
+executable verified the scratch partition inspector/idle check and rejected the
+mounted system disk using read-only queries. No destructive command targeted
+the system disk.
+
+Shared product dispatch integration, native product device retests, final
+frozen-candidate container validation and complete workspace tests remain
+pending. No complete host qualification is claimed.
 
 The installed NTFS-3G and exfat-fuse packages provide writable candidates;
 libfsapfs and libfsxfs expose read-only readers. An ext4 formatter exists, but
