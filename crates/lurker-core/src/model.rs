@@ -216,7 +216,7 @@ impl VolumeType {
             Self::Cgd => os == "netbsd",
             Self::Softraid | Self::Raid1c => os == "openbsd",
             Self::Gocryptfs => matches!(os, "linux" | "macos" | "freebsd"),
-            Self::Cryfs => matches!(os, "linux" | "macos" | "freebsd"),
+            Self::Cryfs => matches!(os, "linux" | "macos" | "freebsd" | "netbsd"),
             Self::Cryptomator => matches!(os, "linux" | "macos"),
         }
     }
@@ -257,7 +257,7 @@ mod scope_tests {
                 VolumeType::Gocryptfs,
                 [true, true, true, false, false, false],
             ),
-            (VolumeType::Cryfs, [true, true, true, false, false, false]),
+            (VolumeType::Cryfs, [true, true, true, false, true, false]),
             (
                 VolumeType::Cryptomator,
                 [true, true, false, false, false, false],

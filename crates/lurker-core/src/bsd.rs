@@ -1956,6 +1956,27 @@ fn sync_directory(path: &Path) -> AppResult<()> {
         .map_err(|e| AppError::io("Sync directory", e))
 }
 
+#[cfg(target_os = "netbsd")]
+pub(crate) fn folder_mount_identity(path: &Path) -> AppResult<Option<String>> {
+    let mut matches = mounts()?.into_iter().filter(|entry| entry.target == path);
+    let Some(mount) = matches.next() else {
+        return Ok(None);
+    };
+    if matches.next().is_some() {
+        return Err(AppError::new(
+            "Multiple native mounts occupy the folder mountpoint; preserve the session.",
+        ));
+    }
+    // Native puffs names may be truncated. The kernel fsid and exact target
+    // identify the mount independently of display text or command argv.
+    serde_json::to_string(&serde_json::json!({
+        "fsid": mount.fsid, "source": mount.source,
+        "target": mount.target, "filesystem": mount.filesystem,
+    }))
+    .map(|value| Some(format!("netbsd-fsid:{value}")))
+    .map_err(|e| AppError::new(format!("Cannot record native folder mount identity: {e}")))
+}
+
 fn mounts() -> AppResult<Vec<Mounted>> {
     // getmntinfo uses a process-global buffer. Serialize access through a mutex;
     // copy every field before releasing it. Unlike `mount` text, spaces in

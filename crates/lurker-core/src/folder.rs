@@ -22,6 +22,8 @@ mod supervisor;
 mod fence;
 #[cfg(target_os = "netbsd")]
 mod netbsd_process;
+#[cfg(target_os = "netbsd")]
+mod netbsd;
 #[cfg(target_os = "macos")]
 #[path = "folder/macos_publication.rs"]
 mod macos_publication;
@@ -95,10 +97,16 @@ pub(crate) fn detect_type(path: &Path) -> AppResult<VolumeType> {
 
 fn supported(kind: VolumeType) -> bool {
     match kind {
-        VolumeType::Gocryptfs | VolumeType::Cryfs => cfg!(any(
+        VolumeType::Gocryptfs => cfg!(any(
             target_os = "linux",
             target_os = "macos",
             target_os = "freebsd"
+        )),
+        VolumeType::Cryfs => cfg!(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "freebsd",
+            target_os = "netbsd"
         )),
         VolumeType::Cryptomator => cfg!(any(target_os = "linux", target_os = "macos")),
         _ => false,
@@ -662,6 +670,8 @@ fn unescape(value: &str) -> String {
         .replace("\\134", "\\")
 }
 fn mount_identity(path: &Path) -> AppResult<Option<String>> {
+    #[cfg(target_os = "netbsd")]
+    return crate::bsd::folder_mount_identity(path);
     #[cfg(target_os = "linux")]
     {
         let text = fs::read_to_string("/proc/self/mountinfo")
@@ -674,7 +684,7 @@ fn mount_identity(path: &Path) -> AppResult<Option<String>> {
         }
         Ok(None)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "netbsd")))]
     {
         let value = Command::new("/sbin/mount")
             .env("LC_ALL", "C")
@@ -800,6 +810,8 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
             "This directory backend is not selected for this OS.",
         ));
     }
+    #[cfg(target_os = "netbsd")]
+    netbsd::require_fuse_access()?;
     if c.source_kind != crate::SourceKind::Directory
         || c.force
         || c.size_gb.is_some()
@@ -1011,6 +1023,8 @@ fn mount_inner(
             "This directory backend is not selected for this OS.",
         ));
     }
+    #[cfg(target_os = "netbsd")]
+    netbsd::require_fuse_access()?;
     if c.keyfile.is_some() || c.tag.is_some() {
         return Err(AppError::new(
             "Directory mounts do not accept keyfiles or mapper tags.",

@@ -343,11 +343,21 @@ pub fn effective_uid() -> u32 {
 
 /// Internal frontend entry point for a login-user directory backend monitor.
 pub fn run_folder_supervisor_if_requested() -> Option<i32> {
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ))]
     {
         folder::run_supervisor_if_requested()
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    )))]
     {
         None
     }
