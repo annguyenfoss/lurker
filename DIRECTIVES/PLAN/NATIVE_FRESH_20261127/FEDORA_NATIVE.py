@@ -15,6 +15,7 @@ def main():
     a.add_argument("--payload", required=True, type=Path)
     a.add_argument("--device", type=Path)
     a.add_argument("--serial")
+    a.add_argument("--ufs2-kernel", action="store_true", help="Probe the existing configured native UFS module")
     a.add_argument("--filesystems", default=",".join(FILES))
     x = a.parse_args()
     if os.uname().nodename != "fedora-core-01" or os.geteuid() != 0:
@@ -46,7 +47,11 @@ def main():
         def mount():
             nonlocal mounted
             if fs=="zfs":cmd(["zpool","import","-d",str(image.parent),pool])
-            elif fs=="ufs2":cmd(["/usr/local/bin/fuse-ufs","-o","rw,allow_other,fsname="+str(image),image,m])
+            elif fs=="ufs2":
+                if x.ufs2_kernel:
+                    options="rw,ufstype=ufs2"+("" if x.device else ",loop")
+                    cmd(["mount","-i","-t","ufs","-o",options,image,m])
+                else:cmd(["/usr/local/bin/fuse-ufs","-o","rw,allow_other,fsname="+str(image),image,m])
             else:
                 opts=[] if x.device else ["loop"]
                 if fs=="apfs":opts += ["readwrite"]
