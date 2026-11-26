@@ -9,7 +9,7 @@ mod fuse;
 pub(in crate::bsd) fn filesystem_has_posix_ownership(mapped: &str) -> AppResult<bool> {
     Ok(!matches!(
         probe(mapped)?,
-        CreateFilesystem::Ntfs | CreateFilesystem::Exfat
+        CreateFilesystem::Ntfs | CreateFilesystem::Exfat | CreateFilesystem::Fat32
     ))
 }
 pub(in crate::bsd) fn close_filesystem(mapped: &str) -> AppResult<()> {
@@ -103,6 +103,9 @@ pub(super) fn probe(mapped: &str) -> AppResult<CreateFilesystem> {
     }
     if &bytes[3..11] == b"NTFS    " {
         return Ok(CreateFilesystem::Ntfs);
+    }
+    if &bytes[82..90] == b"FAT32   " {
+        return Ok(CreateFilesystem::Fat32);
     }
     if bytes[1080..1082] == [0x53, 0xef] {
         return Ok(CreateFilesystem::Ext4);

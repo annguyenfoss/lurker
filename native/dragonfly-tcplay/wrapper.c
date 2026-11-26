@@ -1,6 +1,10 @@
 /* Private Lurker protocol for the pinned DragonFly libtcplay build. */
 #include <sys/types.h>
 #include <sys/resource.h>
+#include <sys/diskslice.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 #include <libdm.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -15,6 +19,12 @@
 #define MAPPER_PREFIX "lurker_vc_"
 #define UUID_PREFIX "LURKER-VERACRYPT-"
 
+struct backing_proof {
+    int fd;
+    struct stat node;
+    struct partinfo geometry;
+};
+
 static bool
 valid_name(const char *value, const char *prefix, const char *alphabet)
 {
@@ -24,6 +34,86 @@ valid_name(const char *value, const char *prefix, const char *alphabet)
     value += length;
     return *value != '\0' && strlen(value) <= 64 &&
         strspn(value, alphabet) == strlen(value);
+}
+
+static bool
+physical_name(const char *value)
+{
+    const char *prefixes[] = { "/dev/vbd", "/dev/nvme", "/dev/ad", "/dev/da" };
+    const char *number = NULL;
+    if (strlen(value) > 64)
+        return false;
+    for (size_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i) {
+        size_t length = strlen(prefixes[i]);
+        if (strncmp(value, prefixes[i], length) == 0) {
+            number = value + length;
+            break;
+        }
+    }
+    if (number == NULL || *number < '0' || *number > '9')
+        return false;
+    while (*number >= '0' && *number <= '9')
+        ++number;
+    if (*number++ != 's' || *number < '0' || *number > '9')
+        return false;
+    unsigned partition = 0;
+    while (*number >= '0' && *number <= '9') {
+        partition = partition * 10 + (*number++ - '0');
+        if (partition > 128)
+            return false;
+    }
+    return *number == '\0' && partition > 0;
+}
+
+static bool
+same_node(const struct stat *left, const struct stat *right)
+{
+    return S_ISCHR(right->st_mode) && right->st_uid == 0 &&
+        left->st_dev == right->st_dev && left->st_ino == right->st_ino &&
+        left->st_rdev == right->st_rdev;
+}
+
+static bool
+physical_geometry(int fd, struct partinfo *info)
+{
+    static const unsigned char nil_uuid[16] = {0};
+    memset(info, 0, sizeof(*info));
+    return ioctl(fd, DIOCGPART, info) == 0 &&
+        info->media_blksize == SECTOR_BYTES && info->reserved_blocks == 0 &&
+        info->media_offset > 0 && info->media_offset % SECTOR_BYTES == 0 &&
+        info->media_blocks <= INT64_MAX / SECTOR_BYTES &&
+        info->media_size == info->media_blocks * SECTOR_BYTES &&
+        memcmp(&info->storage_uuid, nil_uuid, sizeof(nil_uuid)) != 0;
+}
+
+static bool
+verify_physical(const struct backing_proof *proof, const char *path)
+{
+    struct stat named, opened;
+    struct partinfo now;
+    if (proof->fd == -1)
+        return true; /* The existing vnode reservation is verified by core. */
+    return lstat(path, &named) == 0 && fstat(proof->fd, &opened) == 0 &&
+        same_node(&proof->node, &named) && same_node(&proof->node, &opened) &&
+        physical_geometry(proof->fd, &now) &&
+        now.media_offset == proof->geometry.media_offset &&
+        now.media_size == proof->geometry.media_size &&
+        memcmp(&now.storage_uuid, &proof->geometry.storage_uuid,
+            sizeof(now.storage_uuid)) == 0;
+}
+
+static bool
+open_backing(const char *path, struct backing_proof *proof)
+{
+    if (valid_name(path, "/dev/vn", "0123456789"))
+        return true;
+    if (!physical_name(path))
+        return false;
+    proof->fd = open(path, O_RDWR | O_NOFOLLOW | O_NONBLOCK);
+    return proof->fd >= 0 && fstat(proof->fd, &proof->node) == 0 &&
+        S_ISCHR(proof->node.st_mode) && proof->node.st_uid == 0 &&
+        physical_geometry(proof->fd, &proof->geometry) &&
+        verify_physical(proof, path);
 }
 
 static bool
@@ -107,9 +197,14 @@ main(int argc, char **argv)
         puts("lurker-tcplay 2");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "physical-protocol") == 0) {
+        puts("lurker-tcplay physical 1");
+        return 0;
+    }
     bool create = argc == 5 && strcmp(argv[1], "create-header") == 0;
     bool map = argc == 6 && strcmp(argv[1], "map") == 0;
-    if ((!create && !map) || !valid_name(argv[2], "/dev/vn", "0123456789"))
+    if ((!create && !map) ||
+        !(valid_name(argv[2], "/dev/vn", "0123456789") || physical_name(argv[2])))
         return 2;
     const char *cipher = create ? argv[4] : NULL;
     const char *alphanumeric = "0123456789abcdefghijklmnopqrstuvwxyz_";
@@ -128,34 +223,39 @@ main(int argc, char **argv)
         return 2;
     tc_api_task task = tc_api_task_init(create ? "create" : "info");
     int result = 2;
+    struct backing_proof proof = { .fd = -1 };
+    uint64_t mapped_start = 0, mapped_bytes = 0;
     disksz_t blocks;
     size_t sector;
-    if (task == NULL || get_disk_info(argv[2], &blocks, &sector) != 0 ||
+    if (task == NULL || !open_backing(argv[2], &proof) ||
+        get_disk_info(argv[2], &blocks, &sector) != 0 ||
         sector != SECTOR_BYTES || blocks <= MIN_VOL_BYTES / SECTOR_BYTES ||
         blocks > INT64_MAX / SECTOR_BYTES ||
         tc_api_task_set(task, "dev", argv[2]) != TC_OK ||
         tc_api_task_set(task, "interactive", 0) != TC_OK ||
         tc_api_task_set(task, "retries", 1) != TC_OK ||
-        set_credential(task, argv[3]) != TC_OK)
+        set_credential(task, argv[3]) != TC_OK || !verify_physical(&proof, argv[2]))
         goto done;
 
     if (create) {
-        /* Lurker already filled and synced the staging file. */
+        /* Lurker already filled and synced the staging file or verified partition. */
         if (tc_api_task_set(task, "cipher_chain", cipher) == TC_OK &&
             tc_api_task_set(task, "prf_algo", PROFILE) == TC_OK &&
             tc_api_task_set(task, "secure_erase", 0) == TC_OK &&
-            tc_api_task_do(task) == TC_OK) {
-            puts("created");
+            tc_api_task_do(task) == TC_OK && verify_physical(&proof, argv[2]) &&
+            (proof.fd == -1 || fsync(proof.fd) == 0)) {
             result = 0;
         }
     } else if (tc_api_task_do(task) != TC_OK ||
         task->last_info == NULL || !qualified_volume(task->last_info, blocks * SECTOR_BYTES)) {
         result = 3;
-    } else if (!activate(task->last_info, argv[4], argv[5])) {
+    } else if (!verify_physical(&proof, argv[2]) ||
+        !activate(task->last_info, argv[4], argv[5]) ||
+        !verify_physical(&proof, argv[2])) {
         result = 4;
     } else {
-        printf("mapped %" PRIu64 " %" PRIu64 "\n",
-            task->last_info->hdr->off_mk_scope, task->last_info->hdr->sz_mk_scope);
+        mapped_start = task->last_info->hdr->off_mk_scope;
+        mapped_bytes = task->last_info->hdr->sz_mk_scope;
         result = 0;
     }
 
@@ -163,6 +263,14 @@ done:
     if (task != NULL)
         tc_api_task_uninit(task);
     tc_api_uninit();
+    if (proof.fd != -1 && close(proof.fd) != 0 && result == 0)
+        result = 2;
+    if (result == 0) {
+        if (create)
+            puts("created");
+        else
+            printf("mapped %" PRIu64 " %" PRIu64 "\n", mapped_start, mapped_bytes);
+    }
     if (result == 3)
         fputs("VeraCrypt authentication failed. Check the credential and use a normal SHA-512, PIM 0 volume with AES, Serpent, or Twofish.\n", stderr);
     else if (result == 4)

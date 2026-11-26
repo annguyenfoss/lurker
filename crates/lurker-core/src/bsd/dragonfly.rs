@@ -20,7 +20,7 @@ pub(super) use filesystems::{
 pub(super) mod linear;
 mod metadata;
 mod physical;
-pub(super) use physical::{ensure_physical_idle, physical_device};
+pub(super) use physical::{create_physical, ensure_physical_idle, physical_device};
 pub(super) mod veracrypt;
 
 const VNCONFIG: &str = "/usr/sbin/vnconfig";
@@ -33,6 +33,56 @@ fn vnode_name(device: &str) -> AppResult<&str> {
         return Err(AppError::new("Refusing an invalid DragonFly vnode device."));
     }
     Ok(name)
+}
+
+fn backing_device(device: &str) -> AppResult<()> {
+    if vnode_name(device).is_ok() {
+        return Ok(());
+    }
+    physical_device(Path::new(device)).map(|_| ())
+}
+
+fn source_bytes(session: &Session) -> AppResult<u64> {
+    if let Some(proof) = &session.physical {
+        proof.verify(&session.source)?;
+        return physical_device(&session.source).map(|device| device.bytes);
+    }
+    let metadata = std::fs::metadata(&session.source)
+        .map_err(|e| AppError::io("Inspect DragonFly container size", e))?;
+    if !metadata.is_file() || !session.identity.matches(&session.source) {
+        return Err(AppError::new("DragonFly container identity changed."));
+    }
+    Ok(metadata.len())
+}
+
+fn open_source(session: &Session, writable: bool) -> AppResult<File> {
+    let file = File::options()
+        .read(true)
+        .write(writable)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(&session.source)
+        .map_err(|e| AppError::io("Open DragonFly ciphertext", e))?;
+    let metadata = file.metadata()
+        .map_err(|e| AppError::io("Inspect open DragonFly ciphertext", e))?;
+    if metadata.dev() != session.identity.dev || metadata.ino() != session.identity.ino {
+        return Err(AppError::new("DragonFly ciphertext descriptor changed; preserve its journal."));
+    }
+    if let Some(physical) = &session.physical {
+        physical.verify(&session.source)?;
+        let named = std::fs::symlink_metadata(&session.source)
+            .map_err(|e| AppError::io("Recheck DragonFly physical ciphertext", e))?;
+        if !metadata.file_type().is_char_device() || metadata.rdev() != named.rdev() {
+            return Err(AppError::new("DragonFly physical descriptor changed; preserve its journal."));
+        }
+    } else if !metadata.is_file() {
+        return Err(AppError::new("DragonFly file ciphertext changed; preserve its journal."));
+    }
+    Ok(file)
+}
+
+fn sync_source(session: &Session) -> AppResult<()> {
+    open_source(session, false)?.sync_all()
+        .map_err(|e| AppError::io("Sync DragonFly ciphertext", e))
 }
 
 fn mapping_name(device: &str) -> AppResult<&str> {
@@ -241,7 +291,7 @@ fn credential_args(credential: &Credential) -> (Vec<OsString>, Option<Vec<u8>>) 
 }
 
 pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential) -> AppResult<()> {
-    vnode_name(device)?;
+    backing_device(device)?;
     let cipher = match cipher {
         CreateCipher::Aes => "aes-xts-plain64",
         CreateCipher::Serpent => "serpent-xts-plain64",
@@ -283,7 +333,7 @@ fn unlock_named(
     if device.starts_with("/dev/mapper/lurker_linear_") {
         mapping_name(device)?;
     } else {
-        vnode_name(device)?;
+        backing_device(device)?;
     }
     mapping_name(name)?;
     let mut command = args(&["--batch-mode"]);
@@ -451,6 +501,10 @@ fn vnode_state(device: &str) -> AppResult<VnodeState> {
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
     let metadata = std::fs::metadata(path)
         .map_err(|e| AppError::io("Failed to inspect DragonFly backing file", e))?;
+    if metadata.file_type().is_char_device() && Path::new(device) == path {
+        physical_device(path)?;
+        return Ok(());
+    }
     // Kernel device/inode identity is independent of reconstructed pathnames
     // and does not require the backing filesystem to have a /dev entry.
     if !metadata.is_file()
@@ -556,7 +610,7 @@ fn mapping_sectors(mapped: &str, backing: &str) -> AppResult<u64> {
     if backing.starts_with("/dev/mapper/lurker_linear_") {
         mapping_name(backing)?;
     } else {
-        vnode_name(backing)?;
+        backing_device(backing)?;
     }
     verify_dependencies(mapped, &[backing])?;
     let status = exec(

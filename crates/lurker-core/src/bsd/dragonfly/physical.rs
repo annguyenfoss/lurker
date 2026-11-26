@@ -335,6 +335,126 @@ pub(in crate::bsd) fn ensure_physical_idle(source: &Path) -> AppResult<()> {
     Ok(())
 }
 
+pub(in crate::bsd) fn create_physical(
+    command: crate::CreateCommand,
+    output: crate::Output,
+) -> AppResult<()> {
+    use crate::bsd::{
+        Registry, Session, cleanup, credential, initialize_acquired_mapping,
+        initialize_new_filesystem_owner, verify_session,
+    };
+    use crate::{CreateFilesystem, SourceKind, VolumeType};
+    if command.source_kind != SourceKind::Block || !command.force || command.size_gb.is_some() {
+        return Err(AppError::new(
+            "DragonFly physical creation requires --force and no file size.",
+        ));
+    }
+    let backend = crate::bsd::check_backend(command.volume_type)?;
+    super::validate_filesystem(command.filesystem, backend)?;
+    let target_metadata = fs::symlink_metadata(&command.target)
+        .map_err(|e| AppError::io("Inspect DragonFly physical target", e))?;
+    if !target_metadata.file_type().is_char_device() || target_metadata.file_type().is_symlink() {
+        return Err(invalid());
+    }
+    let source = fs::canonicalize(&command.target)
+        .map_err(|e| AppError::io("Resolve DragonFly physical target", e))?;
+    let owner = crate::new_filesystem::invoking_owner()?;
+    let registry = Registry::open()?;
+    registry.ensure_unused(&source)?;
+    let (identity, proof) = crate::bsd::physical::capture(&source)?;
+    ensure_physical_idle(&source)?;
+    let bytes = physical_device(&source)?.bytes;
+    let credential = credential(
+        command.passphrase.as_deref(),
+        command.keyfile.as_deref(),
+        command.passphrase.is_none() && command.keyfile.is_none(),
+    )?;
+    let program = if backend == VolumeType::Veracrypt {
+        super::veracrypt::validate_create_size(bytes)?;
+        Some(super::veracrypt::validate(&credential, Some(&source))?)
+    } else {
+        None
+    };
+    let mut session = Session {
+        version: 1,
+        id: crate::bsd::unique_id(),
+        backend,
+        backing: Some(source.to_string_lossy().into_owned()),
+        source,
+        create_target: None,
+        peer_sources: Vec::new(),
+        identity,
+        physical: Some(proof),
+        dragonfly_backing_reservation: None,
+        dragonfly_backing_detach_requested: false,
+        dragonfly_layer: None,
+        dragonfly_veracrypt: None,
+        mapped: None,
+        mounted: None,
+        intended_mountpoint: None,
+        initialization_directory: None,
+        readonly: false,
+    };
+    registry.save(&session)?;
+    let initialized = (|| {
+        verify_session(&session)?;
+        ensure_physical_idle(&session.source)?;
+        let mapped = if let Some(program) = &program {
+            let descriptor = super::open_source(&session, true)?;
+            super::veracrypt::initialize_image(&descriptor, bytes)?;
+            session.physical.as_ref().unwrap().verify(&session.source)?;
+            drop(descriptor);
+            super::veracrypt::create_header(
+                &registry,
+                &session,
+                program,
+                command.cipher,
+                &credential,
+            )?;
+            super::veracrypt::activate(&registry, &mut session, program, &credential)?
+        } else {
+            super::format(
+                session.backing.as_deref().unwrap(),
+                command.cipher,
+                &credential,
+            )?;
+            super::linear::activate(&registry, &mut session, false, &credential)?
+        };
+        session.mapped = Some(mapped);
+        registry.save(&session)?;
+        initialize_acquired_mapping(&registry, &session, |mapped| {
+            if program.is_some() {
+                super::veracrypt::make_filesystem(
+                    &registry,
+                    mapped,
+                    bytes,
+                    command.filesystem.unwrap_or(CreateFilesystem::Hammer2),
+                )
+            } else {
+                super::make_selected_filesystem(mapped, command.filesystem)
+            }
+        })?;
+        initialize_new_filesystem_owner(&registry, &mut session, owner)
+    })();
+    if let Err(error) = cleanup(&registry, &mut session) {
+        return Err(AppError::new(format!(
+            "DragonFly physical resources remain recorded for recovery at {}: {error}",
+            session.source.display()
+        )));
+    }
+    initialized.map_err(|error: AppError| {
+        AppError::new(format!(
+            "{error}; preserve the selected physical partition {}",
+            session.source.display()
+        ))
+    })?;
+    output.success(&format!(
+        "Created {backend} data partition: {}",
+        session.source.display()
+    ));
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

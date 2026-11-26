@@ -102,7 +102,7 @@ pub(in crate::bsd) fn bind(registry: &Registry, session: &mut Session) -> AppRes
             "LUKS1 image changed before metadata capture.",
         ));
     }
-    let (geometry, prefix) = read_header(&source, metadata.len())?;
+    let (geometry, prefix) = read_header(&source, super::source_bytes(session)?)?;
     let path = metadata_path(&registry.directory, session)?;
     if fs::symlink_metadata(&path).is_ok() {
         return Err(AppError::new(
@@ -423,6 +423,9 @@ pub(in crate::bsd) fn release(registry: &Registry, session: &mut Session) -> App
     };
     let path = metadata_path(&registry.directory, session)?;
     verify(&registry.directory, session)?;
+    if session.physical.is_some() {
+        super::sync_source(session)?;
+    }
     let composite = device(session);
     if layer.composite_requested {
         if has_mapping(&composite)? {

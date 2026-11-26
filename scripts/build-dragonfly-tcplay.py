@@ -76,6 +76,8 @@ def build(cache, output, offline):
         version = subprocess.check_output([str(binary), "protocol"], text=True).strip()
         if version != "lurker-tcplay 2":
             raise SystemExit("Unexpected wrapper protocol")
+        if subprocess.check_output([str(binary), "physical-protocol"], text=True).strip() != "lurker-tcplay physical 1":
+            raise SystemExit("Unexpected physical wrapper protocol")
         output.mkdir(parents=True, exist_ok=True)
         license_path = output / "licenses" / "DragonFly-tcplay.txt"
         license_path.parent.mkdir(exist_ok=True)
@@ -83,6 +85,7 @@ def build(cache, output, offline):
         shutil.copy2(binary, output / BINARY)
         manifest = {
             "schema": 1, "protocol": version,
+            "runtime": {"physical_source_protocol": 1},
             "target": {"os": platform.system(), "machine": platform.machine()},
             "revision": pin["revision"],
             "inputs": {name: digest(NATIVE / name) for name in

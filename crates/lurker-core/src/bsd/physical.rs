@@ -133,7 +133,9 @@ pub(super) fn create(command: CreateCommand, output: Output) -> AppResult<()> {
     return create_cgd(command, output);
     #[cfg(target_os = "openbsd")]
     return openbsd::create(command, output);
-    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
+    #[cfg(target_os = "dragonfly")]
+    return super::native::create_physical(command, output);
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd", target_os = "dragonfly")))]
     {
         let _ = (command, output);
         Err(AppError::new(

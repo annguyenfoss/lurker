@@ -1,6 +1,6 @@
 //! VeraCrypt headers are handled in the private tcplay process. Only a
 //! validated native mapper, identified by its journaled UUID, is mounted.
-use super::{AppError, AppResult, args, exec, mapping_name, verify_backing, vnode_name};
+use super::{AppError, AppResult, args, backing_device, exec, mapping_name, verify_backing};
 use crate::bsd::{Credential, Mounted, Registry, Session, exec_dragonfly_locked, mounts};
 use crate::new_filesystem::Owner;
 use crate::{CreateCipher, CreateFilesystem, VolumeType};
@@ -9,7 +9,7 @@ use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind, Read};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -60,12 +60,33 @@ pub(in crate::bsd) fn classify(source: &Path) -> AppResult<VolumeType> {
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(source)
         .map_err(|e| AppError::io("Open DragonFly container for format detection", e))?;
-    if !file
+    let metadata = file
         .metadata()
-        .map_err(|e| AppError::io("Inspect DragonFly container", e))?
-        .is_file()
-    {
-        return Err(AppError::new("DragonFly containers must be regular files."));
+        .map_err(|e| AppError::io("Inspect DragonFly source", e))?;
+    if metadata.file_type().is_char_device() {
+        super::physical_device(source)?;
+        let named = fs::symlink_metadata(source)
+            .map_err(|e| AppError::io("Recheck DragonFly physical source", e))?;
+        if (metadata.dev(), metadata.ino(), metadata.rdev())
+            != (named.dev(), named.ino(), named.rdev())
+        {
+            return Err(AppError::new(
+                "DragonFly physical source changed during detection.",
+            ));
+        }
+        // Native raw devices require a complete sector, even for a short magic.
+        let mut sector = [0; 512];
+        file.read_exact(&mut sector)
+            .map_err(|e| AppError::io("Read DragonFly physical crypto signature", e))?;
+        return Ok(if sector[..6] == *b"LUKS\xba\xbe" {
+            VolumeType::Luks1
+        } else {
+            VolumeType::Veracrypt
+        });
+    } else if !metadata.is_file() {
+        return Err(AppError::new(
+            "DragonFly sources must be regular files or verified GPT data partitions.",
+        ));
     }
     let mut magic = [0; 6];
     match file.read_exact(&mut magic) {
@@ -103,7 +124,7 @@ pub(in crate::bsd) fn validate(
         }
     }
     if let Some(source) = source.filter(|path| path.exists()) {
-        if super::attached_private_copy(source)?.is_some() {
+        if source.is_file() && super::attached_private_copy(source)?.is_some() {
             return Err(AppError::new(
                 "Container is already attached to a DragonFly vnode.",
             ));
@@ -124,7 +145,31 @@ pub(in crate::bsd) fn validate(
             "Incompatible DragonFly VeraCrypt wrapper. Install a matching Lurker package.",
         ));
     }
+    if let Some(source) = source.filter(|path| {
+        fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_char_device())
+    }) {
+        super::physical_device(source)?;
+        require_physical_backend(&program)?;
+    }
     Ok(program)
+}
+
+pub(in crate::bsd) fn require_physical_backend(program: &Path) -> AppResult<()> {
+    if exec(
+        program
+            .to_str()
+            .ok_or_else(|| AppError::new("Invalid private wrapper path."))?,
+        &args(&["physical-protocol"]),
+        None,
+    )?
+    .trim()
+        != "lurker-tcplay physical 1"
+    {
+        return Err(AppError::new(
+            "DragonFly physical VeraCrypt requires a matching packaged raw-device wrapper.",
+        ));
+    }
+    Ok(())
 }
 
 fn run(
@@ -136,7 +181,7 @@ fn run(
     credential: &Credential,
     timeout: Duration,
 ) -> AppResult<String> {
-    vnode_name(backing)?;
+    backing_device(backing)?;
     let mut keyfile = Vec::new();
     let (kind, bytes) = match credential {
         Credential::Password(password) => ("password", password.as_slice()),
@@ -279,9 +324,7 @@ pub(in crate::bsd) fn activate(
             "DragonFly VeraCrypt mapper name is already in use.",
         ));
     }
-    let bytes = fs::metadata(&session.source)
-        .map_err(|e| AppError::io("Inspect VeraCrypt container size", e))?
-        .len();
+    let bytes = super::source_bytes(session)?;
     let sectors = payload_sectors(bytes)?;
     session.dragonfly_veracrypt = Some(Mapping {
         sectors,
@@ -350,6 +393,9 @@ pub(in crate::bsd) fn reconcile(registry: &Registry, session: &mut Session) -> A
             registry.save(session)?;
         }
     } else if mapping.removing && session.mounted.is_none() {
+        if session.physical.is_some() {
+            sync_backing(session)?;
+        }
         session.mapped = None;
         session.dragonfly_veracrypt = None;
         registry.save(session)?;
@@ -383,6 +429,9 @@ pub(in crate::bsd) fn remove(registry: &Registry, session: &mut Session) -> AppR
         None,
         COMMAND_TIMEOUT,
     )?;
+    if session.physical.is_some() {
+        sync_backing(session)?;
+    }
     session.dragonfly_veracrypt = None;
     Ok(())
 }
@@ -689,24 +738,7 @@ pub(in crate::bsd) fn verify_access(
 }
 
 pub(in crate::bsd) fn sync_backing(session: &Session) -> AppResult<()> {
-    let file = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-        .open(&session.source)
-        .map_err(|e| AppError::io("Open VeraCrypt ciphertext for close", e))?;
-    let metadata = file
-        .metadata()
-        .map_err(|e| AppError::io("Inspect open VeraCrypt ciphertext", e))?;
-    if !metadata.is_file()
-        || metadata.dev() != session.identity.dev
-        || metadata.ino() != session.identity.ino
-    {
-        return Err(AppError::new(
-            "VeraCrypt ciphertext changed during close; preserving the journal.",
-        ));
-    }
-    file.sync_all()
-        .map_err(|e| AppError::io("Sync VeraCrypt ciphertext before detaching its vnode", e))
+    super::sync_source(session)
 }
 
 #[cfg(test)]
