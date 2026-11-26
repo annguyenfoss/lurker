@@ -219,9 +219,9 @@ def main():
                     shutil.move(str(fixture), str(target))
                     fixture.symlink_to(target, target_is_directory=True)
                 print(json.dumps({'case': label, 'status': result['status'], 'receipt': str(result_path), 'mount_remaining': result['mount_remaining']}), flush=True)
-                if args.mode == 'device' and (result['mount_remaining'] or result['owned_loop_remaining']):
-                    return 1
+            if args.mode == 'device' and (result['mount_remaining'] or result['owned_loop_remaining']):
+                return 1
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())
