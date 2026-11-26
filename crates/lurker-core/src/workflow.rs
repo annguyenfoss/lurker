@@ -30,7 +30,7 @@ const VERACRYPT_CREATE_ARGS_COMMON: &[&str] = &[
     "--pim=0",
 ];
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 // VeraCrypt determines the full device size; --size=max is file-only.
 const VERACRYPT_CREATE_ARGS_BLOCK: &[&str] = &["--quick"];
 
@@ -259,6 +259,18 @@ pub(crate) fn macos_veracrypt_create_args(
 }
 
 #[cfg(target_os = "macos")]
+pub(crate) fn macos_veracrypt_device_create_args(
+    cipher: CreateCipher,
+    keyfile: Option<&std::path::Path>,
+) -> crate::AppResult<Vec<OsString>> {
+    let mut args =
+        macos_veracrypt_create_args(cipher, 0, keyfile, Some(crate::CreateFilesystem::Exfat))?;
+    args.retain(|arg| !arg.to_string_lossy().starts_with("--size="));
+    args.extend(VERACRYPT_CREATE_ARGS_BLOCK.iter().map(OsString::from));
+    Ok(args)
+}
+
+#[cfg(target_os = "macos")]
 pub(crate) fn macos_apple_create_args(
     size_mib: u64,
     filesystem: Option<crate::CreateFilesystem>,
@@ -313,6 +325,31 @@ fn macos_filesystem(
 #[cfg(all(test, target_os = "macos"))]
 mod macos_profile_tests {
     use super::*;
+
+    #[test]
+    fn device_veracrypt_preserves_crypto_and_uses_native_partition_geometry() {
+        for cipher in [
+            CreateCipher::Aes,
+            CreateCipher::Serpent,
+            CreateCipher::Twofish,
+        ] {
+            let args = macos_veracrypt_device_create_args(cipher, None).unwrap();
+            assert!(args.iter().any(|arg| arg == "--quick"));
+            assert!(args.iter().any(|arg| arg == "--hash=SHA-512"));
+            assert!(args.iter().any(|arg| arg == "--filesystem=exFAT"));
+            assert!(args.iter().any(|arg| arg == "--pim=0"));
+            assert!(
+                !args
+                    .iter()
+                    .any(|arg| arg.to_string_lossy().starts_with("--size="))
+            );
+            assert!(args.iter().any(|arg| arg.to_string_lossy()
+                == format!(
+                    "--encryption={}",
+                    cipher_profile(cipher).veracrypt_encryption
+                )));
+        }
+    }
 
     #[test]
     fn apple_native_and_external_filesystems_keep_one_fixed_crypto_profile() {

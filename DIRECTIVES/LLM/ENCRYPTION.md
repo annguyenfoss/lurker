@@ -179,6 +179,13 @@ the native driver's probe. The defaults below apply to other filesystems.
   - `--quick`
   - omit `--size`: VeraCrypt determines the full device size; `--size=max` can fail for device-hosted volumes.
 
+### macOS VeraCrypt data partitions
+
+- Native external GPT data partitions require `--force`, no file size, and the currently qualified exFAT filesystem. Reuse the fixed cipher/hash/PIM/credential profile and existing device `--quick` policy from `workflow.rs`; never silently substitute file-only filesystem adapters.
+- The private engine and ancestor path must be administrator-controlled before its native core service can authorize device access. Frontend/helper remain in the login-user session. Native device ownership is restored after creation.
+- Bind the selected partition UUID, offset/size, native node and parent model/transport/tree/hardware serial. Refuse whole/internal/system/mounted/reserved targets and existing APFS containers or system-role parents; recheck identity before operation. Virtual data partitions must match their owned backing image and attachment. Auto detects actual encrypted APFS data volumes instead of treating every `/dev` path as APFS.
+- Fresh native virtual, desktop-callback and Toshiba USB proof is recorded in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/MACOS_RESULTS.md`. Native-only qualification uses the audited macFUSE build. Interactive authorization outside Buran's pre-authorized privilege route remains unqualified. See `native/macos/veracrypt-partitions.md`.
+
 ### DragonFly VeraCrypt file containers
 
 - Select `veracrypt` explicitly for create. LUKS1 remains the native default. Auto open keeps a recognized LUKS signature on the LUKS path and authenticates other regular files through the private wrapper.

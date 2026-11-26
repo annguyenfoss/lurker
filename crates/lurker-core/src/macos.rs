@@ -17,6 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 mod apfs;
 mod filesystems;
+mod veracrypt_device;
 mod vm_filesystem;
 mod zfs;
 
@@ -567,6 +568,9 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
             "Option --type auto is not valid with create.",
         ));
     }
+    if c.source_kind == SourceKind::Block && c.volume_type == VolumeType::Veracrypt {
+        return veracrypt_device::create(c, output);
+    }
     if c.source_kind != SourceKind::File {
         return Err(AppError::new("macOS create supports file containers only."));
     }
@@ -749,9 +753,21 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     require_type(c.volume_type)?;
     require_no_tag(c.tag.as_deref())?;
     let source = existing(&c.source)?;
-    if !source.is_file() {
-        return Err(AppError::new("macOS supports file containers only."));
-    }
+    let device = if source.is_file() {
+        None
+    } else {
+        if !matches!(c.volume_type, VolumeType::Auto | VolumeType::Veracrypt) {
+            return Err(AppError::new(
+                "This macOS backend requires a file container.",
+            ));
+        }
+        Some(veracrypt_device::identity(&source)?)
+    };
+    let device_program = if device.is_some() {
+        Some(veracrypt_device::backend()?)
+    } else {
+        None
+    };
     let mountpoint = target_path(&c.mountpoint)?;
     if mountpoint.exists()
         && (!mountpoint.is_dir()
@@ -762,7 +778,11 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     {
         return Err(AppError::new("Mount point must be an empty directory."));
     }
-    let apple = encrypted_apple(&source)?;
+    let apple = if device.is_some() {
+        None
+    } else {
+        encrypted_apple(&source)?
+    };
     let kind = match (c.volume_type, apple) {
         (_, Some(false)) => {
             return Err(AppError::new(
@@ -831,14 +851,25 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         if c.readonly {
             a.push("--mount-options=ro".into());
         }
-        (require_veracrypt()?, a)
+        (
+            if let Some(program) = device_program {
+                program
+            } else {
+                require_veracrypt()?
+            },
+            a,
+        )
     };
     arguments.push(source.as_os_str().into());
     if kind == VolumeType::Veracrypt {
         arguments.push(mountpoint.as_os_str().into());
     }
+    if let Some(device) = &device {
+        device.revalidate()?;
+    }
     if let Err(error) = checked(&program, &arguments, Some(&pass)) {
         if kind == VolumeType::Veracrypt
+            && device.is_none()
             && (error.message.contains("no mountable file systems")
                 || error.message.contains("Unable to invoke task"))
             && filesystems::mount_missing(
@@ -901,7 +932,25 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         ));
         return Ok(());
     }
-    filesystems::replace_native_ntfs(&source, &mountpoint, c.readonly, kind == VolumeType::Apple)?;
+    if let Some(device) = &device {
+        device.revalidate()?;
+        if let Err(error) = veracrypt_device::validate_mount(&mountpoint) {
+            for volume in vera_volumes()?
+                .into_iter()
+                .filter(|v| same_path(&v.source, &source))
+            {
+                detach(&volume)?;
+            }
+            return Err(error);
+        }
+    } else {
+        filesystems::replace_native_ntfs(
+            &source,
+            &mountpoint,
+            c.readonly,
+            kind == VolumeType::Apple,
+        )?;
+    }
     output.msg2(&format!(
         "Mounted {} at {}",
         source.display(),
@@ -958,6 +1007,11 @@ fn detach(volume: &Volume) -> AppResult<()> {
             None,
         )?;
     } else {
+        let program = if volume.source.starts_with("/dev") {
+            veracrypt_device::backend()?
+        } else {
+            require_veracrypt()?
+        };
         // Some VeraCrypt macOS builds force-detach internally, even without
         // --force. Let Disk Arbitration reject busy filesystems before closing
         // the encrypted mapping, so ordinary unmount never discards open data.
@@ -969,7 +1023,7 @@ fn detach(volume: &Volume) -> AppResult<()> {
             )?;
         }
         checked(
-            &require_veracrypt()?,
+            &program,
             &[
                 "-t".into(),
                 "--non-interactive".into(),

@@ -96,7 +96,8 @@ fn detach_image(image: &Image) -> AppResult<()> {
 
 pub(super) fn detects(source: &Path) -> AppResult<bool> {
     if source.starts_with("/dev") {
-        return Ok(true);
+        let source = existing(source)?;
+        return Ok(encrypted_data_partition(&containers()?, &source));
     }
     let result = execute(
         Path::new(HDIUTIL),
@@ -126,6 +127,20 @@ pub(super) fn detects(source: &Path) -> AppResult<bool> {
                     == Some("Apple_APFS")
             })
         }))
+}
+
+fn encrypted_data_partition(containers: &[Container], source: &Path) -> bool {
+    containers.iter().any(|container| {
+        container.volumes.iter().any(|volume| {
+            volume.encrypted
+                && volume.roles.is_empty()
+                && (device(&volume.device) == source
+                    || container
+                        .stores
+                        .iter()
+                        .any(|store| device(&store.device) == source))
+        })
+    })
 }
 
 pub(super) fn list() -> AppResult<Vec<Volume>> {
@@ -432,4 +447,52 @@ pub(super) fn unmount(c: UnmountCommand, output: Output) -> AppResult<()> {
     }
     output.msg2("Locked APFS volume");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn auto_device_probe_requires_a_matching_encrypted_apfs_data_volume() {
+        let mut containers = vec![Container {
+            reference: "disk43".into(),
+            stores: vec![Store {
+                device: "disk42s2".into(),
+            }],
+            volumes: vec![ApfsVolume {
+                device: "disk43s1".into(),
+                uuid: "test".into(),
+                encrypted: true,
+                locked: true,
+                roles: vec![],
+            }],
+        }];
+        assert!(encrypted_data_partition(
+            &containers,
+            Path::new("/dev/disk42s2")
+        ));
+        assert!(encrypted_data_partition(
+            &containers,
+            Path::new("/dev/disk43s1")
+        ));
+        assert!(!encrypted_data_partition(
+            &containers,
+            Path::new("/dev/disk42s3")
+        ));
+        assert!(!encrypted_data_partition(
+            &containers,
+            Path::new("/dev/disk42")
+        ));
+        containers[0].volumes[0].encrypted = false;
+        assert!(!encrypted_data_partition(
+            &containers,
+            Path::new("/dev/disk42s2")
+        ));
+        containers[0].volumes[0].encrypted = true;
+        containers[0].volumes[0].roles.push("System".into());
+        assert!(!encrypted_data_partition(
+            &containers,
+            Path::new("/dev/disk42s2")
+        ));
+    }
 }
