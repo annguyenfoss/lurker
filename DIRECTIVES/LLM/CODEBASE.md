@@ -65,6 +65,14 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 
 ## Core Invariants
 
+- Filesystem facilities and drivers are host prerequisites, not bundled Lurker
+  components. Discover actual OS capabilities and wrap ordinary native format,
+  mount and dismount operations. Bundle independent eligible encryption engines
+  privately; install OS-coupled crypto facilities and FUSE on the host. The fresh
+  qualification contract is `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/BRIEF.md`;
+  paid-only/trial routes and VM/network-filesystem compatibility workarounds do
+  not satisfy its native filesystem acceptance.
+
 - **The product goal is Create + Read/Write for every targeted OS/filesystem pair.** Cannot create, cannot mount, or can only read means incomplete support, not a desired feature or a successful Create + Read/Write result.
 - **There is one mount action and one unmount action.** Do not add a user-selectable read-only/read-write mode, CLI flag, API option, desktop toggle, or separate read-only feature/test requirement. Mount uses the best available filesystem/driver capability and must use read/write when available. Read-only access is a capability limitation to report explicitly; never choose it when an eligible writable route can satisfy the request.
 - Qualify filesystem support with the ordinary create, mount, write, normal close, reopen, verify, append and reopen flow. Research establishes the expected filesystem/driver capabilities; a successful representative Lurker flow with no discovered blocker can fulfill that expectation without an exhaustive filesystem-feature audit. Record every shortcoming against Create + Read/Write, including any historical promise limited to imports or reading.

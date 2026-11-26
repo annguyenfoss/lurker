@@ -7,6 +7,15 @@ mode. Follow `CODEBASE.md` for this contract across all platforms and frontends.
 
 ## Development cycle
 
+The fresh eleven-host round requested on 2026-11-27 follows
+`DIRECTIVES/PLAN/NATIVE_FRESH_20261127/BRIEF.md` and `HOSTS.md` in that directory.
+Its new observations replace prior results for this round: cover all ten
+filesystem rows, all applicable requested encryption methods, containers first,
+then new per-VM qcow2 scratch disks and a small authorized Toshiba USB sample on
+Buran. Follow its eligibility, host-update, deferred-custom-kernel, evidence and
+one-owner-per-host rules. Existing caches and harnesses may be inspected/reused;
+old receipts never count as freshly executed tests.
+
 1. Read the relevant project directives and inspect the working tree and
    index. Use [ENCRYPTION.md](ENCRYPTION.md) to identify the approved routes and
    supported create options, then compare them with the code and available
