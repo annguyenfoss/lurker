@@ -54,6 +54,7 @@ def main():
                     row.update(h.bounded_payload_call(lambda:h.payload_phase(m,wanted,phase,fs,backend,a.device),45))
                     proof=subprocess.run(["blkid","-p",view.split()[0]],capture_output=True,text=True,timeout=15)
                     row.setdefault("superblocks",[]).append({"source":view.split()[0],"code":proof.returncode,"stdout":proof.stdout,"stderr":proof.stderr})
+                    if fs in {"ufs1","ufs2"} and (proof.returncode or ('VERSION="'+("1" if fs=="ufs1" else "2")+'"') not in proof.stdout):raise RuntimeError("Independent UFS superblock version mismatch")
                     row["filesystem_driver"]=subprocess.run(["modinfo",{"ufs1":"ufs","ufs2":"ufs","ntfs":"ntfs3"}.get(fs,fs)],capture_output=True,text=True,timeout=15).stdout
                     if phase=="append":wanted['page.txt']+=h.APPEND;wanted['second.txt']=h.SECOND
                     cli("unmount",[m],"auto")
@@ -115,7 +116,9 @@ def main():
                     if fs in {'ntfs','exfat'}:options+=['uid=1300','gid=1300','umask=0077']
                     command(['mount','-i','-t',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs),'-o',','.join(options),partition,m]);mounted=True
                 actual=h.linux_mount_record(Path('/proc/self/mountinfo').read_text(),m);row['mount']=actual;row['identity_gate']=h.check_linux_filesystem(actual,fs)
-                row['superblock']=command(['blkid','-p',partition]);row['driver']=command(['modinfo',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs)])
+                row['superblock']=command(['blkid','-p',partition])
+                if fs in {'ufs1','ufs2'} and ('VERSION="'+('1' if fs=='ufs1' else '2')+'"') not in row['superblock']:raise RuntimeError('Independent backing UFS version mismatch')
+                row['driver']=command(['modinfo',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs)])
                 if fs not in {'ntfs','exfat'}:os.chown(m,1300,1300);m.chmod(0o700)
                 for backend in ['gocryptfs','cryfs','cryptomator']:
                     argv=['sudo','-n','-u','adjutant','--','/usr/bin/python3',a.harness,'--binary',a.binary,'--backend',backend,'--filesystem',fs,'--commit',a.commit,'--root',m,'--mount-root',plain,'--payload-dir',a.payload,'--timeout','90']
