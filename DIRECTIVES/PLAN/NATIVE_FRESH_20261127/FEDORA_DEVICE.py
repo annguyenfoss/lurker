@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Destructive product cases fenced to the fresh Fedora scratch serial."""
-import argparse, hashlib, importlib.util, itertools, json, os, secrets, shutil, subprocess, time
+import argparse, hashlib, importlib.util, itertools, json, os, re, secrets, shutil, subprocess, time
 from pathlib import Path
 
 
@@ -60,7 +60,27 @@ def main():
             if action == 'create': argv += ['--cipher', cipher]
             if action in {'create', 'mount'} and keyfile: argv += ['--key-file', str(keyfile)]
             argv += list(map(str, operands))
-            r = h.terminal(argv, None if keyfile else password, 240, log)
+            original_read = h.os.read
+            confirmed = 0
+            pending = bytearray()
+            allow_quick = action == 'create' and backend == 'veracrypt' and '--force' in argv and str(a.device) in argv
+            def read_with_device_confirmation(fd, length):
+                nonlocal confirmed
+                chunk = original_read(fd, length)
+                if allow_quick and not confirmed:
+                    pending.extend(chunk)
+                    if len(pending) > 16384: del pending[:-16384]
+                    prompt = rb'Are you sure you want to use Quick Format\? \(y=Yes/n=No\) \[No\]:[ \t]*'
+                    if re.search(prompt, pending):
+                        h.os.write(fd, b'y\n')
+                        confirmed += 1
+                return chunk
+            h.os.read = read_with_device_confirmation
+            try:
+                r = h.terminal(argv, None if keyfile else password, 240, log)
+                r['native_quick_confirmations'] = confirmed
+            finally:
+                h.os.read = original_read
             row['operations'].append(dict(action=action, log=str(log), **r)); save()
             if r['exit_code'] or r['timed_out']: raise RuntimeError('CLI ' + action + ' failed')
         try:
@@ -98,6 +118,8 @@ def main():
                             stream.write(wanted[name]); stream.flush(); os.fsync(stream.fileno())
                 row[phase + '_hashes'] = {name: hashlib.sha256((target / name).read_bytes()).hexdigest() for name in wanted}
                 cli('unmount', [mountpoint], 'auto')
+                remaining = subprocess.check_output(['lsblk', '-nr', '-o', 'NAME', str(a.device)], text=True).splitlines()
+                if len(remaining) != 1: raise RuntimeError('CLI close left device children')
             row['status'] = 'passed'
         except Exception as error:
             row.update(status='failed', error=str(error))
@@ -107,6 +129,10 @@ def main():
                 try: cli('unmount', [mountpoint], 'auto')
                 except Exception as error: row['cleanup_error'] = str(error)
             row['mount_remaining'] = os.path.ismount(mountpoint)
+            remaining = subprocess.check_output(['lsblk', '-nr', '-o', 'NAME', str(a.device)], text=True).splitlines()
+            if len(remaining) != 1:
+                row['remaining_device_children'] = remaining
+                stop = True
             header_changed = False
             if header_before is not None:
                 with a.device.open('rb', buffering=0) as stream:
@@ -115,7 +141,11 @@ def main():
             destructive_started = header_changed or any(x['action'] == 'create' and x['exit_code'] == 0
                                                        for x in row['operations'])
             row['destructive_started'] = destructive_started
-            if row['status'] == 'failed' and destructive_started and not row['mount_remaining']:
+            timed_out = any(x['timed_out'] for x in row['operations'])
+            if timed_out:
+                stop = True
+                row['raw_device_preserved_for_recovery'] = True
+            if row['status'] == 'failed' and destructive_started and not row['mount_remaining'] and not timed_out:
                 try:
                     size = int(subprocess.check_output(['blockdev', '--getsize64', str(a.device)], text=True))
                     if shutil.disk_usage(d).free < size + 512 * 1024**2: raise RuntimeError('Insufficient space to retain failed device')
