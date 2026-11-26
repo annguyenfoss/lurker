@@ -19,6 +19,8 @@ pub(super) use filesystems::{
 };
 pub(super) mod linear;
 mod metadata;
+mod physical;
+pub(super) use physical::{ensure_physical_idle, physical_device};
 pub(super) mod veracrypt;
 
 const VNCONFIG: &str = "/usr/sbin/vnconfig";

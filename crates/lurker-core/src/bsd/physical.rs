@@ -21,11 +21,11 @@ pub(super) struct BackingIdentity {
 }
 
 pub(super) fn inspect(source: &Path) -> AppResult<PhysicalDevice> {
-    #[cfg(any(target_os = "netbsd", target_os = "freebsd"))]
+    #[cfg(any(target_os = "netbsd", target_os = "freebsd", target_os = "dragonfly"))]
     return super::native::physical_device(source);
     #[cfg(target_os = "openbsd")]
     return super::native::physical_device(source);
-    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd", target_os = "dragonfly")))]
     {
         let _ = source;
         Err(AppError::new(
@@ -35,11 +35,11 @@ pub(super) fn inspect(source: &Path) -> AppResult<PhysicalDevice> {
 }
 
 pub(super) fn ensure_idle(source: &Path) -> AppResult<()> {
-    #[cfg(any(target_os = "netbsd", target_os = "freebsd"))]
+    #[cfg(any(target_os = "netbsd", target_os = "freebsd", target_os = "dragonfly"))]
     return super::native::ensure_physical_idle(source);
     #[cfg(target_os = "openbsd")]
     return super::native::ensure_physical_idle(source);
-    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd", target_os = "dragonfly")))]
     {
         let _ = source;
         Err(AppError::new(
