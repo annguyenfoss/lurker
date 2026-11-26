@@ -88,9 +88,10 @@ def main():
                       'operations': [], 'status': 'running'}
             backing_mount = None
             backing_source = None
+            backing_kind = 'luks1' if fs == 'ufs1' else 'luks'
 
             def command(action, operands, kind=backend):
-                privileged = backend not in DIRECTORIES or kind == 'luks'
+                privileged = backend not in DIRECTORIES or kind in BACKENDS
                 argv = (['/usr/bin/sudo', '-n'] if privileged else []) + [str(binary), action, '--type', kind, '--color=never'] + list(map(str, operands))
                 log = fixture / f'{len(result["operations"]):02d}-{action}.log'
                 status = harness.terminal(argv, password, 240, log)
@@ -106,8 +107,8 @@ def main():
                     backing_source = fixture / 'backing.img'
                     backing_mount = fixture / 'backing'
                     backing_mount.mkdir(mode=0o700)
-                    command('create', ['--filesystem', fs, backing_source, '0.5'], kind='luks')
-                    command('mount', [backing_source, backing_mount], kind='luks')
+                    command('create', ['--filesystem', fs, backing_source, '0.5'], kind=backing_kind)
+                    command('mount', [backing_source, backing_mount], kind=backing_kind)
                     if not os.path.ismount(backing_mount):
                         raise RuntimeError('Backing mount absent')
                     source = backing_mount / 'encrypted'
@@ -135,7 +136,7 @@ def main():
                         feature = mount / 'feature-check'
                         feature.write_text('permissions and ACL probe\n')
                         features = {}
-                        for name, argv in [('permissions', ['chmod', '600', str(feature)]), ('acl', ['setfacl', '-m', 'u:65534:r', str(feature)]), ('cow', ['cp', '--reflink=always', str(feature), str(mount / 'reflink-check')])]:
+                        for name, argv in [('permissions', ['chmod', '600', str(feature)]), ('acl', ['setfacl', '-m', 'u:65534:r', str(feature)]), ('reflink', ['cp', '--reflink=always', str(feature), str(mount / 'reflink-check')])]:
                             observed = subprocess.run(argv, capture_output=True, text=True)
                             features[name] = {'command': argv, 'yes': observed.returncode == 0, 'observation': observed.stderr.strip()}
                         result['features'] = features
@@ -155,7 +156,7 @@ def main():
             except Exception as error:
                 result.update(status='failed', error=str(error))
             finally:
-                for target, kind in [(mount, backend), (backing_mount, 'luks')]:
+                for target, kind in [(mount, backend), (backing_mount, backing_kind)]:
                     if target is not None and os.path.ismount(target):
                         try:
                             command('unmount', [target], kind=kind)
