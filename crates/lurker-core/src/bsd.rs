@@ -728,7 +728,9 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
             })?;
             if matches!(
                 vc_filesystem,
-                crate::CreateFilesystem::Hammer2 | crate::CreateFilesystem::Ufs1
+                crate::CreateFilesystem::Hammer2
+                    | crate::CreateFilesystem::Ufs1
+                    | crate::CreateFilesystem::Ext4
             ) {
                 initialize_new_filesystem_owner(&registry, &mut session, owner)?;
             }

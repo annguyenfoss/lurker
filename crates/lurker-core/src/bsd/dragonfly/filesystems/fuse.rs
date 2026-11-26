@@ -92,6 +92,7 @@ pub(super) fn mount(
             args(&["-o", &private, mapped]),
         ),
         CreateFilesystem::Ntfs => ("/usr/local/bin/ntfs-3g", args(&["-o", &private, mapped])),
+        CreateFilesystem::Ext4 => ("/usr/local/bin/fuse-ext2", args(&[mapped])),
         _ => return Err(AppError::new("Unsupported DragonFly FUSE filesystem.")),
     };
     let program = crate::trusted_privileged_executable(Path::new(program))?;
@@ -108,7 +109,12 @@ pub(super) fn mount(
         .write(true)
         .open("/dev/fuse")
         .map_err(|error| AppError::io("Open DragonFly FUSE device", error))?;
-    argv.push(target.as_os_str().into());
+    if filesystem == CreateFilesystem::Ext4 {
+        argv.push(target.as_os_str().into());
+        argv.extend(args(&["-o", if readonly { "ro" } else { "rw+" }]));
+    } else {
+        argv.push(target.as_os_str().into());
+    }
     let mut launch = args(&[
         &format!("FUSE_DEV_FD={}", descriptor.as_raw_fd()),
         "FUSE_NO_MOUNT=1",

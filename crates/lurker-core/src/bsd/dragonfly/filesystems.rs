@@ -33,6 +33,7 @@ pub(in crate::bsd) fn validate_filesystem(
         selected,
         CreateFilesystem::Ufs1
             | CreateFilesystem::Hammer2
+            | CreateFilesystem::Ext4
             | CreateFilesystem::Ntfs
             | CreateFilesystem::Exfat
     ) || (backend == VolumeType::Veracrypt && selected == CreateFilesystem::Fat32)
@@ -40,7 +41,7 @@ pub(in crate::bsd) fn validate_filesystem(
         return Ok(());
     }
     Err(AppError::new(format!(
-        "DragonFly cannot create {} with this encryption route; use UFS1, HAMMER2, NTFS or exFAT with the required native tools (VeraCrypt also supports FAT32).",
+        "DragonFly cannot create {} with this encryption route; use UFS1, HAMMER2, ext4, NTFS or exFAT with the required native tools (VeraCrypt also supports FAT32).",
         selected.as_str()
     )))
 }
@@ -54,6 +55,21 @@ pub(in crate::bsd) fn make_selected_filesystem(
         CreateFilesystem::Ufs1 => super::make_filesystem(mapped),
         CreateFilesystem::Hammer2 => {
             exec("/sbin/newfs_hammer2", &args(&["-L", "DATA", mapped]), None)?;
+            Ok(())
+        }
+        CreateFilesystem::Ext4 => {
+            let sectors = decrypted_sectors(mapped)?;
+            let blocks = sectors / 8;
+            if blocks == 0 {
+                return Err(AppError::new(
+                    "Decrypted DragonFly device is too small for ext4.",
+                ));
+            }
+            exec(
+                "/usr/local/sbin/mkfs.ext4",
+                &args(&["-F", "-b", "4096", mapped, &blocks.to_string()]),
+                None,
+            )?;
             Ok(())
         }
         CreateFilesystem::Exfat => {
@@ -111,13 +127,13 @@ pub(in crate::bsd) fn mount_filesystem(
         CreateFilesystem::Hammer2 => {
             super::veracrypt::mount_hammer2_local(mapped, target, readonly)
         }
-        filesystem @ (CreateFilesystem::Ntfs | CreateFilesystem::Exfat) => {
+        filesystem
+        @ (CreateFilesystem::Ext4 | CreateFilesystem::Ntfs | CreateFilesystem::Exfat) => {
             fuse::mount(mapped, target, filesystem, readonly)
         }
         filesystem => {
             let kind = match filesystem {
                 CreateFilesystem::Ufs1 => "ufs",
-                CreateFilesystem::Ext4 if readonly => "ext2fs",
                 _ => {
                     return Err(AppError::new(
                         "The stock DragonFly foreign filesystem driver cannot provide writable access.",
@@ -145,7 +161,7 @@ pub(in crate::bsd) fn mount_filesystem(
 pub(in crate::bsd) fn matches_filesystem_mount(mapped: &str, mounted: &Mounted) -> bool {
     match mounted.filesystem.as_str() {
         "hammer2" => super::veracrypt::mount_uses_mapper(mounted, mapped),
-        "ufs" | "ext2fs" => mounted.source == Path::new(mapped),
+        "ufs" => mounted.source == Path::new(mapped),
         "fuse" => fuse::matches(mapped, mounted),
         _ => false,
     }
@@ -160,11 +176,14 @@ mod tests {
             assert!(validate_filesystem(None, backend).is_ok());
             assert!(validate_filesystem(Some(CreateFilesystem::Ufs1), backend).is_ok());
             assert!(validate_filesystem(Some(CreateFilesystem::Hammer2), backend).is_ok());
-            for fs in [CreateFilesystem::Ntfs, CreateFilesystem::Exfat] {
+            for fs in [
+                CreateFilesystem::Ext4,
+                CreateFilesystem::Ntfs,
+                CreateFilesystem::Exfat,
+            ] {
                 assert!(validate_filesystem(Some(fs), backend).is_ok());
             }
             for fs in [
-                CreateFilesystem::Ext4,
                 CreateFilesystem::Btrfs,
                 CreateFilesystem::Xfs,
                 CreateFilesystem::Apfs,

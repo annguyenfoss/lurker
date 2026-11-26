@@ -394,7 +394,10 @@ pub(in crate::bsd) fn make_filesystem(
     filesystem: CreateFilesystem,
 ) -> AppResult<()> {
     mapping_name(mapped)?;
-    if matches!(filesystem, CreateFilesystem::Ntfs | CreateFilesystem::Exfat) {
+    if matches!(
+        filesystem,
+        CreateFilesystem::Ext4 | CreateFilesystem::Ntfs | CreateFilesystem::Exfat
+    ) {
         super::filesystems::make_selected_filesystem(mapped, Some(filesystem))?;
         if probe_filesystem(mapped, payload_sectors(size)?)? != filesystem {
             return Err(AppError::new(
@@ -512,6 +515,7 @@ fn probe_filesystem(mapped: &str, sectors: u64) -> AppResult<CreateFilesystem> {
     if let Ok(
         filesystem @ (CreateFilesystem::Hammer2
         | CreateFilesystem::Ufs1
+        | CreateFilesystem::Ext4
         | CreateFilesystem::Ntfs
         | CreateFilesystem::Exfat),
     ) = super::filesystems::probe(mapped)
@@ -550,7 +554,7 @@ pub(in crate::bsd) fn matches_mount(session: &Session, mounted: &Mounted) -> boo
         CreateFilesystem::Ufs1 => {
             mounted.filesystem == "ufs" && mounted.source == Path::new(mapped)
         }
-        CreateFilesystem::Ntfs | CreateFilesystem::Exfat => {
+        CreateFilesystem::Ext4 | CreateFilesystem::Ntfs | CreateFilesystem::Exfat => {
             super::filesystems::matches_filesystem_mount(mapped, mounted)
         }
         _ => false,
@@ -669,7 +673,7 @@ pub(in crate::bsd) fn verify_access(
                 "Mounted filesystem root does not have the invoking user's private access permissions.",
             ))
         }
-        Some(CreateFilesystem::Hammer2 | CreateFilesystem::Ufs1)
+        Some(CreateFilesystem::Hammer2 | CreateFilesystem::Ufs1 | CreateFilesystem::Ext4)
             if owner.uid != 0
                 && (metadata.uid() != owner.uid || metadata.mode() & 0o700 != 0o700) =>
         {
