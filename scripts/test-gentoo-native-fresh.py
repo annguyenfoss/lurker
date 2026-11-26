@@ -39,6 +39,9 @@ def features(mountpoint):
     info = json.loads(mount.get("stdout") or "{}").get("filesystems", [{}])[0]
     filesystem = info.get("fstype", "")
     source = info.get("source", "")
+    if os.geteuid() == 0 and source.startswith("/dev/"):
+        row["superblock"] = probe(["blkid", "-p", source])
+        row["filesystem_signature"] = probe(["file", "-s", source])
     if filesystem == "ext4":
         row["journaling"] = probe(["tune2fs", "-l", source])
         row["journaling"]["status"] = ("yes" if "has_journal" in row["journaling"].get("stdout", "") else "unknown")
