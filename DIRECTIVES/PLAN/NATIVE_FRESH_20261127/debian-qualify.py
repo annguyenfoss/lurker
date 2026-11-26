@@ -18,12 +18,23 @@ import time
 FILESYSTEMS = ('ext4', 'btrfs', 'xfs', 'apfs', 'ufs1', 'ufs2', 'hammer2', 'ntfs', 'exfat', 'zfs')
 BACKENDS = ('luks1', 'luks', 'veracrypt')
 DIRECTORIES = ('gocryptfs', 'cryfs', 'cryptomator')
+EXPECTED_TYPES = {'ext4': {'ext4'}, 'btrfs': {'btrfs'}, 'xfs': {'xfs'}, 'apfs': {'apfs'},
+                  'ufs1': {'ufs'}, 'ufs2': {'fuse.ufs'}, 'hammer2': {'hammer2'},
+                  'ntfs': {'fuseblk', 'ntfs3', 'ntfs'}, 'exfat': {'exfat'}, 'zfs': {'zfs'}}
 
 
 def atomic(path, value):
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value, indent=2) + '\n')
     os.replace(temporary, path)
+
+
+def require_native_filesystem(mount, filesystem):
+    row = subprocess.check_output(['findmnt', '-rn', '-M', str(mount), '-o', 'SOURCE,FSTYPE,OPTIONS'], text=True).strip()
+    parts = row.split()
+    if len(parts) < 3 or parts[1] not in EXPECTED_TYPES[filesystem] or 'rw' not in parts[2].split(','):
+        raise RuntimeError(f'Expected writable {filesystem}; actual mount: {row}')
+    return row
 
 
 def observe_features(mount, native=False):
@@ -158,6 +169,7 @@ def main():
                     command('mount', [backing_source, backing_mount], kind=backing_kind)
                     if not os.path.ismount(backing_mount):
                         raise RuntimeError('Backing mount absent')
+                    result['backing_mount_identity'] = require_native_filesystem(backing_mount, fs)
                     result['backing_features'] = observe_features(backing_mount, native=True)
                     source = backing_mount / 'encrypted'
                     command('create', [source])
@@ -174,6 +186,8 @@ def main():
                     command('mount', [source, mount], kind=backend if phase == 'write' else 'auto')
                     if not os.path.ismount(mount):
                         raise RuntimeError('Mount absent; refusing underlay access')
+                    if backend not in DIRECTORIES:
+                        require_native_filesystem(mount, fs)
                     result.setdefault('mounts', []).append(subprocess.check_output(['findmnt', '-rn', '-M', str(mount), '-o', 'SOURCE,FSTYPE,OPTIONS'], text=True).strip())
                     if phase == 'write':
                         result['root_metadata'] = {'uid': mount.stat().st_uid, 'gid': mount.stat().st_gid, 'mode': oct(mount.stat().st_mode & 0o7777)}
