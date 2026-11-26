@@ -18,6 +18,7 @@ def main():
     a.add_argument("--payload", required=True, type=Path)
     a.add_argument("--device", type=Path)
     a.add_argument("--serial")
+    a.add_argument("--ntfs-native",action="store_true",help="Assess the installed Linux NTFS3 kernel writer separately from NTFS-3g")
     a.add_argument("--ufs2-native",action="store_true",help="Assess the installed Linux UFS2 kernel writer separately from FUSE")
     a.add_argument("--filesystems", default=",".join(FILES))
     x = a.parse_args()
@@ -56,7 +57,7 @@ def main():
                 if fs=="apfs":opts += ["readwrite"]
                 if fs=="ufs1":opts += ["rw","ufstype=44bsd"]
                 if fs=="ufs2":opts += ["rw","ufstype=ufs2"]
-                c=["mount",*(["-i"] if fs!="ntfs" else []),"-t",{"ufs1":"ufs","ufs2":"ufs","ntfs":"ntfs-3g"}.get(fs,fs)]
+                c=["mount",*(["-i"] if fs!="ntfs" else []),"-t",{"ufs1":"ufs","ufs2":"ufs","ntfs":"ntfs3" if x.ntfs_native else "ntfs-3g"}.get(fs,fs)]
                 if opts:c += ["-o",",".join(opts)]
                 cmd(c+[image,m])
             for _ in range(100):
