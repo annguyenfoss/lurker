@@ -1,0 +1,55 @@
+Upstream-source: https://github.com/realchonk/fuse-ufs
+Upstream-commit: ee5c4a447da98220a11edb69a225d51379afc4fb
+License: BSD-2-Clause
+Purpose: Forward filesystem fsync/fsyncdir to the scoped backing-file barrier.
+Host prerequisite only; no global sync or bundled filesystem implementation.
+Apply: git apply --unidiff-zero FEDORA_FUSE_UFS_BARRIER.patch
+
+diff --git a/fuse-ufs/src/fuse3.rs b/fuse-ufs/src/fuse3.rs
+index 17dd6aa..cf865c2 100644
+--- a/fuse-ufs/src/fuse3.rs
++++ b/fuse-ufs/src/fuse3.rs
+@@ -40,0 +41,14 @@ impl Filesystem for Fs {
++	fn fsync(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _datasync: bool, reply: ReplyEmpty) {
++		match run(|| self.ufs.sync_all()) {
++			Ok(()) => reply.ok(),
++			Err(error) => reply.error(error),
++		}
++	}
++
++	fn fsyncdir(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _datasync: bool, reply: ReplyEmpty) {
++		match run(|| self.ufs.sync_all()) {
++			Ok(()) => reply.ok(),
++			Err(error) => reply.error(error),
++		}
++	}
++
+diff --git a/rufs/src/blockreader.rs b/rufs/src/blockreader.rs
+index 453bdbd..fac9d4b 100644
+--- a/rufs/src/blockreader.rs
++++ b/rufs/src/blockreader.rs
+@@ -28,0 +29,5 @@ impl BlockReader<File> {
++	pub(crate) fn sync_all(&mut self) -> IoResult<()> {
++		self.flush()?;
++		self.inner.sync_all()
++	}
++
+diff --git a/rufs/src/decoder.rs b/rufs/src/decoder.rs
+index 4e7191f..3a0c940 100644
+--- a/rufs/src/decoder.rs
++++ b/rufs/src/decoder.rs
+@@ -67,0 +68,4 @@ impl<T: Read> Decoder<T> {
++	pub(crate) fn inner_mut(&mut self) -> &mut T {
++		&mut self.inner
++	}
++
+diff --git a/rufs/src/ufs/mod.rs b/rufs/src/ufs/mod.rs
+index 3909303..23b5978 100644
+--- a/rufs/src/ufs/mod.rs
++++ b/rufs/src/ufs/mod.rs
+@@ -87,0 +88,5 @@ impl Ufs<File> {
++	/// Flush this filesystem and request a durable barrier on its backing file.
++	pub fn sync_all(&mut self) -> IoResult<()> {
++		self.file.inner_mut().sync_all()
++	}
++
