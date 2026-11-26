@@ -992,11 +992,15 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     };
     let native_targets = if cfg!(target_os = "netbsd") {
         "File containers and CGD GPT data partitions"
+    } else if cfg!(target_os = "freebsd") {
+        "File containers and GELI data providers"
     } else {
         "File containers only"
     };
     let native_device_help = if cfg!(target_os = "netbsd") {
         "\nPhysical CGD data partitions:\n  create --type cgd [--filesystem NAME] <GPT-wedge> --force\n  mount --type cgd <GPT-wedge> <mountpoint>\n  Back up /var/db/lurker-cgd/<partition-UUID>.cgdparams with the encrypted partition.\n"
+    } else if cfg!(target_os = "freebsd") {
+        "\nPhysical GELI data providers:\n  create --type geli [--filesystem NAME] <data-provider> --force\n  mount --type geli <data-provider> <mountpoint>\n  System disks and providers in use are refused.\n"
     } else {
         ""
     };
@@ -1074,7 +1078,7 @@ fn parse_create_cipher(
 fn path_source_kind(path: &Path) -> Option<SourceKind> {
     let metadata = fs::metadata(path).ok()?;
     let file_type = metadata.file_type();
-    if file_type.is_block_device() {
+    if native_device_type(file_type) {
         Some(SourceKind::Block)
     } else if file_type.is_dir() {
         Some(SourceKind::Directory)
@@ -1085,6 +1089,14 @@ fn path_source_kind(path: &Path) -> Option<SourceKind> {
     }
 }
 
+fn native_device_type(file_type: fs::FileType) -> bool {
+    file_type.is_block_device()
+        || (cfg!(any(
+            target_os = "freebsd", target_os = "openbsd",
+            target_os = "netbsd", target_os = "dragonfly"
+        )) && file_type.is_char_device())
+}
+
 fn classify_create_target(
     path: &Path,
     script_name: &str,
@@ -1093,7 +1105,7 @@ fn classify_create_target(
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             let file_type = metadata.file_type();
-            if file_type.is_block_device() {
+            if native_device_type(file_type) {
                 Ok(SourceKind::Block)
             } else if file_type.is_file() {
                 Ok(SourceKind::File)

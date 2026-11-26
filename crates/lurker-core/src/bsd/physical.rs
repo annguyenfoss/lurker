@@ -6,6 +6,9 @@ use std::fs;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 
+#[cfg(target_os = "freebsd")]
+mod freebsd;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct BackingIdentity {
     rdev: u64,
@@ -14,9 +17,9 @@ pub(super) struct BackingIdentity {
 }
 
 pub(super) fn inspect(source: &Path) -> AppResult<PhysicalDevice> {
-    #[cfg(target_os = "netbsd")]
+    #[cfg(any(target_os = "netbsd", target_os = "freebsd"))]
     return super::native::physical_device(source);
-    #[cfg(not(target_os = "netbsd"))]
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
     {
         let _ = source;
         Err(AppError::new(
@@ -26,9 +29,9 @@ pub(super) fn inspect(source: &Path) -> AppResult<PhysicalDevice> {
 }
 
 pub(super) fn ensure_idle(source: &Path) -> AppResult<()> {
-    #[cfg(target_os = "netbsd")]
+    #[cfg(any(target_os = "netbsd", target_os = "freebsd"))]
     return super::native::ensure_physical_idle(source);
-    #[cfg(not(target_os = "netbsd"))]
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
     {
         let _ = source;
         Err(AppError::new(
@@ -99,9 +102,11 @@ pub(super) fn params_path(session: &Session) -> AppResult<std::path::PathBuf> {
 }
 
 pub(super) fn create(command: CreateCommand, output: Output) -> AppResult<()> {
+    #[cfg(target_os = "freebsd")]
+    return freebsd::create(command, output);
     #[cfg(target_os = "netbsd")]
     return create_cgd(command, output);
-    #[cfg(not(target_os = "netbsd"))]
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
     {
         let _ = (command, output);
         Err(AppError::new(

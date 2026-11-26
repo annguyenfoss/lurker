@@ -25,7 +25,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
   - `src/file_crypto/`: login-user single-file age, GnuPG, and OpenSSL CMS workflows with private output staging
   - `src/folder.rs`: shared login-user gocryptfs/CryFS/Cryptomator lifecycle, fixed profiles, private backend discovery and identity-checked sessions
   - `src/bsd.rs`, `src/bsd/`: shared BSD file-container lifecycle with FreeBSD GELI and PEFS, NetBSD CGD, OpenBSD CRYPTO and RAID1C, and DragonFly LUKS1. FreeBSD and OpenBSD use the private VeraCrypt engine. DragonFly VeraCrypt uses the private `tcplay` wrapper and native device mapper.
-  - `src/bsd/physical.rs`: physical-partition identity and lifecycle using the same native session journal. NetBSD CGD validates GPT wedge geometry/UUID and keeps mandatory recovery parameters under `/var/db/lurker-cgd/`; physical providers are never treated as owned vnode leases.
+  - `src/bsd/physical.rs`, `src/bsd/physical/`: physical-partition identity and lifecycle using the same native session journal. FreeBSD GELI validates GEOM topology, GPT identity and disk serial; NetBSD CGD validates GPT wedge geometry/UUID and keeps mandatory recovery parameters under `/var/db/lurker-cgd/`. Physical providers are never treated as owned vnode leases.
   - `src/api.rs`: shared serde command/response types
   - `src/model.rs`: enums such as `VolumeType`, `CreateCipher`, `SourceKind`
   - `src/credentials.rs`: password/keyfile exclusivity and keyfile validation

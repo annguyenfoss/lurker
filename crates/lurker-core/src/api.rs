@@ -138,6 +138,7 @@ impl CreateCommand {
                     VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
                 ))
                 || (os == "macos" && self.volume_type == VolumeType::Apfs)
+                || (os == "freebsd" && self.volume_type == VolumeType::Geli)
                 || (os == "netbsd" && self.volume_type == VolumeType::Cgd));
         if !matches!(
             os,
@@ -343,7 +344,6 @@ mod tests {
         command.filesystem = Some(CreateFilesystem::Exfat);
         assert!(command.validate_filesystem("macos").is_err());
         for (os, backend) in [
-            ("freebsd", VolumeType::Geli),
             ("openbsd", VolumeType::Softraid),
             ("dragonfly", VolumeType::Luks1),
         ] {
@@ -358,6 +358,21 @@ mod tests {
         command.privilege_mode = PrivilegeMode::Privileged;
         command.volume_type = VolumeType::Gocryptfs;
         assert!(command.validate_filesystem("linux").is_err());
+    }
+
+    #[test]
+    fn freebsd_geli_device_filesystem_requires_privileged_native_route() {
+        let mut command: CreateCommand = serde_json::from_value(serde_json::json!({
+            "target": "/dev/test-data", "source_kind": "block", "force": true,
+            "volume_type": "geli", "filesystem": "ufs2", "passphrase": null,
+            "size_gb": null
+        })).unwrap();
+        assert!(command.validate_filesystem("freebsd").is_ok());
+        command.privilege_mode = PrivilegeMode::Unprivileged;
+        assert!(command.validate_filesystem("freebsd").is_err());
+        command.privilege_mode = PrivilegeMode::Privileged;
+        command.volume_type = VolumeType::Pefs;
+        assert!(command.validate_filesystem("freebsd").is_err());
     }
 
     fn raid_create() -> CommandAction {
