@@ -15,8 +15,9 @@ UFS1 writable qualification remains unresolved. UFS2 has a separately installed
 FUSE driver requiring fresh control and product tests.
 
 Fresh exact-source workspace check, workspace test and workspace build run:
-`20261126T203534Z-2d1d70ae` (one Cargo worker). This is still running; it is not
-a pass. Payload copies use the round's downloaded Bitcoin, Ethereum and
+`20261126T203534Z-2d1d70ae` (one Cargo worker). `cargo check --workspace`
+passed in 4m53s. Workspace tests and binary build are still running; runtime
+qualification is incomplete. Payload copies use the round's downloaded Bitcoin, Ethereum and
 Transformer PDFs and text. Runtime, container matrix, device matrix, reboot
 persistence and final-candidate checks remain incomplete.
 
@@ -25,6 +26,14 @@ CryFS and Cryptomator inputs and complete runtime hashes. These are reusable
 build inputs only, with fresh runtime tests still required. Native VeraCrypt
 creator verification is being assessed separately from the LKL helper; the
 LKL filesystem route does not count toward native acceptance.
+
+Source candidates for ordinary external drivers are pinned to HAMMER2
+`09c130bf8bac021b0bb6a8ed9c9685a5bd9bbbd0` (1.0.112, BSD-3-Clause) and
+fuse-ufs `ee5c4a447da98220a11edb69a225d51379afc4fb` (0.6.0, BSD-2-Clause).
+Both advertise experimental write routes suitable only for the authorized
+scratch-media assessment; fresh matching builds and runtime tests are queued.
+Sources: https://github.com/jdmanring/linux_hammer2 and
+https://github.com/realchonk/fuse-ufs .
 
 The required applicability ledger is ten filesystems × thirteen methods.
 LUKS1, LUKS2 and VeraCrypt require independent inner-filesystem cases; gocryptfs,
