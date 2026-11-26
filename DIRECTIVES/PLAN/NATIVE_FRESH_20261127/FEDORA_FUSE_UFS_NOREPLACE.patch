@@ -1,0 +1,21 @@
+Upstream-source: https://github.com/realchonk/fuse-ufs
+Upstream-commit: ee5c4a447da98220a11edb69a225d51379afc4fb
+License: BSD-2-Clause
+Purpose: Enable FUSE_RENAME2 and check its destination for atomic no-clobber rename.
+Host prerequisite only; do not bundle this filesystem driver with Lurker.
+Apply: git apply --unidiff-zero FEDORA_FUSE_UFS_NOREPLACE.patch
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 7bb74ed..eba65e7 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -20 +20 @@ fuse2rs = "0.1.2"
+-fuser = { version = "0.16.0", features = [ "libfuse" ] }
++fuser = { version = "0.16.0", features = [ "libfuse", "abi-7-23" ] }
+diff --git a/rufs/src/ufs/dir.rs b/rufs/src/ufs/dir.rs
+index 9986db3..a353031 100644
+--- a/rufs/src/ufs/dir.rs
++++ b/rufs/src/ufs/dir.rs
+@@ -522 +522 @@ impl<R: Backend> Ufs<R> {
+-			match self.dir_lookup(s_dinr, s_name) {
++			match self.dir_lookup(d_dinr, d_name) {
