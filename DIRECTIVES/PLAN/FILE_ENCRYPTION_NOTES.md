@@ -16,9 +16,8 @@ The shell functions shared in discussion describe a personal workflow. Reproduci
 
 ## OpenSSL CMS
 
-- Wrap the installed OpenSSL for CMS file encryption. `openssl enc` compatibility is out of scope.
-- Use AES-256-GCM for new CMS files encrypted to certificates.
-- Use native OS or desktop file pickers for CMS credentials.
-- Encrypt to one or more existing recipient X.509 certificate files. Any selected recipient can decrypt independently.
-- Decrypt with an existing matching private key file and its certificate when needed. Prompt for the key's unlock passphrase if it is encrypted.
+- Use one CMS recipient workflow, equivalent to `openssl cms -encrypt` and `-decrypt`, with AES-256-GCM for new files. Direct symmetric CMS `EncryptedData` and `openssl enc` compatibility are out of scope.
+- To encrypt, select at least one credential: a passphrase, a shared AES keyfile containing raw key material, or one or more existing X.509 recipient certificates. Allow any combination. Each selected credential provides independent decryption access.
+- Use native OS or desktop file pickers for keyfiles, certificates, and private keys. For certificate-based decryption, use the matching private key file and its certificate when needed. Prompt for the private key's unlock passphrase if it is encrypted.
+- Use the installed OpenSSL CLI where credentials can be passed without exposing secrets in process arguments. Choose a secure transport for shared keys and passphrases before implementing those options. The stock CLI accepts `-secretkey` and `-pwri_password` as argument values.
 - Limit key handling to selecting existing files. Key and certificate creation, import, export, deletion, and other management are out of scope.
