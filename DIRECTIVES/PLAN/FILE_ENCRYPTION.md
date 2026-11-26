@@ -58,3 +58,25 @@ These are candidates from the initial SSH probe. Confirm version, package owners
 3. Encrypt and restore the PDF through the actual built `lurker` CLI. Test age passphrase and multiple recipients, GnuPG passphrase, passphrase file, public-key files, keyring selection, and combined recipients, and CMS certificates, shared keyfile, passphrase, and combined recipients. In combined cases decrypt independently using each kind of credential. Compare each restored PDF to the original byte-for-byte. Exercise one wrong credential or corrupted input per backend to confirm failed decryption leaves no output. Use the same PDF for every case.
 4. Record one compact result row per host with the commit, build and test result, PDF SHA-256, tool versions and paths, package changes, binary hash, and evidence path. Keep full logs in job directories. Rerun only failed or affected cases after fixes and identify the exact product revision used.
 5. Reconcile the encryption directive and CLI usage documentation with the implemented file backend scope. Record actual native passes and any unresolved host prerequisites before declaring coverage.
+
+## 5. Native CLI results
+
+All eleven build hosts passed at `2fde23bff0ebebb25e0d85b02def315705f354ad`. Each native binary restored the same PDF byte-for-byte through 20 credential routes. Each also rejected a wrong passphrase for each of the three backends without publishing output. The PDF SHA-256 was `f62d9bb8cdf4722e68937ce0fd939201585a74e28ea839b3bc1441a2dd29597b`.
+
+| Host | GnuPG | OpenSSL | Run ID | CLI SHA-256 prefix |
+| --- | --- | --- | --- | --- |
+| Arch | 2.4.9 | 4.1.0 | `20261126T193129Z-6fac2014` | `5e56e85f3e99` |
+| Debian | 2.4.7 | 3.5.9 | `20261126T193227Z-030d2cd7` | `ce4379c8d277` |
+| Ubuntu | 2.4.9 | 4.0.3 | `20261126T193133Z-c6f0edc2` | `d5762010095b` |
+| Fedora | 2.4.9 | 4.0.3 | `20261126T193138Z-b7b38883` | `bf8861f6a2be` |
+| openSUSE | 2.5.5 | 3.5.0 | `20261126T193143Z-b2f601bb` | `dee8f1e802c4` |
+| Gentoo | 2.5.24 | 3.5.9 | `20261126T193153Z-deba7781` | `79096b219f68` |
+| FreeBSD | 2.5.24 | 3.5.9 | `20261126T193311Z-c83bfa62` | `40902a200fb1` |
+| NetBSD | 2.5.22 | 3.5.7 | `20261126T193350Z-1776cbf7` | `c6df88151188` |
+| DragonFly BSD | 2.5.24 | 3.5.9 | `20261126T193213Z-dd13e9a6` | `fdf41eee9f99` |
+| OpenBSD | 2.5.24 | 3.5.9 | `20261126T193212Z-f7d657c3` | `41e002163ba5` |
+| Buran | 2.5.24 | 3.5.9 | `20261126T193211Z-b5aee944` | `7914d524766b` |
+
+The verified receipts and full binary hashes are collected in `target/file-encryption-validation/2fde23b/matrix.json`. Each remote receipt sits next to the corresponding runner `result.json` and `artifacts/debug/lurker`.
+
+FreeBSD's first build found a missing file in its shared Cargo registry. The successful run used an isolated registry and target on disposable scratch storage, which was detached after retaining evidence. NetBSD used its example OpenSSL configuration to generate fixture certificates. A separate native check verified CMS encryption and decryption with `OPENSSL_CONF` unset. The three BSD private GnuPG installations are recorded in the prerequisite table above.
