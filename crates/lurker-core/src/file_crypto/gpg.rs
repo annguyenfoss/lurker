@@ -5,7 +5,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{self, Path};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 
 fn command() -> AppResult<Command> {
     let path = std::env::var_os("PATH").unwrap_or_default();
@@ -113,29 +113,83 @@ pub(super) fn run(request: &FileRequest, staged: &Path) -> AppResult<()> {
         .as_deref()
         .map(str::as_bytes)
         .or(passphrase_from_file.as_deref());
+    let decrypting = matches!(request.operation, FileOperation::Decrypt);
+    let passphrase_home = if decrypting && passphrase.is_some() {
+        // --no-keyring does not suppress lookups on keyboxd installations.
+        // Explicit passphrase decryption must use only the chosen credential.
+        Some(
+            tempfile::Builder::new()
+                .prefix("lurker-gpg-")
+                .tempdir()
+                .map_err(|error| AppError::io("Create private GnuPG passphrase session", error))?,
+        )
+    } else {
+        None
+    };
+    let key_decryption = decrypting && passphrase.is_none();
+    let mut output = execute(
+        request,
+        staged,
+        passphrase,
+        passphrase_home.as_ref().map(tempfile::TempDir::path),
+        key_decryption,
+    )?;
+    if key_decryption && !output.status.success() && private_key_prompt_cancelled(&output.stdout) {
+        // Let the regular agent unlock a protected private key if needed.
+        // For mixed input, cancel the file-passphrase prompt to use the key.
+        output = execute(request, staged, None, None, false)?;
+    }
+
+    let status = String::from_utf8_lossy(&output.stdout);
+    let has_status =
+        |code| statuses(&status).any(|entry| entry.split_ascii_whitespace().next() == Some(code));
+    let expected = if decrypting {
+        "DECRYPTION_OKAY"
+    } else {
+        "END_ENCRYPTION"
+    };
+    if output.status.success() && has_status(expected) {
+        return Ok(());
+    }
+    let message = if has_status("INV_RECP") {
+        "GnuPG rejected a recipient. Check that the selected key is usable and trusted."
+    } else if passphrase.is_some() && has_status("DECRYPTION_FAILED") {
+        "GnuPG could not decrypt the file with the supplied passphrase."
+    } else if key_decryption && has_status("NEED_PASSPHRASE_SYM") && !has_status("DECRYPTION_KEY") {
+        "GnuPG could not decrypt with a local private key. To use the file passphrase, select --passphrase or --key-file."
+    } else if has_status("NO_SECKEY") && !has_status("DECRYPTION_KEY") {
+        "GnuPG could not find a matching private key."
+    } else if has_status("DECRYPTION_FAILED") {
+        "GnuPG could not decrypt the file. Check the credential and encrypted input."
+    } else {
+        return Err(gpg_error("GnuPG file operation failed", &output.stderr));
+    };
+    Err(AppError::new(message))
+}
+
+fn execute(
+    request: &FileRequest,
+    staged: &Path,
+    passphrase: Option<&[u8]>,
+    passphrase_home: Option<&Path>,
+    cancel_pinentry: bool,
+) -> AppResult<Output> {
     let mut command = command()?;
     command
         .args(["--yes", "--status-fd", "1", "--output"])
         .arg(staged);
-    let mut passphrase_home = None;
     if passphrase.is_some() {
         command.args(["--pinentry-mode", "loopback", "--passphrase-fd", "0"]);
-        if matches!(request.operation, FileOperation::Decrypt) {
-            // Restrict explicit passphrase decryption to that credential even
-            // when the user's keyring could independently open a mixed file.
-            // --no-keyring does not suppress lookups on keyboxd installations.
-            let home = tempfile::Builder::new()
-                .prefix("lurker-gpg-")
-                .tempdir()
-                .map_err(|error| AppError::io("Create private GnuPG passphrase session", error))?;
-            command
-                .arg("--homedir")
-                .arg(home.path())
-                .arg("--no-autostart");
-            passphrase_home = Some(home);
-        }
+    } else if cancel_pinentry {
+        // GnuPG tries the symmetric session-key packet first. An explicit
+        // cancellation allows available private keys to succeed without a
+        // prompt, including when the child has no interactive terminal.
+        command.args(["--pinentry-mode", "cancel"]);
     }
-    let expected = match request.operation {
+    if let Some(home) = passphrase_home {
+        command.arg("--homedir").arg(home).arg("--no-autostart");
+    }
+    match request.operation {
         FileOperation::Encrypt => {
             command.args(["--compress-algo", "none", "--set-filename", ""]);
             if passphrase.is_some() {
@@ -147,13 +201,11 @@ pub(super) fn run(request: &FileRequest, staged: &Path) -> AppResult<()> {
                     add_recipient(&mut command, recipient)?;
                 }
             }
-            "END_ENCRYPTION"
         }
         FileOperation::Decrypt => {
             command.arg("--decrypt");
-            "DECRYPTION_OKAY"
         }
-    };
+    }
     let input = path::absolute(&request.input)
         .map_err(|error| AppError::io("Resolve GnuPG input file", error))?;
     let mut child = command
@@ -168,7 +220,7 @@ pub(super) fn run(request: &FileRequest, staged: &Path) -> AppResult<()> {
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| AppError::io("Start GnuPG", error))?;
-    let output = std::thread::scope(|scope| {
+    std::thread::scope(|scope| {
         let writer = passphrase
             .zip(child.stdin.take())
             .map(|(passphrase, mut stdin)| {
@@ -190,31 +242,25 @@ pub(super) fn run(request: &FileRequest, staged: &Path) -> AppResult<()> {
             }
         }
         Ok::<_, AppError>(output)
-    })?;
-    drop(passphrase_home);
-    let status = String::from_utf8_lossy(&output.stdout);
-    let has_status = |code| {
-        status.lines().any(|line| {
-            line.strip_prefix("[GNUPG:] ")
-                .and_then(|entry| entry.split_ascii_whitespace().next())
-                == Some(code)
-        })
-    };
-    if output.status.success() && has_status(expected) {
-        return Ok(());
-    }
-    let message = if has_status("INV_RECP") {
-        "GnuPG rejected a recipient. Check that the selected key is usable and trusted."
-    } else if passphrase.is_some() && has_status("DECRYPTION_FAILED") {
-        "GnuPG could not decrypt the file with the supplied passphrase."
-    } else if has_status("NO_SECKEY") {
-        "GnuPG could not find a matching private key."
-    } else if has_status("DECRYPTION_FAILED") {
-        "GnuPG could not decrypt the file. Check the credential and encrypted input."
-    } else {
-        return Err(gpg_error("GnuPG file operation failed", &output.stderr));
-    };
-    Err(AppError::new(message))
+    })
+}
+
+fn statuses(output: &str) -> impl Iterator<Item = &str> {
+    output
+        .lines()
+        .filter_map(|line| line.strip_prefix("[GNUPG:] "))
+}
+
+fn private_key_prompt_cancelled(output: &[u8]) -> bool {
+    // libgpg-error stores the source above the 16-bit error code.
+    const GPG_ERR_CANCELED: u32 = 99;
+    statuses(&String::from_utf8_lossy(output)).any(|entry| {
+        entry
+            .strip_prefix("ERROR pkdecrypt_failed ")
+            .and_then(|value| value.split_ascii_whitespace().next())
+            .and_then(|code| code.parse::<u32>().ok())
+            .is_some_and(|code| code & 0xffff == GPG_ERR_CANCELED)
+    })
 }
 
 fn gpg_error(context: &str, stderr: &[u8]) -> AppError {
