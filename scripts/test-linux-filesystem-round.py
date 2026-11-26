@@ -74,11 +74,11 @@ def main():
                     command(([shutil.which('sudo'), '-n'] if privileged else []) + ['rm', '--', source])
                     row['passed_ciphertext_removed'] = True
             elif not native.get('mount_remaining') and native.get('status') != 'passed' and not directory:
-                retained = Path.home() / '.cache/lurker/filesystem-round-retained'
-                retained.mkdir(parents=True, exist_ok=True)
-                destination = retained / path.parent.name
-                command(([shutil.which('sudo'), '-n'] if privileged else []) + ['mv', '--', path.parent, destination])
-                row['retained_fixture'] = str(destination)
+                # A failed FUSE mount can leave its mapper/loop open even when
+                # no mount was published. Moving the backing file would make
+                # its active identity stale and obstruct normal cleanup.
+                row['retained_fixture'] = str(path.parent)
+                row['failed_fixture_preserved_in_place'] = True
         except Exception as error:
             row.update(error=str(error), stdout=proc.stdout[-2000:], stderr=proc.stderr[-2000:])
         result['cases'].append(row)
