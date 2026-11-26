@@ -8,9 +8,15 @@ OpenSSL CMS, age, and GnuPG each take one input file and produce one output file
 
 All three support multiple public-key recipients per encrypted file. None specifies a fixed public-key recipient count in its CLI documentation or format specification. OS command-line limits still apply when passing recipients as individual arguments.
 
-Use Lurker's existing `--key-file FILE` spelling for a shared credential supplied as a file. With GnuPG, the first line is the passphrase. With OpenSSL CMS, the file contains raw AES key material.
-
 The shell functions shared in discussion describe a personal workflow. Reproducing them and integrating `tar`, `pigz`, or `pv` are out of scope.
+
+## CLI credential options
+
+Use the same option names across Lurker wherever the operation supports the credential.
+
+- `--key-file FILE` supplies a shared credential from a file. GnuPG reads the first line as the passphrase. OpenSSL CMS reads the AES key material.
+- `--passphrase` selects interactive passphrase entry. The option takes no value.
+- `--public-key RECIPIENT` selects a public-key recipient for encryption. Repeat it for multiple recipients. Use a local key fingerprint or public-key file for GnuPG, a recipient file for age, and an X.509 certificate file for OpenSSL CMS.
 
 ## age
 
