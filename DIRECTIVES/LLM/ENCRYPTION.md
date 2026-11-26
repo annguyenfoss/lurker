@@ -30,11 +30,14 @@ Follow the support and acceptance rules in `CODEBASE.md`.
 | securefs | 🟦 | 🟦 | 🟦 | — | 🟦 | 🟦 | 🟦 |
 
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, encrypted archives, backups and rclone crypt are excluded. LUKS still uses dm-crypt internally. Research availability is not approval to integrate.
-- age/rage is excluded: Lurker targets writable encrypted disks, filesystems and directories unlocked for use during a session. age/rage encrypts files/streams; rage-mount provides only read-only archive access, not writable directory encryption.
 - macOS runtime policy: VeraCrypt uses FUSE-T 1.2.9 or later via SMB loopback. gocryptfs, CryFS and Cryptomator use FUSE-T FSKit. The full bundle requires the qualified FUSE-T 1.2.9 helper for gocryptfs. Exact macOS package results are in `docs/macos-backends.md`.
 - Planned support requires native validation: gocryptfs macOS is beta and FreeBSD is basic; VeraCrypt targets FreeBSD x86-64 14+ and OpenBSD x86-64 7.8+, subject to inner-filesystem support. CryFS 2.0 alpha is excluded.
 - Prefer LUKS2 for new Linux volumes; LUKS1 adds compatibility and the DragonFly native path. Do not apply LUKS2/Argon2id format arguments to LUKS1. Qualify DragonFly cryptsetup versions, patches, profiles and disk/file-container behavior before release; selection is not security approval. PEFS needs a matching FreeBSD kernel module. Cryptomator requires create/mount/credential API and application-filesystem validation.
 - Existing profiles below remain authoritative. Select and document profiles for new backends during implementation; do not apply LUKS/VeraCrypt cipher options to folder backends automatically.
+
+## Single-file CLI encryption
+
+Age, GnuPG OpenPGP, and OpenSSL CMS are approved for one-file encryption and decryption in the CLI. Age uses the bundled Rust library and its standard payload and passphrase profiles. GnuPG uses installed tooling and the user's existing keyring. OpenSSL CMS uses installed OpenSSL and creates AES-256-GCM recipient envelopes. The file commands run without elevation. The [file encryption plan](../PLAN/FILE_ENCRYPTION.md) records the supported credentials and native validation scope.
 
 ## Planned integration batches
 

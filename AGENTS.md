@@ -13,6 +13,7 @@ Non-negotiables:
 - First-class products are `lurker` CLI and `lurker-desktop`, both on top of `lurker-core`.
 - `lurker-helper` is internal. The desktop app uses it; the desktop app must not shell out to the CLI.
 - Use native system facilities for kernel crypto/filesystem operations (`cryptsetup`, formatters, mount tools, BSD base commands, macOS `hdiutil`/`diskutil`). Package third-party encryption engines privately; follow `DIRECTIVES/PLAN/CROSS_PLATFORMS.md`. Never elevate a user-writable private executable. macOS FUSE remains a separately installed prerequisite.
+- Single-file CLI encryption embeds age and uses installed GnuPG and OpenSSL as unprivileged optional dependencies. Follow `DIRECTIVES/PLAN/FILE_ENCRYPTION.md` for these backends.
 - Do not reintroduce Tauri, Electron, or any WebView stack.
 - The desktop app is Slint + winit + software renderer.
 - `apps/lurker-desktop/build.rs` intentionally uses Slint `material`; do not switch styles casually.

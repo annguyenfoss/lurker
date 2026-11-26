@@ -2,7 +2,7 @@
 
 ## Product Model
 
-`lurker` is a disk/container and directory encryption utility with two first-class frontends. Native BSD CLI support and the additional selected backends are being qualified alongside Linux/macOS:
+`lurker` is a disk/container and directory encryption utility with two first-class frontends. The CLI also handles encryption and decryption of individual files. Native BSD CLI support and the additional selected backends are being qualified alongside Linux/macOS:
 
 - `lurker`: CLI for terminal/scripting use
 - `lurker-desktop`: Slint desktop app for simple create/mount/unmount flows
@@ -22,6 +22,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 ## Workspace Map
 
 - `crates/lurker-core`
+  - `src/file_crypto/`: login-user single-file age, GnuPG, and OpenSSL CMS workflows with private output staging
   - `src/folder.rs`: shared login-user gocryptfs/CryFS/Cryptomator lifecycle, fixed profiles, private backend discovery and identity-checked sessions
   - `src/bsd.rs`, `src/bsd/`: shared BSD file-container lifecycle with FreeBSD GELI and PEFS, NetBSD CGD, OpenBSD CRYPTO and RAID1C, and DragonFly LUKS1. FreeBSD and OpenBSD use the private VeraCrypt engine. DragonFly VeraCrypt uses the private `tcplay` wrapper and native device mapper.
   - `src/api.rs`: shared serde command/response types
@@ -38,6 +39,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
   - `src/system.rs`: tool discovery, subprocess execution, privilege-aware context
   - `src/output.rs`: structured human-facing output
 - `crates/lurker-cli`
+  - `src/file_cli.rs`: single-file encryption and decryption arguments and CLI dispatch
   - `src/cli.rs`: manual argv parsing and help rendering
   - `src/main.rs`: parse -> run core
 - `crates/lurker-helper`
