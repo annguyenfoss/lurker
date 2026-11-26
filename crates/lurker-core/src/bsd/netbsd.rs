@@ -7,10 +7,12 @@
 use super::{args, exec, Credential, Registry, Session};
 use crate::{AppError, AppResult, CreateCipher, CreateFilesystem};
 mod filesystems;
+mod physical;
 pub(super) use filesystems::{
     close_filesystem, filesystem_has_posix_ownership, make_selected_filesystem,
     matches_filesystem_mount, mount_filesystem, validate_filesystem,
 };
+pub(super) use physical::{ensure_physical_idle, physical_device};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -66,7 +68,7 @@ pub(super) fn format(
     if cipher != CreateCipher::Aes {
         return Err(AppError::new("CGD creation supports AES-XTS only."));
     }
-    device_number(device, "vnd")?;
+    validate_backing_device(device)?;
     password_input(credential, false)?;
     let generated = exec(
         CGDCONFIG,
@@ -103,7 +105,7 @@ pub(super) fn unlock_initial(
     credential: &Credential,
     params: &Path,
 ) -> AppResult<String> {
-    device_number(device, "vnd")?;
+    validate_backing_device(device)?;
     let input = password_input(credential, true)?;
     configure(device, &input, params, true)
 }
@@ -114,7 +116,7 @@ pub(super) fn unlock(
     credential: &Credential,
     params: &Path,
 ) -> AppResult<String> {
-    device_number(device, "vnd")?;
+    validate_backing_device(device)?;
     let input = password_input(credential, false)?;
     configure(device, &input, params, false)
 }
@@ -204,6 +206,14 @@ fn backing_identity(n: u32) -> AppResult<(u64, u64)> {
 }
 
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
+    if device.starts_with("/dev/dk") {
+        let physical = physical_device(path)?;
+        let backing = physical_device(Path::new(device))?;
+        if physical.source != backing.source || physical.metadata_id != backing.metadata_id {
+            return Err(AppError::new("NetBSD physical backing identity changed."));
+        }
+        return Ok(());
+    }
     let n = device_number(device, "vnd")?;
     let identity =
         fs::metadata(path).map_err(|e| AppError::io("Failed to inspect CGD image", e))?;
@@ -217,7 +227,7 @@ pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
 
 pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
     let n = device_number(mapped, "cgd")?;
-    device_number(backing, "vnd")?;
+    validate_backing_device(backing)?;
     let listing = exec(CGDCONFIG, &args(&["-lv", &format!("/dev/rcgd{n}d")]), None)?;
     if !listing
         .split_whitespace()
@@ -350,6 +360,15 @@ fn device_number(device: &str, kind: &str) -> AppResult<u32> {
     digits
         .parse()
         .map_err(|_| AppError::new("Invalid NetBSD device number."))
+}
+
+fn validate_backing_device(device: &str) -> AppResult<()> {
+    if device.starts_with("/dev/dk") {
+        physical_device(Path::new(device))?;
+    } else {
+        device_number(device, "vnd")?;
+    }
+    Ok(())
 }
 
 fn password_input(credential: &Credential, repeat: bool) -> AppResult<Vec<u8>> {

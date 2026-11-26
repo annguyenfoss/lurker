@@ -51,6 +51,12 @@ use dragonfly::veracrypt as dragonfly_vc;
 
 const STATE: &str = "/var/run/lurker-bsd";
 
+pub(super) struct PhysicalDevice {
+    source: PathBuf,
+    bytes: u64,
+    metadata_id: Option<String>,
+}
+
 pub(super) enum Credential {
     Password(Vec<u8>),
     Keyfile(PathBuf),
