@@ -19,3 +19,4 @@ The shell functions shared in discussion describe a personal workflow. Reproduci
 - Use native OS or desktop file pickers for CMS credentials.
 - Encrypt to one or more existing recipient X.509 certificate files. Any selected recipient can decrypt independently.
 - Decrypt with an existing matching private key file and its certificate when needed. Prompt for the key's unlock passphrase if it is encrypted.
+- Limit key handling to selecting existing files. Key and certificate creation, import, export, deletion, and other management are out of scope.
