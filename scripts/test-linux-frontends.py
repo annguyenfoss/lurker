@@ -14,6 +14,7 @@ from pathlib import Path
 import pty
 import re
 import select
+import secrets
 import signal
 import subprocess
 import sys
@@ -23,7 +24,8 @@ import time
 
 BIN = Path(sys.argv[1] if len(sys.argv) > 1 else 'target/release').resolve()
 UNPRIVILEGED = '--unprivileged' in sys.argv[2:]
-PASSWORD = '  Frontend 密碼 test passphrase 123456789!  '
+# Keep whitespace/Unicode coverage without failing native dictionary policies.
+PASSWORD = '  Frontend 密碼 9!' + secrets.token_urlsafe(24) + '  '
 
 def terminal(args, cwd, cancel=False):
     if UNPRIVILEGED:
@@ -99,13 +101,15 @@ def must_succeed(response):
 @contextlib.contextmanager
 def fixture():
     root = Path(tempfile.mkdtemp(prefix='lurker-frontends-', dir='/tmp'))
+    completed = False
     try:
         yield root
+        completed = True
     finally:
         live = [line.split()[4] for line in Path('/proc/self/mountinfo').read_text().splitlines()
                 if line.split()[4].startswith(str(root) + '/')]
-        if live:
-            print(f'Retaining live test fixture {root}: {live}', file=sys.stderr)
+        if live or not completed:
+            print(f'Retaining test fixture {root}: completed={completed}, live_mounts={live}', file=sys.stderr)
         else:
             shutil.rmtree(root)
 
