@@ -201,3 +201,24 @@ Private complete evidence is `device/ufs1-geometry-93e0630.tar.gz` and
 `validation/ufs1-geometry-93e0630-summary.json`. The latter four-case proof is
 separate from the earlier raw native-tool geometry experiment. The physical
 controller is terminal with both cases passed and the scratch device closed.
+
+## Final Linux sweep started
+
+Final Linux core/CLI/helper source is frozen at
+`ca7d2137fca741008648360e98acc06ce559de3d`. A fresh exact archive is built on
+Fedora and staged separately at
+`/usr/local/lib/lurker-native-fresh-20261127-fedora-ca7d213`. The final retained
+60-cell container sweep uses the complete UFS2 driver prerequisite, the fresh
+validated CryFS donor, bounded common payload workers and actual native
+filesystem identity checks. The initial 57/60 count records operational payload
+outcomes; its older harness did not prove every selected filesystem identity.
+The final guarded matrix is the acceptance evidence and remains in progress.
+
+The repaired CryFS engine independently passed UFS2 and exFAT downloaded payload
+cycles on Fedora. A fresh repeat of all three directory engines on these two
+backings passes 6/6, with no remaining mounts or cleanup errors. The first repeat
+had two Cryptomator launch failures because private cached runtime files retained
+0600 permissions when copied into a root-owned staging tree. Only that new
+staged tree was made readable/executable as appropriate, with root ownership and
+write restrictions preserved; the fresh six-case repeat then passed. Runtime
+bytes and source identity were unchanged.
