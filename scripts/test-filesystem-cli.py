@@ -243,6 +243,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--backend", required=True)
+    parser.add_argument("--cipher", choices=("aes", "serpent", "twofish"))
+    parser.add_argument("--credential", choices=("password", "keyfile"), default="password")
+    parser.add_argument("--auto-detect", action="store_true", help="Reopen with --type auto")
     parser.add_argument("--filesystem", help="Create selection; backing-store label only for directory engines")
     parser.add_argument("--root", type=Path, default=Path(tempfile.gettempdir()))
     parser.add_argument("--mount-root", type=Path,
@@ -255,6 +258,10 @@ def main():
     parser.add_argument("--unprivileged", action="store_true")
     parser.add_argument("--timeout", type=int, default=240)
     args = parser.parse_args()
+    if args.cipher and args.backend in DIRECTORIES:
+        parser.error("Directory backends use a fixed profile, without --cipher")
+    if args.credential == "keyfile" and args.backend not in {"luks", "luks1", "veracrypt", "geli", "pefs"}:
+        parser.error("This backend has no binary-keyfile credential route")
     try:
         expected = load_payload(args.payload_dir, args.pdf)
     except (OSError, ValueError) as error:
@@ -274,10 +281,23 @@ def main():
     peer = directory / "peer.img"
     # Meet ordinary host password policies without changing their settings.
     password = "Lurker9!" + secrets.token_urlsafe(24)
+    keyfile = None
+    if args.credential == "keyfile":
+        password = None
+        keyfile = directory / "binary key, Việt Nam.bin"
+        descriptor = os.open(keyfile, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(b"\x00\xff\n\r" + secrets.token_bytes(252))
+            stream.flush()
+            os.fsync(stream.fileno())
     result = {"schema": 1, "os": platform.system(), "release": platform.release(),
               "machine": platform.machine(), "commit": args.commit,
               "binary": str(binary), "binary_sha256": file_hash(binary),
               "backend": args.backend, "filesystem": args.filesystem,
+              "cipher": args.cipher, "credential": args.credential,
+              "auto_detect": args.auto_detect,
+              "keyfile": str(keyfile) if keyfile else None,
+              "keyfile_sha256": file_hash(keyfile) if keyfile else None,
               "unprivileged": args.unprivileged,
               "payload_dir": str(args.payload_dir.resolve()) if args.payload_dir else None,
               "input_sha256": {name: hashlib.sha256(data).hexdigest()
@@ -289,7 +309,12 @@ def main():
     mounted = False
 
     def cli(action, operands):
-        command = [str(binary), action, "--type", args.backend, "--color=never"]
+        backend = "auto" if args.auto_detect and action == "mount" else args.backend
+        command = [str(binary), action, "--type", backend, "--color=never"]
+        if action == "create" and args.cipher:
+            command.extend(["--cipher", args.cipher])
+        if action in {"create", "mount"} and keyfile:
+            command.extend(["--key-file", str(keyfile)])
         if args.unprivileged:
             command.append("--unprivileged")
         command.extend(map(str, operands))
