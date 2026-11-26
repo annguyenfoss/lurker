@@ -46,7 +46,7 @@ Age, GnuPG OpenPGP, and OpenSSL CMS are approved for one-file encryption and dec
 - **Batch 3**
   - LUKS1 and LUKS2 on macOS, FreeBSD, OpenBSD, and NetBSD, plus LUKS2 on DragonFly BSD. Start with file-backed AES profiles. Qualify Btrfs access separately for existing Linux Lurker vaults.
   - gocryptfs and securefs on OpenBSD and NetBSD.
-  - Stable CryFS 1.x and Cryptomator on FreeBSD, OpenBSD, and NetBSD.
+  - Stable CryFS 1.x on OpenBSD and NetBSD, and Cryptomator on FreeBSD, OpenBSD, and NetBSD. FreeBSD CryFS has a native private build and core route; fresh packaged lifecycle qualification is in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/`.
 
 ### Windows roadmap
 

@@ -472,7 +472,7 @@ mod tests {
         for (os, default, expected_count) in [
             ("linux", "luks", 6),
             ("macos", "apple", 6),
-            ("freebsd", "geli", 4),
+            ("freebsd", "geli", 5),
             ("netbsd", "cgd", 1),
             ("openbsd", "softraid", 3),
             ("dragonfly", "luks1", 2),

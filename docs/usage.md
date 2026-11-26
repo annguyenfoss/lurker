@@ -278,6 +278,10 @@ installed FUSE-T with its File System Extensions entry enabled in System
 Settings. Install FUSE-T 1.2.9 for the full bundle, which uses its versioned
 gocryptfs helper. [macOS requirements](macos-backends.md)
 
+FreeBSD can use privately packaged stable CryFS 1.0.3 with the host's FUSE
+facilities. It runs as the login user. Filesystem-specific qualification and
+prerequisites are recorded in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/`.
+
 Native BSD defaults are GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD), softraid CRYPTO/FFS
 (OpenBSD), and LUKS1/UFS (DragonFly). Native containers take `<file> <size-gb>` and
 administrator authorization. NetBSD CGD also accepts GPT data partitions.
