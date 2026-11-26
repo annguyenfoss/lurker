@@ -285,3 +285,23 @@ verified copy or their original quarantine. Root has 23 GiB free and the fixture
 store initially had 20 GiB free, covering approximately 2 GiB of retries plus a
 9-GiB device-snapshot reserve and 2-GiB margin. No live mapper/backing source was
 moved, and no product or KDF arguments changed for this repair.
+
+## Current final container and device milestone
+
+All eight capacity-affected creates pass fresh retries with the unchanged native
+RPM. The canonical `final-container-576505d-reconciled/matrix.json` contains
+60 current passing cases: 52 original complete successes plus eight fresh complete
+successes. The immutable initial matrix, retry receipts, failed fixture history
+and supersession references remain retained. All ten final LUKS2 container
+headers are independently dumped: UFS1 uses sector 512, every other filesystem
+uses 4096, and this final batch calibrated all ten Argon2id headers at
+1048576 KiB. These are observed values, separate from requested profile limits.
+
+The final native inner-filesystem scratch-device sweep passes **30/30** on
+`576505d`: LUKS2, LUKS1 and VeraCrypt across all ten filesystems. Each has the
+real downloaded-payload write, normal close/reopen, append/new file and final
+reopen/compare cycle, bounded I/O, actual filesystem identity and independent
+UFS version evidence. All nine binary-keyfile device variations also pass,
+covering AES, Serpent and Twofish for all three native methods. Additional
+password-cipher variants and physical filesystem backing/directory-engine
+cases are still running; reboot and final conformance gates remain pending.
