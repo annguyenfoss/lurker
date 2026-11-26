@@ -63,7 +63,7 @@ fn validate_runtime_ownership(path: &Path) -> AppResult<()> {
 
 /// Private loader companions are read from their actual installation paths,
 /// without following an alias into a different library or manifest inventory.
-#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+#[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
 pub(crate) fn trusted_runtime_directory(path: &Path) -> AppResult<()> {
     validate_runtime_ownership(path)?;
     if !fs::symlink_metadata(path)

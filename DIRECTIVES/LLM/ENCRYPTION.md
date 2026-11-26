@@ -55,7 +55,7 @@ Windows packaging and native qualification are planned. Use `cppcryptfs` for the
 ## Physical-device setup scope
 
 - Support physical-device encryption setup where feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. Qualify each backend and device type on its native OS before advertising support.
-- Lurker currently supports physical-device creation on Linux. macOS APFS accepts unmounted external data partitions and file-backed virtual disks. Physical macOS hardware remains unqualified. BSD disk-container workflows use file-backed storage.
+- Lurker supports physical-device creation on Linux and native CGD creation on identified NetBSD GPT data wedges. NetBSD stores mandatory recovery parameters persistently by checked GPT partition UUID under `/var/db/lurker-cgd/`; wedge numbers are not stable identifiers. macOS APFS accepts unmounted external data partitions and file-backed virtual disks. Fresh physical-hardware qualification and remaining BSD device integration are recorded in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/`.
 - The APFS Encrypted scope covers native data-volume setup and unlocking, mounting, and locking existing encrypted APFS volumes via `diskutil`. Apple Encrypted Disk Image uses the existing `hdiutil` backend. Startup-volume FileVault management uses `fdesetup` and native authorization.
 
 ## Create Profile Scope

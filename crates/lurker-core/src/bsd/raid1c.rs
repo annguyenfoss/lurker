@@ -130,6 +130,7 @@ fn empty_session(
         source: primary,
         create_target: None,
         identity,
+        physical: None,
         backing: None,
         openbsd_detach: None,
         mapped: None,
@@ -711,7 +712,9 @@ fn reconcile_detach(registry: &Registry, session: &mut Session) -> AppResult<()>
     let Some(intent) = state(session)?.detach else {
         return Ok(());
     };
-    let conflict = || AppError::new("RAID1C detach intent conflicts with its session; preserving the journal.");
+    let conflict = || {
+        AppError::new("RAID1C detach intent conflicts with its session; preserving the journal.")
+    };
     if session.mounted.is_some() {
         return Err(conflict());
     }
@@ -725,7 +728,10 @@ fn reconcile_detach(registry: &Registry, session: &mut Session) -> AppResult<()>
                 return Ok(());
             }
             verify_members(session, None)?;
-            if mounts()?.iter().any(|m| native::matches_filesystem_mount(mapped, m)) {
+            if mounts()?
+                .iter()
+                .any(|m| native::matches_filesystem_mount(mapped, m))
+            {
                 return Err(conflict());
             }
             session.mapped = None;
@@ -778,7 +784,10 @@ fn close_resources(registry: &Registry, session: &mut Session) -> AppResult<()> 
         registry.save(session)?;
     }
     if let Some(mapped) = session.mapped.clone() {
-        if mounts()?.iter().any(|m| native::matches_filesystem_mount(&mapped, m)) {
+        if mounts()?
+            .iter()
+            .any(|m| native::matches_filesystem_mount(&mapped, m))
+        {
             return Err(AppError::new(
                 "Mirror still has a mounted filesystem; leave it recoverable.",
             ));
@@ -930,7 +939,10 @@ mod tests {
         let mut members = Vec::new();
         for index in 0..2 {
             let path = work.join(format!("member-{index}.img"));
-            File::create(&path).unwrap().set_len(128 * 1024 * 1024).unwrap();
+            File::create(&path)
+                .unwrap()
+                .set_len(128 * 1024 * 1024)
+                .unwrap();
             members.push(Member {
                 identity: Some(Identity::read(&path).unwrap()),
                 target: path.clone(),
@@ -951,7 +963,8 @@ mod tests {
         );
         attach_members(&registry, &mut session).unwrap();
         let backings = state(&session).unwrap().backings();
-        let credential = super::super::Credential::Password(b"disposable RAID1C detach fixture".to_vec());
+        let credential =
+            super::super::Credential::Password(b"disposable RAID1C detach fixture".to_vec());
         let mapped = driver::format(&backings, &credential).unwrap();
         set_uuid_from_members(&mut session, None).unwrap();
         session.mapped = Some(mapped.clone());
@@ -984,7 +997,9 @@ mod tests {
         for member in &state(&saved).unwrap().members {
             assert!(member.identity.as_ref().unwrap().matches(&member.path));
         }
-        assert!(backings.iter().all(|path| native::vnode_identity(path).unwrap().is_none()));
+        assert!(backings
+            .iter()
+            .all(|path| native::vnode_identity(path).unwrap().is_none()));
         fs::remove_dir_all(work).unwrap();
     }
 

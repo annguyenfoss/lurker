@@ -1,7 +1,8 @@
-//! Native BSD file-container lifecycle, shared by small OS adapters.
+//! Native BSD container and partition lifecycle, shared by small OS adapters.
 //!
 //! Only recorded, identity-checked resources are closed. No forced unmount,
-//! physical-device formatting or implicit privilege escalation occurs here.
+//! implicit privilege escalation occurs here. Physical creation requires force
+//! and an independently identified, idle native data partition.
 use crate::{
     ActiveVolume, AppError, AppResult, CommandAction, CreateCommand, MountCommand, Output,
     PrivilegeMode, SourceKind, SystemProbe, ToolStatus, UnmountCommand, VolumeType,
@@ -20,6 +21,7 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod filesystems;
+mod physical;
 mod staging;
 
 #[cfg(target_os = "freebsd")]
@@ -101,7 +103,7 @@ impl Identity {
         })
     }
     fn matches(&self, path: &Path) -> bool {
-        Self::read(path).is_ok_and(|now| now.dev == self.dev && now.ino == self.ino)
+        fs::metadata(path).is_ok_and(|now| now.dev() == self.dev && now.ino() == self.ino)
     }
 }
 
@@ -137,6 +139,8 @@ struct Session {
     #[serde(default)]
     veracrypt_proof: Option<veracrypt::RecoveryProof>,
     identity: Identity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    physical: Option<physical::BackingIdentity>,
     backing: Option<String>,
     #[cfg(target_os = "freebsd")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -316,7 +320,7 @@ fn private_owned(path: &Path, directory: bool) -> AppResult<()> {
 fn require_root() -> AppResult<()> {
     if crate::effective_uid() != 0 {
         return Err(AppError::new(
-            "Native BSD file-container operations require root; run the CLI through sudo or doas.",
+            "Native BSD storage operations require root; run the CLI through sudo or doas.",
         ));
     }
     Ok(())
@@ -513,6 +517,9 @@ fn params_path(path: &Path) -> PathBuf {
 }
 
 fn create(c: CreateCommand, output: Output) -> AppResult<()> {
+    if c.source_kind == SourceKind::Block {
+        return physical::create(c, output);
+    }
     let owner = crate::new_filesystem::invoking_owner()?;
     let backend = check_backend(c.volume_type)?;
     filesystems::validate(c.filesystem, backend)?;
@@ -604,6 +611,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         source: source.clone(),
         create_target: Some(target.clone()),
         identity,
+        physical: None,
         backing: None,
         #[cfg(target_os = "freebsd")]
         freebsd_detach: None,
@@ -920,18 +928,19 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         return Err(AppError::new("Native BSD mounts do not support tags."));
     }
     let source = fs::canonicalize(&c.source).map_err(|e| AppError::io("Resolve container", e))?;
-    if !fs::metadata(&source)
-        .map_err(|e| AppError::io("Inspect container", e))?
-        .is_file()
-    {
-        return Err(AppError::new(
-            "Native BSD disk containers must be regular files.",
-        ));
-    }
-    let identity = Identity::read(&source)?;
+    let metadata = fs::metadata(&source).map_err(|e| AppError::io("Inspect container", e))?;
+    let (identity, physical_backing) = if metadata.is_file() {
+        (Identity::read(&source)?, None)
+    } else {
+        let (identity, proof) = physical::capture(&source)?;
+        (identity, Some(proof))
+    };
     let backend = mount_backend(c.volume_type, &source)?;
     let registry = Registry::open()?;
     registry.ensure_unused(&source)?;
+    if physical_backing.is_some() {
+        physical::ensure_idle(&source)?;
+    }
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
     if backend == VolumeType::Veracrypt {
         veracrypt::ensure_source_available_with_managed(&source, &managed_veracrypt(&registry)?)?;
@@ -993,6 +1002,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         source: source.clone(),
         create_target: None,
         identity,
+        physical: physical_backing,
         backing: None,
         #[cfg(target_os = "freebsd")]
         freebsd_detach: None,
@@ -1032,12 +1042,17 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             capture_veracrypt_recovery(&registry, &mut session)?;
         }
         if session.mapped.is_none() {
-            #[cfg(target_os = "dragonfly")]
-            native::attach_backing(&registry, &mut session)?;
-            #[cfg(not(target_os = "dragonfly"))]
-            {
-                session.backing = Some(attach_native_file(&source, c.readonly)?);
+            if session.physical.is_some() {
+                session.backing = Some(source.to_string_lossy().into_owned());
                 registry.save(&session)?;
+            } else {
+                #[cfg(target_os = "dragonfly")]
+                native::attach_backing(&registry, &mut session)?;
+                #[cfg(not(target_os = "dragonfly"))]
+                {
+                    session.backing = Some(attach_native_file(&source, c.readonly)?);
+                    registry.save(&session)?;
+                }
             }
             verify_session(&session)?;
             #[cfg(target_os = "openbsd")]
@@ -1069,7 +1084,7 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
                         session.backing.as_deref().unwrap(),
                         c.readonly,
                         &credential,
-                        &params_path(&source),
+                        &physical::params_path(&session)?,
                     )?);
                 }
                 #[cfg(target_os = "dragonfly")]
@@ -1246,6 +1261,7 @@ fn mount_pefs(c: MountCommand, output: Output) -> AppResult<()> {
         source: source.clone(),
         create_target: None,
         identity,
+        physical: None,
         backing: None,
         freebsd_detach: None,
         mapped: None,
@@ -1403,6 +1419,9 @@ fn unmount_matching(c: UnmountCommand, output: Output, source_only: bool) -> App
 }
 
 fn verify_session(s: &Session) -> AppResult<()> {
+    if let Some(physical) = &s.physical {
+        physical.verify(&s.source)?;
+    }
     #[cfg(target_os = "openbsd")]
     if s.backend == VolumeType::Raid1c {
         return raid1c::verify(s);
@@ -1450,6 +1469,16 @@ fn verify_session(s: &Session) -> AppResult<()> {
 }
 
 fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
+    // Reconcile interrupted detaches only after proving that a physical
+    // provider still has its recorded geometry and partition identity.
+    if let Some(physical) = &s.physical {
+        if !s.identity.matches(&s.source) {
+            return Err(AppError::new(
+                "Physical BSD device node changed; preserve its recorded resources.",
+            ));
+        }
+        physical.verify(&s.source)?;
+    }
     #[cfg(target_os = "openbsd")]
     if s.backend == VolumeType::Raid1c {
         return raid1c::cleanup(registry, s);
@@ -1562,30 +1591,32 @@ fn cleanup(registry: &Registry, s: &mut Session) -> AppResult<()> {
     #[cfg(target_os = "dragonfly")]
     dragonfly::linear::release(registry, s)?;
     #[cfg(target_os = "openbsd")]
-    if s.backend == VolumeType::Softraid && s.backing.is_some() {
+    if s.backend == VolumeType::Softraid && s.backing.is_some() && s.physical.is_none() {
         openbsd::detach_backing(registry, s)?;
     }
     if let Some(backing) = &s.backing {
         native::verify_backing(backing, &s.source)?;
-        #[cfg(target_os = "dragonfly")]
-        {
-            if s.backend == VolumeType::Veracrypt {
-                dragonfly_vc::sync_backing(s)?;
+        if s.physical.is_none() {
+            #[cfg(target_os = "dragonfly")]
+            {
+                if s.backend == VolumeType::Veracrypt {
+                    dragonfly_vc::sync_backing(s)?;
+                }
+                s.dragonfly_backing_detach_requested = true;
+                registry.save(s)?;
             }
-            s.dragonfly_backing_detach_requested = true;
-            registry.save(s)?;
+            #[cfg(target_os = "netbsd")]
+            {
+                s.netbsd_detach = Some(netbsd::DetachIntent::Vnd);
+                registry.save(s)?;
+            }
+            #[cfg(target_os = "freebsd")]
+            if s.backend == VolumeType::Geli {
+                s.freebsd_detach = Some(freebsd::DetachIntent::Md);
+                registry.save(s)?;
+            }
+            native::detach_file(backing)?;
         }
-        #[cfg(target_os = "netbsd")]
-        {
-            s.netbsd_detach = Some(netbsd::DetachIntent::Vnd);
-            registry.save(s)?;
-        }
-        #[cfg(target_os = "freebsd")]
-        if s.backend == VolumeType::Geli {
-            s.freebsd_detach = Some(freebsd::DetachIntent::Md);
-            registry.save(s)?;
-        }
-        native::detach_file(backing)?;
         s.backing = None;
         #[cfg(target_os = "freebsd")]
         {
@@ -2051,6 +2082,7 @@ mod tests {
             create_target: None,
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
+            physical: None,
             backing: None,
             #[cfg(target_os = "freebsd")]
             freebsd_detach: None,
@@ -2186,6 +2218,7 @@ mod tests {
             source: source.clone(),
             create_target: Some(target.clone()),
             identity: Identity::read(&source).unwrap(),
+            physical: None,
             backing: None,
             #[cfg(target_os = "freebsd")]
             freebsd_detach: None,
@@ -2273,12 +2306,10 @@ mod tests {
         .unwrap();
         assert!(!record_path.exists());
         let staged_path = source.to_string_lossy();
-        assert!(
-            messages
-                .entries()
-                .iter()
-                .any(|entry| entry.message.contains(staged_path.as_ref()))
-        );
+        assert!(messages
+            .entries()
+            .iter()
+            .any(|entry| entry.message.contains(staged_path.as_ref())));
         assert!(native::verify_mapping(&mapped, session.backing.as_deref().unwrap()).is_err());
         assert!(native::verify_backing(session.backing.as_deref().unwrap(), &source).is_err());
         assert!(session.identity.matches(&source));
@@ -2367,23 +2398,19 @@ mod tests {
             assert_eq!(fs::read(&marker).unwrap(), b"durably committed Auto data");
             close();
             let before = digest(&source);
-            assert!(
-                mount(
-                    mount_request(&source, "incorrect Auto credential"),
-                    Output::silent()
-                )
-                .is_err()
-            );
+            assert!(mount(
+                mount_request(&source, "incorrect Auto credential"),
+                Output::silent()
+            )
+            .is_err());
             assert_eq!(digest(&source), before);
             assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
-            assert!(
-                !Registry::open()
-                    .unwrap()
-                    .records()
-                    .unwrap()
-                    .iter()
-                    .any(|s| s.source == source)
-            );
+            assert!(!Registry::open()
+                .unwrap()
+                .records()
+                .unwrap()
+                .iter()
+                .any(|s| s.source == source));
         }
         let unknown = directory.join("random unknown image");
         let mut random = File::open("/dev/urandom").unwrap();
@@ -2404,14 +2431,12 @@ mod tests {
         assert!(mount(mount_request(&unknown, passphrase), Output::silent()).is_err());
         assert_eq!(digest(&unknown), before);
         assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
-        assert!(
-            !Registry::open()
-                .unwrap()
-                .records()
-                .unwrap()
-                .iter()
-                .any(|s| s.source == unknown)
-        );
+        assert!(!Registry::open()
+            .unwrap()
+            .records()
+            .unwrap()
+            .iter()
+            .any(|s| s.source == unknown));
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -2481,14 +2506,12 @@ mod tests {
             before
         );
         assert!(!mounts().unwrap().iter().any(|m| m.target == mountpoint));
-        assert!(
-            !Registry::open()
-                .unwrap()
-                .records()
-                .unwrap()
-                .iter()
-                .any(|s| s.identity.dev == identity.dev && s.identity.ino == identity.ino)
-        );
+        assert!(!Registry::open()
+            .unwrap()
+            .records()
+            .unwrap()
+            .iter()
+            .any(|s| s.identity.dev == identity.dev && s.identity.ino == identity.ino));
         assert!(!fs::read_dir(&directory).unwrap().any(|e| {
             e.unwrap()
                 .file_name()
@@ -2581,14 +2604,12 @@ mod tests {
             )
             .unwrap();
         }
-        assert!(
-            !Registry::open()
-                .unwrap()
-                .records()
-                .unwrap()
-                .iter()
-                .any(|s| s.source.starts_with(&directory))
-        );
+        assert!(!Registry::open()
+            .unwrap()
+            .records()
+            .unwrap()
+            .iter()
+            .any(|s| s.source.starts_with(&directory)));
         fs::remove_dir_all(directory).unwrap();
     }
 }

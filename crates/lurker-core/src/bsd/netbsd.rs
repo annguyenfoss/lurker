@@ -506,6 +506,7 @@ mod tests {
             create_target: None,
             peer_sources: Vec::new(),
             backing: Some(backing.clone()),
+            physical: None,
             netbsd_detach: Some(DetachIntent::Cgd),
             mapped: Some(mapped.clone()),
             mounted: None,

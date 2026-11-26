@@ -280,10 +280,25 @@ gocryptfs helper. [macOS requirements](macos-backends.md)
 
 Native BSD defaults are GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD), softraid CRYPTO/FFS
 (OpenBSD), and LUKS1/UFS (DragonFly). Native containers take `<file> <size-gb>` and
-administrator authorization. The current BSD workflows create file-backed vaults.
+administrator authorization. NetBSD CGD also accepts GPT data partitions.
 Keep NetBSD `.cgdparams` and PEFS `.pefs.conf`/`.pefs.db` metadata with their
 encrypted data. OpenBSD CRYPTO and RAID1C refuse read-only attachment.
 See `docs/backend-testing.md` for the exact tested revisions and remaining gates.
+
+On NetBSD, identify the intended GPT wedge before using destructive creation:
+
+```sh
+sudo lurker create --type cgd --filesystem ufs2 /dev/dkN --force
+sudo lurker mount --type cgd /dev/dkN /mnt/vault
+sudo lurker unmount /mnt/vault
+```
+
+Physical CGD recovery parameters live in
+`/var/db/lurker-cgd/<GPT-partition-UUID>.cgdparams`. Back up that mandatory file
+with the encrypted partition. Wedge numbers can change after reboot; Lurker
+finds the parameters from the current wedge's checked GPT UUID. Existing
+parameters are never overwritten during create, even with `--force`; preserve
+them before deliberately reusing a partition UUID.
 
 For a new FreeBSD GELI image, plan for the full requested size on the backing
 filesystem. Lurker reserves and syncs that space before formatting when the

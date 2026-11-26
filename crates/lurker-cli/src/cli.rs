@@ -977,7 +977,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     };
 
     let mount_help = "\nMount access follows filesystem and driver capabilities.\n";
-    let filesystem_help = "\nFilesystems (file-container create, Linux privileged devices, macOS APFS partitions):\n  --filesystem ext4|btrfs|xfs|apfs|ufs1|ufs2|hammer2|ntfs|exfat|zfs\n  Native default when omitted. Available choices depend on the OS, encryption route and installed tools.\n";
+    let filesystem_help = "\nFilesystems (file-container create, Linux privileged devices, macOS APFS partitions, NetBSD CGD GPT partitions):\n  --filesystem ext4|btrfs|xfs|apfs|ufs1|ufs2|hammer2|ntfs|exfat|zfs\n  Native default when omitted. Available choices depend on the OS, encryption route and installed tools.\n";
     let directory_help = "\nDirectory backends (where supported):\n  create --type gocryptfs|cryfs|cryptomator|pefs <directory>\n  mount --type BACKEND <encrypted-directory> <mountpoint>\n  unmount --type BACKEND <mountpoint>\n  No size or cipher option; fixed native encryption profile.\n";
     let session_help = "\nSession shutdown hook:\n  session-close --type BACKEND [--timeout SECONDS] <absolute-vault-source>\n";
     let raid_help = if cfg!(target_os = "openbsd") {
@@ -990,9 +990,19 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     } else {
         ""
     };
+    let native_targets = if cfg!(target_os = "netbsd") {
+        "File containers and CGD GPT data partitions"
+    } else {
+        "File containers only"
+    };
+    let native_device_help = if cfg!(target_os = "netbsd") {
+        "\nPhysical CGD data partitions:\n  create --type cgd [--filesystem NAME] <GPT-wedge> --force\n  mount --type cgd <GPT-wedge> <mountpoint>\n  Back up /var/db/lurker-cgd/<partition-UUID>.cgdparams with the encrypted partition.\n"
+    } else {
+        ""
+    };
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return format!(
-            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\n  {script_name} list\nNative default: {}. File containers only; native device operations require administrator privileges.\n{raid_help}{dragonfly_help}{mount_help}{filesystem_help}{directory_help}{session_help}",
+            "Usage: {script_name} create [--type TYPE] <file> <size-gb>\n  {script_name} mount [--type TYPE] <file> <mountpoint>\n  {script_name} unmount [--type TYPE] <file|mountpoint>\n  {script_name} list\nNative default: {}. {native_targets}; native device operations require administrator privileges.\n{native_device_help}{raid_help}{dragonfly_help}{mount_help}{filesystem_help}{directory_help}{session_help}",
             VolumeType::default_create()
         );
     }

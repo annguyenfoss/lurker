@@ -479,6 +479,7 @@ mod tests {
             create_target: None,
             peer_sources: Vec::new(),
             identity: Identity::read(&source).unwrap(),
+            physical: None,
             backing: None,
             dragonfly_backing_reservation: None,
             dragonfly_backing_detach_requested: false,

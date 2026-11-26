@@ -512,6 +512,7 @@ mod tests {
             create_target: None,
             peer_sources: Vec::new(),
             backing: Some(backing.clone()),
+            physical: None,
             freebsd_detach: Some(DetachIntent::Geli),
             mapped: Some(mapped.clone()),
             mounted: None,

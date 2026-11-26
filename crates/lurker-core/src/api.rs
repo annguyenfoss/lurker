@@ -137,7 +137,8 @@ impl CreateCommand {
                     self.volume_type,
                     VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
                 ))
-                || (os == "macos" && self.volume_type == VolumeType::Apfs));
+                || (os == "macos" && self.volume_type == VolumeType::Apfs)
+                || (os == "netbsd" && self.volume_type == VolumeType::Cgd));
         if !matches!(
             os,
             "linux" | "macos" | "freebsd" | "openbsd" | "netbsd" | "dragonfly"
@@ -343,13 +344,18 @@ mod tests {
         assert!(command.validate_filesystem("macos").is_err());
         for (os, backend) in [
             ("freebsd", VolumeType::Geli),
-            ("netbsd", VolumeType::Cgd),
             ("openbsd", VolumeType::Softraid),
             ("dragonfly", VolumeType::Luks1),
         ] {
             command.volume_type = backend;
             assert!(command.validate_filesystem(os).is_err());
         }
+        command.volume_type = VolumeType::Cgd;
+        command.filesystem = Some(CreateFilesystem::Ufs2);
+        assert!(command.validate_filesystem("netbsd").is_ok());
+        command.privilege_mode = PrivilegeMode::Unprivileged;
+        assert!(command.validate_filesystem("netbsd").is_err());
+        command.privilege_mode = PrivilegeMode::Privileged;
         command.volume_type = VolumeType::Gocryptfs;
         assert!(command.validate_filesystem("linux").is_err());
     }

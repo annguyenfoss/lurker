@@ -502,6 +502,7 @@ mod tests {
             create_target: None,
             peer_sources: Vec::new(),
             backing: Some(backing.clone()),
+            physical: None,
             openbsd_detach: Some(DetachIntent::Volume),
             mapped: Some(mapped.clone()),
             mounted: None,
