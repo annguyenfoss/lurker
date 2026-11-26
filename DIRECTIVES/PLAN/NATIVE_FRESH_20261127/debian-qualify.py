@@ -136,12 +136,16 @@ def main():
                       'backend': backend, 'filesystem': fs, 'role': 'backing' if args.mode == 'directories' else 'inner',
                       'route': 'private-prefix-product', 'commit': args.commit,
                       'binary': str(binary), 'binary_sha256': harness.file_hash(binary),
-                      'fixture': str(fixture), 'source_kind': 'device' if args.mode == 'device' else 'file',
+                      'fixture': str(fixture), 'source': str(source), 'mountpoint': str(mount),
+                      'source_kind': 'directory' if backend in DIRECTORIES else ('device' if args.mode == 'device' else 'file'),
                       'cipher': args.cipher, 'authentication': 'keyfile' if args.keyfile else 'password',
                       'private_fixture_credential': str(credential),
                       'tool_inventory': str(root / 'tools.json'),
                       'common_harness_sha256': harness.file_hash(args.harness),
                       'operations': [], 'status': 'running'}
+            if args.mode == 'device':
+                result['device_identity'] = {'path': str(args.device.resolve()), 'serial': args.serial,
+                                             'inventory': subprocess.check_output(['lsblk', '-dnbo', 'NAME,SIZE,SERIAL,MODEL', str(args.device)], text=True).strip()}
             backing_mount = None
             backing_source = None
             backing_kind = 'luks1' if fs == 'ufs1' else 'luks'
@@ -172,6 +176,7 @@ def main():
                     result['backing_mount_identity'] = require_native_filesystem(backing_mount, fs)
                     result['backing_features'] = observe_features(backing_mount, native=True)
                     source = backing_mount / 'encrypted'
+                    result.update(source=str(source), backing_source=str(backing_source), backing_source_kind='file')
                     command('create', [source])
                 else:
                     operands = ['--filesystem', fs, '--cipher', args.cipher]
@@ -223,6 +228,22 @@ def main():
                 atomic(result_path, result)
                 loops = subprocess.run(['/usr/bin/sudo', '-n', '/sbin/losetup', '--list', '--json', '--output', 'BACK-FILE'], capture_output=True, text=True)
                 result['owned_loop_remaining'] = loops.returncode != 0 or str(fixture) in loops.stdout
+                if args.mode == 'device':
+                    holders = Path('/sys/class/block') / args.device.resolve().name / 'holders'
+                    result['device_holders_remaining'] = [entry.name for entry in holders.iterdir()]
+                    if result['status'] == 'failed' and not result['mount_remaining'] and not result['device_holders_remaining']:
+                        # Preserve the failed disposable disk before another case
+                        # overwrites it. Only the login user opens the output;
+                        # the elevated process reads the verified scratch disk.
+                        snapshot = fixture / 'failed-device.img'
+                        with snapshot.open('xb') as stream:
+                            snapshot.chmod(0o600)
+                            copied = subprocess.run(['/usr/bin/sudo', '-n', '/usr/bin/cat', str(args.device)], stdout=stream, stderr=subprocess.PIPE, timeout=120)
+                        if copied.returncode:
+                            result['snapshot_error'] = copied.stderr.decode(errors='replace')
+                        else:
+                            result['failed_device_snapshot'] = str(snapshot)
+                            result['failed_device_snapshot_sha256'] = harness.file_hash(snapshot)
                 atomic(result_path, result)
                 if args.archive_to and not result['mount_remaining'] and not result['owned_loop_remaining']:
                     # Keep the original evidence paths valid. Mounted or failed
@@ -233,7 +254,7 @@ def main():
                     shutil.move(str(fixture), str(target))
                     fixture.symlink_to(target, target_is_directory=True)
                 print(json.dumps({'case': label, 'status': result['status'], 'receipt': str(result_path), 'mount_remaining': result['mount_remaining']}), flush=True)
-            if args.mode == 'device' and (result['mount_remaining'] or result['owned_loop_remaining']):
+            if args.mode == 'device' and (result['mount_remaining'] or result['owned_loop_remaining'] or result.get('device_holders_remaining') or result.get('snapshot_error')):
                 return 1
 
 
