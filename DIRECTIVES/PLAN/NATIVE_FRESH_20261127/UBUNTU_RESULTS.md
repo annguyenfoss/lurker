@@ -16,15 +16,16 @@ FUSE driver requiring fresh control and product tests.
 
 Fresh exact-source workspace check, workspace test and workspace build run:
 `20261126T203534Z-2d1d70ae` (one Cargo worker). `cargo check --workspace`
-passed in 4m53s. Workspace tests and binary build are still running; runtime
-qualification is incomplete. Payload copies use the round's downloaded Bitcoin, Ethereum and
+passed in 4m53s. Workspace tests passed **147, failed 0, ignored 13**; the
+workspace binary build also passed. Runtime qualification remains incomplete. Payload copies use the round's downloaded Bitcoin, Ethereum and
 Transformer PDFs and text. Runtime, container matrix, device matrix, reboot
 persistence and final-candidate checks remain incomplete.
 
 Current-source manifest verification accepted the cached private gocryptfs,
 CryFS and Cryptomator inputs and complete runtime hashes. These are reusable
 build inputs only, with fresh runtime tests still required. Native VeraCrypt
-creator verification is being assessed separately from the LKL helper; the
+creator source/archive/patch/binary/private-library verification passed
+separately from the LKL helper; the
 LKL filesystem route does not count toward native acceptance.
 
 Source candidates for ordinary external drivers are pinned to HAMMER2
@@ -33,7 +34,7 @@ fuse-ufs `ee5c4a447da98220a11edb69a225d51379afc4fb` (0.6.0, BSD-2-Clause).
 Both advertise experimental write routes suitable only for the authorized
 scratch-media assessment; fresh matching builds and runtime tests are queued.
 Sources: https://github.com/jdmanring/linux_hammer2 and
-https://github.com/realchonk/fuse-ufs .
+https://github.com/realchonk/fuse-ufs
 
 The required applicability ledger is ten filesystems × thirteen methods.
 LUKS1, LUKS2 and VeraCrypt require independent inner-filesystem cases; gocryptfs,
@@ -42,7 +43,13 @@ hdiutil/diskutil, GELI, PEFS, softraid CRYPTO/RAID1C and CGD are outside the Lin
 native adapter scope and must each retain an explicit not-applicable entry.
 No runtime cell has yet been credited as passed in this fresh round.
 
-Next: finish exact-source build, execute all ordinary container cases including
+The fresh CLI SHA-256 is
+`44fe7d0ff20f5e780c3c98a5fc837f680012fadc216f739806cdc5ddd5175a1a`;
+helper SHA-256 is
+`e1dcf92659a19c9115fa0bee2cde6b6b4c52fa9c93007995577f43184d1632a6`.
+Full identities and checks are in the private `build/result.json`.
+
+Next: complete the queued matching driver builds, execute ordinary containers including
 native controls for missing capabilities, batch demonstrated fixes, then attach
 and identify a new `lurker-fresh-ubuntu` qcow2 for device cases. Existing disks,
 fixtures, sessions and installed Lurker artifacts are preserved.
