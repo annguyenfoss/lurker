@@ -1,6 +1,6 @@
 # NetBSD fresh qualification — 2026-11-27
 
-Status: in progress. Prior-round receipts are not fresh passes.
+Status: ordinary native qualification remains in progress while the stable CryFS source assessment and installed-package matrix finish. Prior-round receipts are not fresh passes.
 
 The assigned host is `adjutant@netbsd-core-01`, running NetBSD 11.1 amd64,
 GENERIC dated 2026-11-02. The current formal release and release-specific
@@ -115,6 +115,53 @@ run` or `--as-root list-native`. `visudo` validated it, unrelated commands remai
 denied, and the rule was removed with policy restoration verified. This test-only
 authorization does not establish a default ordinary-user sudo policy.
 
+The frozen candidate `dac50106f0b39b10fe781fe84d2b50e443ed64d6` includes the
+physical foundation, desktop GPT selectors and NTFS prerequisite guard. Workspace
+run `20261126T215016Z-b440f1b1` passed check and tests: 114 passed, 0 failed,
+5 ignored. Its staged CLI `6bfce2292334744a40af79e9368e36c426d79522a94c58e92425071e85eb41b4`
+and helper `a8fdd2079a4c1066a1c290b35566c4492b9636ac8c1acddc290a728968923698`
+passed all seven container and seven independently identified GPT device payload
+lifecycles. These staged artifacts are distinct from the native package below.
+
+A fresh native CLI/desktop development package for the same commit was created
+with the ordinary NetBSD package tools: `lurker-0.1.0.tgz`, SHA-256
+`7bcafe3ac4905f316b7ff12c5e47dde42f1c07f5642289c07ea4ad10945ae672`.
+It contains 845 files and declares `libxkbcommon-1.13.2` and `sudo-1.9.17p1`.
+The host's previously unmanaged xkbcommon libraries were replaced by the ordinary
+current package. `pkg_add` installed Lurker into the isolated root-owned prefix
+`/opt/lurker-native-fresh-20261127-netbsd/installed-dac5010`; this is an actual
+native package installation, with default debug builds rather than release builds.
+Its CLI, helper and desktop hashes are respectively
+`9020aa50e27c0a820312b702cd9729231a074c0ba377e7ae91492167d2792bfc`,
+`c29bac0f81f17c2f496689b4d5b310d987cf1bdcb8a235e0bb30955394b13433` and
+`fb6068f747ca74becce3749849a8e68abdc267b256caca6f365627a3d7239d58`.
+The installed CLI passed a UFS2 payload lifecycle; the installed helper passed the
+complete physical UFS2 ordinary-user lifecycle and ownership/privacy checks.
+The frozen-candidate real GUI callback test passed 1/1 through that helper, and
+the actual installed desktop opened its Slint software window under Xvfb as UID
+1300. The screenshot was collected and viewed. The second temporary authorization
+rule was removed and both helper and unrelated sudo commands were denied again.
+The complete installed CLI filesystem matrix remains pending; the earlier staged
+14-case pass is not relabeled as package validation.
+
+The frozen staged candidate passed ordinary mounted-reboot persistence for NTFS,
+ext4 and HAMMER2 containers and a physical UFS2 partition. The persisted NTFS
+socket limit survived the reboot; physical CGD parameters retained the same hash
+and UUID while the current wedge was resolved again. ZFS close/reopen succeeds,
+but its mounted-reboot test is blocked by the ordinary native module: safe import
+refuses the pool as potentially owned by another system. Configuring and persisting
+a stable nonzero `kern.hostid` did not fix a fresh reproduction. Read-only `zdb -l`
+inspection found no hostid field in any of the four pool labels. In the current
+NetBSD 11 source, `zone_get_hostid` expands to `hostid`, while
+`spa_config_generate` declares a local `hostid = 0` before invoking that macro;
+the macro therefore reads the local zero. The stock module also has no unresolved
+hostid reference. The stock rc.d zfs service only attempts module unloading and
+has no pool export or shutdown hook. No forced import, custom hook, module source
+change or ineffective product prerequisite guard was applied. Failed encrypted
+ZFS fixtures remain intact. This cell is blocked for reboot qualification even
+though its ordinary file/device lifecycle passes; a base-module repair is deferred
+until the ordinary-route assessment is complete.
+
 Eligibility references:
 
 - https://www.netbsd.org/releases/formal.html
@@ -127,3 +174,9 @@ Eligibility references:
 - https://github.com/cryfs/cryfs/tree/1.0.3
 - https://github.com/cryptomator/fuse-nio-adapter
 - https://github.com/sgan81/apfs-fuse
+
+ZFS reboot diagnosis sources:
+
+- https://mail-index.netbsd.org/source-changes/2021/12/28/msg136186.html
+- https://raw.githubusercontent.com/NetBSD/src/netbsd-11/external/cddl/osnet/dist/uts/common/fs/zfs/sys/zfs_context.h
+- https://raw.githubusercontent.com/NetBSD/src/netbsd-11/external/cddl/osnet/dist/uts/common/fs/zfs/spa_config.c
