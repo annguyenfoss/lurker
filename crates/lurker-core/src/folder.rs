@@ -20,6 +20,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod supervisor;
 #[path = "folder/fence.rs"]
 mod fence;
+#[cfg(target_os = "macos")]
+#[path = "folder/macos_publication.rs"]
+mod macos_publication;
 
 pub(crate) fn run_supervisor_if_requested() -> Option<i32> {
     supervisor::dispatch()
@@ -896,13 +899,26 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
             ));
         }
         sync_tree(&staging)?;
-        for entry in fs::read_dir(&staging)
+        // Snapshot names before publication mutates the directory. Native FUSE
+        // directory offsets can otherwise shift after each removed entry.
+        let initialized = fs::read_dir(&staging)
             .map_err(|e| AppError::io("Cannot inspect initialized vault", e))?
-        {
-            let entry = entry.map_err(|e| AppError::io("Cannot inspect vault data", e))?;
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::io("Cannot inspect vault data", e))?;
+        for entry in initialized {
             if entry.file_name() != config {
                 let published = target.join(entry.file_name());
                 if let Err(error) = fs::rename(entry.path(), &published) {
+                    #[cfg(target_os = "macos")]
+                    if matches!(error.raw_os_error(), Some(libc::ENOTSUP | libc::EOPNOTSUPP))
+                        && fs::symlink_metadata(entry.path())
+                            .map_err(|e| AppError::io("Cannot inspect unpublished vault data", e))?
+                            .is_dir()
+                    {
+                        macos_publication::publish_directory(&entry.path(), &published)
+                            .map_err(|e| AppError::io("Cannot publish vault directory", e))?;
+                        continue;
+                    }
                     // Darwin moves AppleDouble metadata with its base entry on
                     // exFAT. The directory iterator can still return the old name.
                     #[cfg(target_os = "macos")]
@@ -911,7 +927,10 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
                     {
                         continue;
                     }
-                    return Err(AppError::io("Cannot publish vault data", error));
+                    return Err(AppError::io(
+                        format!("Cannot publish vault data {}", entry.path().display()),
+                        error,
+                    ));
                 }
             }
         }
