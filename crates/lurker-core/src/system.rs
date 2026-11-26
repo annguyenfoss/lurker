@@ -799,7 +799,7 @@ mod tests {
     #[test]
     #[ignore = "formats a private image with the installed native mke2fs"]
     fn canonical_ext4_formatter_creates_a_journaled_ext4_superblock() {
-        use std::os::unix::fs::{FileExt, OpenOptionsExt};
+        use std::os::unix::fs::{FileExt, OpenOptionsExt, PermissionsExt};
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
