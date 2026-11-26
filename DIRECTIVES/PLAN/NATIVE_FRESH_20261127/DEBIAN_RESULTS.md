@@ -122,13 +122,13 @@ The system disk and old work are preserved. New fixture storage is
 `/srv/build/lurker-native-fresh-20261127/debian/fixture-storage.qcow2`, attached
 to domain `debian-core-01`. Guest identity was checked as a new 32 GiB disk with
 observed virtio serial `lurker-fresh-debian-` before formatting. This owned disk
-was subsequently grown online to 64 GiB, with serial, source, size and mount
+was subsequently grown online to 64 GiB and then 128 GiB, with serial, source, size and mount
 checked before resizing its ext4 filesystem. It is mounted at
 `/var/tmp/lurker-native-fresh-20261127-debian-storage`. Closed current-round
 fixtures are retained there with their original evidence paths preserved.
 The later destructive device matrix will use a separately identified scratch disk.
 
-Final Linux source is frozen at `ca7d2137fca741008648360e98acc06ce559de3d`.
+The first Linux candidate was `ca7d2137fca741008648360e98acc06ce559de3d`.
 Remote workspace job `20261126T221438Z-c632c5b9` passed check, tests and build:
 156 tests passed, zero failed, 15 ignored. Final CLI/helper/desktop SHA-256s are
 `1e5e454037a195fc2042ca1315cf25e186d8b2932a2862ce4ae5146e33eea125`,
@@ -146,9 +146,36 @@ is `997c548efecc0f03cc0aede18b1371c625ada78ccb76c0cc59ac87bd9ba3fc9e`.
 Installed binary hashes match the workspace artifacts. This is a prepared-host
 installation; clean-host dependency absence is not claimed.
 
-The final seven-filesystem container/backing batch is running on official 7.3;
-the first LUKS1/HAMMER2 and LUKS2/HAMMER2 full payload cases passed. Remaining:
-complete repaired candidate containers in both kernel cohorts; cipher and credential/conformance
+That seven-filesystem batch completed 21 disk-container passes and 19 folder
+passes. Two HAMMER2 folder creates and the installed Cryptomator conformance
+close collided with my concurrently scheduled directory tests; the product's
+operation lock rejected them. Failed receipts/backing images remain retained.
+The Cryptomator mount closed normally after serialization. These are test
+scheduling failures, not filesystem-support failures. The installed native cipher
+suite passed all nine backend/cipher suites (108 checks), keyfile-negative suites
+passed all three methods, and normal-user helper full payloads passed all 21
+strict JSON responses. The initial candidate is superseded below.
+
+The follow-up candidate is `576505d554d798422840a06322dfa93b899365bc`, including
+the desktop changes and the read-only-superblock correction. Debian's owned
+mount guard independently passed writable ext4 and rejected an actual
+VFS-rw/superblock-ro ext4 bind view. Exact workspace run
+`20261126T223904Z-f54a075f` passed check/test/build: 159 passed, zero failed,
+15 ignored. Current-source staging revalidated all native private engines and
+Rust notices; the new package installed with exact workspace hashes.
+
+- CLI: `6211f7e19af9920b2dd4c94c86c92cc3da230247db26bf97d835ad693f0d0a47`.
+- Helper: `d90f43bc97bc334a0eeb44288354c909777fc17e3ba408dd91a4d1cc647e20ab`.
+- Desktop: `f057ea2dd770be1be20c60d77c9d5067d15796fe4867930158a87a65b41f94ca`.
+- Stage archive: `c7272303c7927453f196b81a7d37a89f5051ed2c7d2787510f587144ca7d43d7`.
+- Installed Debian package `0.1.0+fresh20261127.576505d`:
+  `24da9205fe18dae81caea5f75d5a2d855e3b65ae179689b72088a9ff85d0cc51`.
+
+The follow-up desktop rendered as UID 1300 in an authenticated private X11
+session and cleaned up its owned resources. Final storage and disk-only
+conformance/helper batches are running independently; directory gates are
+serialized. All final container and physical cases will use this follow-up.
+Remaining: complete repaired candidate containers in both kernel cohorts; cipher and credential/conformance
 cases; candidate reboot persistence; new scratch-device cases; final validation
 and cleanup
 and reconciliation of all 130 applicability cells. No complete-host pass is claimed.
