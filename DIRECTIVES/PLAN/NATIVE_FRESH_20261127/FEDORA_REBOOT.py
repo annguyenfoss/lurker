@@ -61,6 +61,17 @@ def main():
             password = native(['cat', credential_path]) if privileged else credential_path.read_text()
             if old['binary_sha256'] != result['binary_sha256']: raise RuntimeError('Candidate binary changed')
             cli('mount', [old['source'], mountpoint])
+            identity_path = mountpoint if privileged else Path(old['source'])
+            identity = h.linux_mount_record(Path('/proc/self/mountinfo').read_text(), identity_path)
+            new['native_filesystem'] = identity
+            new['filesystem_identity_gate'] = h.check_linux_filesystem(identity, row['filesystem'])
+            if row['filesystem'] in {'ufs1', 'ufs2', 'ntfs'}:
+                superblock = native(['blkid', '-p', identity['source']])
+                new['native_superblock'] = superblock
+                expected_marker = ('VERSION=\"' + ('1' if row['filesystem'] == 'ufs1' else '2') + '\"') if row['filesystem'] in {'ufs1', 'ufs2'} else 'TYPE=\"ntfs\"'
+                if expected_marker not in superblock: raise RuntimeError('Independent filesystem superblock differs')
+            if identity['filesystem'] in {'fuse.ufs', 'fuse.rufs', 'fuse.fuse-ufs'}:
+                new['fuse_ufs_driver_sha256'] = h.file_hash(Path('/usr/local/bin/fuse-ufs'))
             expected = old['verify_sha256']
             new['verified_hashes'] = payload('verify', expected)
             if a.prepare:
