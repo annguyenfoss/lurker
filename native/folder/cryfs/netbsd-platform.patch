@@ -67,3 +67,16 @@
  // this is not supported on musl systems, that's why we ifdef it for glibc only.
  std::string get_thread_name(std::thread* thread);
  #endif
+--- a/src/fspp/impl/FilesystemImpl.cpp
++++ b/src/fspp/impl/FilesystemImpl.cpp
+@@ -187,6 +187,10 @@
+   if(node == none) {
+     throw fuse::FuseErrnoException(ENOENT);
+   } else {
++#if defined(__NetBSD__)
++    // ReFUSE chmod supplies permission bits; retain this loaded node's type.
++    mode = (mode & ~S_IFMT) | ((*node)->stat().mode.value() & S_IFMT);
++#endif
+     (*node)->chmod(fspp::mode_t(mode));
+   }
+ }
