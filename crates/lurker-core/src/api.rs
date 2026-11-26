@@ -138,6 +138,7 @@ impl CreateCommand {
                     VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
                 ))
                 || (os == "macos" && self.volume_type == VolumeType::Apfs)
+                || (os == "openbsd" && self.volume_type == VolumeType::Softraid)
                 || (os == "freebsd" && self.volume_type == VolumeType::Geli)
                 || (os == "netbsd" && self.volume_type == VolumeType::Cgd));
         if !matches!(
@@ -344,7 +345,6 @@ mod tests {
         command.filesystem = Some(CreateFilesystem::Exfat);
         assert!(command.validate_filesystem("macos").is_err());
         for (os, backend) in [
-            ("openbsd", VolumeType::Softraid),
             ("dragonfly", VolumeType::Luks1),
         ] {
             command.volume_type = backend;

@@ -8,6 +8,8 @@ use std::path::Path;
 
 #[cfg(target_os = "freebsd")]
 mod freebsd;
+#[cfg(target_os = "openbsd")]
+mod openbsd;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct BackingIdentity {
@@ -19,7 +21,9 @@ pub(super) struct BackingIdentity {
 pub(super) fn inspect(source: &Path) -> AppResult<PhysicalDevice> {
     #[cfg(any(target_os = "netbsd", target_os = "freebsd"))]
     return super::native::physical_device(source);
-    #[cfg(not(any(target_os = "netbsd", target_os = "freebsd")))]
+    #[cfg(target_os = "openbsd")]
+    return super::native::physical_device(source);
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
     {
         let _ = source;
         Err(AppError::new(
@@ -31,7 +35,9 @@ pub(super) fn inspect(source: &Path) -> AppResult<PhysicalDevice> {
 pub(super) fn ensure_idle(source: &Path) -> AppResult<()> {
     #[cfg(any(target_os = "netbsd", target_os = "freebsd"))]
     return super::native::ensure_physical_idle(source);
-    #[cfg(not(any(target_os = "netbsd", target_os = "freebsd")))]
+    #[cfg(target_os = "openbsd")]
+    return super::native::ensure_physical_idle(source);
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
     {
         let _ = source;
         Err(AppError::new(
@@ -106,7 +112,9 @@ pub(super) fn create(command: CreateCommand, output: Output) -> AppResult<()> {
     return freebsd::create(command, output);
     #[cfg(target_os = "netbsd")]
     return create_cgd(command, output);
-    #[cfg(not(any(target_os = "netbsd", target_os = "freebsd")))]
+    #[cfg(target_os = "openbsd")]
+    return openbsd::create(command, output);
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd")))]
     {
         let _ = (command, output);
         Err(AppError::new(
