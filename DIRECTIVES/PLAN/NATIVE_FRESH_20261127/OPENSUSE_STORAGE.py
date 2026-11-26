@@ -8,6 +8,7 @@ def main():
     disk=Path('/dev/disk/by-id/virtio-lkr-build-opensuse').resolve(strict=True)
     assert subprocess.check_output(['lsblk','-dn','-o','SERIAL',str(disk)],text=True).strip()=='lkr-build-opensuse'
     assert int(subprocess.check_output(['blockdev','--getsize64',str(disk)],text=True))==68719476736
+    subprocess.run(['mount','--make-rprivate',str(DATA)],check=True)
     j={'pid':os.getpid(),'started':time.time(),'status':'running','moves':[]};receipt=ROOT/'storage-move.json'
     def save():
         t=receipt.with_suffix('.tmp');t.write_text(json.dumps(j,indent=2));t.replace(receipt)
@@ -42,8 +43,8 @@ def main():
         subprocess.run(['cp','-a','--sparse=always','--',str(source),str(destination)],check=True)
         row['stage']='verifying-complete-content';save();before=inventory(source);after=inventory(destination);assert before==after,'Copy differs'
         row.update(entries=len(before),inventory_sha256=hashlib.sha256(json.dumps(before,sort_keys=True).encode()).hexdigest());backup=source.with_name(source.name+'.native-fresh-terminal-original');assert not backup.exists();mode=source.stat().st_mode&0o777;uid=source.stat().st_uid;gid=source.stat().st_gid
-        source.rename(backup);source.mkdir(mode=mode);os.chown(source,uid,gid);subprocess.run(['mount','--bind',str(destination),str(source)],check=True)
-        entry=' '.join([str(destination),str(source),'none','bind,nofail,x-systemd.requires-mounts-for='+str(DATA),'0','0'])
+        source.rename(backup);source.mkdir(mode=mode);os.chown(source,uid,gid);subprocess.run(['mount','-o','bind,private',str(destination),str(source)],check=True)
+        entry=' '.join([str(destination),str(source),'none','bind,private,nofail,x-systemd.requires-mounts-for='+str(DATA),'0','0'])
         with Path('/etc/fstab').open('a') as f:f.write(entry+chr(10))
         row['stage']='bound-and-verified';save();assert inventory(source)==before;shutil.rmtree(backup);row['stage']='moved-path-preserved';save()
     subprocess.run(['systemctl','daemon-reload'],check=True);j.update(status='passed',finished=time.time());save();print(json.dumps({'status':'passed','receipt':str(receipt)}))
