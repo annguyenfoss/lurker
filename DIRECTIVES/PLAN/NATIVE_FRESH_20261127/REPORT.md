@@ -71,9 +71,10 @@ under target/goal-validation/native-fresh-20261127/.
   UFS1, preserving cipher, key size and KDF costs, including replacement of the
   usual Twofish sector argument. Arch core tests passed (83 passed, 2 ignored)
   and CLI/helper builds passed. Fedora's prior native AES/Argon2id 512-sector
-  control passed the payload lifecycle. The changed product's native container
-  and device regressions are running separately; stock UFS write limitations
-  remain explicit prerequisites.
+  control passed the payload lifecycle. The exact changed product now passed
+  all four AES/Twofish container/device payload regressions on Fedora. Header
+  inspection confirmed 512-byte sectors, 64-byte XTS keys and unchanged
+  Argon2id memory costs. Stock UFS write limitations remain explicit prerequisites.
 - Linux CryFS publication: `166266f` uses native exclusive rename with the
   existing durability barriers; `195b56b` registers the Linux-only patch. The
   Debian-built portable engine's archive SHA-256 is
@@ -85,7 +86,13 @@ under target/goal-validation/native-fresh-20261127/.
 - FreeBSD physical native controls now pass for GELI and VeraCrypt on distinct
   checked GPT scratch partitions. `ff9f312` and `3130c21` add immutable GEOM
   inspection, separate idle guards and active-provider identity verification.
-  Product create dispatch and its native tests remain in progress.
+  `e116dcc` plus the required cross-platform fallback correction `b76d730` add
+  product GELI device creation, filesystem selection and BSD CLI device-node
+  classification. Native core tests passed (65 passed, 11 ignored), CLI tests
+  passed (19 passed), and the actual device preview passed 14 operations. The
+  coordinator matched all original payload hashes and final appended hashes,
+  verified the invoking user's private filesystem root and clean final mount
+  inventory. Desktop controls and full device-matrix qualification are separate.
 - FreeBSD CryFS backing qualification: ext4, UFS1, UFS2, HAMMER2 and ZFS passed.
   Both NTFS and exFAT passed equivalent unmodified upstream CryFS payload
   controls, while the bundled durability patch failed during hardlink
@@ -101,14 +108,27 @@ under target/goal-validation/native-fresh-20261127/.
   passed the full payload lifecycle. Shared product physical wiring is underway.
 - macOS `175ea1c` adds the native exclusive CryFS publication primitive, and
   `065eaa2` registers its independent patch input. The patched engine passed
-  direct UFS2 and APFS payload regressions. A separate core directory-publication
-  fallback is still being qualified for native UFS2. Existing normal rename
-  behavior on other filesystems is retained.
+  direct UFS2 and APFS payload regressions. `383c47b` adds the core's anchored
+  directory-publication fallback for native UFS2, preserving directory xattrs,
+  exclusive file moves, durability barriers and configuration-last recognition.
+  Four native unit tests and UFS2 CryFS/Cryptomator, APFS both engines and exFAT
+  Cryptomator payload regressions passed. Existing normal rename behavior on
+  other filesystems is retained. exFAT CryFS's engine-primitive gap remains open.
 - openSUSE's actual login-user CLI/helper regression passed with the narrow sudo
   authorization probe change; the machine's `sudo -n -v` failure and
   `sudo -n true` success were preserved. `7d8827e` independently fixes the test
   harness's terminal echo-readiness race. Production authorization and harness
   synchronization have distinct receipts.
+- NetBSD's final workspace and seven-container/seven-device batch passed on
+  `dac5010`. The subsequent mounted-reboot batch exposed native ZFS import
+  refusal when the host has no persistent nonzero `kern.hostid`. The original
+  pool is preserved; ordinary host configuration and a fresh no-force reboot
+  control are being investigated before any new pass or final claim.
+- All eleven applicability ledgers now contain 130 unique normalized cells.
+  The coordinator's private structural audit verifies coverage of the requested
+  method/filesystem names only. It does not establish runtime completion or
+  the correctness of any availability claim; source-build gaps and remaining
+  native qualifications continue to be audited individually.
 
 ## Work still required
 
