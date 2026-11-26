@@ -393,7 +393,18 @@ pub(crate) fn linux_filesystem_module(
         Some(crate::api::CreateFilesystem::Hammer2) => Some("hammer2"),
         Some(crate::api::CreateFilesystem::Zfs) => Some("zfs"),
         Some(crate::api::CreateFilesystem::Ufs1) => Some("ufs"),
+        Some(crate::api::CreateFilesystem::Ntfs) if native_filesystem_available("ntfs3") => {
+            Some("ntfs3")
+        }
         _ => None,
+    }
+}
+
+pub(crate) fn linux_ntfs_mount_driver() -> &'static str {
+    if native_filesystem_available("ntfs3") {
+        "ntfs3"
+    } else {
+        "ntfs-3g"
     }
 }
 

@@ -1307,8 +1307,11 @@ fn mount_open_mapper(
         ]);
     }
     if filesystem_type.as_deref() == Some("ntfs") {
-        // The installed NTFS-3G helper is the portable Linux read/write route.
-        args.extend([OsString::from("-t"), OsString::from("ntfs-3g")]);
+        // Prefer the writable native driver; retain NTFS-3G on hosts without it.
+        args.extend([
+            OsString::from("-t"),
+            OsString::from(crate::system::linux_ntfs_mount_driver()),
+        ]);
     }
     if filesystem_type.as_deref() == Some("apfs") && !readonly {
         // The separately installed upstream Linux APFS module requires this
