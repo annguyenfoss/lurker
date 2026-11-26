@@ -39,6 +39,8 @@ def main():
     parser.add_argument('--backends', help='Comma-separated subset for an affected-case retest')
     parser.add_argument('--attempt', default='')
     parser.add_argument('--archive-to', type=Path, help='Owned mounted storage for closed retained fixtures')
+    parser.add_argument('--cipher', choices=('aes', 'serpent', 'twofish'), default='aes')
+    parser.add_argument('--keyfile', action='store_true', help='Fresh fixture-owned binary keyfile credentials')
     args = parser.parse_args()
     root = args.root.resolve(strict=True)
     if os.uname().sysname != 'Linux' or 'debian' not in Path('/etc/os-release').read_text():
@@ -49,6 +51,8 @@ def main():
         observed = subprocess.check_output(['lsblk', '-dnro', 'SERIAL', str(args.device)], text=True).strip()
         if observed != args.serial or not args.device.is_block_device():
             parser.error('Scratch device identity mismatch')
+    if args.mode == 'directories' and (args.keyfile or args.cipher != 'aes'):
+        parser.error('Directory engines retain their fixed credential/profile selection')
     os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:' + os.environ.get('PATH', '')
     spec = importlib.util.spec_from_file_location('filesystem_harness', args.harness)
     harness = importlib.util.module_from_spec(spec)
@@ -69,7 +73,10 @@ def main():
             parser.error('Archive destination must be an identified mounted storage root')
     for fs in selected_fs:
         for backend in selected_backends:
-            label = f'{args.mode}-{fs}-{backend}' + ('-' + args.attempt if args.attempt else '')
+            label = f'{args.mode}-{fs}-{backend}'
+            label += '-' + args.cipher if args.cipher != 'aes' else ''
+            label += '-keyfile' if args.keyfile else ''
+            label += '-' + args.attempt if args.attempt else ''
             result_path = receipts / (label + '.json')
             if result_path.exists():
                 continue  # Never overwrite a failed receipt or reuse its fixture.
@@ -79,12 +86,18 @@ def main():
             mount.mkdir(mode=0o700)
             source = args.device if args.mode == 'device' else fixture / 'vault.img'
             password = 'Lurker9!' + secrets.token_urlsafe(24)
+            credential = fixture / ('credential.key' if args.keyfile else 'credential.txt')
+            descriptor = os.open(credential, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, 'wb') as stream:
+                stream.write(os.urandom(256) if args.keyfile else password.encode())
             result = {'host': 'debian', 'os': os.uname().sysname, 'kernel': os.uname().release,
                       'boot_id': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
                       'backend': backend, 'filesystem': fs, 'role': 'backing' if args.mode == 'directories' else 'inner',
                       'route': 'private-prefix-product', 'commit': args.commit,
                       'binary': str(binary), 'binary_sha256': harness.file_hash(binary),
                       'fixture': str(fixture), 'source_kind': 'device' if args.mode == 'device' else 'file',
+                      'cipher': args.cipher, 'authentication': 'keyfile' if args.keyfile else 'password',
+                      'private_fixture_credential': str(credential),
                       'operations': [], 'status': 'running'}
             backing_mount = None
             backing_source = None
@@ -93,8 +106,10 @@ def main():
             def command(action, operands, kind=backend):
                 privileged = backend not in DIRECTORIES or kind in BACKENDS
                 argv = (['/usr/bin/sudo', '-n'] if privileged else []) + [str(binary), action, '--type', kind, '--color=never'] + list(map(str, operands))
+                if args.keyfile and action in ('create', 'mount'):
+                    argv += ['--key-file', str(credential)]
                 log = fixture / f'{len(result["operations"]):02d}-{action}.log'
-                status = harness.terminal(argv, password, 240, log)
+                status = harness.terminal(argv, None if args.keyfile else password, 240, log)
                 result['operations'].append({'action': action, 'log': str(log), **status})
                 atomic(result_path, result)
                 if status['exit_code'] or status['timed_out']:
@@ -114,7 +129,7 @@ def main():
                     source = backing_mount / 'encrypted'
                     command('create', [source])
                 else:
-                    operands = ['--filesystem', fs]
+                    operands = ['--filesystem', fs, '--cipher', args.cipher]
                     if args.mode == 'device':
                         operands += ['--force', source]
                     else:
