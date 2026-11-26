@@ -16,9 +16,9 @@ are outside the round.
   Cryptsetup upgraded to 2.8.9 and SELinux policy to 45.25. Running kernel is the
   newest installed kernel. `dnf needs-restarting -r` reported no reboot needed.
   SELinux remains Enforcing. No broad security-policy change was made.
-- Fresh `cargo check --workspace` passed. Workspace tests/build are running with
-  one Cargo worker. CLI/helper were also freshly built using an inspected warm
-  Cargo cache to begin runtime work while the desktop test build completes.
+- Fresh `cargo check --workspace`, `cargo test --workspace`, and workspace build
+  passed with one Cargo worker. CLI/helper were also freshly built using an
+  inspected warm Cargo cache to begin runtime work during the desktop test build.
 - Staged CLI SHA256:
   `fc629e7cc01d1174b07f2b242f276de58a834bba5d942f2f6195b15b6472043e`.
 - Staged helper SHA256:
@@ -93,10 +93,23 @@ Private local evidence:
 - `native-container/native.json`: first 10/10 native controls.
 - `native-container-features/native.json`: fresh 10/10 with explicit ownership
   changes and scoped ZFS ACL retry.
-- `product-container/matrix.json`: running applicable Lurker container matrix;
-  first LUKS2/ext4 downloaded-payload lifecycle passed.
-- `logs/build.log`: workspace check passed; test/build still running.
-- `logs/credentials.log`: CLI/helper credential suite running.
+- `product-container/matrix.json`: initial applicable Lurker container matrix
+  running. Privileged ext4/Btrfs/XFS/APFS, UFS2 and HAMMER2 passed all three
+  backends; UFS1 passed LUKS1/VeraCrypt and rejected LUKS2 because its default
+  logical-sector geometry is incompatible. This is a product adapter gap,
+  separately from the native configured-UFS driver observation.
+- Incidental LKL comparison attempts reject the old userspace helper. These
+  are excluded comparison evidence and are outside native acceptance.
+- `logs/backend-cache-validation.json`: newer VC creator/LKL cache verified
+  against its original exact `16aa1f4` source; relevant native/build input diff
+  from that source to `8adcdcf` is empty. gocryptfs, stable CryFS and Cryptomator
+  cached artifacts validate directly against `8adcdcf`. Original envelopes stay
+  unchanged. New backend input copy is administrator controlled. LKL will not
+  receive additional comparison work this round.
+- `logs/build.log`: workspace check, tests and build passed.
+- `logs/credentials.log`: CLI/helper prompt and password/keyfile slot suite passed.
+- `logs/desktop-window.log`: fresh real X11/winit software-rendered window passed,
+  with frame evidence `/tmp/lurker-desktop-window-bs4lma9d/result.json`.
 - `logs/updates.log`, `logs/inventory.log`, `logs/native-provenance.log`,
   `logs/backend-input-hashes.log`, `logs/candidate-fresh-upstreams.log` preserve
   host/update/input details.
@@ -104,5 +117,9 @@ Private local evidence:
 No qcow2 has been attached or overwritten yet. All applicable container cases
 precede scratch-device work. Native device runner verifies the unique scratch
 serial and active children immediately before destructive product creation.
-Device, reboot persistence, runtime conformance and final frozen-candidate
+Native LUKS2/UFS1 research with explicit 512-byte sectors and unchanged approved
+AES/key-size/Argon costs is queued after the initial batch, before any product
+geometry decision. A retained final-sweep wrapper and post-reboot verifier are
+prepared; generated test-only credentials remain private mode0600 outside logs.
+Device, reboot persistence, broader runtime conformance and final frozen-candidate
 validation are pending; this report does not claim completion.
