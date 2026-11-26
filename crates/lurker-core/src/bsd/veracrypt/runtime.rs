@@ -83,6 +83,59 @@ fn normal_name(value: &str) -> bool {
 struct Inventory {
     files: BTreeMap<String, String>,
     libraries: BTreeSet<String>,
+    host_fuse: HostFuse,
+}
+
+struct HostFuse {
+    library: String,
+    path: PathBuf,
+}
+
+fn host_fuse(value: &Value, platform: &str) -> AppResult<HostFuse> {
+    let value = &value["host_fuse"];
+    let library = value["library"].as_str().ok_or_else(invalid)?;
+    let path = PathBuf::from(value["path"].as_str().ok_or_else(invalid)?);
+    let sha256 = value["sha256"].as_str().ok_or_else(invalid)?;
+    let expected = match platform {
+        "FreeBSD" => Path::new("/usr/local/lib"),
+        "OpenBSD" => Path::new("/usr/lib"),
+        _ => return Err(invalid()),
+    };
+    let numbers = |name: &str| {
+        name.strip_prefix("libfuse.so.").is_some_and(|tail| {
+            !tail.is_empty()
+                && tail
+                    .split('.')
+                    .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        })
+    };
+    if value["api"].as_str() != Some("fuse2")
+        || !digest(sha256)
+        || !normal_name(library)
+        || !numbers(library)
+        || (platform == "FreeBSD" && library != "libfuse.so.2")
+        || (platform == "OpenBSD"
+            && library
+                .strip_prefix("libfuse.so.")
+                .unwrap()
+                .split('.')
+                .count()
+                != 2)
+        || path.parent() != Some(expected)
+        || path.file_name().and_then(|n| n.to_str()) != Some(library)
+        || path.components().any(|c| {
+            !matches!(
+                c,
+                std::path::Component::RootDir | std::path::Component::Normal(_)
+            )
+        })
+    {
+        return Err(invalid());
+    }
+    Ok(HostFuse {
+        library: library.to_owned(),
+        path,
+    })
 }
 
 fn inventory(value: &Value, platform: &str) -> AppResult<Inventory> {
@@ -120,10 +173,7 @@ fn inventory(value: &Value, platform: &str) -> AppResult<Inventory> {
         return Err(invalid());
     }
     let required: BTreeSet<String> = match platform {
-        "FreeBSD" => ["libfuse.so.2", "libiconv.so.2"]
-            .into_iter()
-            .map(String::from)
-            .collect(),
+        "FreeBSD" => ["libiconv.so.2"].into_iter().map(String::from).collect(),
         "OpenBSD" => BTreeSet::new(),
         _ => return Err(invalid()),
     };
@@ -156,10 +206,11 @@ fn inventory(value: &Value, platform: &str) -> AppResult<Inventory> {
     Ok(Inventory {
         files,
         libraries: required,
+        host_fuse: host_fuse(value, platform)?,
     })
 }
 
-pub(super) fn validate(program: &Path) -> AppResult<()> {
+fn validate_assets(program: &Path) -> AppResult<(Layout, Inventory)> {
     let layout = Layout::locate(program)?;
     let bytes = crate::trust::trusted_runtime_file(&layout.manifest, MAX_MANIFEST)?;
     let manifest: Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
@@ -189,18 +240,173 @@ pub(super) fn validate(program: &Path) -> AppResult<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound && inventory.libraries.is_empty() => {}
         Err(e) => return Err(AppError::io("Inspect BSD private library closure", e)),
     }
-    for (logical, expected) in inventory.files {
+    for (logical, expected) in &inventory.files {
         let limit = if logical == NAME || logical.starts_with("lib/") {
             64 * 1024 * 1024
         } else {
             4 * 1024 * 1024
         };
         let bytes = crate::trust::trusted_runtime_file(&layout.file(&logical), limit)?;
-        if crate::sha256::hex_digest(&bytes) != expected {
+        if crate::sha256::hex_digest(&bytes) != *expected {
             return Err(AppError::new("BSD VeraCrypt runtime hash mismatch; reinstall the complete administrator-owned package."));
         }
     }
-    Ok(())
+    verify_host_fuse(&inventory.host_fuse)?;
+    Ok((layout, inventory))
+}
+
+/// Host packages may receive compatible administrator-controlled updates.
+/// The manifest hash is build provenance; ownership, ABI and live resolution
+/// authorize runtime use. Version aliases may change only within the host libdir.
+fn host_provider(path: &Path) -> AppResult<PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+    let directory = path.parent().ok_or_else(invalid)?;
+    crate::trust::trusted_runtime_directory(directory)?;
+    let mut current = path.to_owned();
+    for _ in 0..16 {
+        let metadata = fs::symlink_metadata(&current)
+            .map_err(|e| AppError::io("Inspect host FUSE prerequisite", e))?;
+        if metadata.uid() != 0 {
+            return Err(invalid());
+        }
+        if !metadata.file_type().is_symlink() {
+            crate::trust::trusted_runtime_file(&current, 64 * 1024 * 1024)?;
+            return Ok(current);
+        }
+        let target =
+            fs::read_link(&current).map_err(|e| AppError::io("Read host FUSE ABI alias", e))?;
+        current = if target.is_absolute() {
+            target
+        } else {
+            if target.components().count() != 1 {
+                return Err(invalid());
+            }
+            directory.join(target)
+        };
+        if current.parent() != Some(directory)
+            || current.components().any(|c| {
+                !matches!(
+                    c,
+                    std::path::Component::RootDir | std::path::Component::Normal(_)
+                )
+            })
+        {
+            return Err(invalid());
+        }
+    }
+    Err(AppError::new(
+        "Host FUSE ABI alias chain is cyclic or too long.",
+    ))
+}
+
+fn verify_host_fuse(host: &HostFuse) -> AppResult<PathBuf> {
+    host_provider(&host.path)
+}
+
+fn dynamic_tags(text: &str, tag: &str) -> AppResult<Vec<String>> {
+    if text.len() > 65536 {
+        return Err(invalid());
+    }
+    let marker = format!("({tag})");
+    text.lines()
+        .filter(|line| line.contains(&marker))
+        .map(|line| {
+            let (_, value) = line.split_once('[').ok_or_else(invalid)?;
+            let (value, rest) = value.split_once(']').ok_or_else(invalid)?;
+            if !normal_name(value) || !rest.trim().is_empty() {
+                return Err(invalid());
+            }
+            Ok(value.to_owned())
+        })
+        .collect()
+}
+
+fn inspect_dynamic(path: &Path, tag: &str) -> AppResult<Vec<String>> {
+    let text = super::super::exec_in_locale(
+        "/usr/bin/readelf",
+        &["-d".into(), path.as_os_str().to_owned()],
+        None,
+        "C",
+        None,
+        std::time::Duration::from_secs(30),
+        None,
+    )?;
+    dynamic_tags(&text, tag)
+}
+
+fn resolved_fuse_paths(text: &str) -> AppResult<Vec<PathBuf>> {
+    if text.len() > 65536 || text.contains("not found") {
+        return Err(invalid());
+    }
+    let paths: Vec<_> = text
+        .split_whitespace()
+        .filter(|value| value.starts_with('/'))
+        .map(PathBuf::from)
+        .filter(|path| {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("libfuse.so."))
+        })
+        .collect();
+    if paths.len() != 1 {
+        return Err(invalid());
+    }
+    Ok(paths)
+}
+
+pub(super) fn validate(program: &Path) -> AppResult<()> {
+    let (layout, inventory) = validate_assets(program)?;
+    let bytes = crate::trust::trusted_runtime_file(program, 64 * 1024 * 1024)?;
+    if !bytes.starts_with(b"\x7fELF") {
+        return Err(AppError::new(
+            "Private BSD VeraCrypt backend must be a native ELF executable.",
+        ));
+    }
+    let expected = std::slice::from_ref(&inventory.host_fuse.library);
+    let provider = verify_host_fuse(&inventory.host_fuse)?;
+    if inspect_dynamic(&provider, "SONAME")? != expected {
+        return Err(AppError::new(
+            "Host FUSE SONAME differs from the qualified prerequisite.",
+        ));
+    }
+    let needed: Vec<_> = inspect_dynamic(program, "NEEDED")?
+        .into_iter()
+        .filter(|n| n.starts_with("libfuse"))
+        .collect();
+    if needed != expected {
+        return Err(AppError::new(
+            "Backend requires a different FUSE ABI than its host prerequisite.",
+        ));
+    }
+    for library in &inventory.libraries {
+        if inspect_dynamic(&layout.directory.join("lib").join(library), "SONAME")?
+            != [library.clone()]
+        {
+            return Err(AppError::new(
+                "Unexpected private BSD library ABI; FUSE must remain host-owned.",
+            ));
+        }
+    }
+    // The trusted OS loader trace runs with a cleared environment after every
+    // declared provider and private asset has passed ownership and hash checks.
+    let text = super::super::exec_in_locale(
+        "/usr/bin/ldd",
+        &[program.as_os_str().to_owned()],
+        None,
+        "C",
+        None,
+        std::time::Duration::from_secs(30),
+        None,
+    )?;
+    let resolved = resolved_fuse_paths(&text)?.remove(0);
+    if fs::canonicalize(resolved).map_err(|e| AppError::io("Resolve loaded FUSE provider", e))?
+        != inventory.host_fuse.path
+    {
+        return Err(AppError::new(
+            "BSD loader resolves FUSE outside the qualified host prerequisite.",
+        ));
+    }
+    verify_host_fuse(&inventory.host_fuse).map(|_| ())
 }
 
 /// Older OpenBSD engines abort while enumerating physical disks. Require the
@@ -240,7 +446,7 @@ mod tests {
             "binary_sha256":hash,"runtime":{"privilege":"root","source_kind":"regular_file"},
             "private_libraries":[],"files":{NAME:hash,"licenses/VeraCrypt.txt":hash,"licenses/wxWidgets.txt":hash}});
         if platform == "FreeBSD" {
-            for name in ["libfuse.so.2", "libiconv.so.2"] {
+            for name in ["libiconv.so.2"] {
                 value["private_libraries"]
                     .as_array_mut()
                     .unwrap()
@@ -248,6 +454,13 @@ mod tests {
                 value["files"][format!("lib/{name}")] = hash.clone().into();
             }
         }
+        let (library, path) = if platform == "FreeBSD" {
+            ("libfuse.so.2", "/usr/local/lib/libfuse.so.2")
+        } else {
+            ("libfuse.so.4.0", "/usr/lib/libfuse.so.4.0")
+        };
+        value["host_fuse"] =
+            serde_json::json!({"api":"fuse2","library":library,"path":path,"sha256":hash});
         value
     }
 
@@ -277,9 +490,55 @@ mod tests {
         value["private_libraries"][0]["sha256"] = "b".repeat(64).into();
         assert!(inventory(&value, "FreeBSD").is_err());
         value = manifest("FreeBSD");
-        value["private_libraries"][1] = value["private_libraries"][0].clone();
+        let duplicate = value["private_libraries"][0].clone();
+        value["private_libraries"]
+            .as_array_mut()
+            .unwrap()
+            .push(duplicate);
         assert!(inventory(&value, "FreeBSD").is_err());
         assert!(inventory(&manifest("OpenBSD"), "FreeBSD").is_err());
+    }
+
+    #[test]
+    fn host_fuse_contract_is_external_and_build_hash_is_provenance() {
+        let mut value = manifest("OpenBSD");
+        for path in ["/tmp/libfuse.so.4.0", "/usr/lib/../lib/libfuse.so.4.0"] {
+            value["host_fuse"]["path"] = path.into();
+            assert!(inventory(&value, "OpenBSD").is_err());
+        }
+        value = manifest("OpenBSD");
+        value["host_fuse"]["sha256"] = "b".repeat(64).into();
+        assert!(inventory(&value, "OpenBSD").is_ok());
+        value["host_fuse"]["api"] = "fuse3".into();
+        assert!(inventory(&value, "OpenBSD").is_err());
+        let mut value = manifest("FreeBSD");
+        value["private_libraries"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"name":"libfuse.so.2","sha256":"a".repeat(64)}));
+        value["files"]["lib/libfuse.so.2"] = "a".repeat(64).into();
+        assert!(inventory(&value, "FreeBSD").is_err());
+    }
+
+    #[test]
+    fn native_loader_audits_require_a_single_matching_fuse_provider() {
+        let freebsd = "libfuse.so.2 => /usr/local/lib/libfuse.so.2 (0x10)\nlibc.so.7 => /lib/libc.so.7 (0x20)\n";
+        let openbsd = "0000 0001 rlib 0 1 0 /usr/lib/libfuse.so.4.0\n";
+        assert_eq!(
+            resolved_fuse_paths(freebsd).unwrap(),
+            vec![PathBuf::from("/usr/local/lib/libfuse.so.2")]
+        );
+        assert_eq!(
+            resolved_fuse_paths(openbsd).unwrap(),
+            vec![PathBuf::from("/usr/lib/libfuse.so.4.0")]
+        );
+        assert!(resolved_fuse_paths("libfuse.so.2 => not found").is_err());
+        assert!(resolved_fuse_paths(&(freebsd.to_owned() + openbsd)).is_err());
+        assert_eq!(
+            dynamic_tags(" 0x0 (NEEDED) Shared library: [libfuse.so.2]\n", "NEEDED").unwrap(),
+            vec!["libfuse.so.2"]
+        );
+        assert!(dynamic_tags("(NEEDED) [../libfuse.so.2]", "NEEDED").is_err());
     }
 
     #[test]
@@ -290,6 +549,42 @@ mod tests {
             crate::bsd::veracrypt::invoke(&crate::bsd::args(&["--text", "--version"]), None)
                 .unwrap();
         assert!(version.trim().starts_with("VeraCrypt 1.26.31"));
+    }
+
+    #[test]
+    #[ignore = "root BSD; metadata-only host-library ownership, alias and compatible-update fixtures"]
+    fn host_library_updates_require_administrator_control_through_every_alias() {
+        use std::os::unix::fs::PermissionsExt;
+        crate::bsd::require_root().unwrap();
+        let root = PathBuf::from(format!(
+            "/var/run/lurker-host-fuse-audit-{}",
+            crate::bsd::unique_id()
+        ));
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        let first = root.join("libfuse.so.2.1");
+        let second = root.join("libfuse.so.2.2");
+        let alias = root.join("libfuse.so.2");
+        fs::write(&first, b"old compatible provider fixture").unwrap();
+        fs::write(&second, b"updated compatible provider fixture").unwrap();
+        std::os::unix::fs::symlink(first.file_name().unwrap(), &alias).unwrap();
+        assert_eq!(host_provider(&alias).unwrap(), first);
+        fs::remove_file(&alias).unwrap();
+        std::os::unix::fs::symlink(second.file_name().unwrap(), &alias).unwrap();
+        assert_eq!(host_provider(&alias).unwrap(), second);
+        fs::set_permissions(&second, fs::Permissions::from_mode(0o666)).unwrap();
+        assert!(host_provider(&alias).is_err());
+        fs::set_permissions(&second, fs::Permissions::from_mode(0o644)).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(host_provider(&alias).is_err());
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_file(&alias).unwrap();
+        std::os::unix::fs::symlink("../outside-provider", &alias).unwrap();
+        assert!(host_provider(&alias).is_err());
+        fs::remove_file(&alias).unwrap();
+        std::os::unix::fs::symlink(alias.file_name().unwrap(), &alias).unwrap();
+        assert!(host_provider(&alias).is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -380,10 +675,13 @@ mod tests {
                     None,
                 )
             };
-            assert!(version().unwrap().contains("VeraCrypt"));
-            assert!(marker.exists());
-            fs::remove_file(&marker).unwrap();
+            assert!(validate_assets(&program).is_ok());
+            // A shell stand-in is not a native ELF backend. Actual qualified
+            // engine execution is covered by the separate native version probe.
+            assert!(version().is_err());
+            assert!(!marker.exists());
             let reject = || {
+                assert!(validate_assets(&program).is_err());
                 assert!(version().is_err());
                 assert!(
                     !marker.exists(),
@@ -438,8 +736,9 @@ mod tests {
             fs::write(&program, b"#!/bin/sh\nexit 0\n").unwrap();
             reject();
             fs::write(&program, script.as_bytes()).unwrap();
-            assert!(version().is_ok());
-            fs::remove_file(&marker).unwrap();
+            assert!(validate_assets(&program).is_ok());
+            assert!(version().is_err());
+            assert!(!marker.exists());
         }
         fs::remove_dir_all(&root).unwrap();
     }

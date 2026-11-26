@@ -97,15 +97,41 @@ class SourceProvenance(unittest.TestCase):
         output = self.cache / "stage"
         with patch.object(builder.subprocess, "run"), \
              patch.object(builder, "linked_libraries", return_value=[Path("/usr/lib/libfuse.so.4.0")]), \
+             patch.object(builder, "host_fuse_identity", return_value={"api":"fuse2","library":"libfuse.so.4.0","path":"/usr/lib/libfuse.so.4.0","sha256":"a"*64}), \
              patch.object(builder.subprocess, "check_output", side_effect=["VeraCrypt fixture", "2.9.9"]):
             manifest = builder.stage(binary, output, source, wx, "OpenBSD", {})
         self.assertEqual(manifest["runtime"]["physical_source_protocol"], 1)
+        self.assertEqual(manifest["host_fuse"]["api"], "fuse2")
+        self.assertEqual(manifest["private_libraries"], [])
         for name, contents in (("wxWidgets.txt", "wxWidgets exception"),
                                ("wxWidgets-LGPL.txt", "Library GPL")):
             relative = "licenses/" + name
             notice = output / relative
             self.assertEqual(notice.read_text(), contents)
             self.assertEqual(manifest["files"][relative], builder.digest(notice))
+
+    def test_stale_private_fuse_is_rejected_before_overwriting_the_sdk(self):
+        output = self.cache / "stale-sdk"
+        (output / "lib").mkdir(parents=True)
+        (output / "lib/libfuse.so.2").write_bytes(b"old private FUSE")
+        manifest = output / "bsd-veracrypt-source.json"
+        manifest.write_bytes(b"preserved old provenance")
+        with self.assertRaisesRegex(RuntimeError, "fresh output directory"):
+            builder.stage(Path("unused"), output, Path("unused"), Path("unused"), "FreeBSD", {})
+        self.assertEqual(manifest.read_bytes(), b"preserved old provenance")
+
+    def test_host_fuse_requires_the_linked_abi_and_a_host_provider(self):
+        with patch.object(builder, "elf_tags", side_effect=[["libfuse.so.2"], ["libfuse.so.2"]]), \
+             patch.object(builder.Path, "resolve", lambda p, **kw: p), \
+             patch.object(builder, "digest", return_value="a" * 64):
+            value = builder.host_fuse_identity(Path("backend"), [Path("/usr/local/lib/libfuse.so.2")], "FreeBSD")
+        self.assertEqual(value["path"], "/usr/local/lib/libfuse.so.2")
+        with self.assertRaisesRegex(RuntimeError, "exactly one"):
+            builder.host_fuse_identity(Path("backend"), [], "OpenBSD")
+        with patch.object(builder.Path, "resolve", lambda p, **kw: p), self.assertRaisesRegex(RuntimeError, "host prerequisite"):
+            builder.host_fuse_identity(Path("backend"), [Path("/tmp/sdk/lib/libfuse.so.2")], "FreeBSD")
+        with patch.object(builder.Path, "resolve", lambda p, **kw: p), patch.object(builder, "elf_tags", side_effect=[["libfuse.so.2"], ["libfuse.so.3"]]), self.assertRaisesRegex(RuntimeError, "declared host FUSE ABI"):
+            builder.host_fuse_identity(Path("backend"), [Path("/usr/local/lib/libfuse.so.2")], "FreeBSD")
 
     def test_reviewed_patch_is_repeatable_and_rejects_extra_source_changes(self):
         # A reduced real upstream fixture retains the complete reviewed hunk.

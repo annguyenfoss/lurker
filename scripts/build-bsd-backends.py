@@ -259,8 +259,38 @@ def compatible_wx_build(stamp, source, wx):
         return None
 
 
+def elf_tags(binary, tag):
+    text = subprocess.check_output(["readelf", "-d", str(binary)], text=True, stderr=subprocess.STDOUT)
+    return re.findall(r"\(" + re.escape(tag) + r"\).*?\[([^\]]+)\]", text)
+
+
+def host_fuse_identity(binary, dependencies, target):
+    providers = [p for p in dependencies if p.name.startswith("libfuse.so.")]
+    if len(providers) != 1:
+        raise RuntimeError("Expected exactly one native host FUSE provider")
+    provider = providers[0].resolve(strict=True)
+    expected = Path("/usr/local/lib") if target == "FreeBSD" else Path("/usr/lib")
+    if provider.parent != expected:
+        raise RuntimeError("FUSE must resolve to the host prerequisite, never the private SDK")
+    soname = elf_tags(provider, "SONAME")
+    allowed = r"libfuse\.so\.2" if target == "FreeBSD" else r"libfuse\.so\.[1-9][0-9]*\.[0-9]+"
+    if len(soname) != 1 or not re.fullmatch(allowed, soname[0]):
+        raise RuntimeError("Unexpected native FUSE ABI/SONAME")
+    needed = [name for name in elf_tags(binary, "NEEDED") if name.startswith("libfuse")]
+    if needed != soname:
+        raise RuntimeError("Backend does not require exactly the declared host FUSE ABI")
+    entry = expected / soname[0]
+    if entry.resolve(strict=True) != provider:
+        raise RuntimeError("Host FUSE SONAME entry does not resolve to the linked native provider")
+    # This hash records the build/qualification input, not a runtime byte pin:
+    # administrator-controlled compatible updates retain the same ABI entry.
+    return {"api": "fuse2", "library": soname[0], "path": str(entry), "sha256": digest(provider)}
+
+
 def stage(binary, output, source, wx, target, build_options, iconv_source=None):
     output.mkdir(parents=True, exist_ok=True)
+    if (output / "lib").is_dir() and any(p.name.startswith("libfuse") for p in (output / "lib").iterdir()):
+        raise RuntimeError("Old SDK contains bundled FUSE; preserve it and stage into a fresh output directory")
     (output / "bsd-veracrypt-source.json").unlink(missing_ok=True)
     destination = output / "lurker-veracrypt-bsd"
     temporary = output / ".lurker-veracrypt-bsd.tmp"
@@ -270,11 +300,13 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
     dependencies = linked_libraries(temporary)
     private = []
     for library in dependencies:
+        if library.name.startswith("libfuse.so."):
+            continue  # Host prerequisite, including the userspace ABI.
         if str(library).startswith(("/lib/", "/usr/lib/", "/usr/libexec/")):
             continue
         if target != "FreeBSD" or library.parent not in (Path("/usr/local/lib"), output / "lib"):
             raise RuntimeError(f"Unqualified runtime library path: {library}")
-        if library.name not in ("libfuse.so.2", "libiconv.so.2"):
+        if library.name != "libiconv.so.2":
             raise RuntimeError(f"Unqualified private library/license inventory: {library.name}")
         libdir = output / "lib"
         libdir.mkdir(exist_ok=True)
@@ -292,6 +324,7 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
         for item in private:
             if resolved.get(item["name"]) != (output / "lib" / item["name"]).resolve():
                 raise RuntimeError(f"Private runtime library resolves outside the staged package: {item['name']}")
+    host_fuse = host_fuse_identity(temporary, linked_libraries(temporary), target)
     version = subprocess.check_output([str(temporary), "--text", "--version"], text=True).strip()
     if "VeraCrypt" not in version:
         raise RuntimeError("Built backend failed its version check")
@@ -305,8 +338,8 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
         shutil.copy2(iconv_source / "COPYING.LIB", licenses / "libiconv-LGPL-2.1.txt")
     # Private copies of OS packages retain their upstream notices. Base system
     # libraries are external; their installed OS license inventory remains host-owned.
-    for component in ["libiconv", "fusefs-libs"]:
-        if any(component.startswith("libiconv") and p["name"].startswith("libiconv") or component == "fusefs-libs" and p["name"].startswith("libfuse") for p in private):
+    for component in ["libiconv"]:
+        if any(p["name"].startswith("libiconv") for p in private):
             candidates = list(Path("/usr/local/share/licenses").glob(component + "-*"))
             if not candidates:
                 raise RuntimeError(f"Missing installed package notices for {component}")
@@ -318,6 +351,7 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
         "patches": patch_inventory(), "build_options": build_options,
         "version": version, "binary": destination.name, "binary_sha256": digest(destination),
         "private_libraries": private,
+        "host_fuse": host_fuse,
         "system_libraries": [p.name for p in dependencies if str(p).startswith(("/lib/", "/usr/lib/", "/usr/libexec/"))],
         "fuse_version": subprocess.check_output(["pkg-config", "--modversion", "fuse"], text=True).strip(),
         "runtime": {"external_fuse_kernel": True, "separate_veracrypt": False, "privilege": "root", "source_kind": "regular_file", "physical_source_protocol": 1},
@@ -326,7 +360,7 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
                licenses / "VeraCrypt.txt", *[licenses / name for name in WX_NOTICES.values()]]
     if iconv_source is not None:
         members.append(licenses / "libiconv-LGPL-2.1.txt")
-    for name in ("libiconv", "fusefs-libs"):
+    for name in ("libiconv",):
         owned = licenses / name
         if owned.is_dir():
             members.extend(p for p in owned.rglob("*") if p.is_file())
@@ -364,7 +398,7 @@ def main():
     if target == "FreeBSD":
         # The top-level immediate variable and exported submake each consume
         # one $$ layer; the recipe shell then preserves quoted ORIGIN.
-        # Base wx is static; bundle libiconv/libfuse as private shared objects.
+        # Base wx is static; libiconv is private and FUSE remains a host prerequisite.
         flags.append("TC_EXTRA_LFLAGS=-Wl,-rpath,'$$$$ORIGIN/lib'")
     wx_stamp = options.source_dir.resolve() / "wx-build.json"
     wx_spec = wx_specification(source, wx)
