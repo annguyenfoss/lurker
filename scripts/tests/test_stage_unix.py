@@ -281,14 +281,15 @@ Version needs section '.gnu.version_r' contains 2 entries:
             ("native/bsd-veracrypt/auxiliary-path.patch", "PATCH_SHA256"),
             ("native/bsd-veracrypt/openbsd-vnd-io.patch", "OPENBSD_VND_PATCH_SHA256"),
             ("native/bsd-veracrypt/openbsd-ffs-shutdown.patch", "OPENBSD_FFS_SHUTDOWN_PATCH_SHA256"),
+            ("native/bsd-veracrypt/openbsd-device-discovery.patch", "OPENBSD_DEVICE_DISCOVERY_PATCH_SHA256"),
             ("native/bsd-veracrypt/freebsd-md-sync.patch", "FREEBSD_MD_PATCH_SHA256"),
         ]
         hashes = {constant: stager.hashlib.sha256(name.encode()).hexdigest() for name, constant in entries}
         source.constant.side_effect = lambda _path, name: hashes[name]
         provenance = [{"path": name, "sha256": hashes[constant]} for name, constant in entries]
         common = provenance[:2]
-        openbsd = provenance[2:4]
-        freebsd = provenance[4:]
+        openbsd = provenance[2:5]
+        freebsd = provenance[5:]
         for system, local, other in (("OpenBSD", openbsd, freebsd), ("FreeBSD", freebsd, openbsd)):
             with self.subTest(platform=system):
                 stager.verify_bsd_patches({"platform": system, "patches": common + local}, source)

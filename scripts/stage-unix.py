@@ -246,6 +246,7 @@ def verify_bsd_patches(manifest, source):
     elif target == "OpenBSD":
         patches.append(("native/bsd-veracrypt/openbsd-vnd-io.patch", "OPENBSD_VND_PATCH_SHA256"))
         patches.append(("native/bsd-veracrypt/openbsd-ffs-shutdown.patch", "OPENBSD_FFS_SHUTDOWN_PATCH_SHA256"))
+        patches.append(("native/bsd-veracrypt/openbsd-device-discovery.patch", "OPENBSD_DEVICE_DISCOVERY_PATCH_SHA256"))
     expected = []
     for name, constant in patches:
         actual = hashlib.sha256(source.read(name)).hexdigest()
