@@ -215,6 +215,27 @@ Version needs section '.gnu.version_r' contains 2 entries:
         with self.assertRaisesRegex(ValueError, "patch provenance"):
             stager.verify_folder_patches("gocryptfs", correct, source)
 
+    def test_linux_publication_patch_is_required_without_changing_freebsd_inputs(self):
+        import ast
+        def constant(name, variable):
+            for node in ast.parse((stager.ROOT / name).read_bytes()).body:
+                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == variable for t in node.targets):
+                    return ast.literal_eval(node.value)
+            raise AssertionError("Source constant missing")
+        source = mock.Mock()
+        source.constant.side_effect = constant
+        source.read.side_effect = lambda name: (stager.ROOT / name).read_bytes()
+        common = "native/folder/cryfs/fsyncdir.patch"
+        local = "native/folder/cryfs/linux-localstate.patch"
+        publication = "native/folder/cryfs/linux-exclusive-publication.patch"
+        hashes = {name: stager.digest(stager.ROOT / name) for name in (common, local, publication)}
+        with mock.patch.object(stager.platform, "system", return_value="Linux"):
+            stager.verify_folder_patches("cryfs", {"patches": hashes}, source)
+            with self.assertRaisesRegex(ValueError, "patch provenance"):
+                stager.verify_folder_patches("cryfs", {"patches": {name: hashes[name] for name in (common, local)}}, source)
+        with mock.patch.object(stager.platform, "system", return_value="FreeBSD"):
+            stager.verify_folder_patches("cryfs", {"patches": {common: hashes[common]}}, source)
+
     def test_freebsd_gocryptfs_requires_its_platform_patch(self):
         name = "native/folder/gocryptfs/freebsd-futimes.patch"
         patch = stager.ROOT / name

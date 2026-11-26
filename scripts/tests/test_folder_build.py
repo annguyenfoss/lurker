@@ -86,7 +86,8 @@ class PlatformPatchTests(unittest.TestCase):
         common = ["native/folder/cryfs/fsyncdir.patch"]
         linux = BUILD.selected_patches("cryfs", "Linux")
         mac = BUILD.selected_patches("cryfs", "Darwin")
-        self.assertEqual(linux, common + ["native/folder/cryfs/linux-localstate.patch"])
+        self.assertEqual(linux, common + ["native/folder/cryfs/linux-localstate.patch",
+                                         "native/folder/cryfs/linux-exclusive-publication.patch"])
         self.assertEqual(mac, common + ["native/macos/cryfs-fuse-t.patch"])
         compiler = (BUILD.ROOT / mac[-1]).read_text()
         self.assertIn("IdWrapper.h", compiler)

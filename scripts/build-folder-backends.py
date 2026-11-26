@@ -26,7 +26,8 @@ PINS = {
 }
 PATCHES = {"cryfs": ["native/folder/cryfs/fsyncdir.patch"]}
 PLATFORM_PATCHES = {
-    "Linux": {"cryfs": ["native/folder/cryfs/linux-localstate.patch"]},
+    "Linux": {"cryfs": ["native/folder/cryfs/linux-localstate.patch",
+                        "native/folder/cryfs/linux-exclusive-publication.patch"]},
     "Darwin": {"cryfs": ["native/macos/cryfs-fuse-t.patch"]},
     "FreeBSD": {"gocryptfs": ["native/folder/gocryptfs/freebsd-futimes.patch"]},
 }
