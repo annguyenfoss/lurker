@@ -160,6 +160,11 @@ impl AppContext {
         context: &str,
     ) -> AppResult<()> {
         let mut command = self.prepare_command(program, args, privileged, interactive)?;
+        // Buffered helper output is serialized as one JSON response. Native
+        // progress must not leak onto that protocol's stdout stream.
+        if !self.output.inherit_child_stdout() {
+            command.stdout(Stdio::null());
+        }
         run_status(&mut command, context)
     }
 
@@ -994,6 +999,52 @@ mod tests {
             sudo_ready: false,
             cleanup_mapper: None,
             loop_lease: None,
+        }
+    }
+
+    #[test]
+    fn native_status_stdout_respects_output_mode_without_hiding_prompts() {
+        const MODE: &str = "LURKER_TEST_NATIVE_STDOUT_MODE";
+        if let Ok(mode) = std::env::var(MODE) {
+            let mut context = subprocess_context();
+            context.output = match mode.as_str() {
+                "terminal" => crate::output::Output::new(crate::model::ColorMode::Never),
+                "buffered" => crate::output::Output::buffered().0,
+                "silent" => crate::output::Output::silent(),
+                _ => panic!("unexpected output fixture mode"),
+            };
+            context
+                .run_command(
+                    std::path::Path::new("/bin/sh"),
+                    &[
+                        "-c".into(),
+                        "printf 'NATIVE_PROGRESS_MARKER\\n'; printf 'NATIVE_PROMPT_MARKER\\n' >&2"
+                            .into(),
+                    ],
+                    false,
+                    true,
+                    "Native stdout fixture",
+                )
+                .unwrap();
+            return;
+        }
+        for mode in ["terminal", "buffered", "silent"] {
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "system::tests::native_status_stdout_respects_output_mode_without_hiding_prompts",
+                    "--nocapture",
+                ])
+                .env(MODE, mode)
+                .output()
+                .unwrap();
+            assert!(result.status.success(), "{mode}");
+            assert_eq!(
+                String::from_utf8_lossy(&result.stdout).contains("NATIVE_PROGRESS_MARKER"),
+                mode == "terminal",
+                "{mode}"
+            );
+            assert!(String::from_utf8_lossy(&result.stderr).contains("NATIVE_PROMPT_MARKER"));
         }
     }
 

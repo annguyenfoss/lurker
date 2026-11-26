@@ -54,6 +54,9 @@ impl OutputBuffer {
 }
 
 trait OutputSink: Send + Sync {
+    fn inherit_child_stdout(&self) -> bool {
+        false
+    }
     fn stderr_is_tty(&self) -> bool;
     fn record(&self, level: OutputLevel, message: &str);
     fn raw_stdout(&self, value: &str);
@@ -116,6 +119,10 @@ impl Output {
         self.inner.stderr_is_tty()
     }
 
+    pub(crate) fn inherit_child_stdout(&self) -> bool {
+        self.inner.inherit_child_stdout()
+    }
+
     pub fn raw_stdout(&self, value: &str) {
         self.inner.raw_stdout(value);
     }
@@ -154,6 +161,10 @@ impl Output {
 }
 
 impl OutputSink for TerminalOutput {
+    fn inherit_child_stdout(&self) -> bool {
+        true
+    }
+
     fn stderr_is_tty(&self) -> bool {
         self.stderr_tty
     }
