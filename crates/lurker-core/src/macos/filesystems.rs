@@ -62,6 +62,15 @@ fn requested(filesystem: Option<CreateFilesystem>) -> Option<Kind> {
         _ => None,
     }
 }
+fn require_persistent_driver(kind: Kind) -> AppResult<()> {
+    if kind == Kind::Xfs {
+        return Err(AppError::new(
+            "The current macOS XFS driver failed normal-close persistence qualification. XFS create/mount is unavailable until a host-native driver is qualified; use another filesystem.",
+        ));
+    }
+    Ok(())
+}
+
 fn tool(name: &str) -> AppResult<PathBuf> {
     if crate::effective_uid() == 0 {
         return Err(AppError::new(
@@ -145,6 +154,7 @@ pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<
     else {
         return Ok(None);
     };
+    require_persistent_driver(kind)?;
     if crate::effective_uid() == 0 {
         return Err(AppError::new(
             "External macOS filesystem containers must be created as the login user.",
@@ -342,6 +352,7 @@ pub(super) fn format(
     let Some(kind) = requested(filesystem) else {
         return Ok(());
     };
+    require_persistent_driver(kind)?;
     if kind == Kind::Btrfs {
         return format_btrfs(source, pass, keyfile);
     }
@@ -1233,6 +1244,7 @@ fn start(
     else {
         return Ok(false);
     };
+    require_persistent_driver(kind)?;
     let driver = if kind == Kind::Ufs2 {
         ufs2_driver()?
     } else {
@@ -1408,6 +1420,9 @@ pub(super) fn mount_missing(
     let image = open_image(source, pass, readonly, keyfile, false)?;
     let result = (|| {
         let kind = opened_image_kind(&image);
+        if let Some(kind) = kind {
+            require_persistent_driver(kind)?;
+        }
         if kind == Some(Kind::Ntfs) {
             start_native_ntfs(&registry, source, mountpoint, &image, readonly)
         } else if kind == Some(Kind::Btrfs) {
@@ -1488,6 +1503,29 @@ pub(super) fn augment(volumes: &mut [Volume]) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unqualified_xfs_fails_before_tools_credentials_or_allocation() {
+        let command = CreateCommand {
+            peer_sources: Vec::new(),
+            privilege_mode: crate::PrivilegeMode::Unprivileged,
+            target: PathBuf::from("/nonexistent/must-not-be-created.hc"),
+            size_gb: Some("0.75".into()),
+            force: false,
+            source_kind: crate::SourceKind::File,
+            volume_type: VolumeType::Veracrypt,
+            cipher: crate::CreateCipher::Aes,
+            filesystem: Some(CreateFilesystem::Xfs),
+            passphrase: None,
+            keyfile: None,
+        };
+        let error = create_args(&command, 768).unwrap_err();
+        assert!(error.message.contains("normal-close persistence"));
+        assert!(require_persistent_driver(Kind::Xfs).is_err());
+        for kind in [Kind::Ext4, Kind::Ufs2, Kind::Ntfs, Kind::Zfs] {
+            assert!(require_persistent_driver(kind).is_ok());
+        }
+    }
+
     #[test]
     fn external_filesystem_tools_are_host_prerequisites() {
         for name in ["fuse-ext2", "fuse-xfs", "mkfs.xfs", "fuse-ufs", "ufs2tool"] {
