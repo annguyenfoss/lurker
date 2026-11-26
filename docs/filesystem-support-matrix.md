@@ -2,18 +2,18 @@
 
 ## Planning summary
 
-This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools are freely obtainable by individual users. The original research required host-OS tools and excluded virtual machines; the subsequently approved macOS Btrfs microVM route is an explicit exception. WSL, paid routes and extract–edit–reinsert workflows remain excluded. Native and userspace mounts count equally. Separate formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
+This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. The 2026-11-26 Linux, macOS and BSD reassessment combines achieved and achievable host-local support, using free software, freeware or open-source software that can be built without purchasing a binary. VMs, guest operating systems, NFS, SMB, SSHFS and other network filesystems are excluded at every layer, including encryption transport. Local kernel drivers, FSKit and FUSE count equally; LKL compiled into a native host process is not a guest VM. Prefer one adequate tool; combine a formatter and mount driver when needed to cover a material gap. A documented engineering path can establish achievable capability without being an implemented or tested Lurker route. Windows entries are retained from the earlier research and were not reassessed.
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ext4 | ✅ | ☑️ | ☑️ | ⚠️ R/O | ☑️ | ⚠️ R/O | ☑️ |
-| Btrfs | ✅ | ☑️ | ☑️ | — | — | — | ☑️ |
-| XFS | ✅ | ☑️ | ☑️ | ⚠️ R/O | — | ⚠️ R/O | ⚠️ R/O |
+| Btrfs | ✅ | ☑️¹ | ⚠️ R/O | — | — | — | ☑️ |
+| XFS | ✅ | ☑️ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ⚠️ R/O |
 | APFS | ☑️ | ✅ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ☑️¹ |
 | UFS1 / FFSv1 | ☑️ | — | ✅ | ✅ | ✅ | ✅ | ⚠️ R/O |
 | UFS2 / FFSv2 | ☑️ | ☑️² | ✅ | ✅ | ✅ | — | ⚠️ R/O |
-| HAMMER2 | ✅² | — | ☑️² | ☑️ | ☑️ | ✅ | — |
-| NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ✅ |
+| HAMMER2 | ✅² | — | ☑️² | ☑️³ | ☑️ | ✅ | — |
+| NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ⚠️ R/O | ✅ |
 | exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅² |
 
@@ -21,18 +21,92 @@ This planning summary follows the stated use case: format a decrypted physical p
 
 - **✅** Full feature support.
 - **☑️** Largely usable, with some filesystem features missing or unverified.
-- **⚠️** Read-Only.
+- **⚠️** Read-only access; write support is missing.
 - **—** Unsupported.
 - **¹** Disk/container creation not available.
 - **²** Largely usable; reliability not established.
+- **³** Native writable port exists; compatibility with the current OS release is not established.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. macOS UFS2 uses an experimental writer; moving directories between parents is unsupported. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
-This remains a planning matrix based on filesystem capability research. The macOS Btrfs and UFS2 promises now include Create + Read/Write following native CLI qualification, as documented below. Other cells do not assert integration or runtime qualification in Lurker.
+This remains a capability planning matrix, not an installed/runtime support matrix. Read-only access and missing creation remain shortcomings against the goal of Create + Read/Write. The native-only update below supersedes earlier planning conclusions where they relied on excluded transports; historical receipts remain evidence only for the routes actually exercised.
+
+## Native-only planning update
+
+Assessed 2026-11-26. Relative to the previous non-Windows promise, 45 of 50
+cells have an achieved or achievable native route to that promise: 38 Create +
+Read/Write cells and seven historical read-only promises. Those seven remain
+shortcomings against the ideal Create + Read/Write goal. The five exceptions
+are recorded below; OpenBSD HAMMER2 is version-dependent, not a missing driver.
+
+- **macOS / Btrfs: ☑️ → ☑️¹.** xlinuxfs supplies local FSKit read/write
+  access using an in-process LKL engine, but explicitly does not format.
+  No usable native Darwin creation route was established. The earlier
+  anylinuxfs guest/SSHFS creation pass is excluded from this native promise.
+  https://github.com/HuanchuanTech/xlinuxfs/blob/main/docs/architecture.md
+  https://github.com/HuanchuanTech/xlinuxfs/blob/main/docs/filesystem-capabilities.md
+- **FreeBSD / Btrfs and XFS: ☑️ → ⚠️ R/O.** Native formatters exist:
+  `mkntfs` plus `ntfs2btrfs` for Btrfs, and `mkfs.xfs` for XFS. The local
+  LKL writer fails appending/flushing with `EBADF`; successful fileshare/NFS
+  controls do not establish native writes. See the [retest evidence](../DIRECTIVES/PLAN/FILESYSTEM_ROUND/FREEBSD_RETEST.md).
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/lkl
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/ntfs2btrfs
+  https://github.com/freebsd/freebsd-ports/tree/main/filesystems/xfsprogs
+- **OpenBSD / HAMMER2: ☑️ → ☑️³.** The native writable port exists, but its
+  supplied integration patch targets OpenBSD 7.7. Compatibility with the
+  current 8.0 host needs adaptation/build verification; do not infer that
+  the 7.7 patch works unchanged on 8.0.
+  https://github.com/kusumi/openbsd_hammer2/blob/master/CHANGES
+  https://github.com/kusumi/openbsd_hammer2/blob/master/patch/openbsd77.patch
+- **DragonFly BSD / NTFS: ☑️ → ⚠️ R/O.** Creation and native reading work;
+  NTFS-3G fails device locking with `EINVAL`. DPorts' `LOCK=off` rebuild is
+  a repair candidate, not a demonstrated solution. See the [retest evidence](../DIRECTIVES/PLAN/FILESYSTEM_ROUND/DRAGONFLY_RETEST.md).
+  https://github.com/DragonFlyBSD/DPorts/blob/master/filesystems/ntfs/Makefile
+
+Conditions behind the achievable cells:
+
+- **Linux covers Arch, Debian, Ubuntu, Fedora, openSUSE and Gentoo.** Each
+  route requires compatible packages and kernel modules. HAMMER2 requires
+  Linux 7.3+, while released OpenZFS 2.4.4 documents support through 7.2.
+  This establishes separate native routes, not both on one booted kernel.
+  https://github.com/jdmanring/linux_hammer2
+  https://github.com/openzfs/zfs/releases/tag/zfs-2.4.4
+- **macOS requires local encryption transport as well as local filesystem
+  drivers.** The current private FUSE-T/SMB VeraCrypt build is excluded.
+  Upstream's macFUSE-compatible variant supplies a local architecture to
+  integrate and qualify inside Lurker's private bundle; users do not install
+  VeraCrypt separately. FUSE-T's local FSKit backend is another candidate,
+  not a qualified VeraCrypt/hdiutil combination. The native filesystem
+  routes include Ext4Kit for ext4 creation/RW, fuse-xfs's native formatter
+  and writer, and the [patched UFS2 tools](../native/macos/fuse-ufs.md).
+  https://veracrypt.io/en/Downloads.html
+  https://www.fuse-t.org/
+  https://github.com/rayhanadev/Ext4Kit/releases
+  https://github.com/karan-vk/fuse-xfs
+- **DragonFly XFS/APFS reading is achievable through a local I/O adapter.**
+  Existing readers work on regular images, while direct decrypted-device
+  reads fail on alignment. Both libraries accept a `libbfio` handle with
+  custom I/O callbacks: read surrounding aligned sectors and return the
+  requested bytes. This engineering deduction supports their historical
+  reading-only promise; the adapter is not implemented/qualified and does
+  not supply filesystem creation or writes. No VM, network transport or
+  plaintext image copy is required. The [retest record](../DIRECTIVES/PLAN/FILESYSTEM_ROUND/DRAGONFLY_RETEST.md)
+  retains the observed direct-device failures.
+  https://github.com/libyal/libbfio/blob/main/include/libbfio.h.in
+  https://github.com/libyal/libfsxfs/blob/main/libfsxfs/libfsxfs_volume.c
+  https://github.com/libyal/libfsapfs/blob/main/libfsapfs/libfsapfs_container.c
+
+The original promise, assessment, per-cell sources and six-distribution
+expansion are retained in the local round artifact
+`target/goal-validation/native-only-reassessment-20261126/reassessment.json`.
+This assessment adds no runtime qualification.
 
 ## macOS promise updates
 
-The 2026-11-25 follow-up exceeded two earlier promises using free tools:
+Historical results: the 2026-11-25 follow-up exceeded two earlier promises
+using free tools. The native-only update above supersedes the Btrfs creation
+conclusion because that pass used a guest and SSHFS; the UFS2 filesystem
+capability remains, subject to qualifying a local encryption transport.
 
 - **Btrfs: ☑️¹ → ☑️.** Creation now works as well as read/write access.
   Lurker uses anylinuxfs's Linux guest to format and mount the identified
@@ -55,7 +129,7 @@ or release packaging, and do not imply full metadata or crash-safety parity.
 
 ## Detailed solution survey
 
-The earlier per-solution survey below is retained in full, including alternatives excluded from the planning summary. Its detailed tags and counts describe that survey snapshot; the planning summary incorporates the later workflow and beta assessments and the macOS promise updates above. The original anylinuxfs and UFS2Tool entries do not describe the subsequently qualified combinations.
+The earlier per-solution survey below is retained in full, including paid and network/VM alternatives excluded from the current planning summary. Its detailed tags and counts describe that survey snapshot; the planning summary follows the native-only update above. The original anylinuxfs and UFS2Tool entries do not describe the subsequently qualified combinations.
 
 Survey date 2026-11-24. Every previously researched offering is restored: 160
 solution entries across 70 OS/filesystem cells, without consolidation.
@@ -339,10 +413,12 @@ Pro.
 
 ### macOS
 
-- **Later Btrfs and UFS2 qualification.** The [promise updates](#macos-promise-updates)
-  supersede the earlier creation-unavailable Btrfs and reader-only UFS2
-  conclusions. The offering descriptions below retain the original survey's
-  individual tools and interfaces; UFS2Tool alone still supplies no macOS mount.
+- **Current native-only scope.** The [native-only update](#native-only-planning-update)
+  supersedes the historical Btrfs guest/SSHFS creation result. Native Btrfs
+  creation remains unavailable; UFS2 retains experimental creation/RW through
+  the combined patched tools, with local encryption transport still requiring
+  qualification. The offering descriptions below retain historical and
+  excluded alternatives; UFS2Tool alone still supplies no macOS mount.
 - **ext4, Btrfs, XFS.** xlinuxfs covers attached images and partitions via
   FSKit, with the image attachment method depending on macOS version.
   PolyDrive Disk documents physical devices on Apple Silicon and macOS 26+.

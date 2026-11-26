@@ -8,19 +8,29 @@ The README and planning summary use the following compact notation. The older de
 
 - **✅** Full feature support.
 - **☑️** Largely usable, with some filesystem features missing or unverified.
-- **⚠️** Read-Only.
+- **⚠️** Read-only access; write support is missing.
 - **—** Unsupported.
 - **¹** Disk/container creation not available.
 - **²** Largely usable; reliability not established.
+- **³** Native writable port exists; compatibility with the current OS release is not established.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. macOS UFS2 uses an experimental writer; moving directories between parents is unsupported. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
-This remains a planning matrix based on filesystem capability research. The
-macOS Btrfs and UFS2 promises were raised after representative Create + Read/Write
-CLI flows passed; see the [promise updates](filesystem-support-matrix.md#macos-promise-updates).
-Other cells do not assert integration or runtime qualification in Lurker.
+The Linux, macOS and BSD planning matrix combines achieved and achievable
+native capabilities; it does not assert completed Lurker integration or
+runtime qualification. See the [native-only planning update](filesystem-support-matrix.md#native-only-planning-update).
+Read-only access and missing creation are shortcomings against Create +
+Read/Write, not separate desired features. Windows entries were not reassessed.
 
-This planning summary follows the stated use case: format a decrypted physical partition or file container, then reopen and mount it for normal application file access. Tools are freely obtainable by individual users. The original research required host-OS tools and excluded virtual machines; the subsequently approved macOS Btrfs microVM route is an explicit exception. WSL, paid routes and extract–edit–reinsert workflows remain excluded. Native and userspace mounts count equally. Separate formatters and mount drivers may be combined, but an unverified combination is not a confirmed creation route.
+The current non-Windows summary requires host-local encryption transport and
+filesystem access using free software, freeware or open source that can be built
+without purchasing a binary. VMs, guest operating systems and network
+filesystems (including NFS, SMB and SSHFS loopback) are excluded at every layer.
+Local kernel drivers, FSKit and FUSE count equally; native in-process LKL is not
+a guest VM. Prefer one adequate tool; combine tools only to cover a material
+gap. A documented engineering path can count as achievable without being a
+completed runtime pass. The detailed survey retains excluded alternatives as
+historical research, not current approved routes.
 
 Number planning annotations from 1 by first appearance, scanning cells left to right and rows top to bottom. Related cells may share a number and explanation. Use superscript numbers, with one concise explanation per number in the legend; omit OS/filesystem pair names from the explanations.
 

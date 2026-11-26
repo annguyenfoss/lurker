@@ -34,8 +34,17 @@ missing module is recorded separately from an implementation defect.
 
 ## Later macOS planning updates
 
-The 2026-11-25 native CLI follow-up raises two planning promises beyond the
-original research snapshot below:
+The [2026-11-26 native-only planning update](filesystem-support-matrix.md#native-only-planning-update)
+now governs the README promise. It excludes VM/network transports at every
+layer, restores the macOS Btrfs creation limitation, records the FreeBSD
+Btrfs/XFS and DragonFly NTFS write failures, and identifies OpenBSD HAMMER2's
+current-release compatibility condition. Documented achievable integrations
+count alongside achieved capabilities; they are not runtime qualification.
+
+Historical results: the 2026-11-25 CLI follow-up raised two planning promises
+beyond the original research snapshot below. These receipts remain evidence
+for their actual routes; the Btrfs guest/SSHFS pass does not fulfill the current
+native-only promise, and the UFS2 pass does not qualify local encryption transport:
 
 - **Btrfs: ☑️¹ → ☑️.** The approved anylinuxfs Linux guest formats and mounts
   the decrypted virtual disk; authenticated SFTP/macFUSE SSHFS exposes it to

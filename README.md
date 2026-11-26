@@ -279,13 +279,13 @@ Lurker chooses the native format for your OS. Use administrator authorization wh
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ext4 | ✅ | ☑️ | ☑️ | ⚠️ R/O | ☑️ | ⚠️ R/O | ☑️ |
-| Btrfs | ✅ | ☑️ | ☑️ | — | — | — | ☑️ |
-| XFS | ✅ | ☑️ | ☑️ | ⚠️ R/O | — | ⚠️ R/O | ⚠️ R/O |
+| Btrfs | ✅ | ☑️¹ | ⚠️ R/O | — | — | — | ☑️ |
+| XFS | ✅ | ☑️ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ⚠️ R/O |
 | APFS | ☑️ | ✅ | ⚠️ R/O | ⚠️ R/O | — | ⚠️ R/O | ☑️¹ |
 | UFS1 / FFSv1 | ☑️ | — | ✅ | ✅ | ✅ | ✅ | ⚠️ R/O |
 | UFS2 / FFSv2 | ☑️ | ☑️² | ✅ | ✅ | ✅ | — | ⚠️ R/O |
-| HAMMER2 | ✅² | — | ☑️² | ☑️ | ☑️ | ✅ | — |
-| NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ✅ |
+| HAMMER2 | ✅² | — | ☑️² | ☑️³ | ☑️ | ✅ | — |
+| NTFS | ☑️ | ☑️ | ☑️ | ☑️ | ☑️ | ⚠️ R/O | ✅ |
 | exFAT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ZFS / OpenZFS | ✅ | ✅ | ✅ | — | ☑️ | — | ✅² |
 
@@ -293,14 +293,15 @@ Lurker chooses the native format for your OS. Use administrator authorization wh
 
 - **✅** Full feature support.
 - **☑️** Largely usable, with some filesystem features missing or unverified.
-- **⚠️** Read-Only.
+- **⚠️** Read-only access; write support is missing.
 - **—** Unsupported.
 - **¹** Disk/container creation not available.
 - **²** Largely usable; reliability not established.
+- **³** Native writable port exists; compatibility with the current OS release is not established.
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. macOS UFS2 uses an experimental writer; moving directories between parents is unsupported. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
-This remains a planning matrix based on filesystem capability research. The macOS Btrfs and UFS2 promises now include Create + Read/Write following native CLI qualification; see the [supporting notes](docs/filesystem-support-matrix.md#macos-promise-updates). Other cells do not assert integration or runtime qualification in Lurker.
+For Linux, macOS and the BSDs, this planning matrix combines achieved and achievable host-local support, excluding VMs and network filesystems at every layer. Linux covers all six distributions with compatible kernels/modules; this does not establish every filesystem on one booted kernel. Achievable cells can still require Lurker integration, including a local bundled VeraCrypt transport on macOS and aligned device reads for DragonFly XFS/APFS. Read-only access and missing creation remain shortcomings against Create + Read/Write. See the [native-only assessment and limits](docs/filesystem-support-matrix.md#native-only-planning-update). Windows entries are unchanged by this reassessment. The table does not assert completed integration or runtime qualification in Lurker.
 
 ## Get started
 
