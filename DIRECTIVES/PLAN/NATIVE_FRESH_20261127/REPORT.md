@@ -53,8 +53,10 @@ under target/goal-validation/native-fresh-20261127/.
   credentials and source close, plus helper/native inventory assertions. The
   coordinator inspected the actual receipt and matched original and final
   payload hashes, no-force preservation and clean vnode/CGD inventories. Full
-  frozen-candidate seven-filesystem container/device coverage is in progress;
-  desktop partition controls remain a separate validation step.
+  seven-filesystem container/device coverage passed on the subsequent recorded
+  candidate. `5b9939e` adds the native desktop partition fields; its ordinary-user
+  helper callback and 100%/120% layout probes passed. The final source-specific
+  rerun and receipt audit remain with the NetBSD owner.
 - CryFS initialization: `3178144` uses the private runtime for the temporary
   plaintext mount on every platform. The macOS APFS backing regression passed.
   Other backing failures remain independently tracked.
@@ -62,6 +64,51 @@ under target/goal-validation/native-fresh-20261127/.
   verified runtime/license closure. `1c62f1f` exposes the route in the core and
   desktop capability model; scoped native core/desktop tests passed. The full
   backing-filesystem lifecycle round is still required.
+
+## Subsequent fixes and native controls
+
+- Linux LUKS2/UFS1 geometry: `93e0630` selects 512-byte logical sectors only for
+  UFS1, preserving cipher, key size and KDF costs, including replacement of the
+  usual Twofish sector argument. Arch core tests passed (83 passed, 2 ignored)
+  and CLI/helper builds passed. Fedora's prior native AES/Argon2id 512-sector
+  control passed the payload lifecycle. The changed product's native container
+  and device regressions are running separately; stock UFS write limitations
+  remain explicit prerequisites.
+- Linux CryFS publication: `166266f` uses native exclusive rename with the
+  existing durability barriers; `195b56b` registers the Linux-only patch. The
+  Debian-built portable engine's archive SHA-256 is
+  `fa5e8f14e008b0df5bb5faff6247bbac0810af4e04c32dc1d074a5f9e5744db2`.
+  Fresh affected UFS2/exFAT product payload regressions passed on Debian,
+  Ubuntu and Gentoo under their separately recorded Rust component identities.
+  Namespace correctness and backing-device fsync forwarding are separate host
+  driver qualifications; a payload comparison alone proves neither barrier.
+- FreeBSD physical native controls now pass for GELI and VeraCrypt on distinct
+  checked GPT scratch partitions. `ff9f312` and `3130c21` add immutable GEOM
+  inspection, separate idle guards and active-provider identity verification.
+  Product create dispatch and its native tests remain in progress.
+- FreeBSD CryFS backing qualification: ext4, UFS1, UFS2, HAMMER2 and ZFS passed.
+  Both NTFS and exFAT passed equivalent unmodified upstream CryFS payload
+  controls, while the bundled durability patch failed during hardlink
+  publication. Native no-replace rename controls show the stock FreeBSD FUSE
+  layer rejects rename flags before calling either driver. This is an unresolved
+  bundled-engine/host-primitive gap, not an upstream encryption failure or an
+  inapplicable filesystem. Any custom kernel-module experiment is deferred
+  until the ordinary routes have been fully assessed and reported.
+- OpenBSD native CRYPTO/RAID1C device controls passed all eight applicable
+  filesystem combinations. The private VeraCrypt device discovery and native
+  whole-disk-alias guard are implemented in `6ab0f8b`; block, raw and symlink
+  whole-disk rejection preserved the checked headers, and a real partition
+  passed the full payload lifecycle. Shared product physical wiring is underway.
+- macOS `175ea1c` adds the native exclusive CryFS publication primitive, and
+  `065eaa2` registers its independent patch input. The patched engine passed
+  direct UFS2 and APFS payload regressions. A separate core directory-publication
+  fallback is still being qualified for native UFS2. Existing normal rename
+  behavior on other filesystems is retained.
+- openSUSE's actual login-user CLI/helper regression passed with the narrow sudo
+  authorization probe change; the machine's `sudo -n -v` failure and
+  `sudo -n true` success were preserved. `7d8827e` independently fixes the test
+  harness's terminal echo-readiness race. Production authorization and harness
+  synchronization have distinct receipts.
 
 ## Work still required
 
@@ -72,13 +119,14 @@ and independent engine identities separately rather than rebuilding unchanged
 product inputs or relabeling old engines as new builds.
 
 NetBSD CGD physical dispatch is implemented. FreeBSD, OpenBSD and DragonFly
-physical create dispatch and BSD character-device classification still need
+physical create dispatch and BSD character-device classification are undergoing
 integration and native validation. Native controls inform those adapters;
-file-container results cannot close the device requirement.
-DragonFly has newly demonstrated writable host-local FUSE controls that its
-current adapter does not yet expose. On macOS, the owner is investigating an
-eligible macFUSE VeraCrypt route after loading the installed driver without a
-reboot; a FUSE-T SMB mount cannot satisfy the network-filesystem exclusion.
+file-container results cannot close the device requirement. DragonFly's native
+NTFS/exFAT/ext4 adapters now pass applicable file-container payload flows with
+the documented host prerequisites. Its normal stock base update is still
+building. macOS has a freshly built native macFUSE VeraCrypt route, avoiding
+the ineligible SMB transport. Native hdiutil foreign-filesystem controls have
+also exposed remaining Apple-image filesystem integration work.
 
 DragonFly's discarded manual mount-label prototype caused a kernel panic by
 violating the native FUSE vnode close contract. A fresh unmodified-helper
