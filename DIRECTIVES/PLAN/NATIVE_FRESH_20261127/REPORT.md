@@ -39,6 +39,29 @@ under target/goal-validation/native-fresh-20261127/.
   existing privileged Linux LUKS1/LUKS2/VeraCrypt device creation and existing
   macOS APFS partition creation. Remote formatting and focused core/CLI tests
   passed on Arch. Physical-device runtime qualification is still pending.
+- Bounded native I/O: `45e5b9e` isolates payload syscalls in owned workers and
+  records any worker that cannot be reaped. `aecdcde` records Linux mount and
+  backing identities and rejects requested/observed filesystem mismatches
+  before payload writes. Eight unit tests and actual mounted positive/negative
+  controls passed remotely. Generic FUSE and UFS labels explicitly require
+  separate driver/superblock evidence.
+- NetBSD physical CGD: `a38fc83` creates and reopens checked GPT data wedges,
+  records native device identity in the existing journal and preserves mandatory
+  parameters by partition UUID under `/var/db/lurker-cgd/`. Native core tests
+  passed (50 passed, 4 ignored). The preview's 11 CLI operations covered create,
+  explicit/Auto opens, no-force unchanged-byte rejection, duplicate/busy/wrong
+  credentials and source close, plus helper/native inventory assertions. The
+  coordinator inspected the actual receipt and matched original and final
+  payload hashes, no-force preservation and clean vnode/CGD inventories. Full
+  frozen-candidate seven-filesystem container/device coverage is in progress;
+  desktop partition controls remain a separate validation step.
+- CryFS initialization: `3178144` uses the private runtime for the temporary
+  plaintext mount on every platform. The macOS APFS backing regression passed.
+  Other backing failures remain independently tracked.
+- FreeBSD CryFS: `eface5b` adds the pinned native private build/stager and its
+  verified runtime/license closure. `1c62f1f` exposes the route in the core and
+  desktop capability model; scoped native core/desktop tests passed. The full
+  backing-filesystem lifecycle round is still required.
 
 ## Work still required
 
@@ -48,9 +71,10 @@ builds use `8adcdcf` or the recorded later script-only revision; record harness
 and independent engine identities separately rather than rebuilding unchanged
 product inputs or relabeling old engines as new builds.
 
-The shared BSD lifecycle currently rejects physical devices, and BSD character
-device classification also needs review. Native device controls must inform
-adapter fixes; file-container results cannot close the device requirement.
+NetBSD CGD physical dispatch is implemented. FreeBSD, OpenBSD and DragonFly
+physical create dispatch and BSD character-device classification still need
+integration and native validation. Native controls inform those adapters;
+file-container results cannot close the device requirement.
 DragonFly has newly demonstrated writable host-local FUSE controls that its
 current adapter does not yet expose. On macOS, the owner is investigating an
 eligible macFUSE VeraCrypt route after loading the installed driver without a
@@ -61,6 +85,28 @@ violating the native FUSE vnode close contract. A fresh unmodified-helper
 failed-mount control subsequently closed normally without a panic. This is
 evidence against presenting the prototype failure as an upstream FUSE defect.
 The owner is testing a corrected adapter using the actual FUSE device vnode.
+
+Initial Linux payload completions were found insufficient for requested-format
+qualification: on Debian, Gentoo and Ubuntu, resolving `mkfs.ext4` to `mke2fs`
+could create ext2. Those specific receipts are reclassified as mismatches;
+verified actual ext4 observations on other hosts are retained. The explicit
+ext4 formatter fix includes follow-up `f22ee9f`; do not use its earlier
+test-import-incomplete predecessor alone. Kmod applet dispatch, NTFS mount
+readiness and native NTFS3 preference are also separate tested Linux fixes.
+
+Host prerequisite fixes are not bundled filesystem stacks. The source-pinned
+FUSE-UFS no-replace correction (`94da64c`) has native unit, collision/rename and
+payload evidence on several Linux hosts. Configured native UFS kernel routes
+remain distinct from stock distribution modules. NetBSD NTFS now has a passing
+native control with the required socket-buffer setting; matching product runs
+are in progress. macOS NTFS-3G/macFUSE supports the directory workloads that its
+other installed driver could not support privately. Exact prerequisites and
+remaining limitations belong to each host's report.
+
+macOS native XFS failed persistence qualification and is guarded before writable
+operations (`8a401a3`); an automatic network-filesystem fallback is not used.
+The authorized Toshiba USB samples for APFS encryption and Cryptomator on exFAT
+passed and closed normally. Buran was not rebooted.
 
 No complete host matrix, final candidate validation, scratch-device qualification,
 whole-round cleanup or deferred customized-kernel assessment is claimed yet.
