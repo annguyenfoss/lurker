@@ -12,20 +12,35 @@ inheritance hardening and system-tool wait/timeout fixes relevant to the previou
 native hangs; native qualification below remains a separate requirement.
 https://github.com/veracrypt/VeraCrypt/releases/tag/VeraCrypt_1.26.31
 
+The fresh native-only round is recorded in
+`DIRECTIVES/PLAN/NATIVE_FRESH_20261127/MACOS_RESULTS.md`. Its native VeraCrypt
+route uses the explicit audited `--fuse-runtime macfuse` build and separately
+installed macFUSE. The default FUSE-T build remains available, but its SMB
+transport is excluded from native-only qualification. Directory engines retain
+local FUSE-T FSKit. Historical package results below are not fresh acceptance.
+
+Native Apple ext4/NTFS/ZFS image routes and guarded external GPT VeraCrypt
+partitions are documented in `native/macos/apple-filesystems.md` and
+`native/macos/veracrypt-partitions.md`. Physical VeraCrypt requires an
+administrator-controlled complete installation before native authorization.
+
 Its text interface uses the existing VeraCrypt profiles and stdin credentials.
 The shared `native/veracrypt/utf8-console.patch` preserves complete Unicode paths
 in libc++ volume listings; its digest and patched input hashes are recorded and
 checked on cache reuse. It changes no encryption or storage format.
 
-The macOS-only `native/veracrypt/macos-fuset-loopback.patch` selects FUSE-T's
+For the default FUSE-T variant, the macOS-only
+`native/veracrypt/macos-fuset-loopback.patch` selects FUSE-T's
 `nobonjour` SMB mount option. Each auxiliary mount connects to its own loopback
 port. The previous shared Bonjour discovery name could time out on repeated
 create and unlock operations. FUSE-T 1.2.9 introduced this per-mount option.
 https://github.com/macos-fuse-t/fuse-t/releases/tag/1.2.9
 
 Build on a Mac using the user's Rust and Python toolchains, Xcode command-line
-tools, GNU-compatible make and pkg-config. VeraCrypt uses separately installed
-FUSE-T 1.2.9 or later and its development headers for SMB loopback. The full
+tools, GNU-compatible make and pkg-config. The default VeraCrypt variant uses
+separately installed FUSE-T 1.2.9 or later and its development headers for SMB
+loopback. The explicit macFUSE variant requires separately installed macFUSE
+and its matching SDK/runtime. The full
 bundle uses FUSE-T 1.2.9 because gocryptfs uses its versioned, signed helper.
 gocryptfs, CryFS and Cryptomator mount through FUSE-T FSKit. Enable FUSE-T in
 System Settings > General > Login Items & Extensions > File System Extensions.
@@ -38,11 +53,14 @@ python scripts/build-macos-backends.py --jobs 4
 python scripts/build-macos-dmg.py
 ```
 
-`--fuse-runtime fuse-t` is accepted explicitly. The build records both
+Use `--fuse-runtime macfuse` for the native-only VeraCrypt route;
+`--fuse-runtime fuse-t` selects the unchanged default explicitly. The build records both
 FUSE-selection flags, runtime implementation/version and FUSE API version.
 Verified source, patched inputs and build specifications keep old native
 objects from being recertified under different inputs. Mach-O dependency
-audits accept only the reviewed FUSE-T install names for external FUSE.
+audits accept only the selected reviewed runtime: FUSE-T install names for
+the default or the administrator-controlled `/usr/local/lib/libfuse.2.dylib`
+for the explicit VeraCrypt macFUSE build. Directory runtime policy stays fixed.
 
 After building directory backends into `target/release/backends`, include them
 explicitly with `--folder-backends gocryptfs cryfs cryptomator`. The packager
@@ -75,8 +93,8 @@ Apple's entitlement contract:
 https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.disable-library-validation
 
 Apple encrypted disk images use built-in `hdiutil`/`diskutil`. Ordinary
-create, mount, close, and active-volume display work when VeraCrypt's FUSE-T
-library is unavailable. Forced replacement requires discovery of all attached
+create, mount, close, and active-volume display work when VeraCrypt's selected
+FUSE runtime is unavailable. Forced replacement requires discovery of all attached
 containers. Ad-hoc packages are development builds. Public releases require
 Developer ID signing and notarization. Each release must qualify the exact
 FUSE/OS combination and test the final package without a separate VeraCrypt
@@ -88,7 +106,7 @@ Use only disposable `/tmp/lurker-*` files for native tests:
 TMPDIR=/tmp cargo test -p lurker-core --test macos_native -- --ignored --test-threads=1
 ```
 
-## FUSE-T package qualification
+## Historical FUSE-T package qualification
 
 The development DMG from `4dcf8d68434b7856a1cd3bd13977098482628e23`
 passed 356 CLI checks across 20 cases on Buran (macOS 27.2.1 arm64).
@@ -253,9 +271,16 @@ See `DIRECTIVES/PLAN/CROSS_PLATFORMS_STATUS.md` for the complete matrix and limi
 
 ## Optional inner-filesystem development tools
 
-VeraCrypt file containers now have native development CLI evidence for explicit
-`--filesystem ext4` and `--filesystem xfs`, using separately staged, unmodified
-filesystem drivers with the existing FUSE-T encryption engine. Current release
-packages do not bundle these optional tools. See `docs/macos-filesystems.md`
-for pins, build/stage instructions, dependencies and limits, and
-`DIRECTIVES/PLAN/FILESYSTEM_ROUND/MACOS_RETEST.md` for exact CLI payload receipts.
+The fresh native-only routes use separately installed host filesystem tools,
+never a CLI-relative or bundled filesystem layer. VeraCrypt file containers
+qualify ext4 FSKit, native NTFS, UFS2 macFUSE and OpenZFS where their recorded
+native controls and product receipts pass. XFS is refused after a host driver
+lost data across ordinary close/reopen. Existing VM/SMB routes cannot fill
+native filesystem gaps. Apple ext4/NTFS/ZFS image integration and the initial
+physical VeraCrypt exFAT route are separate qualified adapter paths; their
+current package evidence remains in the fresh round report.
+
+Older `docs/macos-filesystems.md` and
+`DIRECTIVES/PLAN/FILESYSTEM_ROUND/MACOS_RETEST.md` entries retain earlier
+experiments and receipts; they do not override the current host-tool policy,
+transport exclusions or XFS persistence limitation.
