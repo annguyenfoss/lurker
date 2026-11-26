@@ -682,14 +682,45 @@ mod tests {
         let physical_partition = partition.is_some();
         let source = if let Some(partition) = partition {
             use std::os::unix::fs::FileTypeExt;
-            assert!(cfg!(target_os = "macos") && backend == lurker_core::VolumeType::Veracrypt);
+            assert!(
+                (cfg!(target_os = "macos") && backend == lurker_core::VolumeType::Veracrypt)
+                    || (cfg!(target_os = "openbsd")
+                        && matches!(
+                            backend,
+                            lurker_core::VolumeType::Softraid
+                                | lurker_core::VolumeType::Raid1c
+                                | lurker_core::VolumeType::Veracrypt
+                        ))
+            );
             let partition = std::path::PathBuf::from(partition).canonicalize().unwrap();
-            assert!(partition.starts_with("/dev") && std::fs::metadata(&partition).unwrap().file_type().is_block_device());
+            let file_type = std::fs::metadata(&partition).unwrap().file_type();
+            assert!(
+                partition.starts_with("/dev")
+                    && (file_type.is_block_device()
+                        || (cfg!(target_os = "openbsd") && file_type.is_char_device()))
+            );
             partition
         } else {
             fixture.join("encrypted")
         };
-        let peer = fixture.join("encrypted-peer");
+        let peer = if physical_partition && mirrored {
+            let peer = std::path::PathBuf::from(
+                std::env::var_os("LURKER_DESKTOP_NATIVE_PEER")
+                    .expect("explicit second disposable disk"),
+            )
+            .canonicalize()
+            .unwrap();
+            use std::os::unix::fs::FileTypeExt;
+            let file_type = std::fs::metadata(&peer).unwrap().file_type();
+            assert!(
+                peer.starts_with("/dev")
+                    && peer != source
+                    && (file_type.is_block_device() || file_type.is_char_device())
+            );
+            peer
+        } else {
+            fixture.join("encrypted-peer")
+        };
         let mountpoint = fixture.join("mount");
         std::fs::DirBuilder::new()
             .mode(0o700)
@@ -830,14 +861,16 @@ mod tests {
             mount(true);
             if !backend.is_directory() && !cfg!(target_os = "macos") {
                 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-                let image = std::fs::metadata(&source).unwrap();
                 let filesystem = std::fs::metadata(&mountpoint).unwrap();
-                assert_eq!(image.uid(), uid, "new image belongs to the invoking user");
-                assert_eq!(image.permissions().mode() & 0o777, 0o600);
-                if mirrored {
-                    let peer_image = std::fs::metadata(&peer).unwrap();
-                    assert_eq!(peer_image.uid(), uid);
-                    assert_eq!(peer_image.permissions().mode() & 0o777, 0o600);
+                if !physical_partition {
+                    let image = std::fs::metadata(&source).unwrap();
+                    assert_eq!(image.uid(), uid, "new image belongs to the invoking user");
+                    assert_eq!(image.permissions().mode() & 0o777, 0o600);
+                    if mirrored {
+                        let peer_image = std::fs::metadata(&peer).unwrap();
+                        assert_eq!(peer_image.uid(), uid);
+                        assert_eq!(peer_image.permissions().mode() & 0o777, 0o600);
+                    }
                 }
                 assert_eq!(
                     filesystem.uid(),
@@ -922,6 +955,55 @@ mod tests {
             });
             render(&window);
             snapshot(&window, &format!("macos-vc-partition-open-bottom-{scale}"));
+        }
+        ui.hide().unwrap();
+    }
+
+    #[test]
+    fn openbsd_physical_forms_render_at_native_scales() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        super::configure_platform(&ui, "openbsd");
+        ui.show().unwrap();
+        for format in ["softraid", "raid1c", "vera"] {
+            ui.set_create_format(format.into());
+            render(&window);
+            let source = if format == "vera" {
+                "/dev/sd1a"
+            } else {
+                "/dev/sd1c"
+            };
+            ui.set_create_target_kind("partition".into());
+            ui.set_create_partition(source.into());
+            ui.set_create_peer_source(if format == "raid1c" { "/dev/sd2c" } else { "" }.into());
+            ui.set_mount_source_kind("partition".into());
+            ui.set_mount_source(source.into());
+            ui.set_mount_point("/mnt/work".into());
+            ui.set_mount_mirrored(format == "raid1c");
+            render(&window);
+            ui.set_mount_peer_source(if format == "raid1c" { "/dev/sd2c" } else { "" }.into());
+            for scale in [1.0, 1.2] {
+                ui.set_ui_scale(scale);
+                for view in ["create", "manage"] {
+                    ui.set_current_view(view.into());
+                    for (position, delta) in [("top", 10000.0), ("bottom", -10000.0)] {
+                        ui.window()
+                            .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                                position: slint::LogicalPosition::new(1000.0, 500.0),
+                                delta_x: 0.0,
+                                delta_y: delta,
+                            });
+                        render(&window);
+                        assert_eq!(ui.get_create_target_kind(), "partition");
+                        assert_eq!(ui.get_mount_source_kind(), "partition");
+                        snapshot(
+                            &window,
+                            &format!("openbsd-{format}-{view}-{position}-{scale}"),
+                        );
+                    }
+                }
+            }
         }
         ui.hide().unwrap();
     }

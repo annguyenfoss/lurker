@@ -15,6 +15,7 @@ export component CreateView inherits Card {
     in property <bool> is-linux: true;
     in property <bool> is-netbsd: false;
     in property <bool> is-freebsd: false;
+    in property <bool> is-openbsd: false;
     in property <bool> is-dragonfly: false;
     in property <[string]> formats: ["luks", "vera"];
     in property <bool> unprivileged: false;
@@ -37,7 +38,7 @@ export component CreateView inherits Card {
     out property <bool> directory-format: root.format == "gocryptfs" || root.format == "cryfs" || root.format == "cryptomator" || root.format == "pefs";
     out property <bool> variable-cipher: root.format == "luks" || root.format == "luks1" || root.format == "vera";
     out property <bool> supports-keyfile: root.variable-cipher || root.format == "geli" || root.format == "pefs";
-    private property <bool> supports-partition: (root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs" || (root.is-macos && root.format == "vera") || (root.is-netbsd && root.format == "cgd") || (root.is-freebsd && (root.format == "geli" || root.format == "vera"));
+    private property <bool> supports-partition: (root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs" || (root.is-macos && root.format == "vera") || (root.is-netbsd && root.format == "cgd") || (root.is-freebsd && (root.format == "geli" || root.format == "vera")) || (root.is-openbsd && (root.format == "softraid" || root.format == "raid1c" || root.format == "vera"));
     changed format => {
         root.target-kind = root.directory-format ? "directory" : "file";
         if !root.variable-cipher { root.cipher = "aes"; }
@@ -142,23 +143,17 @@ export component CreateView inherits Card {
             }
         }
 
-        if root.format == "raid1c": Field {
-            label: "Second member file";
-            hint: "new file path · size above applies to each member";
-            required: true;
-            ThemedLineEdit { text <=> root.peer-source; }
-        }
-
         if root.target-kind == "partition": VerticalLayout {
             spacing: UiTheme.s3;
 
             Field {
-                label: "Partition";
+                label: root.is-openbsd && root.format != "vera" ? "Disk" : "Partition";
                 required: true;
                 if root.is-macos && (root.format == "apfs" || root.format == "vera"): ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/diskNsM"; }
                 if root.is-netbsd && root.format == "cgd": ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/dkN"; }
                 if root.is-freebsd && (root.format == "geli" || root.format == "vera"): ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/daNpM"; }
-                if !(root.is-macos && (root.format == "apfs" || root.format == "vera")) && !(root.is-netbsd && root.format == "cgd") && !(root.is-freebsd && (root.format == "geli" || root.format == "vera")): DevicePicker {
+                if root.is-openbsd: ThemedLineEdit { text <=> root.partition; placeholder-text: root.format == "vera" ? "/dev/sdNa" : "/dev/sdNc"; }
+                if !root.is-openbsd && !(root.is-macos && (root.format == "apfs" || root.format == "vera")) && !(root.is-netbsd && root.format == "cgd") && !(root.is-freebsd && (root.format == "geli" || root.format == "vera")): DevicePicker {
                     devices: root.devices;
                     value <=> root.partition;
                     selected-label: root.partition-label;
@@ -187,7 +182,7 @@ export component CreateView inherits Card {
                         y: (parent.height - self.height) / 2;
                     }
                     Text {
-                        text: "All data on " + root.partition + " will be erased.";
+                        text: "All data on " + root.partition + (root.format == "raid1c" && root.peer-source != "" ? " and " + root.peer-source : "") + " will be erased.";
                         font-size: UiTheme.fs-sm;
                         font-family: "JetBrains Mono";
                         color: UiTheme.fg-1;
@@ -196,6 +191,13 @@ export component CreateView inherits Card {
                     }
                 }
             }
+        }
+
+        if root.format == "raid1c": Field {
+            label: root.target-kind == "partition" ? "Second member disk" : "Second member file";
+            hint: root.target-kind == "partition" ? "different whole /dev/sdNc disk · all data will be erased" : "new file path · size above applies to each member";
+            required: true;
+            ThemedLineEdit { text <=> root.peer-source; }
         }
     }
 

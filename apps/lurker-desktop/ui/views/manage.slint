@@ -15,6 +15,7 @@ export component ManageView inherits Rectangle {
     in property <bool> is-linux: true;
     in property <bool> is-netbsd: false;
     in property <bool> is-freebsd: false;
+    in property <bool> is-openbsd: false;
     in property <bool> supports-directories: true;
     in property <bool> supports-keyfile: true;
     in property <bool> supports-raid1c: false;
@@ -166,6 +167,7 @@ export component ManageView inherits Rectangle {
             is-linux: root.is-linux;
             is-netbsd: root.is-netbsd;
             is-freebsd: root.is-freebsd;
+            is-openbsd: root.is-openbsd;
             supports-directories: root.supports-directories;
             supports-keyfile: root.supports-keyfile;
             supports-raid1c: root.supports-raid1c;

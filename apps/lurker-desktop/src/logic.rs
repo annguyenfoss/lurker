@@ -69,11 +69,23 @@ pub fn validate_create_platform(
     if command.source_kind == SourceKind::Block
         && (!(os == "macos"
             && mode == lurker_core::PrivilegeMode::Privileged
-            && matches!(command.volume_type, VolumeType::Apfs | VolumeType::Veracrypt))
+            && matches!(
+                command.volume_type,
+                VolumeType::Apfs | VolumeType::Veracrypt
+            ))
             && !(os == "netbsd" && command.volume_type == VolumeType::Cgd)
             && !(os == "freebsd"
                 && mode == lurker_core::PrivilegeMode::Privileged
-                && matches!(command.volume_type, VolumeType::Geli | VolumeType::Veracrypt))
+                && matches!(
+                    command.volume_type,
+                    VolumeType::Geli | VolumeType::Veracrypt
+                ))
+            && !(os == "openbsd"
+                && mode == lurker_core::PrivilegeMode::Privileged
+                && matches!(
+                    command.volume_type,
+                    VolumeType::Softraid | VolumeType::Raid1c | VolumeType::Veracrypt
+                ))
             && (os != "linux" || mode == lurker_core::PrivilegeMode::Unprivileged))
     {
         return Err("Physical-device creation requires a supported native device backend.".into());
@@ -196,9 +208,14 @@ pub fn with_create_members(
     os: &str,
 ) -> Result<CreateCommand, String> {
     if command.volume_type == VolumeType::Raid1c {
-        command
-            .peer_sources
-            .push(input_path(required_value("Second member file", member)?)?);
+        command.peer_sources.push(input_path(required_value(
+            if command.source_kind == SourceKind::Block {
+                "Second member disk"
+            } else {
+                "Second member file"
+            },
+            member,
+        )?)?);
     }
     lurker_core::CommandAction::Create(command.clone())
         .validate_raid1c_options(os)
@@ -594,7 +611,7 @@ mod tests {
             "",
         )
         .unwrap();
-        for os in ["netbsd", "openbsd", "dragonfly"] {
+        for os in ["netbsd", "dragonfly"] {
             assert!(super::validate_create_platform(&raw, os, PrivilegeMode::Privileged).is_err());
         }
         assert!(
@@ -603,6 +620,7 @@ mod tests {
         super::validate_create_platform(&raw, "linux", PrivilegeMode::Privileged).unwrap();
         super::validate_create_platform(&raw, "freebsd", PrivilegeMode::Privileged).unwrap();
         super::validate_create_platform(&raw, "macos", PrivilegeMode::Privileged).unwrap();
+        super::validate_create_platform(&raw, "openbsd", PrivilegeMode::Privileged).unwrap();
     }
 
     #[test]
@@ -912,6 +930,54 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn openbsd_physical_commands_keep_force_members_and_native_authentication() {
+        for format in ["softraid", "raid1c", "vera"] {
+            let command = build_create_command(
+                "partition",
+                format,
+                "",
+                "",
+                if format == "vera" {
+                    "/dev/sd1a"
+                } else {
+                    "/dev/sd1c"
+                },
+                "",
+                "GB",
+                "aes",
+                "password",
+                "password",
+                "pass",
+                "",
+            )
+            .unwrap();
+            let command = super::with_create_members(
+                command,
+                if format == "raid1c" { "/dev/sd2c" } else { "" },
+                "openbsd",
+            )
+            .unwrap();
+            assert_eq!(command.source_kind, SourceKind::Block);
+            assert!(command.force);
+            assert!(command.size_gb.is_none());
+            assert!(command.keyfile.is_none());
+            assert_eq!(command.peer_sources.len(), usize::from(format == "raid1c"));
+            super::validate_create_platform(
+                &command,
+                "openbsd",
+                lurker_core::PrivilegeMode::Privileged,
+            )
+            .unwrap();
+            assert!(super::validate_create_platform(
+                &command,
+                "openbsd",
+                lurker_core::PrivilegeMode::Unprivileged
+            )
+            .is_err());
+        }
     }
 
     #[test]
