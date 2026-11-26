@@ -1,16 +1,16 @@
-//! FreeBSD's native file-backed GELI adapter.
-//!
-//! The shared BSD lifecycle owns staging, publication, mount identity and
-//! recovery. This module only operates on md devices returned by mdconfig;
-//! it deliberately has no physical-device, forced-detach or boot integration.
+//! FreeBSD's native GELI adapter for leased vnode images and inspected GEOM providers.
+//! The shared BSD lifecycle owns publication, mount identity and recovery.
 use super::{Credential, Registry, Session, args, exec};
 use crate::{AppError, AppResult, CreateCipher, VolumeType};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::fd::AsRawFd;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::path::Path;
+
+mod physical;
+pub(super) use physical::{ensure_physical_idle, physical_device};
 
 const MDCONFIG: &str = "/sbin/mdconfig";
 const GELI: &str = "/sbin/geli";
@@ -71,12 +71,15 @@ pub(super) fn probe_image(path: &Path) -> AppResult<Option<u32>> {
     let metadata = file
         .metadata()
         .map_err(|e| AppError::io("Failed to inspect image metadata", e))?;
-    if !metadata.is_file() {
+    let length = if metadata.is_file() {
+        metadata.len()
+    } else if metadata.file_type().is_char_device() {
+        physical_device(path)?.bytes
+    } else {
         return Err(AppError::new(
-            "GELI image detection requires a regular file.",
+            "GELI detection requires a regular file or native physical provider.",
         ));
-    }
-    let length = metadata.len();
+    };
     let count = length.min(65536) as usize;
     let mut tail = vec![0; count];
     file.seek(SeekFrom::Start(length - count as u64))
@@ -304,10 +307,10 @@ pub(super) fn verify_mapping(mapped: &str, backing: &str) -> AppResult<()> {
 }
 
 fn mapping_unit<'a>(mapped: &str, backing: &'a str) -> AppResult<&'a str> {
-    let unit = md_unit(backing)?;
+    let unit = provider_unit(backing)?;
     if mapped != format!("/dev/{unit}.eli") {
         return Err(AppError::new(
-            "The GELI provider does not match the recorded md device.",
+            "The GELI provider does not match the recorded backing device.",
         ));
     }
     Ok(unit)
@@ -352,7 +355,14 @@ pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> Ap
     match intent {
         DetachIntent::Geli => {
             let mapped = session.mapped.as_deref().ok_or_else(conflict)?;
-            verify_backing(backing, &session.source)?;
+            if let Some(proof) = &session.physical {
+                proof.verify(&session.source)?;
+                if Path::new(backing) != session.source {
+                    return Err(conflict());
+                }
+            } else {
+                verify_backing(backing, &session.source)?;
+            }
             if !mapping_is_absent(mapped, backing)? {
                 return Ok(());
             }
@@ -365,7 +375,7 @@ pub(super) fn reconcile_detach(registry: &Registry, session: &mut Session) -> Ap
             session.mapped = None;
         }
         DetachIntent::Md => {
-            if session.mapped.is_some() {
+            if session.physical.is_some() || session.mapped.is_some() {
                 return Err(conflict());
             }
             if backing_identity(backing)?.is_some() {
@@ -393,7 +403,7 @@ fn mapping_matches(listing: &str, unit: &str) -> bool {
 }
 
 pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential) -> AppResult<()> {
-    md_unit(device)?;
+    provider_unit(device)?;
     if cipher != CreateCipher::Aes {
         return Err(AppError::new(
             "FreeBSD GELI uses the AES-XTS profile; Serpent and Twofish are unavailable.",
@@ -417,7 +427,7 @@ pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential
 }
 
 pub(super) fn unlock(device: &str, readonly: bool, credential: &Credential) -> AppResult<String> {
-    md_unit(device)?;
+    provider_unit(device)?;
     let mut argv = args(&["attach"]);
     if readonly {
         argv.push("-r".into());
@@ -441,8 +451,8 @@ pub(super) fn unlock(device: &str, readonly: bool, credential: &Credential) -> A
 pub(super) fn close(device: &str) -> AppResult<()> {
     let backing = device
         .strip_suffix(".eli")
-        .ok_or_else(|| AppError::new("Expected a GELI md provider."))?;
-    md_unit(backing)?;
+        .ok_or_else(|| AppError::new("Expected a native GELI provider."))?;
+    provider_unit(backing)?;
     exec(GELI, &args(&["detach", backing]), None)?;
     Ok(())
 }
@@ -450,10 +460,25 @@ pub(super) fn close(device: &str) -> AppResult<()> {
 pub(super) fn make_filesystem(device: &str) -> AppResult<()> {
     let backing = device
         .strip_suffix(".eli")
-        .ok_or_else(|| AppError::new("Expected a GELI md provider."))?;
-    md_unit(backing)?;
+        .ok_or_else(|| AppError::new("Expected a native GELI provider."))?;
+    provider_unit(backing)?;
     exec(NEWFS, &args(&["-U", device]), None)?;
     Ok(())
+}
+
+fn provider_unit(value: &str) -> AppResult<&str> {
+    if let Ok(unit) = md_unit(value) {
+        return Ok(unit);
+    }
+    let inspected = physical_device(Path::new(value))?;
+    if inspected.source != Path::new(value) {
+        return Err(AppError::new(
+            "Physical GELI operations require the canonical provider.",
+        ));
+    }
+    value
+        .strip_prefix("/dev/")
+        .ok_or_else(|| AppError::new("Expected a native GEOM provider."))
 }
 
 fn md_unit(value: &str) -> AppResult<&str> {
