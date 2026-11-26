@@ -222,3 +222,29 @@ had two Cryptomator launch failures because private cached runtime files retaine
 staged tree was made readable/executable as appropriate, with root ownership and
 write restrictions preserved; the fresh six-case repeat then passed. Runtime
 bytes and source identity were unchanged.
+
+## Combined follow-up candidate
+
+The `ca7d213` retained sweep completed 59/60 with no cleanup errors. Its sole
+failure was Cryptomator's first payload write on a native NTFS-3g backing
+(`EIO`). The failed backing image and copied logs remain retained. The Fedora
+retention recipe still selected NTFS-3g; the shared Linux recipe already chooses
+the available native kernel writer. The owned retention/reboot recipes now use
+that same selector and record the selected driver. Fedora's stock `ntfs3`
+module is present and loaded, and its independent writable controls pass.
+
+A shared mount-admission follow-up checks both VFS and superblock read-only
+flags. Final combined source is now
+`576505d554d798422840a06322dfa93b899365bc`, including the updated desktop.
+The completed `ca7d213` receipts remain separate historical batch evidence.
+A fresh combined workspace build/package and a new guarded 60-cell sweep will
+precede final device/reboot gates. The idle old-source device queue was stopped
+before it executed any device step.
+
+Public header metadata for all ten `ca7d213` LUKS2 containers is retained. The
+requested profile arguments stayed unchanged. Nine headers calibrated Argon2id
+at 1048576 KiB; UFS2 calibrated at 891632 KiB during host load. The native
+`--pbkdf-memory` argument is a calibration limit, so the observed value is not
+relabeled as 1 GiB. A quiet follow-up will retain a separate comparison; no
+product flags are being changed to force a value. Compiler and PBKDF work will
+be serialized on this 3.8-GiB VM.
