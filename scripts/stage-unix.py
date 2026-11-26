@@ -127,6 +127,18 @@ def copy_tree(source, destination):
         else:
             shutil.copyfile(path, target, follow_symlinks=False)
             target.chmod(0o755 if path.stat().st_mode & 0o111 else 0o644)
+    normalize_payload_modes(destination)
+
+
+def normalize_payload_modes(root):
+    """Public package modes are independent of the builder's private umask."""
+    root = safe_root(root)
+    listing = list(entries(root))
+    for path in [root, *(p for p in root.rglob("*") if p.is_dir() and not p.is_symlink())]:
+        path.chmod(0o755)
+    for path, kind in listing:
+        if kind == "file":
+            path.chmod(0o755 if path.stat().st_mode & 0o111 else 0o644)
 
 
 def json_file(path):
@@ -1097,6 +1109,9 @@ def stage(args):
                     "self_contained": False, "native_operation_qualification": "not performed by staging",
                     "files": file_manifest(prefix)}
         (share / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        # Keep the private temporary parent at 0700; only the installable tree
+        # gets public modes, including generated metadata and nested runtimes.
+        normalize_payload_modes(prefix)
         archive = prefix / "package.tar.gz"
         def archive_filter(info):
             info.uid = info.gid = 0
@@ -1108,8 +1123,10 @@ def stage(args):
             for child in sorted(prefix.iterdir()):
                 if child != archive:
                     tar.add(child, arcname="lurker/" + child.name, filter=archive_filter)
+        archive.chmod(0o644)
         archive_digest = digest(archive)
         (prefix / "package.sha256").write_text(archive_digest + "  package.tar.gz\n")
+        (prefix / "package.sha256").chmod(0o644)
         # symlink(2) is atomic and fails for every existing destination type,
         # including an empty directory. Keep the completed backing tree on success.
         output.symlink_to(os.path.relpath(prefix, parent), target_is_directory=True)

@@ -701,6 +701,45 @@ Version needs section '.gnu.version_r' contains 2 entries:
                                   output=self.root / "package", desktop=False)
         return args, source
 
+    def test_private_umask_keeps_work_private_and_installed_runtime_readable(self):
+        args, source = self._stage_fixture()
+        args.select = ["cryptomator"]
+        directory = self.root / "cryptomator-input"
+        previous = os.umask(0o077)
+        try:
+            (directory / "runtime/bin").mkdir(parents=True)
+            (directory / "runtime/lib/server").mkdir(parents=True)
+            (directory / "licenses").mkdir()
+            for name in ("lurker-cryptomator", "runtime/bin/java", "runtime/lib/server/libjvm.so",
+                         "manifest.json", "licenses/notice.txt"):
+                (directory / name).write_bytes(name.encode())
+            for name in stager.ENTRY["cryptomator"]:
+                (directory / name).chmod(0o700)
+            (directory / "runtime/lib/libjvm.so").symlink_to("server/libjvm.so")
+            args.backend = ["cryptomator=" + str(directory)]
+            with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "validate_backend", return_value=directory), mock.patch.object(stager, "audit_dependencies", return_value=[]):
+                self.assertEqual(0, stager.stage(args))
+        finally:
+            os.umask(previous)
+        prefix = args.output.resolve()
+        self.assertEqual(0o700, stat.S_IMODE(prefix.parent.stat().st_mode))
+        self.assertEqual(0o755, stat.S_IMODE(prefix.stat().st_mode))
+        for path in prefix.rglob("*"):
+            if path.is_symlink():
+                self.assertEqual("server/libjvm.so", os.readlink(path))
+            elif path.is_dir():
+                self.assertEqual(0o755, stat.S_IMODE(path.stat().st_mode), str(path))
+            else:
+                executable = path.name in ("lurker", "lurker-helper", "lurker-cryptomator", "java")
+                self.assertEqual(0o755 if executable else 0o644, stat.S_IMODE(path.stat().st_mode), str(path))
+        with tarfile.open(prefix / "package.tar.gz") as archive:
+            for member in archive:
+                if member.isdir():
+                    self.assertEqual(0o755, member.mode)
+                elif member.isfile():
+                    executable = Path(member.name).name in ("lurker", "lurker-helper", "lurker-cryptomator", "java")
+                    self.assertEqual(0o755 if executable else 0o644, member.mode, member.name)
+
     def _raid1c_stage_fixture(self):
         args, source = self._stage_fixture()
         args.select = ["raid1c"]
