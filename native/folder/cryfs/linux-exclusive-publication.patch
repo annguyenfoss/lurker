@@ -1,0 +1,41 @@
+diff --git a/src/cpp-utils/io/DurableFile.h b/src/cpp-utils/io/DurableFile.h
+--- a/src/cpp-utils/io/DurableFile.h
++++ b/src/cpp-utils/io/DurableFile.h
+@@ -7,6 +7,8 @@
+ #include <cstdlib>
+ #include <fcntl.h>
+ #include <limits>
++#include <linux/fs.h>
++#include <sys/syscall.h>
+ #include <system_error>
+ #include <unistd.h>
+ #include <vector>
+@@ -82,12 +84,22 @@
+             throw std::system_error(errno, std::generic_category(), "replace CryFS state");
+         }
+     } else {
+-        if (::link(name.data(), path.c_str()) < 0) {
+-            if (errno == EEXIST) return false;
+-            throw std::system_error(errno, std::generic_category(), "publish CryFS state");
+-        }
+-        if (::unlink(name.data()) < 0) {
+-            throw std::system_error(errno, std::generic_category(), "remove CryFS state temporary");
++        if (::syscall(SYS_renameat2, AT_FDCWD, name.data(), AT_FDCWD,
++                      path.c_str(), RENAME_NOREPLACE) < 0) {
++            const int error = errno;
++            if (error == EEXIST) return false;
++            // Keep publication atomic on filesystems without hardlinks. Only
++            // an unsupported rename primitive may use the hardlink fallback.
++            if (error != ENOSYS && error != EINVAL && error != EOPNOTSUPP) {
++                throw std::system_error(error, std::generic_category(), "publish CryFS state");
++            }
++            if (::link(name.data(), path.c_str()) < 0) {
++                if (errno == EEXIST) return false;
++                throw std::system_error(errno, std::generic_category(), "publish CryFS state");
++            }
++            if (::unlink(name.data()) < 0) {
++                throw std::system_error(errno, std::generic_category(), "remove CryFS state temporary");
++            }
+         }
+     }
+     temporary.path = nullptr;
