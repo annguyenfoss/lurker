@@ -414,6 +414,7 @@ fn managed_veracrypt(registry: &Registry) -> AppResult<Vec<veracrypt::ManagedAtt
             dev: session.identity.dev,
             ino: session.identity.ino,
             mapped: mapped.clone(),
+            physical: session.physical.clone(),
         });
     }
     Ok(managed)

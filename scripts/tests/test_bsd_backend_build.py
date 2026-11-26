@@ -99,6 +99,7 @@ class SourceProvenance(unittest.TestCase):
              patch.object(builder, "linked_libraries", return_value=[Path("/usr/lib/libfuse.so.4.0")]), \
              patch.object(builder.subprocess, "check_output", side_effect=["VeraCrypt fixture", "2.9.9"]):
             manifest = builder.stage(binary, output, source, wx, "OpenBSD", {})
+        self.assertEqual(manifest["runtime"]["physical_source_protocol"], 1)
         for name, contents in (("wxWidgets.txt", "wxWidgets exception"),
                                ("wxWidgets-LGPL.txt", "Library GPL")):
             relative = "licenses/" + name

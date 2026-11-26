@@ -320,7 +320,7 @@ def stage(binary, output, source, wx, target, build_options, iconv_source=None):
         "private_libraries": private,
         "system_libraries": [p.name for p in dependencies if str(p).startswith(("/lib/", "/usr/lib/", "/usr/libexec/"))],
         "fuse_version": subprocess.check_output(["pkg-config", "--modversion", "fuse"], text=True).strip(),
-        "runtime": {"external_fuse_kernel": True, "separate_veracrypt": False, "privilege": "root", "source_kind": "regular_file"},
+        "runtime": {"external_fuse_kernel": True, "separate_veracrypt": False, "privilege": "root", "source_kind": "regular_file", "physical_source_protocol": 1},
     }
     members = [destination, *[output / "lib" / item["name"] for item in private],
                licenses / "VeraCrypt.txt", *[licenses / name for name in WX_NOTICES.values()]]

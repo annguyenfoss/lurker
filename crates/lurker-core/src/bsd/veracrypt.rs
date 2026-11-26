@@ -28,6 +28,7 @@ pub(super) struct ManagedAttachment {
     pub(super) dev: u64,
     pub(super) ino: u64,
     pub(super) mapped: String,
+    pub(super) physical: Option<super::physical::BackingIdentity>,
 }
 
 struct AttachedRecord {
@@ -88,13 +89,23 @@ fn invoke(argv: &[OsString], input: Option<&[u8]>) -> AppResult<String> {
     exec(executable, argv, input)
 }
 
-fn regular_file(source: &Path) -> AppResult<()> {
-    let metadata =
-        fs::symlink_metadata(source).map_err(|e| AppError::io("Inspect BSD VeraCrypt file", e))?;
-    if !metadata.is_file() {
-        return Err(AppError::new("BSD VeraCrypt supports regular file containers only, never physical devices or symlinks."));
+fn source_identity(source: &Path) -> AppResult<Option<super::physical::BackingIdentity>> {
+    let metadata = fs::symlink_metadata(source)
+        .map_err(|e| AppError::io("Inspect BSD VeraCrypt source", e))?;
+    if metadata.is_file() {
+        return Ok(None);
     }
-    Ok(())
+    let (_, physical) = super::physical::capture(source)?;
+    #[cfg(target_os = "openbsd")]
+    if source
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.ends_with('c'))
+    {
+        return Err(AppError::new("Physical OpenBSD VeraCrypt requires a validated partition outside the outer disklabel sector; whole disks use softraid."));
+    }
+    runtime::validate_physical(&backend()?)?;
+    Ok(Some(physical))
 }
 
 fn source_name(source: &Path) -> AppResult<&str> {
@@ -140,7 +151,11 @@ pub(super) fn format_with_managed(
     managed: &[ManagedAttachment],
 ) -> AppResult<()> {
     source_name(source)?;
-    regular_file(source)?;
+    if source_identity(source)?.is_some() {
+        return Err(AppError::new(
+            "Use the guarded physical VeraCrypt creation route for a device.",
+        ));
+    }
     ensure_source_available_with_managed(source, managed)?;
     let keyfile = match credential {
         Credential::Keyfile(path) => Some(path.as_path()),
@@ -151,6 +166,32 @@ pub(super) fn format_with_managed(
     let (_, input) = authentication(credential)?;
     invoke(&argv, Some(&input))?;
     Ok(())
+}
+
+/// Physical creation uses the exact native partition size. The approved cipher,
+/// PBKDF and authentication profile is shared with file-container creation.
+pub(super) fn format_physical_with_managed(
+    source: &Path,
+    cipher: CreateCipher,
+    credential: &Credential,
+    managed: &[ManagedAttachment],
+) -> AppResult<()> {
+    source_name(source)?;
+    let proof = source_identity(source)?
+        .ok_or_else(|| AppError::new("Expected a physical VeraCrypt partition."))?;
+    ensure_source_available_with_managed(source, managed)?;
+    super::physical::ensure_idle(source)?;
+    let keyfile = match credential {
+        Credential::Keyfile(path) => Some(path.as_path()),
+        _ => None,
+    };
+    let mut argv = crate::workflow::file_veracrypt_create_args(cipher, 1, keyfile)?;
+    argv.retain(|arg| !arg.to_string_lossy().starts_with("--size="));
+    argv.push(source.as_os_str().to_owned());
+    let (_, input) = authentication(credential)?;
+    proof.verify(source)?;
+    invoke(&argv, Some(&input))?;
+    proof.verify(source)
 }
 
 fn listing(source: &Path) -> AppResult<String> {
@@ -180,7 +221,7 @@ pub(super) fn ensure_source_available_with_managed(
     managed: &[ManagedAttachment],
 ) -> AppResult<()> {
     source_name(source)?;
-    regular_file(source)?;
+    source_identity(source)?;
     let wanted = fs::metadata(source)
         .map_err(|e| AppError::io("Cannot inspect requested VeraCrypt source identity", e))?;
     let text = match invoke(&args(&["--text", "--list", "--verbose"]), None) {
@@ -228,7 +269,11 @@ fn correlate_managed(records: &[AttachedRecord], managed: &[ManagedAttachment]) 
         }
         let (index, known) = known[0];
         let metadata = fs::metadata(&record.source).map_err(|e| AppError::io("Cannot validate a managed VeraCrypt source identity; reconcile that session before acquisition", e))?;
-        if !metadata.is_file()
+        let valid_source = match &known.physical {
+            Some(proof) => proof.verify(&record.source).is_ok(),
+            None => metadata.is_file(),
+        };
+        if !valid_source
             || metadata.dev() != known.dev
             || metadata.ino() != known.ino
             || !matched.insert(index)
@@ -523,7 +568,7 @@ pub(super) fn unlock_with_managed(
     managed: &[ManagedAttachment],
 ) -> AppResult<String> {
     source_name(source)?;
-    regular_file(source)?;
+    source_identity(source)?;
     #[cfg(target_os = "openbsd")]
     if readonly {
         return Err(AppError::new("OpenBSD VeraCrypt read-only crypto attachment has not been qualified; refusing a writable fallback."));
@@ -572,6 +617,8 @@ pub(super) struct RecoveryProof {
     source: PathBuf,
     source_dev: u64,
     source_ino: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    physical: Option<super::physical::BackingIdentity>,
     mapped: String,
     auxiliary: super::Mounted,
     backing_dev: u64,
@@ -615,7 +662,7 @@ pub(super) fn capture_recovery_proof(source: &Path, mapped: &str) -> AppResult<R
         ));
     }
     verify_backing(&information, mapped)?;
-    regular_file(source)?;
+    let physical = source_identity(source)?;
     let source_metadata =
         fs::metadata(source).map_err(|e| AppError::io("Capture VeraCrypt source identity", e))?;
     let auxiliary_path = auxiliary_path(&information)?;
@@ -629,10 +676,11 @@ pub(super) fn capture_recovery_proof(source: &Path, mapped: &str) -> AppResult<R
     let backing = kernel_backing(&raw_device(mapped)?)?
         .ok_or_else(|| AppError::new("VeraCrypt device disappeared during capture."))?;
     let proof = RecoveryProof {
-        version: 2,
+        version: if physical.is_some() { 3 } else { 2 },
         source: source.to_owned(),
         source_dev: source_metadata.dev(),
         source_ino: source_metadata.ino(),
+        physical,
         mapped: mapped.to_owned(),
         auxiliary,
         backing_dev: backing.0,
@@ -648,11 +696,17 @@ fn recovery_resources(
     proof: &RecoveryProof,
 ) -> AppResult<(bool, bool)> {
     source_name(source)?;
-    regular_file(source)?;
+    let physical = source_identity(source)?;
     let metadata =
         fs::metadata(source).map_err(|e| AppError::io("Verify VeraCrypt recovery source", e))?;
-    if proof.version != 2 {
+    if !matches!(
+        (proof.version, &proof.physical, &physical),
+        (2, None, None) | (3, Some(_), Some(_))
+    ) {
         return Err(AppError::new("Legacy VeraCrypt recovery proof lacks a unique attachment generation; retain the session for live-control administrator reconciliation."));
+    }
+    if let Some(physical) = &proof.physical {
+        physical.verify(source)?;
     }
     if proof.source != source
         || proof.mapped != mapped
@@ -886,6 +940,7 @@ mod tests {
             source: source.clone(),
             source_dev: metadata.dev(),
             source_ino: metadata.ino(),
+            physical: None,
             // Deliberately outside every native namespace. Legacy rejection
             // must happen before even a read-only query can use this device.
             mapped: "/dev/not-a-lurker-device".into(),
@@ -978,6 +1033,7 @@ mod tests {
             dev: metadata.dev(),
             ino: metadata.ino(),
             mapped,
+            physical: None,
         }
     }
 

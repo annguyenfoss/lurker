@@ -203,9 +203,36 @@ pub(super) fn validate(program: &Path) -> AppResult<()> {
     Ok(())
 }
 
+/// Older OpenBSD engines abort while enumerating physical disks. Require the
+/// source producer's explicit native-device contract before any credential I/O.
+pub(super) fn validate_physical(program: &Path) -> AppResult<()> {
+    validate(program)?;
+    let layout = Layout::locate(program)?;
+    let bytes = crate::trust::trusted_runtime_file(&layout.manifest, MAX_MANIFEST)?;
+    let manifest: Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    physical_contract(&manifest)
+}
+
+fn physical_contract(manifest: &Value) -> AppResult<()> {
+    if manifest["runtime"]["physical_source_protocol"].as_u64() != Some(1) {
+        return Err(AppError::new("The private BSD VeraCrypt package lacks qualified physical-device discovery; install the matching current Lurker package."));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_contract_is_explicit_and_versioned() {
+        let mut value = manifest("OpenBSD");
+        assert!(physical_contract(&value).is_err());
+        value["runtime"]["physical_source_protocol"] = 1.into();
+        assert!(physical_contract(&value).is_ok());
+        value["runtime"]["physical_source_protocol"] = 2.into();
+        assert!(physical_contract(&value).is_err());
+    }
 
     fn manifest(platform: &str) -> Value {
         let hash = "a".repeat(64);

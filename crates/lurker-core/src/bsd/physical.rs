@@ -10,8 +10,10 @@ use std::path::Path;
 mod freebsd;
 #[cfg(target_os = "openbsd")]
 mod openbsd;
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+mod veracrypt;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct BackingIdentity {
     rdev: u64,
     bytes: u64,
@@ -108,6 +110,10 @@ pub(super) fn params_path(session: &Session) -> AppResult<std::path::PathBuf> {
 }
 
 pub(super) fn create(command: CreateCommand, output: Output) -> AppResult<()> {
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    if command.volume_type == crate::VolumeType::Veracrypt {
+        return veracrypt::create(command, output);
+    }
     #[cfg(target_os = "freebsd")]
     return freebsd::create(command, output);
     #[cfg(target_os = "netbsd")]

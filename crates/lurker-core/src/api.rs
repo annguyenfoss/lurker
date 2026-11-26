@@ -138,8 +138,13 @@ impl CreateCommand {
                     VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
                 ))
                 || (os == "macos" && self.volume_type == VolumeType::Apfs)
-                || (os == "openbsd" && self.volume_type == VolumeType::Softraid)
-                || (os == "freebsd" && self.volume_type == VolumeType::Geli)
+                || (os == "openbsd"
+                    && matches!(
+                        self.volume_type,
+                        VolumeType::Softraid | VolumeType::Veracrypt
+                    ))
+                || (os == "freebsd"
+                    && matches!(self.volume_type, VolumeType::Geli | VolumeType::Veracrypt))
                 || (os == "netbsd" && self.volume_type == VolumeType::Cgd));
         if !matches!(
             os,
@@ -323,6 +328,22 @@ pub struct OperationResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn filesystem_selection_accepts_privileged_bsd_physical_veracrypt() {
+        let mut command: CreateCommand = serde_json::from_value(serde_json::json!({
+            "target": "/dev/test-disk", "source_kind": "block", "force": true,
+            "volume_type": "veracrypt", "filesystem": "ufs2", "passphrase": null,
+            "size_gb": null
+        }))
+        .unwrap();
+        for os in ["freebsd", "openbsd"] {
+            command.privilege_mode = PrivilegeMode::Privileged;
+            assert!(command.validate_filesystem(os).is_ok());
+            command.privilege_mode = PrivilegeMode::Unprivileged;
+            assert!(command.validate_filesystem(os).is_err());
+        }
+    }
 
     #[test]
     fn filesystem_selection_accepts_existing_native_device_routes() {
