@@ -47,6 +47,7 @@ def main():
         password = 'Lurker9!' + secrets.token_urlsafe(24)
         keyfile = None
         header_before = None
+        io_stalled = False
         credential = d / '.generated-test-credential'
         if a.credential == 'keyfile':
             keyfile = d / 'generated-test-key.bin'
@@ -107,60 +108,73 @@ def main():
                 view = subprocess.check_output(['findmnt', '-rn', '-M', str(mountpoint), '-o', 'SOURCE,FSTYPE,OPTIONS'], text=True).strip()
                 row.setdefault('mounts', []).append(view)
                 if 'rw' not in view.split()[-1].split(','): raise RuntimeError('Mount is not read/write')
-                target = mountpoint / 'payload'
-                if phase == 'write':
-                    target.mkdir(mode=0o700)
+                def payload_io():
+                    target = mountpoint / 'payload'
+                    if phase == 'write':
+                        target.mkdir(mode=0o700)
+                        for name, data in wanted.items():
+                            with (target / name).open('xb') as stream:
+                                stream.write(data); stream.flush(); os.fsync(stream.fileno())
                     for name, data in wanted.items():
-                        with (target / name).open('xb') as stream:
-                            stream.write(data); stream.flush(); os.fsync(stream.fileno())
-                for name, data in wanted.items():
-                    if (target / name).read_bytes() != data: raise RuntimeError('Payload mismatch ' + name)
+                        if (target / name).read_bytes() != data: raise RuntimeError('Payload mismatch ' + name)
+                    if phase == 'append':
+                        wanted['page.txt'] += b'\nFedora device reopen append.\n'
+                        wanted['second.txt'] = b'New file on reopened device.\n'
+                        for name in ('page.txt', 'second.txt'):
+                            with (target / name).open('wb') as stream:
+                                stream.write(wanted[name]); stream.flush(); os.fsync(stream.fileno())
+                    return {name: hashlib.sha256((target / name).read_bytes()).hexdigest() for name in wanted}
+                row[phase + '_hashes'] = h.bounded_payload_call(payload_io, 180)
                 if phase == 'append':
                     wanted['page.txt'] += b'\nFedora device reopen append.\n'
                     wanted['second.txt'] = b'New file on reopened device.\n'
-                    for name in ('page.txt', 'second.txt'):
-                        with (target / name).open('wb') as stream:
-                            stream.write(wanted[name]); stream.flush(); os.fsync(stream.fileno())
-                row[phase + '_hashes'] = {name: hashlib.sha256((target / name).read_bytes()).hexdigest() for name in wanted}
                 cli('unmount', [mountpoint], 'auto')
                 remaining = subprocess.check_output(['lsblk', '-nr', '-o', 'NAME', str(a.device)], text=True).splitlines()
                 if len(remaining) != 1: raise RuntimeError('CLI close left device children')
             row['status'] = 'passed'
         except Exception as error:
             row.update(status='failed', error=str(error))
+            if isinstance(error, h.PayloadWorkerError):
+                row['payload_worker'] = error.worker
+                io_stalled = error.worker['remaining']
+                stop = True
             if 'Scratch identity' in str(error) or 'Scratch device' in str(error): stop = True
         finally:
-            if os.path.ismount(mountpoint):
-                try: cli('unmount', [mountpoint], 'auto')
-                except Exception as error: row['cleanup_error'] = str(error)
-            row['mount_remaining'] = os.path.ismount(mountpoint)
-            remaining = subprocess.check_output(['lsblk', '-nr', '-o', 'NAME', str(a.device)], text=True).splitlines()
-            if len(remaining) != 1:
-                row['remaining_device_children'] = remaining
-                stop = True
-            header_changed = False
-            if header_before is not None:
-                with a.device.open('rb', buffering=0) as stream:
-                    row['header_after_sha256'] = hashlib.sha256(stream.read(1024**2)).hexdigest()
-                header_changed = header_before != row['header_after_sha256']
-            destructive_started = header_changed or any(x['action'] == 'create' and x['exit_code'] == 0
-                                                       for x in row['operations'])
-            row['destructive_started'] = destructive_started
-            timed_out = any(x['timed_out'] for x in row['operations'])
-            if timed_out:
-                stop = True
-                row['raw_device_preserved_for_recovery'] = True
-            if row['status'] == 'failed' and destructive_started and not row['mount_remaining'] and not timed_out:
-                try:
-                    size = int(subprocess.check_output(['blockdev', '--getsize64', str(a.device)], text=True))
-                    if shutil.disk_usage(d).free < size + 512 * 1024**2: raise RuntimeError('Insufficient space to retain failed device')
-                    snapshot = d / 'failed-device.img'
-                    with a.device.open('rb', buffering=0) as source, snapshot.open('xb', buffering=0) as target:
-                        shutil.copyfileobj(source, target, 4 * 1024**2); os.fsync(target.fileno())
-                    row['retained_failed_ciphertext'] = str(snapshot)
-                except Exception as error: row['snapshot_error'] = str(error); stop = True
-            if row['mount_remaining']: stop = True
-            save()
+            if io_stalled:
+                row.update(mount_remaining=True, raw_device_preserved_for_recovery=True)
+                save()
+            else:
+                if os.path.ismount(mountpoint):
+                    try: cli('unmount', [mountpoint], 'auto')
+                    except Exception as error: row['cleanup_error'] = str(error)
+                row['mount_remaining'] = os.path.ismount(mountpoint)
+                remaining = subprocess.check_output(['lsblk', '-nr', '-o', 'NAME', str(a.device)], text=True).splitlines()
+                if len(remaining) != 1:
+                    row['remaining_device_children'] = remaining
+                    stop = True
+                header_changed = False
+                if header_before is not None:
+                    with a.device.open('rb', buffering=0) as stream:
+                        row['header_after_sha256'] = hashlib.sha256(stream.read(1024**2)).hexdigest()
+                    header_changed = header_before != row['header_after_sha256']
+                destructive_started = header_changed or any(x['action'] == 'create' and x['exit_code'] == 0
+                                                           for x in row['operations'])
+                row['destructive_started'] = destructive_started
+                timed_out = any(x['timed_out'] for x in row['operations'])
+                if timed_out:
+                    stop = True
+                    row['raw_device_preserved_for_recovery'] = True
+                if row['status'] == 'failed' and destructive_started and not row['mount_remaining'] and not timed_out:
+                    try:
+                        size = int(subprocess.check_output(['blockdev', '--getsize64', str(a.device)], text=True))
+                        if shutil.disk_usage(d).free < size + 512 * 1024**2: raise RuntimeError('Insufficient space to retain failed device')
+                        snapshot = d / 'failed-device.img'
+                        with a.device.open('rb', buffering=0) as source, snapshot.open('xb', buffering=0) as target:
+                            shutil.copyfileobj(source, target, 4 * 1024**2); os.fsync(target.fileno())
+                        row['retained_failed_ciphertext'] = str(snapshot)
+                    except Exception as error: row['snapshot_error'] = str(error); stop = True
+                if row['mount_remaining']: stop = True
+                save()
     result['status'] = 'terminal'; result['finished'] = time.time(); save()
     print(json.dumps(dict(receipt=str(receipt), counts={s: sum(c['status'] == s for c in result['cases'])
         for s in ('passed', 'failed', 'blocked')})))
