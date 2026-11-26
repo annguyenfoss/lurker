@@ -1,7 +1,7 @@
 # Ubuntu fresh native qualification — in progress
 
 The fresh baseline and corrected host-prerequisite followups currently qualify
-**49 of 60 applicable filesystem/encryption cells** for the required PDF/text
+**51 of 60 applicable filesystem/encryption cells** for the required PDF/text
 write, normal close, reopen, append and final-hash lifecycle. Seventy further
 cells are explicitly not applicable to Linux's native routes. Final-candidate,
 cipher/keyfile/conformance, destructive-device and OS reboot validation remain
@@ -15,10 +15,10 @@ outstanding. The private 130-cell ledger is
 | XFS | Pass | Pass | Pass | Pass | Pass | Pass |
 | APFS | Pass | Pass | Pass | Pass | Pass | Pass |
 | UFS1 | Stock read-only | Stock read-only / sector policy | Stock read-only | Stock read-only | Stock read-only | Stock read-only |
-| UFS2 | Pass | Pass | Pass | Pass | Publication failure; fix pending | Pass with patched driver |
+| UFS2 | Pass | Pass | Pass | Pass | Pass with fresh engine | Pass with patched driver |
 | HAMMER2 | Pass | Pass | Pass | Pass | Pass | Pass |
 | NTFS | Pass | Pass | Pass | Pass | Pass | Pass with native ntfs3 |
-| exFAT | Pass | Pass | Pass | Pass | Publication failure; fix pending | Pass |
+| exFAT | Pass | Pass | Pass | Pass | Pass with fresh engine | Pass |
 | ZFS | Pass | Pass | Pass | Pass | Pass | Pass |
 
 For each filesystem, hdiutil Apple disk-image encryption and diskutil APFS
@@ -130,3 +130,10 @@ container gates, prepare the 54 persistent fixtures, perform an ordinary reboot
 and normal hash-checked reopen/close, then attach and test the separately
 identified destructive scratch disk and inspect final cleanup. Full private evidence and resumable state remain under
 `target/goal-validation/native-fresh-20261127/hosts/ubuntu/` and its checkpoint.
+
+The coordinator subsequently froze follow-up source
+`576505d554d798422840a06322dfa93b899365bc`, including the Linux mount
+read-only parser correction and desktop form integration. The already live ca7
+sweep continues under its own identity. Fresh follow-up workspace job
+`20261126T223704Z-d691528f` is running; the idle ca7 variation queue was cancelled
+before any case. Remaining runtime gates will use the follow-up package.
