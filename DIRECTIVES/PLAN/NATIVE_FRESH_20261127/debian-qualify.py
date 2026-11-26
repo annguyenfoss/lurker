@@ -99,6 +99,8 @@ def main():
     harness = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(harness)
     binary = args.prefix / 'bin/lurker'
+    tool_inventory = json.loads((root / 'tools.json').read_text())
+    qualifier_sha256 = harness.file_hash(Path(__file__))
     payload = harness.load_payload(root / 'payload')
     receipts = root / ('device' if args.mode == 'device' else 'cases')
     receipts.mkdir(exist_ok=True)
@@ -141,6 +143,8 @@ def main():
                       'cipher': args.cipher, 'authentication': 'keyfile' if args.keyfile else 'password',
                       'private_fixture_credential': str(credential),
                       'tool_inventory': str(root / 'tools.json'),
+                      'tool_versions': tool_inventory,
+                      'qualifier_sha256': qualifier_sha256,
                       'common_harness_sha256': harness.file_hash(args.harness),
                       'operations': [], 'status': 'running'}
             if args.mode == 'device':
