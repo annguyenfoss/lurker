@@ -32,7 +32,10 @@ def atomic(path, value):
 def require_native_filesystem(mount, filesystem):
     row = subprocess.check_output(['findmnt', '-rn', '-M', str(mount), '-o', 'SOURCE,FSTYPE,OPTIONS'], text=True).strip()
     parts = row.split()
-    if len(parts) < 3 or parts[1] not in EXPECTED_TYPES[filesystem] or 'rw' not in parts[2].split(','):
+    flags = subprocess.check_output(['findmnt', '-rn', '-M', str(mount), '-o', 'VFS-OPTIONS,FS-OPTIONS'], text=True).split()
+    if (len(parts) < 3 or parts[1] not in EXPECTED_TYPES[filesystem]
+            or not flags or 'rw' not in flags[0].split(',')
+            or any('ro' in options.split(',') for options in flags)):
         raise RuntimeError(f'Expected writable {filesystem}; actual mount: {row}')
     return row
 
