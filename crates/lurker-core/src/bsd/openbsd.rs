@@ -239,10 +239,12 @@ fn probe_crypto_reader(reader: &mut (impl Read + Seek)) -> AppResult<bool> {
     reader
         .seek(SeekFrom::Start(8192))
         .map_err(|e| AppError::io("Seek softraid metadata", e))?;
-    let mut bytes = [0u8; 56];
-    match reader.read_exact(&mut bytes) {
-        Ok(()) if is_raid1c_header(&bytes) => Err(AppError::new("This is a native RAID1C member. Use --type raid1c --member PATH, its .raid1c.json descriptor, or explicit --degraded recovery; a member is not a single CRYPTO volume.")),
-        Ok(()) => Ok(is_crypto_header(&bytes)),
+    // Raw sd nodes require sector-aligned reads; inspect the fixed header only
+    // after acquiring its complete metadata sector.
+    let mut sector = [0u8; 512];
+    match reader.read_exact(&mut sector) {
+        Ok(()) if is_raid1c_header(sector[..56].try_into().unwrap()) => Err(AppError::new("This is a native RAID1C member. Use --type raid1c --member PATH, its .raid1c.json descriptor, or explicit --degraded recovery; a member is not a single CRYPTO volume.")),
+        Ok(()) => Ok(is_crypto_header(sector[..56].try_into().unwrap())),
         Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
         Err(error) => Err(AppError::io("Read softraid metadata", error)),
     }
@@ -586,10 +588,10 @@ mod tests {
         header[8..12].copy_from_slice(&6u32.to_ne_bytes());
         header[32..36].copy_from_slice(&1u32.to_ne_bytes());
         header[52..56].copy_from_slice(&u32::from(b'C').to_ne_bytes());
-        let mut bytes = vec![0u8; 8192 + header.len()];
+        let mut bytes = vec![0u8; 8192 + 512];
         bytes[..header.len()].copy_from_slice(&header);
         assert!(!probe_crypto_reader(&mut std::io::Cursor::new(&bytes)).unwrap());
-        bytes[8192..].copy_from_slice(&header);
+        bytes[8192..8192 + header.len()].copy_from_slice(&header);
         assert!(probe_crypto_reader(&mut std::io::Cursor::new(&bytes)).unwrap());
         assert!(
             !probe_crypto_reader(&mut std::io::Cursor::new(&bytes[..bytes.len() - 1])).unwrap()
@@ -604,7 +606,7 @@ mod tests {
 
     #[test]
     fn recognized_mirror_member_needs_explicit_membership_not_veracrypt_fallback() {
-        let mut bytes = vec![0u8; 8192 + 56];
+        let mut bytes = vec![0u8; 8192 + 512];
         bytes[8192..8200].copy_from_slice(&0x4d4152436372616du64.to_ne_bytes());
         for (offset, value) in [(8, 6u32), (32, 2), (36, 1), (52, 0x1c)] {
             bytes[8192 + offset..8192 + offset + 4].copy_from_slice(&value.to_ne_bytes());
