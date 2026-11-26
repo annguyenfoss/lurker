@@ -467,6 +467,8 @@ pub(crate) fn linux_format_args(
     match filesystem {
         Btrfs => vec!["-q".into()],
         Ext4 => vec![
+            "-t".into(),
+            "ext4".into(),
             "-q".into(),
             "-E".into(),
             format!("root_owner={}:{}", owner.uid, owner.gid).into(),
@@ -792,6 +794,66 @@ mod tests {
             );
             assert!(String::from_utf8_lossy(&output.stdout).contains("kmod"));
         }
+    }
+
+    #[test]
+    #[ignore = "formats a private image with the installed native mke2fs"]
+    fn canonical_ext4_formatter_creates_a_journaled_ext4_superblock() {
+        use std::os::unix::fs::{FileExt, OpenOptionsExt};
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!("lurker-ext4-{nonce}"));
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let image = directory.join("native.img");
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&image)
+            .unwrap()
+            .set_len(64 * 1024 * 1024)
+            .unwrap();
+        let owner = crate::new_filesystem::Owner {
+            uid: unsafe { libc::geteuid() },
+            gid: unsafe { libc::getegid() },
+        };
+        let mut arguments = super::linux_format_args(crate::api::CreateFilesystem::Ext4, owner);
+        arguments.extend(["-F".into(), image.as_os_str().to_os_string()]);
+        // Execute the canonical multicall binary, as privileged execution does.
+        let program = crate::trusted_system_executable("mke2fs").unwrap();
+        let output = std::process::Command::new(program)
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let mut features = [0; 8];
+        std::fs::File::open(&image)
+            .unwrap()
+            .read_exact_at(&mut features, 1024 + 92)
+            .unwrap();
+        let compatible = u32::from_le_bytes(features[..4].try_into().unwrap());
+        let incompatible = u32::from_le_bytes(features[4..].try_into().unwrap());
+        assert_ne!(
+            compatible & 0x4,
+            0,
+            "ext4 journal absent: {}",
+            image.display()
+        );
+        assert_ne!(
+            incompatible & 0x40,
+            0,
+            "ext4 extents absent: {}",
+            image.display()
+        );
+        std::fs::remove_file(image).unwrap();
+        std::fs::remove_dir(directory).unwrap();
     }
 
     fn subprocess_context() -> super::AppContext {
