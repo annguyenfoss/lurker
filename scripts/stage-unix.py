@@ -375,6 +375,8 @@ def verify_cryptomator_patches(root, manifest, source, lock):
 # These components belong to the host ABI and must never be shipped privately.
 LINUX_SYSTEM_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|resolv|util|anl|nss_[^/]+|BrokenLocale)\.so(?:\..*)?)$")
 LINUX_CXX_RUNTIME_ELF = re.compile(r"^lib(?:stdc\+\+|gcc_s)\.so(?:\..*)?$")
+# FUSE and the BSD puffs framework are host facilities, including user libraries.
+HOST_FUSE_LIBRARY = re.compile(r"^lib(?:fuse(?:3|-t)?|osxfuse|refuse|puffs)(?:\.so(?:\.[0-9]+)*|(?:\.[0-9]+)*\.dylib)$")
 
 
 def verify_linux_static_wx(root, manifest, source):
@@ -690,7 +692,11 @@ def audit_dependencies(prefix):
         if real not in metadata:
             metadata[real] = elf_info(path, readelf)
         return metadata[real]
-    pending = [path for path, kind in entries(prefix) if kind == "file"]
+    payload = list(entries(prefix))
+    for path, _ in payload:
+        if HOST_FUSE_LIBRARY.fullmatch(path.name):
+            fail("FUSE libraries are a host prerequisite and cannot be bundled: " + str(path))
+    pending = [path for path, kind in payload if kind == "file"]
     records, seen = [], set()
     while pending:
         path = pending.pop()
@@ -706,6 +712,8 @@ def audit_dependencies(prefix):
                         if member.is_dir():
                             continue
                         relative(member.filename)
+                        if HOST_FUSE_LIBRARY.fullmatch(Path(member.filename).name):
+                            fail("FUSE libraries are a host prerequisite and cannot be bundled inside a JAR: " + member.filename)
                         with jar.open(member) as stream:
                             header = stream.read(20)
                         if not header.startswith(b"\x7fELF"):
@@ -737,6 +745,8 @@ def audit_dependencies(prefix):
                         records.append({"file": str(path.relative_to(prefix)) + "!" + member.filename,
                                         "bundled": True, "dependencies": refs})
             continue
+        if path.resolve().is_relative_to(prefix.resolve()) and any(HOST_FUSE_LIBRARY.fullmatch(name) for name in info.get("soname", [])):
+            fail("FUSE libraries are a host prerequisite and cannot be bundled under another filename: " + str(path))
         if platform.system() == "Linux" and path.resolve().is_relative_to(prefix.resolve()):
             if any(LINUX_SYSTEM_ELF.fullmatch(name) for name in [path.name] + info.get("soname", [])):
                 fail("host glibc/system loader cannot be bundled: " + str(path))

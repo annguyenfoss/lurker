@@ -54,6 +54,31 @@ class PackagingPolicy(unittest.TestCase):
         self.assertEqual(b"library", link.read_bytes())
         self.assertEqual(0o644, stat.S_IMODE((destination / "runtime/lib/jvm.so").stat().st_mode))
 
+    def test_fuse_implementation_libraries_remain_host_prerequisites(self):
+        for name in ("libfuse.so.2", "libfuse3.so.3.17", "librefuse.so.2", "libpuffs.so.2"):
+            directory = self.root / name
+            directory.mkdir()
+            (directory / name).write_bytes(b"fixture never executed")
+            with self.subTest(name=name), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager.subprocess, "run", return_value=mock.Mock(stdout="")):
+                with self.assertRaisesRegex(ValueError, "host prerequisite"):
+                    stager.audit_dependencies(directory)
+        disguised = self.root / "renamed"
+        disguised.mkdir()
+        (disguised / "innocent.so").write_bytes(b"fixture never executed")
+        info = {"soname": ["libfuse.so.2"], "needed": [], "search": [], "interpreters": []}
+        with mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager.subprocess, "run", return_value=mock.Mock(stdout="")), mock.patch.object(stager, "elf_info", return_value=info):
+            with self.assertRaisesRegex(ValueError, "under another filename"):
+                stager.audit_dependencies(disguised)
+            info["soname"] = ["libindependentcrypto.so.1"]
+            self.assertEqual(1, len(stager.audit_dependencies(disguised)))
+        embedded = self.root / "embedded"
+        embedded.mkdir()
+        with zipfile.ZipFile(embedded / "runtime.jar", "w") as jar:
+            jar.writestr("native/libfuse3.so.3", b"fixture never executed")
+        with mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager.subprocess, "run", return_value=mock.Mock(stdout="")), mock.patch.object(stager, "elf_info", return_value=None):
+            with self.assertRaisesRegex(ValueError, "inside a JAR"):
+                stager.audit_dependencies(embedded)
+
     def test_traversal_and_absolute_manifest_paths_are_rejected(self):
         for name in ("../private", "/etc/passwd", "safe/../../private"):
             with self.assertRaisesRegex(ValueError, "unsafe relative path"):
