@@ -29,6 +29,27 @@ def atomic(path, value):
     os.replace(temporary, path)
 
 
+def scratch_device_identity(device, serial):
+    expected = 'lurker-fresh-debian'
+    if serial != expected or not device.is_block_device():
+        raise RuntimeError('Only this round\'s exact Debian scratch serial is accepted')
+    size, observed = subprocess.check_output(
+        ['lsblk', '-dnbo', 'SIZE,SERIAL', str(device)], text=True).strip().split()
+    if observed != expected or int(size) != 1073741824:
+        raise RuntimeError('Scratch serial/size mismatch; fixture-storage disk is forbidden')
+    resolved = device.resolve(strict=True)
+    if resolved != Path('/dev/disk/by-id/virtio-' + expected).resolve(strict=True):
+        raise RuntimeError('Scratch by-id identity differs')
+    if subprocess.check_output(['lsblk', '-nro', 'MOUNTPOINT', str(device)], text=True).strip():
+        raise RuntimeError('Scratch device or a child partition is mounted')
+    for entry in [resolved, *resolved.parent.glob(resolved.name + '[0-9]*')]:
+        if list((Path('/sys/class/block') / entry.name / 'holders').iterdir()):
+            raise RuntimeError('Scratch device or child partition still has holders')
+    return {'path': str(resolved), 'serial': observed, 'bytes': int(size),
+            'inventory': subprocess.check_output(
+                ['lsblk', '-dnbo', 'NAME,SIZE,SERIAL,MODEL', str(device)], text=True).strip()}
+
+
 def require_native_filesystem(mount, filesystem):
     row = subprocess.check_output(['findmnt', '-rn', '-M', str(mount), '-o', 'SOURCE,FSTYPE,OPTIONS'], text=True).strip()
     parts = row.split()
@@ -120,11 +141,12 @@ def main():
     if os.uname().sysname != 'Linux' or 'debian' not in Path('/etc/os-release').read_text():
         parser.error('Debian native host required')
     if args.mode == 'device':
-        if not args.device or not args.serial or not args.serial.startswith('lurker-fresh-debian'):
+        if not args.device or not args.serial:
             parser.error('Device mode requires an identified round-specific scratch serial')
-        observed = subprocess.check_output(['lsblk', '-dnro', 'SERIAL', str(args.device)], text=True).strip()
-        if observed != args.serial or not args.device.is_block_device():
-            parser.error('Scratch device identity mismatch')
+        try:
+            scratch_device_identity(args.device, args.serial)
+        except RuntimeError as error:
+            parser.error(str(error))
     if args.mode == 'directories' and (args.keyfile or args.cipher != 'aes'):
         parser.error('Directory engines retain their fixed credential/profile selection')
     os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:' + os.environ.get('PATH', '')
@@ -156,6 +178,7 @@ def main():
             result_path = receipts / (label + '.json')
             if result_path.exists():
                 continue  # Never overwrite a failed receipt or reuse its fixture.
+            device_identity = scratch_device_identity(args.device, args.serial) if args.mode == 'device' else None
             fixture = fixtures / label
             fixture.mkdir(mode=0o700)
             mount = fixture / 'mount'
@@ -181,8 +204,7 @@ def main():
                       'common_harness_sha256': harness.file_hash(args.harness),
                       'operations': [], 'status': 'running'}
             if args.mode == 'device':
-                result['device_identity'] = {'path': str(args.device.resolve()), 'serial': args.serial,
-                                             'inventory': subprocess.check_output(['lsblk', '-dnbo', 'NAME,SIZE,SERIAL,MODEL', str(args.device)], text=True).strip()}
+                result['device_identity'] = device_identity
             backing_mount = None
             backing_source = None
             backing_kind = 'luks1' if fs == 'ufs1' else 'luks'
@@ -220,6 +242,7 @@ def main():
                 else:
                     operands = ['--filesystem', fs, '--cipher', args.cipher]
                     if args.mode == 'device':
+                        scratch_device_identity(args.device, args.serial)
                         operands += ['--force', source]
                     else:
                         operands += [source, '0.5']
@@ -263,15 +286,19 @@ def main():
                         # Preserve the failed disposable disk before another case
                         # overwrites it. Only the login user opens the output;
                         # the elevated process reads the verified scratch disk.
-                        snapshot = fixture / 'failed-device.img'
-                        with snapshot.open('xb') as stream:
-                            snapshot.chmod(0o600)
-                            copied = subprocess.run(['/usr/bin/sudo', '-n', '/usr/bin/cat', str(args.device)], stdout=stream, stderr=subprocess.PIPE, timeout=120)
-                        if copied.returncode:
-                            result['snapshot_error'] = copied.stderr.decode(errors='replace')
-                        else:
-                            result['failed_device_snapshot'] = str(snapshot)
-                            result['failed_device_snapshot_sha256'] = harness.file_hash(snapshot)
+                        try:
+                            scratch_device_identity(args.device, args.serial)
+                            snapshot = fixture / 'failed-device.img'
+                            with snapshot.open('xb') as stream:
+                                snapshot.chmod(0o600)
+                                copied = subprocess.run(['/usr/bin/sudo', '-n', '/usr/bin/cat', str(args.device)], stdout=stream, stderr=subprocess.PIPE, timeout=120)
+                            if copied.returncode:
+                                result['snapshot_error'] = copied.stderr.decode(errors='replace')
+                            else:
+                                result['failed_device_snapshot'] = str(snapshot)
+                                result['failed_device_snapshot_sha256'] = harness.file_hash(snapshot)
+                        except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+                            result['snapshot_error'] = str(error)
                 atomic(result_path, result)
                 if args.archive_to and not result['mount_remaining'] and not result['owned_loop_remaining']:
                     # Keep the original evidence paths valid. Mounted or failed
