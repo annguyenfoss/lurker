@@ -109,6 +109,14 @@ def main():
                 row.setdefault('mounts', []).append(view)
                 if 'rw' not in view.split()[-1].split(','): raise RuntimeError('Mount is not read/write')
                 def payload_io():
+                    if not os.path.ismount(mountpoint): raise RuntimeError('OS mount missing before payload I/O')
+                    native = h.linux_mount_record(Path('/proc/self/mountinfo').read_text(), mountpoint)
+                    identity_gate = h.check_linux_filesystem(native, fs)
+                    superblock = None
+                    if fs in {'ufs1', 'ufs2'}:
+                        superblock = subprocess.check_output(['blkid', '-p', native['source']], text=True, timeout=20)
+                        if ('VERSION=\"' + ('1' if fs == 'ufs1' else '2') + '\"') not in superblock:
+                            raise RuntimeError('Independent UFS superblock version mismatch')
                     target = mountpoint / 'payload'
                     if phase == 'write':
                         target.mkdir(mode=0o700)
@@ -123,8 +131,10 @@ def main():
                         for name in ('page.txt', 'second.txt'):
                             with (target / name).open('wb') as stream:
                                 stream.write(wanted[name]); stream.flush(); os.fsync(stream.fileno())
-                    return {name: hashlib.sha256((target / name).read_bytes()).hexdigest() for name in wanted}
-                row[phase + '_hashes'] = h.bounded_payload_call(payload_io, 180)
+                    return dict(hashes={name: hashlib.sha256((target / name).read_bytes()).hexdigest() for name in wanted}, mount=native, filesystem_identity=identity_gate, superblock=superblock)
+                observation = h.bounded_payload_call(payload_io, 180)
+                row[phase + '_hashes'] = observation.pop('hashes')
+                row[phase + '_native_identity'] = observation
                 if phase == 'append':
                     wanted['page.txt'] += b'\nFedora device reopen append.\n'
                     wanted['second.txt'] = b'New file on reopened device.\n'
