@@ -63,3 +63,30 @@ Next: complete the queued matching driver builds, execute ordinary containers in
 native controls for missing capabilities, batch demonstrated fixes, then attach
 and identify a new `lurker-fresh-ubuntu` qcow2 for device cases. Existing disks,
 fixtures, sessions and installed Lurker artifacts are preserved.
+
+Initial container batch is terminal: **58 receipt rows, 47 raw passes and 11
+failures**. UFS1's failed backing setup represents three blocked directory
+cells. Four raw passes are excluded: the two inherited custom-UFS1 cases and
+the two requested-ext4 cases that actually produced ext2. This leaves **43
+provisional ordinary-route cells** passing the payload lifecycle at the baseline,
+with no final-candidate claim. The private 130-cell applicability ledger retains
+each exclusion and receipt reference.
+
+The manual staging prefix had two corrected errors: a nested VeraCrypt creator
+copy, and unreadable Java runtime library modes after copying Cryptomator as
+root. The latter affected ext4, Btrfs, XFS and APFS initialization before the
+permission correction. These remain staging failures pending independent
+retests, distinct from product/backend failures. Native package staging will
+use normalized executable/data modes for the final candidate.
+
+Fresh post-correction findings are CryFS create failures on UFS2 and exFAT,
+and Cryptomator write EIO on UFS2 and NTFS-3G. Native-driver controls and eligible
+alternatives are being assessed. All three disk-encryption methods and all
+three directory engines passed on HAMMER2 and ZFS. The initial batch left no
+mounts or cleanup errors; failed backings and their receipts are retained.
+
+Stock UFS1 retests, ten filesystem feature/control cases and six real helper
+lifecycles are running serially in the queued post-matrix job. Device and reboot
+qualification remain outstanding. The coordinator authorized dedicated 16 GiB
+fixture storage, separate from the small destructive scratch disk, for persistent
+fixtures and private test credentials across the ordinary reboot.
