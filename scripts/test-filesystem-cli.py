@@ -29,6 +29,90 @@ PROMPT = re.compile(
 MAX_TRANSCRIPT = 2 * 1024 * 1024
 ECHO_WAIT_TIMEOUT = 5.0
 ECHO_STABLE_SECONDS = 0.02
+APPEND = b"\nAppended after a normal encrypted-container reopen.\n"
+SECOND = b"Created during the second mount.\n"
+
+
+class PayloadWorkerError(RuntimeError):
+    def __init__(self, message, pid, remaining=False):
+        super().__init__(message)
+        self.worker = {"pid": pid, "remaining": remaining}
+
+
+def stop_payload_worker(pid):
+    """Signal only our unreaped child, without blocking on a stuck kernel I/O."""
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        child, _ = os.waitpid(pid, os.WNOHANG)
+        if child:
+            return True
+        os.kill(pid, sig)
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            child, _ = os.waitpid(pid, os.WNOHANG)
+            if child:
+                return True
+            time.sleep(0.02)
+    return False
+
+
+def bounded_payload_call(function, timeout):
+    """Keep filesystem syscalls in a child so a broken driver cannot stall the round."""
+    reader, writer = os.pipe()
+    pid = os.fork()
+    if pid == 0:
+        os.close(reader)
+        try:
+            try:
+                result = {"ok": True, "value": function()}
+            except BaseException as error:
+                result = {"ok": False, "error": str(error)[:2000]}
+            data = json.dumps(result).encode()
+            while data:
+                data = data[os.write(writer, data):]
+        finally:
+            os.close(writer)
+            os._exit(0)
+    os.close(writer)
+    finished = False
+    data = bytearray()
+    try:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if select.select([reader], [], [], 0.05)[0]:
+                block = os.read(reader, 65536)
+                data.extend(block)
+                if len(data) > 65536:
+                    raise PayloadWorkerError("Payload worker exceeded its result limit", pid)
+            child, status = os.waitpid(pid, os.WNOHANG)
+            if child:
+                finished = True
+                while select.select([reader], [], [], 0)[0]:
+                    block = os.read(reader, 65536)
+                    if not block:
+                        break
+                    data.extend(block)
+                if not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0:
+                    raise PayloadWorkerError("Payload worker exited unexpectedly", pid)
+                try:
+                    result = json.loads(data)
+                except (ValueError, UnicodeDecodeError) as error:
+                    raise PayloadWorkerError("Payload worker returned no valid result", pid) from error
+                if not result["ok"]:
+                    raise PayloadWorkerError(result["error"], pid)
+                return result["value"]
+        raise PayloadWorkerError(
+            "Payload I/O timed out; retain this fixture and its native storage resources",
+            pid)
+    except BaseException as error:
+        if not finished:
+            # Never wait synchronously for an uninterruptible filesystem syscall.
+            # Keep the owned PID in the receipt if it cannot be reaped.
+            reaped = stop_payload_worker(pid)
+            if isinstance(error, PayloadWorkerError):
+                error.worker["remaining"] = not reaped
+        raise
+    finally:
+        os.close(reader)
 
 def stop_owned_child(pid):
     """Reap or stop our unreaped child; its PID cannot be reused meanwhile."""
@@ -239,6 +323,31 @@ def verify_payload(mountpoint, expected):
     return result
 
 
+def payload_phase(mountpoint, expected, phase):
+    if not os.path.ismount(mountpoint):
+        raise RuntimeError("Mount missing; refusing payload write to underlay")
+    result = {}
+    if phase == "write":
+        metadata = mountpoint.stat()
+        result["initial_root_metadata"] = {
+            "uid": metadata.st_uid, "gid": metadata.st_gid,
+            "mode": oct(metadata.st_mode & 0o7777),
+        }
+        payload_dir = mountpoint / "Lurker payload"
+        payload_dir.mkdir(mode=0o700)
+        for name, contents in expected.items():
+            payload_write(payload_dir / name, contents)
+    else:
+        verify_payload(mountpoint, expected)
+        if phase == "append":
+            payload_write(mountpoint / "Lurker payload/page.txt", APPEND, append=True)
+            expected["page.txt"] += APPEND
+            expected["second.txt"] = SECOND
+            payload_write(mountpoint / "Lurker payload/second.txt", SECOND)
+    result[phase + "_sha256"] = verify_payload(mountpoint, expected)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True, type=Path)
@@ -308,6 +417,15 @@ def main():
     atomic_json(receipt, result)
     mounted = False
 
+    def mount_present():
+        try:
+            return bounded_payload_call(lambda: os.path.ismount(mountpoint), min(args.timeout, 5))
+        except PayloadWorkerError as error:
+            result["mount_probe_error"] = str(error)
+            result.setdefault("payload_workers", []).append(error.worker)
+            # Unknown mount state must retain recovery resources, never claim cleanup.
+            return True
+
     def cli(action, operands):
         backend = "auto" if args.auto_detect and action == "mount" else args.backend
         command = [str(binary), action, "--type", backend, "--color=never"]
@@ -338,42 +456,30 @@ def main():
         for phase in ("write", "append", "verify"):
             cli("mount", [source, mountpoint])
             mounted = True
-            if not os.path.ismount(mountpoint):
-                raise RuntimeError("Mount missing; refusing payload write to underlay")
-            if phase == "write":
-                metadata = mountpoint.stat()
-                result["initial_root_metadata"] = {
-                    "uid": metadata.st_uid, "gid": metadata.st_gid,
-                    "mode": oct(metadata.st_mode & 0o7777),
-                }
-                payload_dir = mountpoint / "Lurker payload"
-                payload_dir.mkdir(mode=0o700)
-                for name, contents in expected.items():
-                    payload_write(payload_dir / name, contents)
-            else:
-                verify_payload(mountpoint, expected)
-                if phase == "append":
-                    addition = b"\nAppended after a normal encrypted-container reopen.\n"
-                    payload_write(mountpoint / "Lurker payload/page.txt", addition, append=True)
-                    expected["page.txt"] += addition
-                    expected["second.txt"] = b"Created during the second mount.\n"
-                    payload_write(mountpoint / "Lurker payload/second.txt", expected["second.txt"])
-            result[phase + "_sha256"] = verify_payload(mountpoint, expected)
+            result["payload_phase"] = phase
+            atomic_json(receipt, result)
+            result.update(bounded_payload_call(
+                lambda: payload_phase(mountpoint, expected, phase), args.timeout))
+            if phase == "append":
+                expected["page.txt"] += APPEND
+                expected["second.txt"] = SECOND
             cli("unmount", [mountpoint])
             mounted = False
-            if os.path.ismount(mountpoint):
+            if mount_present():
                 raise RuntimeError("CLI close left the payload mounted")
         result["status"] = "passed"
     except Exception as error:
         result["status"] = "failed"
         result["error"] = str(error)
+        if isinstance(error, PayloadWorkerError):
+            result.setdefault("payload_workers", []).append(error.worker)
     finally:
-        if mounted or os.path.ismount(mountpoint):
+        if mounted or mount_present():
             try:
                 cli("unmount", [mountpoint])
             except Exception as error:
                 result["cleanup_error"] = str(error)
-        result["mount_remaining"] = os.path.ismount(mountpoint)
+        result["mount_remaining"] = mount_present()
         result["finished"] = time.time()
         atomic_json(receipt, result)
     print(json.dumps({"status": result["status"], "receipt": str(receipt),

@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 
 spec = importlib.util.spec_from_file_location("filesystem_cli", Path(__file__).resolve().parents[1] / "test-filesystem-cli.py")
@@ -54,6 +55,30 @@ class PayloadTests(unittest.TestCase):
                 suite.load_payload(directory)
             with self.assertRaises(ValueError):
                 suite.load_payload(directory, directory / "paper.pdf")
+
+
+class PayloadWorkerTests(unittest.TestCase):
+    def test_worker_returns_result_and_reports_io_failure(self):
+        self.assertEqual(suite.bounded_payload_call(lambda: {"sha256": "verified"}, 2),
+                         {"sha256": "verified"})
+
+        def failed_io():
+            raise OSError("native filesystem write failed")
+
+        with self.assertRaises(suite.PayloadWorkerError) as failure:
+            suite.bounded_payload_call(failed_io, 2)
+        self.assertIn("native filesystem write failed", str(failure.exception))
+        self.assertFalse(failure.exception.worker["remaining"])
+
+    def test_stalled_worker_is_bounded_and_reaped(self):
+        started = time.monotonic()
+        with self.assertRaises(suite.PayloadWorkerError) as failure:
+            suite.bounded_payload_call(lambda: time.sleep(30), 0.1)
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertIn("timed out", str(failure.exception))
+        self.assertFalse(failure.exception.worker["remaining"])
+        with self.assertRaises(ChildProcessError):
+            suite.os.waitpid(failure.exception.worker["pid"], suite.os.WNOHANG)
 
 
 if __name__ == "__main__":
