@@ -6,7 +6,7 @@
 
 **For Linux, MacOS, FreeBSD, OpenBSD, NetBSD and DragonFly BSD.**
 
-Protect disks, file containers and directories with the CLI or native desktop app.
+Protect disks, file containers and directories with the CLI or native desktop app. Encrypt individual files with the CLI.
 
 ## Encryption support
 
@@ -172,36 +172,38 @@ Protect disks, file containers and directories with the CLI or native desktop ap
     </tr>
     <tr height="60">
       <td align="left">a&#8203;g&#8203;e</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td>WIP</td>
     </tr>
     <tr height="60">
-      <td align="left">O&#8203;p&#8203;e&#8203;n&#8203;S&#8203;S&#8203;L<br>CMS&nbsp;/&nbsp;enc</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
+      <td align="left">O&#8203;p&#8203;e&#8203;n&#8203;S&#8203;S&#8203;L<br>CMS</td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">G&#8203;n&#8203;u&#8203;P&#8203;G<br>(OpenPGP)</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
-      <td>WIP</td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td>WIP</td>
     </tr>
   </tbody>
 </table>
+
+age, OpenSSL CMS and GnuPG support individual-file encryption through the CLI on Linux, macOS and all four BSDs. Windows support is planned.
 
 On macOS, `--type apfs` creates a plain disk image containing an encrypted APFS volume. Open and close unlock and lock that volume through `diskutil`. External data-partition creation requires `--force`. The complete flow is tested on disposable images and their virtual partitions. Physical hardware remains untested.
 
@@ -263,6 +265,8 @@ BitLocker on Linux, macOS, and FreeBSD is planned for opening existing volumes. 
   </tbody>
 </table>
 
+For file encryption, age is included with Lurker. GnuPG requires an installed `gpg`. OpenSSL CMS requires OpenSSL 3 or newer and its matching `libcrypto`. macOS, OpenBSD and DragonFly BSD may require a separate OpenSSL package alongside system LibreSSL. These dependencies are needed only for their respective backends.
+
 ## Create. Unlock. Lock.
 
 ```bash
@@ -273,6 +277,25 @@ lurker unmount vault
 ```
 
 Lurker chooses the native format for your OS. Use administrator authorization where required.
+
+## Encrypt and decrypt a file
+
+```bash
+lurker encrypt --type age --passphrase my_data encrypted_my_data
+lurker decrypt --type age --passphrase encrypted_my_data restored_my_data
+```
+
+Choose `--type age`, `--type gnupg` or `--type openssl` (CMS).
+
+- **age** accepts a passphrase or public recipient files.
+- **GnuPG** accepts a passphrase, a passphrase supplied through `--key-file`, public keys, or a combination of shared and public-key credentials.
+- **OpenSSL CMS** uses AES-256-GCM and accepts a passphrase, a shared AES `--key-file`, X.509 certificates, or any combination.
+
+Repeat `--public-key` for multiple recipients. Use `--private-key` for age or CMS decryption. GnuPG finds the matching private key in its existing setup. Each enrolled credential can decrypt independently.
+
+Each operation takes one file and produces one file. Archiving, compression and key management are outside the file-encryption workflow.
+
+Native CLI tests passed on all 11 build hosts across six Linux distributions, macOS and four BSDs, with 220 byte-identical PDF restores and 33 expected wrong-passphrase rejections. See the [file-encryption results](DIRECTIVES/PLAN/FILE_ENCRYPTION.md#5-native-cli-results) and [CLI examples](docs/usage.md#encrypt-and-decrypt-individual-files).
 
 ## Filesystem Tested
 
