@@ -144,9 +144,13 @@ def main():
         if not args.device or not args.serial:
             parser.error('Device mode requires an identified round-specific scratch serial')
         try:
-            scratch_device_identity(args.device, args.serial)
+            identity = scratch_device_identity(args.device, args.serial)
         except RuntimeError as error:
             parser.error(str(error))
+        # Destructive create intentionally rejects symlink targets. Resolve the
+        # verified by-id alias only after serial/size/holder checks; revalidate
+        # the resulting device before every create and failure snapshot.
+        args.device = Path(identity['path'])
     if args.mode == 'directories' and (args.keyfile or args.cipher != 'aes'):
         parser.error('Directory engines retain their fixed credential/profile selection')
     os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:' + os.environ.get('PATH', '')
