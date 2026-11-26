@@ -128,8 +128,27 @@ checked before resizing its ext4 filesystem. It is mounted at
 fixtures are retained there with their original evidence paths preserved.
 The later destructive device matrix will use a separately identified scratch disk.
 
-Pending: final Linux source freeze and workspace build; complete repaired
-candidate containers in both kernel cohorts; cipher and credential/conformance
+Final Linux source is frozen at `ca7d2137fca741008648360e98acc06ce559de3d`.
+Remote workspace job `20261126T221438Z-c632c5b9` passed check, tests and build:
+156 tests passed, zero failed, 15 ignored. Final CLI/helper/desktop SHA-256s are
+`1e5e454037a195fc2042ca1315cf25e186d8b2932a2862ce4ae5146e33eea125`,
+`36180396cd9671e133096d6f946a3462b8acc71d907052e1f7ac3aac42624a3a`,
+and `e2bd595384fa78ba9a9c848bd746a1a52c3ee3a6d719e780774c1bc418c33496`.
+
+The independent `7c48a25` stager validated the native VeraCrypt creator, current
+gocryptfs/Cryptomator and the qualified new CryFS donor against frozen inputs.
+A Cargo JSON log records actual dependency notices. Stage archive SHA-256 is
+`ceeac4577f21df60ac0e51ecf88256ceb96d3b85feba502cdd96965f1e3e07af`.
+The native-only Linux packager now accepts either verified VeraCrypt artifact
+route and tests only the routes included. Debian passed 17 package/archive/policy
+tests and built/installed the new `0.1.0+fresh20261127` package; package SHA-256
+is `997c548efecc0f03cc0aede18b1371c625ada78ccb76c0cc59ac87bd9ba3fc9e`.
+Installed binary hashes match the workspace artifacts. This is a prepared-host
+installation; clean-host dependency absence is not claimed.
+
+The final seven-filesystem container/backing batch is running on official 7.3;
+the first LUKS1/HAMMER2 and LUKS2/HAMMER2 full payload cases passed. Remaining:
+complete repaired candidate containers in both kernel cohorts; cipher and credential/conformance
 cases; candidate reboot persistence; new scratch-device cases; final validation
 and cleanup
 and reconciliation of all 130 applicability cells. No complete-host pass is claimed.
