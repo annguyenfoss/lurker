@@ -440,12 +440,14 @@ mod tests {
             let active = physical_device(&source);
             let busy = ensure_physical_idle(&source);
             let mapping = super::super::verify_mapping(&mapped, device);
+            let backing = super::super::verify_backing(device, &source);
             let detached = super::super::close(&mapped);
             let active = active.unwrap();
             assert_eq!(active.bytes, info.bytes);
             assert_eq!(active.metadata_id, info.metadata_id);
             assert!(busy.is_err());
             mapping.unwrap();
+            backing.unwrap();
             detached.unwrap();
             ensure_physical_idle(&source).unwrap();
         }

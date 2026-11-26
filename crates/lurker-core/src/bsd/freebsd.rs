@@ -208,6 +208,15 @@ pub(super) fn detach_file(device: &str) -> AppResult<()> {
 /// Match the kernel's backing vnode identity, not GEOM's printed filename:
 /// libgeom's XML conversion can corrupt Unicode/spaces in that display field.
 pub(super) fn verify_backing(device: &str, path: &Path) -> AppResult<()> {
+    if md_unit(device).is_err() {
+        let info = physical_device(path)?;
+        if info.source == path && Path::new(device) == path {
+            return Ok(());
+        }
+        return Err(AppError::new(
+            "The FreeBSD physical backing does not match its canonical source.",
+        ));
+    }
     md_unit(device)?;
     let metadata = fs::metadata(path)
         .map_err(|e| AppError::io("Failed to inspect the recorded md backing file", e))?;
