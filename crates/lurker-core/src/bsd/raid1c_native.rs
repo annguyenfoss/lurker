@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::os::unix::fs::MetadataExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct Header {
@@ -64,9 +64,21 @@ pub(super) fn ensure_unattached(paths: &[PathBuf]) -> AppResult<()> {
         ));
     }
     let mut identities = BTreeSet::new();
+    let mut physical = BTreeSet::new();
     for path in paths {
-        let metadata = fs::metadata(path).map_err(|e| AppError::io("Inspect RAID1C member", e))?;
-        if !metadata.is_file() || !identities.insert((metadata.dev(), metadata.ino())) {
+        let metadata =
+            fs::symlink_metadata(path).map_err(|e| AppError::io("Inspect RAID1C member", e))?;
+        if !metadata.is_file() {
+            let info = native::physical_device(path)?;
+            if info.source != *path || !physical.insert(metadata.rdev()) {
+                return Err(AppError::new(
+                    "RAID1C physical members must be independent canonical disks.",
+                ));
+            }
+            native::ensure_physical_idle(path)?;
+            continue;
+        }
+        if !identities.insert((metadata.dev(), metadata.ino())) {
             return Err(AppError::new(
                 "RAID1C members must be distinct regular files, including through aliases.",
             ));
@@ -86,12 +98,12 @@ pub(super) fn ensure_unattached(paths: &[PathBuf]) -> AppResult<()> {
 }
 
 pub(super) fn probe(backing: &str) -> AppResult<Header> {
-    let unit = name(backing, "vnd")?;
+    let unit = native::backing_unit(backing)?;
     let mut file = File::open(format!("/dev/r{unit}a"))
         .map_err(|e| AppError::io("Read native RAID1C member metadata", e))?;
     file.seek(SeekFrom::Start(8192))
         .map_err(|e| AppError::io("Seek native RAID1C metadata", e))?;
-    let mut bytes = [0u8; 56];
+    let mut bytes = [0u8; 512];
     file.read_exact(&mut bytes)
         .map_err(|e| AppError::io("Read native RAID1C metadata", e))?;
     parse_header(&bytes)
@@ -140,13 +152,21 @@ fn backing_names(backings: &[String]) -> AppResult<Vec<String>> {
     }
     let names: Vec<String> = backings
         .iter()
-        .map(|b| name(b, "vnd").map(str::to_owned))
+        .map(|b| native::backing_unit(b).map(str::to_owned))
         .collect::<AppResult<_>>()?;
     let mut devices = BTreeSet::new();
     let mut objects = BTreeSet::new();
     for unit in &names {
-        let identity = native::vnode_identity(unit)?
-            .ok_or_else(|| AppError::new("RAID1C vnode backing is no longer attached."))?;
+        let identity = if unit.starts_with("sd") {
+            let path = PathBuf::from(format!("/dev/{unit}c"));
+            native::physical_device(&path)?;
+            let m = fs::symlink_metadata(path)
+                .map_err(|e| AppError::io("Inspect RAID1C physical member", e))?;
+            (m.dev(), m.ino())
+        } else {
+            native::vnode_identity(unit)?
+                .ok_or_else(|| AppError::new("RAID1C vnode backing is no longer attached."))?
+        };
         if !devices.insert(unit) || !objects.insert(identity) {
             return Err(AppError::new(
                 "RAID1C cannot use the same backing member twice.",
@@ -253,12 +273,39 @@ pub(super) fn format(backings: &[String], credential: &Credential) -> AppResult<
     let names = backing_names(backings)?;
     ensure_backings_unassembled(&names)?;
     for unit in &names {
+        name(unit, "vnd")?;
         exec(
             "/sbin/disklabel",
             &args(&["-wAT-", unit]),
             Some(b"RAID *\n"),
         )?;
     }
+    assemble(&names, credential, true)
+}
+
+/// Physical layouts are initialized and durably identity-journaled by the
+/// caller before assembly. This function never relabels existing members.
+pub(super) fn format_physical(backings: &[String], credential: &Credential) -> AppResult<String> {
+    if backings.len() != 2 {
+        return Err(AppError::new(
+            "New physical RAID1C arrays require two disks.",
+        ));
+    }
+    let names = backing_names(backings)?;
+    for unit in &names {
+        name(unit, "sd")?;
+        native::ensure_physical_idle(Path::new(&format!("/dev/{unit}c")))?;
+        let label = exec("/sbin/disklabel", &args(&[unit]), None)?;
+        if !label.lines().any(|line| {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            fields.len() >= 4 && fields[0] == "a:" && fields[3] == "RAID"
+        }) {
+            return Err(AppError::new(
+                "Physical RAID1C member lacks its prepared native RAID partition.",
+            ));
+        }
+    }
+    ensure_backings_unassembled(&names)?;
     assemble(&names, credential, true)
 }
 

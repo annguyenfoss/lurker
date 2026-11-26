@@ -2,6 +2,7 @@
 //! paths and an array UUID, never credentials or encryption parameters.
 //! Every acquired vnode and every publication step is durably journaled.
 use super::raid1c_native as driver;
+mod physical;
 use super::{
     absolute_destination, credential, exec, mounts, native, private_owned, require_root,
     sync_directory, unique_id, Identity, Registry, Session,
@@ -20,6 +21,8 @@ pub(super) struct Member {
     path: PathBuf,
     target: PathBuf,
     identity: Option<Identity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    physical: Option<super::physical::BackingIdentity>,
     backing: Option<String>,
     stage_dir: Option<PathBuf>,
     stage_identity: Option<Identity>,
@@ -79,6 +82,8 @@ struct Descriptor {
     volume_type: VolumeType,
     array_uuid: String,
     member_paths: Vec<PathBuf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    physical: Vec<super::physical::BackingIdentity>,
 }
 
 pub(super) fn descriptor_path(primary: &Path) -> PathBuf {
@@ -90,7 +95,9 @@ pub(super) fn descriptor_path(primary: &Path) -> PathBuf {
 pub(super) fn handles(command: &CommandAction) -> bool {
     command.volume_type() == VolumeType::Raid1c
         || matches!(command,
-        CommandAction::Mount(c) if c.volume_type == VolumeType::Auto && fs::symlink_metadata(descriptor_path(&c.source)).is_ok())
+        CommandAction::Mount(c) if c.volume_type == VolumeType::Auto && (
+            fs::symlink_metadata(descriptor_path(&c.source)).is_ok()
+            || physical::descriptor_path(&c.source).is_ok_and(|p| fs::symlink_metadata(p).is_ok())))
 }
 
 pub(super) fn run(command: CommandAction, output: Output) -> AppResult<()> {
@@ -174,6 +181,12 @@ fn existing_file(path: &Path, allow_missing: bool) -> AppResult<(PathBuf, Option
 fn ensure_distinct(members: &[Member]) -> AppResult<()> {
     let mut paths = BTreeSet::new();
     let mut identities = BTreeSet::new();
+    let physical_count = members.iter().filter(|m| m.physical.is_some()).count();
+    if physical_count != 0 && physical_count != members.len() {
+        return Err(AppError::new(
+            "RAID1C cannot mix physical disks and file members.",
+        ));
+    }
     for member in members {
         if !paths.insert(&member.target)
             || member
@@ -192,6 +205,9 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
     let owner = crate::new_filesystem::invoking_owner()?;
     CommandAction::Create(c.clone()).validate_raid1c_options("openbsd")?;
     native::validate_filesystem(c.filesystem, VolumeType::Raid1c)?;
+    if c.source_kind == crate::SourceKind::Block {
+        return physical::create(c, output);
+    }
     let bytes = crate::size::size_gb_to_mib(
         c.size_gb
             .as_deref()
@@ -234,6 +250,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
                 path: directory.join("member.img"),
                 target: target.clone(),
                 identity: None,
+                physical: None,
                 backing: None,
                 stage_dir: Some(directory),
                 stage_identity: None,
@@ -334,7 +351,12 @@ fn attach_members(registry: &Registry, session: &mut Session) -> AppResult<()> {
             continue;
         }
         let path = state(session)?.members[index].path.clone();
-        let backing = native::attach_file(&path, false)?;
+        let backing = if let Some(proof) = &state(session)?.members[index].physical {
+            proof.verify(&path)?;
+            path.to_string_lossy().into_owned()
+        } else {
+            native::attach_file(&path, false)?
+        };
         state_mut(session)?.members[index].backing = Some(backing);
         registry.save(session)?;
         verify_members(session, None)?;
@@ -391,6 +413,7 @@ fn prepare_descriptor(
         version: 1,
         volume_type: VolumeType::Raid1c,
         array_uuid: mirror.uuid.clone().unwrap(),
+        physical: Vec::new(),
         member_paths: mirror
             .members
             .iter()
@@ -495,7 +518,7 @@ fn load_descriptor(path: &Path) -> AppResult<Descriptor> {
     }
     let value: Descriptor =
         serde_json::from_slice(&bytes).map_err(|_| AppError::new("Invalid RAID1C descriptor."))?;
-    if value.version != 1
+    if !matches!((value.version, value.physical.len()), (1, 0) | (2, 2))
         || value.volume_type != VolumeType::Raid1c
         || value.member_paths.len() != 2
         || value.member_paths.iter().any(|p| p.as_os_str().is_empty())
@@ -507,6 +530,14 @@ fn load_descriptor(path: &Path) -> AppResult<Descriptor> {
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
     {
         return Err(AppError::new("Unsupported RAID1C membership descriptor."));
+    }
+    if value.version == 2 {
+        crate::trust::trusted_runtime_file(path, 65536)?;
+        if value.member_paths.iter().any(|p| !p.is_absolute()) {
+            return Err(AppError::new(
+                "Physical RAID1C descriptors require absolute canonical device paths.",
+            ));
+        }
     }
     Ok(value)
 }
@@ -522,7 +553,11 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         ));
     }
     let primary = absolute_destination(&c.source)?;
-    let descriptor = descriptor_path(&primary);
+    let descriptor = if fs::symlink_metadata(&primary).is_ok_and(|m| !m.is_file()) {
+        physical::descriptor_path(&primary)?
+    } else {
+        descriptor_path(&primary)
+    };
     let metadata = if fs::symlink_metadata(&descriptor).is_ok() {
         Some(load_descriptor(&descriptor)?)
     } else {
@@ -530,11 +565,23 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     };
     let paths = if c.peer_sources.len() == 1 {
         vec![primary.clone(), absolute_destination(&c.peer_sources[0])?]
+    } else if c.allow_degraded && metadata.as_ref().is_some_and(|d| d.version == 2) {
+        physical::ensure_descriptor_idle(metadata.as_ref().unwrap())?;
+        vec![primary.clone()]
     } else if let Some(value) = &metadata {
-        vec![
-            primary.clone(),
-            absolute_destination(&descriptor.parent().unwrap().join(&value.member_paths[1]))?,
-        ]
+        let peer = if value.version == 2 {
+            value
+                .member_paths
+                .iter()
+                .find(|p| **p != primary)
+                .ok_or_else(|| {
+                    AppError::new("Physical RAID1C descriptor has no independent peer.")
+                })?
+                .clone()
+        } else {
+            descriptor.parent().unwrap().join(&value.member_paths[1])
+        };
+        vec![primary.clone(), absolute_destination(&peer)?]
     } else if c.allow_degraded {
         vec![primary.clone()]
     } else {
@@ -544,11 +591,13 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
     let mut members = Vec::new();
     for path in paths {
         registry.ensure_unused(&path)?;
-        let (path, identity) = existing_file(&path, c.allow_degraded)?;
+        let (path, identity, physical) =
+            physical::existing_member(&path, c.allow_degraded, metadata.as_ref())?;
         members.push(Member {
             path: path.clone(),
             target: path,
             identity,
+            physical,
             backing: None,
             stage_dir: None,
             stage_identity: None,
@@ -664,6 +713,22 @@ fn mountpoint(path: &Path, members: &[Member]) -> AppResult<PathBuf> {
 fn verify_members(session: &Session, inactive_vnode: Option<usize>) -> AppResult<()> {
     for (index, member) in state(session)?.members.iter().enumerate() {
         if let Some(identity) = &member.identity {
+            if let Some(proof) = &member.physical {
+                if !identity.matches(&member.path) {
+                    return Err(AppError::new(
+                        "Physical RAID1C device node changed; preserve its session.",
+                    ));
+                }
+                proof.verify(&member.path)?;
+                if let Some(backing) = &member.backing {
+                    if Path::new(backing) != member.path {
+                        return Err(AppError::new(
+                            "Physical RAID1C backing changed; preserve its session.",
+                        ));
+                    }
+                }
+                continue;
+            }
             let finalized = state(session)?.committed
                 && member.backing.is_none()
                 && session.mapped.is_none()
@@ -742,6 +807,9 @@ fn reconcile_detach(registry: &Registry, session: &mut Session) -> AppResult<()>
             }
             let member = state(session)?.members.get(index).ok_or_else(conflict)?;
             let backing = member.backing.as_deref().ok_or_else(conflict)?;
+            if member.physical.is_some() {
+                return Err(conflict());
+            }
             if native::vnode_identity(backing)?.is_some() {
                 return Ok(());
             }
@@ -803,6 +871,12 @@ fn close_resources(registry: &Registry, session: &mut Session) -> AppResult<()> 
         if let Some(backing) = state(session)?.members[index].backing.clone() {
             let member = &state(session)?.members[index];
             native::verify_backing(&backing, &member.path)?;
+            if let Some(proof) = &member.physical {
+                proof.verify(&member.path)?;
+                state_mut(session)?.members[index].backing = None;
+                registry.save(session)?;
+                continue;
+            }
             state_mut(session)?.detach = Some(DetachIntent::Member(index));
             registry.save(session)?;
             native::detach_file(&backing)?;
@@ -945,6 +1019,7 @@ mod tests {
                 .unwrap();
             members.push(Member {
                 identity: Some(Identity::read(&path).unwrap()),
+                physical: None,
                 target: path.clone(),
                 path,
                 backing: None,
@@ -1042,6 +1117,7 @@ mod tests {
             fs::write(&path, format!("owned member {index}")).unwrap();
             members.push(Member {
                 identity: Some(Identity::read(&path).unwrap()),
+                physical: None,
                 path,
                 target: directory.join(format!("member-{index}")),
                 backing: None,

@@ -58,10 +58,11 @@ impl CommandAction {
                         "RAID1C create requires --type raid1c and exactly one --member path (two members).",
                     );
                 }
-                if c.force || c.source_kind != SourceKind::File {
-                    return reject(
-                        "RAID1C create accepts new file containers only, without --force.",
-                    );
+                if !matches!(
+                    (c.source_kind, c.force, c.size_gb.is_some()),
+                    (SourceKind::File, false, true) | (SourceKind::Block, true, false)
+                ) {
+                    return reject("RAID1C requires two new files with a size and no --force, or two physical disks with --force and no size.");
                 }
                 if c.cipher != CreateCipher::Aes || c.keyfile.is_some() {
                     return reject("RAID1C uses native AES and password authentication only.");
@@ -141,7 +142,7 @@ impl CreateCommand {
                 || (os == "openbsd"
                     && matches!(
                         self.volume_type,
-                        VolumeType::Softraid | VolumeType::Veracrypt
+                        VolumeType::Softraid | VolumeType::Raid1c | VolumeType::Veracrypt
                     ))
                 || (os == "freebsd"
                     && matches!(self.volume_type, VolumeType::Geli | VolumeType::Veracrypt))
@@ -485,6 +486,28 @@ mod tests {
         } else {
             assert!(error.contains("require OpenBSD"));
         }
+    }
+
+    #[test]
+    fn raid1c_physical_create_requires_force_and_omits_file_size() {
+        let mut action = raid_create();
+        if let CommandAction::Create(c) = &mut action {
+            c.source_kind = SourceKind::Block;
+            c.force = true;
+            c.size_gb = None;
+            c.filesystem = Some(CreateFilesystem::Ufs2);
+            assert!(c.validate_filesystem("openbsd").is_ok());
+        }
+        assert!(action.validate_raid1c_options("openbsd").is_ok());
+        if let CommandAction::Create(c) = &mut action {
+            c.force = false;
+        }
+        assert!(action.validate_raid1c_options("openbsd").is_err());
+        if let CommandAction::Create(c) = &mut action {
+            c.force = true;
+            c.size_gb = Some("1".into());
+        }
+        assert!(action.validate_raid1c_options("openbsd").is_err());
     }
 
     #[test]

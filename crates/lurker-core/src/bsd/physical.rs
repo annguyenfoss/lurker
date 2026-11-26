@@ -74,6 +74,19 @@ pub(super) fn capture(source: &Path) -> AppResult<(Identity, BackingIdentity)> {
 }
 
 impl BackingIdentity {
+    #[cfg(target_os = "openbsd")]
+    pub(super) fn after_initialization(&self, source: &Path) -> AppResult<Self> {
+        let (_, now) = capture(source)?;
+        if self.rdev != now.rdev
+            || self.bytes != now.bytes
+            || (self.metadata_id.is_some() && self.metadata_id != now.metadata_id)
+            || now.metadata_id.is_none()
+        {
+            return Err(AppError::new("Physical OpenBSD identity changed unexpectedly during initialization; preserve recorded resources."));
+        }
+        Ok(now)
+    }
+
     pub(super) fn verify(&self, source: &Path) -> AppResult<()> {
         let (_, now) = capture(source)?;
         if self.rdev != now.rdev || self.bytes != now.bytes || self.metadata_id != now.metadata_id {

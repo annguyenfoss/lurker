@@ -822,6 +822,13 @@ where
                 // lstat distinguishes an absent entry from a dangling symlink.
                 match fs::symlink_metadata(&source) {
                     Ok(metadata) if metadata.file_type().is_file() => Some(SourceKind::File),
+                    Ok(metadata)
+                        if os == "openbsd"
+                            && cfg!(target_os = "openbsd")
+                            && native_device_type(metadata.file_type()) =>
+                    {
+                        Some(SourceKind::Block)
+                    }
                     Err(err)
                         if err.kind() == std::io::ErrorKind::NotFound
                             && allow_degraded
@@ -981,7 +988,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     let directory_help = "\nDirectory backends (where supported):\n  create --type gocryptfs|cryfs|cryptomator|pefs <directory>\n  mount --type BACKEND <encrypted-directory> <mountpoint>\n  unmount --type BACKEND <mountpoint>\n  No size or cipher option; fixed native encryption profile.\n";
     let session_help = "\nSession shutdown hook:\n  session-close --type BACKEND [--timeout SECONDS] <absolute-vault-source>\n";
     let raid_help = if cfg!(target_os = "openbsd") {
-        "\nRAID1C (two mirrored file members, native AES/password only):\n  create --type raid1c --member <peer-file> <file> <size-gb>\n  mount [--type raid1c] [--member <peer-file>] <file> <mountpoint>\n  mount --type raid1c --degraded <surviving-file> <mountpoint>\n  --degraded explicitly recovers an existing array; never used during create.\n  Keep both files and their RAID1C descriptors together; no --force or keyfiles.\n"
+        "\nRAID1C (two mirrored files or physical disks, native AES/password only):\n  create --type raid1c --member <peer-file> <file> <size-gb>\n  create --type raid1c --member <peer-disk> <disk> --force\n  mount [--type raid1c] [--member <peer>] <source> <mountpoint>\n  mount --type raid1c --degraded <surviving-member> <mountpoint>\n  --degraded explicitly recovers an existing array; never used during create.\n  File members require a size and no --force; physical disks require --force and no size.\n  Keep file descriptors with their members; back up physical descriptors in /var/db/lurker-raid1c.\n  Physical RAID1C uses two idle whole /dev/sdNc disks. Keyfiles are unavailable.\n"
     } else {
         ""
     };
@@ -994,6 +1001,8 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
         "File containers and CGD GPT data partitions"
     } else if cfg!(target_os = "freebsd") {
         "File containers and GELI data providers"
+    } else if cfg!(target_os = "openbsd") {
+        "File containers, softraid disks and VeraCrypt data partitions"
     } else {
         "File containers only"
     };
@@ -1001,6 +1010,8 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
         "\nPhysical CGD data partitions:\n  create --type cgd [--filesystem NAME] <GPT-wedge> --force\n  mount --type cgd <GPT-wedge> <mountpoint>\n  Back up /var/db/lurker-cgd/<partition-UUID>.cgdparams with the encrypted partition.\n"
     } else if cfg!(target_os = "freebsd") {
         "\nPhysical GELI data providers:\n  create --type geli [--filesystem NAME] <data-provider> --force\n  mount --type geli <data-provider> <mountpoint>\n  System disks and providers in use are refused.\n"
+    } else if cfg!(target_os = "openbsd") {
+        "\nPhysical OpenBSD encryption:\n  create --type softraid [--filesystem NAME] <whole-/dev/sdNc-disk> --force\n  create --type veracrypt [--filesystem NAME] <data-partition> --force\n  VeraCrypt partitions must exclude the outer disklabel sector.\n  System disks and disks in use are refused.\n"
     } else {
         ""
     };
@@ -1434,6 +1445,42 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "openbsd")]
+    #[test]
+    #[ignore = "stat-only parser checks; requires LURKER_TEST_OPENBSD_PHYSICAL_SOURCE naming the verified scratch disk"]
+    fn raid1c_native_members_are_admitted_as_devices_before_core_validation() {
+        use std::os::unix::fs::FileTypeExt;
+        let source = std::env::var("LURKER_TEST_OPENBSD_PHYSICAL_SOURCE").unwrap();
+        assert!(std::fs::symlink_metadata(&source)
+            .unwrap()
+            .file_type()
+            .is_block_device());
+        let raw = source.replacen("/dev/", "/dev/r", 1);
+        assert!(std::fs::symlink_metadata(&raw)
+            .unwrap()
+            .file_type()
+            .is_char_device());
+        for source in [&source, &raw] {
+            let args = [
+                "lurker",
+                "mount",
+                "--type=raid1c",
+                source,
+                "/tmp",
+            ];
+            let ParseOutcome::Run(cli) =
+                super::parse_args_for_platform(args.map(OsString::from), "openbsd").unwrap()
+            else {
+                panic!()
+            };
+            let CommandAction::Mount(command) = cli.command else {
+                panic!()
+            };
+            assert_eq!(command.source, std::path::Path::new(source));
+            assert_eq!(command.volume_type, VolumeType::Raid1c);
+        }
+    }
+
     #[test]
     fn raid1c_mount_normalizes_auto_members_before_helper_serialization() {
         for flag in [
@@ -1560,12 +1607,18 @@ mod tests {
         symlink(&peer, &link).unwrap();
         assert!(parse(&link, &["--type=raid1c", "--degraded"], true).is_err());
         assert!(parse(&mountpoint, &["--type=raid1c", "--degraded"], true).is_err());
-        assert!(parse(
-            std::path::Path::new("/dev/null"),
-            &["--type=raid1c", "--degraded"],
-            true
-        )
-        .is_err());
+        // Native character nodes reach the core inspector on OpenBSD. This
+        // parsing decision grants no device access; /dev/null is rejected by
+        // the core's physical-disk namespace and geometry validation.
+        assert_eq!(
+            parse(
+                std::path::Path::new("/dev/null"),
+                &["--type=raid1c", "--degraded"],
+                true
+            )
+            .is_ok(),
+            cfg!(target_os = "openbsd")
+        );
         let args = [
             OsString::from("lurker"),
             "unmount".into(),
