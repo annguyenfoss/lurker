@@ -1,4 +1,4 @@
-//! Native OpenZFS inside an authenticated VeraCrypt virtual disk, never an
+//! Native OpenZFS inside an authenticated crypto virtual disk, never an
 //! encryption backend. The caller must prove that `device` still belongs to
 //! its private decrypted image before every operation and journal PoolIdentity
 //! before import. Targets must be private, canonical directories protected
@@ -282,7 +282,7 @@ fn associated_devices(
         .filter(|attached| super::same_path(&attached.path, image));
     let selected = matches
         .next()
-        .ok_or_else(|| AppError::new("The expected VeraCrypt image is no longer attached."))?;
+        .ok_or_else(|| AppError::new("The expected authenticated image is no longer attached."))?;
     if matches.next().is_some()
         || !selected
             .entities

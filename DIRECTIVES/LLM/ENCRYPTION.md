@@ -30,7 +30,7 @@ Follow the support and acceptance rules in `CODEBASE.md`.
 | securefs | 🟦 | 🟦 | 🟦 | — | 🟦 | 🟦 | 🟦 |
 
 - Do not add other backend/OS pairs without an explicit scope change. EncFS, fscrypt, OpenZFS, plain dm-crypt, Loop-AES, TCG Opal, commercial-only backends, encrypted archives, backups and rclone crypt are excluded. LUKS still uses dm-crypt internally. Research availability is not approval to integrate.
-- macOS runtime policy: VeraCrypt uses FUSE-T 1.2.9 or later via SMB loopback. gocryptfs, CryFS and Cryptomator use FUSE-T FSKit. The full bundle requires the qualified FUSE-T 1.2.9 helper for gocryptfs. Exact macOS package results are in `docs/macos-backends.md`.
+- macOS runtime policy: VeraCrypt packages declare their separately installed FUSE runtime. The default FUSE-T build uses SMB loopback and is excluded from native-only qualification; the explicit audited `--fuse-runtime macfuse` build provides the qualified native transport. gocryptfs, CryFS and Cryptomator use local FUSE-T FSKit. The full bundle requires the qualified FUSE-T 1.2.9 helper for gocryptfs. Exact package/host evidence is recorded with its actual transport; see `docs/macos-backends.md` and `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/MACOS_RESULTS.md`.
 - Planned support requires native validation: gocryptfs macOS is beta and FreeBSD is basic; VeraCrypt targets FreeBSD x86-64 14+ and OpenBSD x86-64 7.8+, subject to inner-filesystem support. CryFS 2.0 alpha is excluded.
 - Prefer LUKS2 for new Linux volumes; LUKS1 adds compatibility and the DragonFly native path. Do not apply LUKS2/Argon2id format arguments to LUKS1. Qualify DragonFly cryptsetup versions, patches, profiles and disk/file-container behavior before release; selection is not security approval. PEFS needs a matching FreeBSD kernel module. Cryptomator requires create/mount/credential API and application-filesystem validation.
 - Existing profiles below remain authoritative. Select and document profiles for new backends during implementation; do not apply LUKS/VeraCrypt cipher options to folder backends automatically.
@@ -237,12 +237,13 @@ If cipher choices change, also update:
 ## Apple Encrypted Disk Image (macOS)
 
 - Create defaults to `apple` on macOS; Linux defaults to `luks`.
-- `hdiutil create -type UDIF -fs APFS -volname Lurker -encryption AES-256 -stdinpass`.
-- Size is specified in MiB. File containers only, minimum 32 MiB.
-- Encryption protects the virtual disk image; APFS inside is not separately encrypted.
+- Native default: `hdiutil create -type UDIF -fs APFS -volname Lurker -encryption AES-256 -stdinpass`; explicit exFAT uses the same fixed crypto profile.
+- Explicit ext4, NTFS and ZFS use the profile from `workflow.rs`: `hdiutil create -srcdevice <identified-zero-only-virtual-disk> -format UDRW -encryption AES-256 -stdinpass`, then authenticate the encrypted image and format its identified virtual device with native host tools. No existing plaintext or credentials enter the blank source. Filesystem drivers/tools are installed separately; native attachment, process/mount and ZFS GUID identities govern recovery and normal close. See `native/macos/apple-filesystems.md`.
+- Size is specified in MiB. File containers only, minimum 32 MiB for native defaults and 384 MiB for ext4/NTFS/ZFS. Password only; keyfiles are rejected.
+- Encryption protects the virtual disk image; the selected inner filesystem is not separately encrypted. APFS remains the default.
 - AES-256 is fixed. Reject Serpent/Twofish instead of silently ignoring the selected cipher.
 - Mount uses `hdiutil attach -stdinpass`; any access restriction follows the actual storage/driver capability rather than a user-selectable mode. Unmount detaches the virtual disk without force.
-- macOS VeraCrypt retains the existing cipher names, SHA-512, PIM 0, password-or-keyfile authentication, and full initialization; it changes only the inner filesystem to exFAT.
+- macOS VeraCrypt retains the existing cipher names, SHA-512, PIM 0, password-or-keyfile authentication and full initialization. Its default inner filesystem is exFAT; explicit ext4/NTFS/UFS2/ZFS use qualified host-native routes. XFS is refused pending driver persistence qualification. A legacy Btrfs VM route does not qualify as native support.
 
 ## Native APFS encrypted data volumes (macOS)
 

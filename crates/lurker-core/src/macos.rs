@@ -282,7 +282,7 @@ fn images() -> AppResult<Vec<Image>> {
 
 fn apple_volumes() -> AppResult<Vec<Volume>> {
     let uid = crate::effective_uid();
-    Ok(images()?
+    let mut volumes = images()?
         .into_iter()
         .filter(|i| i.encrypted && i.owner.is_none_or(|owner| owner == uid))
         .map(|i| {
@@ -301,7 +301,9 @@ fn apple_volumes() -> AppResult<Vec<Volume>> {
                 readonly: !i.writable,
             }
         })
-        .collect())
+        .collect::<Vec<_>>();
+    filesystems::augment(&mut volumes)?;
+    Ok(volumes)
 }
 
 fn parse_veracrypt_list(text: &str) -> AppResult<Vec<Volume>> {
@@ -484,14 +486,14 @@ fn plain_image_info(bytes: &[u8]) -> AppResult<Option<bool>> {
 pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
     match &command {
         CommandAction::Create(c) if c.volume_type == VolumeType::Apfs => {
-            return apfs::create(c.clone(), output)
+            return apfs::create(c.clone(), output);
         }
         CommandAction::Mount(c)
             if c.volume_type == VolumeType::Apfs
                 || c.volume_type == VolumeType::Auto
                     && (encrypted_apple(&c.source)? != Some(true) && apfs::detects(&c.source)?) =>
         {
-            return apfs::mount(c.clone(), output)
+            return apfs::mount(c.clone(), output);
         }
         CommandAction::Unmount(c)
             if c.volume_type == VolumeType::Apfs
@@ -504,7 +506,7 @@ pub fn run(command: CommandAction, output: Output) -> AppResult<()> {
                             || v.devices.iter().any(|p| same_path(p, &c.target))
                     }) =>
         {
-            return apfs::unmount(c.clone(), output)
+            return apfs::unmount(c.clone(), output);
         }
         _ => {}
     }
@@ -636,9 +638,22 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         require_veracrypt()?
     };
     arguments.push(temp.as_os_str().into());
-    checked(&program, &arguments, Some(&pass))?;
+    if c.volume_type == VolumeType::Apple && external_format {
+        if let Err(error) = filesystems::create_apple(&temp, size, &arguments, &pass) {
+            std::mem::forget(staging);
+            return Err(error);
+        }
+    } else {
+        checked(&program, &arguments, Some(&pass))?;
+    }
     if external_format {
-        if let Err(error) = filesystems::format(&temp, c.filesystem, &pass, c.keyfile.as_deref()) {
+        if let Err(error) = filesystems::format(
+            &temp,
+            c.volume_type,
+            c.filesystem,
+            &pass,
+            c.keyfile.as_deref(),
+        ) {
             // Preserve the recoverable ciphertext if crypto teardown failed.
             std::mem::forget(staging);
             return Err(error);
@@ -752,19 +767,19 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         (_, Some(false)) => {
             return Err(AppError::new(
                 "Refusing to mount an unencrypted disk image.",
-            ))
+            ));
         }
         (VolumeType::Auto, Some(true)) => VolumeType::Apple,
         (VolumeType::Auto, None) => VolumeType::Veracrypt,
         (VolumeType::Apple, None) => {
             return Err(AppError::new(
                 "Source is not an Apple encrypted disk image.",
-            ))
+            ));
         }
         (VolumeType::Veracrypt, Some(true)) => {
             return Err(AppError::new(
                 "Source is an Apple encrypted disk image, not VeraCrypt.",
-            ))
+            ));
         }
         (kind, _) => kind,
     };
@@ -841,6 +856,17 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
             ));
             return Ok(());
         }
+        if kind == VolumeType::Apple
+            && error.message.contains("no mountable file systems")
+            && filesystems::mount_apple_missing(&source, &mountpoint, &pass, c.readonly)?
+        {
+            output.msg2(&format!(
+                "Mounted {} at {}",
+                source.display(),
+                mountpoint.display()
+            ));
+            return Ok(());
+        }
         // Native tools normally roll back failed mounts themselves. If one
         // left an attachment behind, close only this source at this mountpoint.
         let attached = if kind == VolumeType::Apple {
@@ -865,9 +891,17 @@ fn mount(c: MountCommand, output: Output) -> AppResult<()> {
         }
         return Err(error);
     }
-    if kind == VolumeType::Veracrypt {
-        filesystems::replace_native_ntfs(&source, &mountpoint, c.readonly)?;
+    if kind == VolumeType::Apple
+        && filesystems::mount_apple_missing(&source, &mountpoint, &pass, c.readonly)?
+    {
+        output.msg2(&format!(
+            "Mounted {} at {}",
+            source.display(),
+            mountpoint.display()
+        ));
+        return Ok(());
     }
+    filesystems::replace_native_ntfs(&source, &mountpoint, c.readonly, kind == VolumeType::Apple)?;
     output.msg2(&format!(
         "Mounted {} at {}",
         source.display(),

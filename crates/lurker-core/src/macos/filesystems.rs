@@ -1,4 +1,4 @@
-//! Optional filesystems over VeraCrypt's authenticated decrypted image.
+//! Optional filesystems over authenticated native Apple or VeraCrypt storage.
 //! Formatters and filesystem drivers always run as the login user.
 use super::*;
 use crate::CreateFilesystem;
@@ -152,11 +152,24 @@ fn formatter(kind: Kind) -> AppResult<PathBuf> {
 }
 
 pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<OsString>>> {
-    let Some(kind) = requested(c.filesystem).filter(|_| c.volume_type == VolumeType::Veracrypt)
+    let Some(kind) = requested(c.filesystem)
+        .filter(|_| matches!(c.volume_type, VolumeType::Veracrypt | VolumeType::Apple))
     else {
         return Ok(None);
     };
     require_persistent_driver(kind)?;
+    if c.volume_type == VolumeType::Apple {
+        if !matches!(kind, Kind::Ext4 | Kind::Ntfs | Kind::Zfs) {
+            return Err(AppError::new(
+                "This filesystem has no qualified native Apple-image device route on macOS.",
+            ));
+        }
+        if c.keyfile.is_some() {
+            return Err(AppError::new(
+                "Apple disk images do not support keyfile authentication.",
+            ));
+        }
+    }
     if crate::effective_uid() == 0 {
         return Err(AppError::new(
             "External macOS filesystem containers must be created as the login user.",
@@ -178,6 +191,12 @@ pub(super) fn create_args(c: &CreateCommand, size: u64) -> AppResult<Option<Vec<
         return Err(AppError::new(
             "External macOS filesystem containers require at least 384 MiB.",
         ));
+    }
+    if c.volume_type == VolumeType::Apple {
+        return Ok(Some(crate::workflow::macos_apple_create_args(
+            size,
+            c.filesystem,
+        )?));
     }
     let mut arguments =
         crate::workflow::macos_veracrypt_create_args(c.cipher, size, c.keyfile.as_deref(), None)?;
@@ -275,6 +294,7 @@ fn cached_device_reused(attached: &[Image], device: &Path, expected_image: &Path
 struct OpenImage {
     path: PathBuf,
     device: PathBuf,
+    apple: bool,
 }
 fn open_image(
     source: &Path,
@@ -342,11 +362,305 @@ fn identified_image(source: &Path) -> AppResult<OpenImage> {
     Ok(OpenImage {
         path,
         device: device.clone(),
+        apple: false,
     })
+}
+
+fn whole_device(device: &Path) -> bool {
+    device
+        .to_str()
+        .and_then(|value| value.strip_prefix("/dev/disk"))
+        .is_some_and(|number| {
+            !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+        })
+}
+
+fn identified_apple_image(source: &Path) -> AppResult<OpenImage> {
+    select_apple_image(source, images()?)
+}
+fn select_apple_image(source: &Path, images: Vec<Image>) -> AppResult<OpenImage> {
+    let mut attached = images
+        .into_iter()
+        .filter(|image| image.encrypted && same_path(&image.path, source));
+    let image = attached
+        .next()
+        .ok_or_else(|| AppError::new("Authenticated Apple image has no native attachment."))?;
+    if attached.next().is_some() || image.owner.is_some_and(|uid| uid != crate::effective_uid()) {
+        return Err(AppError::new(
+            "Apple image attachment ownership is ambiguous.",
+        ));
+    }
+    let devices: Vec<_> = image
+        .entities
+        .iter()
+        .filter(|entity| whole_device(&entity.device))
+        .collect();
+    if devices.len() != 1 {
+        return Err(AppError::new(
+            "Foreign Apple filesystem needs one identified native virtual disk.",
+        ));
+    }
+    Ok(OpenImage {
+        path: source.into(),
+        device: devices[0].device.clone(),
+        apple: true,
+    })
+}
+
+fn open_apple_image(source: &Path, pass: &[u8], readonly: bool) -> AppResult<OpenImage> {
+    let mut arguments = args(&["attach", "-nomount", "-plist", "-stdinpass", "-nobrowse"]);
+    if readonly {
+        arguments.push("-readonly".into());
+    }
+    arguments.push(source.into());
+    checked(Path::new(HDIUTIL), &arguments, Some(pass))?;
+    identified_apple_image(source)
+}
+
+pub(super) fn create_apple(
+    source: &Path,
+    size_mib: u64,
+    arguments: &[OsString],
+    pass: &[u8],
+) -> AppResult<()> {
+    let blank = source
+        .parent()
+        .ok_or_else(|| AppError::new("Missing private Apple staging directory."))?
+        .join("blank-apple.raw");
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&blank)
+        .map_err(|error| AppError::io("Reserve blank Apple initialization image", error))?;
+    file.set_len(
+        size_mib
+            .checked_mul(1024 * 1024)
+            .ok_or_else(|| AppError::new("Apple image size overflow."))?,
+    )
+    .and_then(|_| file.sync_all())
+    .map_err(|error| AppError::io("Size blank Apple initialization image", error))?;
+    // This file contains zeros only, never an existing plaintext filesystem.
+    // Native hdiutil creates the encrypted UDIF from its identified virtual disk.
+    let result = checked(
+        Path::new(HDIUTIL),
+        &[
+            "attach".into(),
+            "-nomount".into(),
+            "-plist".into(),
+            "-imagekey".into(),
+            "diskimage-class=CRawDiskImage".into(),
+            blank.as_os_str().into(),
+        ],
+        None,
+    )?;
+    #[derive(Deserialize)]
+    struct Attachment {
+        #[serde(rename = "system-entities")]
+        entities: Vec<Entity>,
+    }
+    let attached: Attachment = decode(&result.stdout)?;
+    let devices: Vec<_> = attached
+        .entities
+        .iter()
+        .filter(|entity| whole_device(&entity.device))
+        .collect();
+    if devices.len() != 1 {
+        return Err(AppError::new(
+            "Blank Apple image has ambiguous virtual devices; retain its private staging directory.",
+        ));
+    }
+    let device = &devices[0].device;
+    validate_native_device(&blank, device)?;
+    let mut create = arguments.to_vec();
+    create.splice(
+        1..1,
+        [OsString::from("-srcdevice"), device.as_os_str().into()],
+    );
+    let initialized = checked(Path::new(HDIUTIL), &create, Some(pass)).map(|_| ());
+    validate_native_device(&blank, device)?;
+    checked(
+        Path::new(HDIUTIL),
+        &["detach".into(), device.as_os_str().into()],
+        None,
+    )?;
+    initialized?;
+    fs::remove_file(blank)
+        .map_err(|error| AppError::io("Remove blank Apple initialization image", error))
+}
+
+fn close_apple_image(source: &Path, device: &Path) -> AppResult<()> {
+    validate_native_device(source, device)?;
+    let image = identified_apple_image(source)?;
+    checked(
+        Path::new(HDIUTIL),
+        &["detach".into(), image.device.into_os_string()],
+        None,
+    )?;
+    Ok(())
+}
+
+fn close_open_image(source: &Path, image: &OpenImage) -> AppResult<()> {
+    if image.apple {
+        close_apple_image(source, &image.device)
+    } else {
+        close_identified_crypto(source, &image.path)
+    }
+}
+
+fn close_session_crypto(session: &Session) -> AppResult<()> {
+    if session.apple {
+        close_apple_image(
+            &session.source,
+            session
+                .native_device
+                .as_ref()
+                .ok_or_else(|| AppError::new("Missing Apple device for normal close."))?,
+        )
+    } else {
+        close_identified_crypto(&session.source, &session.image)
+    }
+}
+
+fn format_apple(source: &Path, kind: Kind, pass: &[u8]) -> AppResult<()> {
+    if !matches!(kind, Kind::Ext4 | Kind::Ntfs | Kind::Zfs) {
+        return Err(AppError::new("Unqualified native Apple filesystem route."));
+    }
+    let image = open_apple_image(source, pass, false)?;
+    if kind == Kind::Zfs {
+        return format_zfs_image(source, image);
+    }
+    let registry = Registry::lock()?;
+    let target = source
+        .parent()
+        .ok_or_else(|| AppError::new("Missing Apple staging directory."))?
+        .join("filesystem-initialize");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&target)
+        .map_err(|error| AppError::io("Reserve native filesystem initialization", error))?;
+    let (path, mut session) = reserve_session(
+        &registry,
+        source,
+        &target,
+        source,
+        kind,
+        false,
+        Some(image.device.clone()),
+        true,
+    )?;
+    validate_image(&session)?;
+    let mut arguments = if kind == Kind::Ext4 {
+        vec![
+            "-F".into(),
+            "-E".into(),
+            format!("root_owner={}:{}", crate::effective_uid(), unsafe {
+                libc::getegid()
+            })
+            .into(),
+        ]
+    } else {
+        args(&["-F", "-Q", "-s", "512"])
+    };
+    arguments.push(image.device.into_os_string());
+    let result = checked(&formatter(kind)?, &arguments, None).map(|_| ());
+    close_session(&path, &mut session)?;
+    result?;
+    fs::remove_dir(target)
+        .map_err(|error| AppError::io("Remove filesystem initialization directory", error))
+}
+
+pub(super) fn mount_apple_missing(
+    source: &Path,
+    mountpoint: &Path,
+    pass: &[u8],
+    readonly: bool,
+) -> AppResult<bool> {
+    if mount_identity(mountpoint)?.is_some() {
+        return Ok(false);
+    }
+    let registry = Registry::lock()?;
+    if registry
+        .sessions()?
+        .iter()
+        .any(|(_, session)| same_path(&session.source, source))
+    {
+        return Err(AppError::new(
+            "Apple image already owns a filesystem recovery session.",
+        ));
+    }
+    // hdiutil may retain an authenticated, unmounted attachment after its native
+    // filesystem selection failed. Close it before freshly authenticating again.
+    if let Some(image) = images()?
+        .into_iter()
+        .find(|image| same_path(&image.path, source))
+    {
+        if image
+            .entities
+            .iter()
+            .any(|entity| entity.mountpoint.is_some())
+        {
+            return Err(AppError::new(
+                "Apple image has a partially mounted filesystem; preserving its attachment.",
+            ));
+        }
+        let opened = identified_apple_image(source)?;
+        close_apple_image(source, &opened.device)?;
+    }
+    let image = open_apple_image(source, pass, readonly)?;
+    let result = (|| match opened_image_kind(&image) {
+        Some(Kind::Ext4) => start_driver(
+            &registry,
+            source,
+            mountpoint,
+            source,
+            &image.device,
+            Kind::Ext4,
+            readonly,
+            true,
+        ),
+        Some(Kind::Ntfs) => start_native_ntfs(&registry, source, mountpoint, &image, readonly),
+        Some(kind) => {
+            require_persistent_driver(kind)?;
+            Err(AppError::new(
+                "This foreign Apple filesystem has no qualified native device transport.",
+            ))
+        }
+        None => {
+            if Path::new("/usr/local/zfs/bin/zdb").exists() {
+                if let Some((device, pool)) = zfs::resolve_device(&image.device, source)? {
+                    return start_native_zfs(
+                        &registry,
+                        source,
+                        mountpoint,
+                        &OpenImage {
+                            path: source.into(),
+                            device,
+                            apple: true,
+                        },
+                        readonly,
+                        pool,
+                    );
+                }
+            }
+            Ok(false)
+        }
+    })();
+    if !matches!(result, Ok(true))
+        && !registry
+            .sessions()?
+            .iter()
+            .any(|(_, session)| same_path(&session.source, source))
+    {
+        close_open_image(source, &image)?;
+    }
+    result
 }
 
 pub(super) fn format(
     source: &Path,
+    crypto: VolumeType,
     filesystem: Option<CreateFilesystem>,
     pass: &[u8],
     keyfile: Option<&Path>,
@@ -355,6 +669,9 @@ pub(super) fn format(
         return Ok(());
     };
     require_persistent_driver(kind)?;
+    if crypto == VolumeType::Apple {
+        return format_apple(source, kind, pass);
+    }
     if kind == Kind::Btrfs {
         return format_btrfs(source, pass, keyfile);
     }
@@ -489,6 +806,8 @@ fn format_ufs2(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult<
 }
 #[derive(Serialize, Deserialize)]
 struct Session {
+    #[serde(default)]
+    apple: bool,
     source: PathBuf,
     source_dev: u64,
     source_ino: u64,
@@ -662,6 +981,24 @@ fn validate_image(session: &Session) -> AppResult<()> {
             "Container identity changed; preserving filesystem session.",
         ));
     }
+    if session.apple {
+        if !same_path(&session.source, &session.image)
+            || !images()?
+                .iter()
+                .any(|image| image.encrypted && same_path(&image.path, &session.source))
+        {
+            return Err(AppError::new(
+                "Apple encrypted image identity changed; preserving session.",
+            ));
+        }
+        return validate_native_device(
+            &session.source,
+            session
+                .native_device
+                .as_ref()
+                .ok_or_else(|| AppError::new("Missing Apple virtual device identity."))?,
+        );
+    }
     let image = fs::symlink_metadata(&session.image)
         .map_err(|e| AppError::io("Cannot inspect decrypted image", e))?;
     if !image.is_file()
@@ -735,6 +1072,7 @@ fn start_native_ntfs(
         Kind::Ntfs,
         readonly,
         Some(image.device.clone()),
+        image.apple,
     )?;
     // hdiutil authorizes this login user's virtual device. FSKit provides the
     // driver; no private binary or native mount command is elevated.
@@ -796,6 +1134,7 @@ pub(super) fn replace_native_ntfs(
     source: &Path,
     mountpoint: &Path,
     readonly: bool,
+    apple: bool,
 ) -> AppResult<()> {
     // Successful writable mounts already satisfy the request. Read-only
     // imports can retain Apple's native driver; only a silent RW downgrade
@@ -810,10 +1149,18 @@ pub(super) fn replace_native_ntfs(
     }) {
         return Ok(());
     }
-    let registry = Registry::lock()?;
-    let image = identified_image(source)?;
+    let image = if apple {
+        identified_apple_image(source)?
+    } else {
+        identified_image(source)?
+    };
     validate_native_device(&image.path, &image.device)?;
-    if !read_veracrypt_volumes(false)?.iter().any(|volume| {
+    let owned = if apple {
+        apple_volumes()?
+    } else {
+        read_veracrypt_volumes(false)?
+    };
+    if !owned.iter().any(|volume| {
         same_path(&volume.source, source)
             && volume
                 .mountpoint
@@ -821,9 +1168,10 @@ pub(super) fn replace_native_ntfs(
                 .is_some_and(|path| same_path(path, mountpoint))
     }) {
         return Err(AppError::new(
-            "Native NTFS mount does not belong to the authenticated VeraCrypt source.",
+            "Native NTFS mount does not belong to the authenticated source.",
         ));
     }
+    let registry = Registry::lock()?;
     checked(
         Path::new(DISKUTIL),
         &["unmount".into(), mountpoint.as_os_str().into()],
@@ -836,7 +1184,7 @@ pub(super) fn replace_native_ntfs(
             .iter()
             .any(|(_, session)| same_path(&session.source, source))
     {
-        close_identified_crypto(source, &image.path)?;
+        close_open_image(source, &image)?;
     }
     result
 }
@@ -900,6 +1248,10 @@ fn remember_zfs_mount(path: &Path, session: &mut Session) -> AppResult<()> {
 }
 
 fn format_zfs(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult<()> {
+    let image = open_image(source, pass, false, keyfile, false)?;
+    format_zfs_image(source, image)
+}
+fn format_zfs_image(source: &Path, image: OpenImage) -> AppResult<()> {
     let registry = Registry::lock()?;
     let target = source
         .parent()
@@ -909,7 +1261,6 @@ fn format_zfs(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult<(
         .mode(0o700)
         .create(&target)
         .map_err(|error| AppError::io("Create private ZFS initialization mount", error))?;
-    let image = open_image(source, pass, false, keyfile, false)?;
     let (path, mut session) = reserve_session(
         &registry,
         source,
@@ -918,6 +1269,7 @@ fn format_zfs(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult<(
         Kind::Zfs,
         false,
         Some(image.device.clone()),
+        image.apple,
     )?;
     // Recovery ownership is durable before zpool can change the authenticated device.
     let (device, identity) = zfs::create(&image.device, &image.path)?;
@@ -950,6 +1302,7 @@ fn format_btrfs(source: &Path, pass: &[u8], keyfile: Option<&Path>) -> AppResult
         Kind::Btrfs,
         false,
         Some(image.device.clone()),
+        image.apple,
     )?;
     vm_filesystem::format(
         &path,
@@ -979,6 +1332,7 @@ fn start_btrfs(
         Kind::Btrfs,
         readonly,
         Some(image.device.clone()),
+        image.apple,
     )?;
     session.pid = vm_filesystem::start(&path, &image.path, &image.device, mountpoint, readonly)?;
     session.process_start = process_start(session.pid)?.ok_or_else(|| {
@@ -1012,6 +1366,7 @@ fn start_native_zfs(
         Kind::Zfs,
         readonly,
         Some(image.device.clone()),
+        image.apple,
     )?;
     session.zfs_pool = Some(pool.clone());
     save(&path, &session)?;
@@ -1078,7 +1433,7 @@ fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
         File::open(&session.image)
             .and_then(|image| image.sync_all())
             .map_err(|error| AppError::io("Sync closed Btrfs crypto image", error))?;
-        close_identified_crypto(&session.source, &session.image)?;
+        close_session_crypto(session)?;
         return fs::remove_dir_all(path)
             .map_err(|error| AppError::io("Remove closed Btrfs session", error));
     }
@@ -1110,7 +1465,7 @@ fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
         session.mount_identity = None;
         session.mount_dev = None;
         save(path, session)?;
-        close_identified_crypto(&session.source, &session.image)?;
+        close_session_crypto(session)?;
         return fs::remove_dir_all(path)
             .map_err(|error| AppError::io("Cannot remove closed ZFS session", error));
     }
@@ -1163,7 +1518,7 @@ fn close_session(path: &Path, session: &mut Session) -> AppResult<()> {
             ));
         }
     }
-    close_identified_crypto(&session.source, &session.image)?;
+    close_session_crypto(session)?;
     fs::remove_dir_all(path).map_err(|e| AppError::io("Cannot remove closed filesystem session", e))
 }
 fn reserve_session(
@@ -1174,6 +1529,7 @@ fn reserve_session(
     kind: Kind,
     readonly: bool,
     native_device: Option<PathBuf>,
+    apple: bool,
 ) -> AppResult<(PathBuf, Session)> {
     if mount_identity(mountpoint)?.is_some() {
         return Err(AppError::new(
@@ -1199,6 +1555,7 @@ fn reserve_session(
         .create(&path)
         .map_err(|e| AppError::io("Cannot reserve filesystem session", e))?;
     let session = Session {
+        apple,
         source: source.into(),
         source_dev: metadata.dev(),
         source_ino: metadata.ino(),
@@ -1209,12 +1566,16 @@ fn reserve_session(
         image_ino: fs::metadata(image)
             .map_err(|e| AppError::io("Cannot inspect decrypted image", e))?
             .ino(),
-        auxiliary_mount: mount_identity(
-            image
-                .parent()
-                .ok_or_else(|| AppError::new("Missing auxiliary mount directory."))?,
-        )?
-        .ok_or_else(|| AppError::new("Decrypted image has no auxiliary mount."))?,
+        auxiliary_mount: if apple {
+            String::new()
+        } else {
+            mount_identity(
+                image
+                    .parent()
+                    .ok_or_else(|| AppError::new("Missing auxiliary mount directory."))?,
+            )?
+            .ok_or_else(|| AppError::new("Decrypted image has no auxiliary mount."))?
+        },
         mountpoint: mountpoint.into(),
         kind,
         readonly,
@@ -1246,18 +1607,40 @@ fn start(
     else {
         return Ok(false);
     };
+    start_driver(
+        registry, source, mountpoint, image, image, kind, readonly, false,
+    )
+}
+fn start_driver(
+    registry: &Registry,
+    source: &Path,
+    mountpoint: &Path,
+    image: &Path,
+    backing: &Path,
+    kind: Kind,
+    readonly: bool,
+    apple: bool,
+) -> AppResult<bool> {
     require_persistent_driver(kind)?;
     let driver = if kind == Kind::Ufs2 {
         ufs2_driver()?
     } else {
         tool(kind.driver())?
     };
-    let (path, mut session) =
-        reserve_session(registry, source, mountpoint, image, kind, readonly, None)?;
+    let (path, mut session) = reserve_session(
+        registry,
+        source,
+        mountpoint,
+        image,
+        kind,
+        readonly,
+        apple.then(|| backing.to_path_buf()),
+        apple,
+    )?;
     let mut a: Vec<OsString> = match kind {
         Kind::Btrfs => unreachable!("Btrfs uses its supervised Linux guest"),
         Kind::Ext4 => vec![
-            image.as_os_str().into(),
+            backing.as_os_str().into(),
             mountpoint.as_os_str().into(),
             "-o".into(),
             if readonly {
@@ -1272,7 +1655,7 @@ fn start(
                 a.push("-rw".into());
             }
             a.extend([
-                image.as_os_str().into(),
+                backing.as_os_str().into(),
                 "--".into(),
                 mountpoint.as_os_str().into(),
                 "-f".into(),
@@ -1295,7 +1678,7 @@ fn start(
             } else {
                 "rw,nodev,nosuid".into()
             },
-            image.as_os_str().into(),
+            backing.as_os_str().into(),
             mountpoint.as_os_str().into(),
         ],
     };
@@ -1435,6 +1818,7 @@ pub(super) fn mount_missing(
                     let native = OpenImage {
                         path: image.path.clone(),
                         device,
+                        apple: false,
                     };
                     return start_native_zfs(
                         &registry, source, mountpoint, &native, readonly, pool,
@@ -1472,9 +1856,17 @@ pub(super) fn unmount(target: &Path, kind: VolumeType) -> AppResult<bool> {
     if matches.is_empty() {
         return Ok(false);
     }
-    if matches.len() != 1 || !matches!(kind, VolumeType::Auto | VolumeType::Veracrypt) {
+    if matches.len() != 1
+        || kind != VolumeType::Auto
+            && kind
+                != if matches[0].1.apple {
+                    VolumeType::Apple
+                } else {
+                    VolumeType::Veracrypt
+                }
+    {
         return Err(AppError::new(
-            "Target does not identify one matching VeraCrypt filesystem session.",
+            "Target does not identify one matching encrypted filesystem session.",
         ));
     }
     let (path, session) = &mut matches[0];
@@ -1487,10 +1879,16 @@ pub(super) fn augment(volumes: &mut [Volume]) -> AppResult<()> {
     }
     let registry = Registry::lock()?;
     for (_, session) in registry.sessions()? {
-        validate_image(&session)?;
         if let Some(volume) = volumes.iter_mut().find(|volume| {
-            volume.kind == VolumeType::Veracrypt && same_path(&volume.source, &session.source)
+            volume.kind
+                == (if session.apple {
+                    VolumeType::Apple
+                } else {
+                    VolumeType::Veracrypt
+                })
+                && same_path(&volume.source, &session.source)
         }) {
+            validate_image(&session)?;
             if session.mount_identity.as_ref() == mount_identity(&session.mountpoint)?.as_ref()
                 && session.mount_identity.is_some()
             {
@@ -1505,6 +1903,71 @@ pub(super) fn augment(volumes: &mut [Volume]) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn apple_foreign_format_requires_one_owned_encrypted_virtual_disk() {
+        let source = Path::new("/private/tmp/owned/encrypted.dmg");
+        let image = |encrypted, owner, devices: &[&str]| Image {
+            path: source.into(),
+            encrypted,
+            owner,
+            writable: true,
+            entities: devices
+                .iter()
+                .map(|device| Entity {
+                    device: device.into(),
+                    ..Entity::default()
+                })
+                .collect(),
+        };
+        let selected = select_apple_image(
+            source,
+            vec![image(
+                true,
+                Some(crate::effective_uid()),
+                &["/dev/disk42", "/dev/disk42s1"],
+            )],
+        )
+        .unwrap();
+        assert_eq!(selected.device, Path::new("/dev/disk42"));
+        assert!(selected.apple);
+        assert!(select_apple_image(source, vec![image(false, None, &["/dev/disk42"])]).is_err());
+        assert!(
+            select_apple_image(
+                source,
+                vec![image(
+                    true,
+                    Some(crate::effective_uid() + 1),
+                    &["/dev/disk42"]
+                )]
+            )
+            .is_err()
+        );
+        assert!(
+            select_apple_image(
+                source,
+                vec![image(true, None, &["/dev/disk42", "/dev/disk43"])]
+            )
+            .is_err()
+        );
+        assert!(
+            select_apple_image(
+                source,
+                vec![image(true, None, &["/dev/rdisk42", "/dev/disk42s1"])]
+            )
+            .is_err()
+        );
+        assert!(
+            select_apple_image(
+                source,
+                vec![
+                    image(true, None, &["/dev/disk42"]),
+                    image(true, None, &["/dev/disk43"])
+                ]
+            )
+            .is_err()
+        );
+    }
+
     #[test]
     fn ufs2_rejects_drivers_that_truncate_directory_enumeration() {
         assert!(!qualified_ufs2_capabilities(
@@ -1550,12 +2013,16 @@ mod tests {
                 Path::new("/usr/local/libexec/lurker-filesystems").join(name)
             );
             assert!(paths.iter().all(|path| path.is_absolute()));
-            assert!(paths
-                .iter()
-                .all(|path| !path.to_string_lossy().contains("macos-filesystems")));
+            assert!(
+                paths
+                    .iter()
+                    .all(|path| !path.to_string_lossy().contains("macos-filesystems"))
+            );
         }
-        assert!(host_tool_candidates("mkfs.ext4")
-            .contains(&PathBuf::from("/opt/homebrew/opt/e2fsprogs/sbin/mkfs.ext4")));
+        assert!(
+            host_tool_candidates("mkfs.ext4")
+                .contains(&PathBuf::from("/opt/homebrew/opt/e2fsprogs/sbin/mkfs.ext4"))
+        );
     }
 
     #[test]

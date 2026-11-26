@@ -263,26 +263,33 @@ pub(crate) fn macos_apple_create_args(
     size_mib: u64,
     filesystem: Option<crate::CreateFilesystem>,
 ) -> crate::AppResult<Vec<OsString>> {
-    Ok([
-        "create",
-        "-size",
-        &format!("{size_mib}m"),
-        "-type",
-        "UDIF",
-        "-fs",
-        match filesystem {
-            Some(crate::CreateFilesystem::Fat32) => "MS-DOS FAT32",
-            _ => macos_filesystem(filesystem, "APFS")?,
-        },
-        "-volname",
-        "Lurker",
-        "-encryption",
-        "AES-256",
-        "-stdinpass",
-    ]
-    .into_iter()
-    .map(OsString::from)
-    .collect())
+    use crate::CreateFilesystem;
+    let mut args: Vec<OsString> = vec!["create".into()];
+    if matches!(
+        filesystem,
+        Some(CreateFilesystem::Ext4 | CreateFilesystem::Ntfs | CreateFilesystem::Zfs)
+    ) {
+        // The adapter supplies only an identity-checked zero-only native source
+        // device. Crypto arguments stay in this fixed profile.
+        args.extend(["-format".into(), "UDRW".into()]);
+    } else {
+        args.extend([
+            "-size".into(),
+            format!("{size_mib}m").into(),
+            "-type".into(),
+            "UDIF".into(),
+            "-fs".into(),
+            match filesystem {
+                Some(CreateFilesystem::Fat32) => "MS-DOS FAT32",
+                _ => macos_filesystem(filesystem, "APFS")?,
+            }
+            .into(),
+            "-volname".into(),
+            "Lurker".into(),
+        ]);
+    }
+    args.extend(["-encryption".into(), "AES-256".into(), "-stdinpass".into()]);
+    Ok(args)
 }
 
 #[cfg(target_os = "macos")]
@@ -300,5 +307,33 @@ fn macos_filesystem(
             "Filesystem {} is not available through the native macOS container formatter.",
             other.as_str()
         ))),
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_profile_tests {
+    use super::*;
+
+    #[test]
+    fn apple_native_and_external_filesystems_keep_one_fixed_crypto_profile() {
+        for filesystem in [
+            None,
+            Some(crate::CreateFilesystem::Exfat),
+            Some(crate::CreateFilesystem::Ext4),
+            Some(crate::CreateFilesystem::Ntfs),
+            Some(crate::CreateFilesystem::Zfs),
+        ] {
+            let args = macos_apple_create_args(768, filesystem).unwrap();
+            let encryption = args.iter().position(|arg| arg == "-encryption").unwrap();
+            assert_eq!(args[encryption + 1], "AES-256");
+            assert_eq!(args.last().unwrap(), "-stdinpass");
+            assert_eq!(args.iter().filter(|arg| *arg == "-encryption").count(), 1);
+            assert!(!args.iter().any(|arg| arg == "-srcdevice"));
+            assert_eq!(
+                args.iter().any(|arg| arg == "-fs"),
+                filesystem.is_none() || filesystem == Some(crate::CreateFilesystem::Exfat)
+            );
+        }
+        assert!(macos_apple_create_args(768, Some(crate::CreateFilesystem::Xfs)).is_err());
     }
 }

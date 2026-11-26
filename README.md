@@ -205,8 +205,10 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 
 age, OpenSSL CMS and GnuPG support individual-file encryption through the CLI on Linux, macOS and all four BSDs. Windows support is planned.
 
-On macOS, `--type apfs` creates a plain disk image containing an encrypted APFS volume. Open and close unlock and lock that volume through `diskutil`. External data-partition creation requires `--force`. The complete flow is tested on disposable images and their virtual partitions. Physical hardware remains untested.
+On macOS, `--type apfs` creates a plain disk image containing an encrypted APFS volume. Open and close unlock and lock that volume through `diskutil`. External data-partition creation requires `--force`. The flow is tested on disposable images and their virtual partitions, with a representative encrypted external USB partition also qualified in the fresh native round.
 
+
+Apple encrypted images default to APFS. The CLI and helper also accept `--filesystem ext4`, `ntfs` or `zfs` with separately installed native host tools and drivers; the desktop keeps its native filesystem default. Native-only macOS VeraCrypt qualification uses the explicit audited macFUSE build; the default FUSE-T build's SMB transport is excluded. Directory engines use local FUSE-T FSKit. See [native Apple filesystem setup](native/macos/apple-filesystems.md) and the [fresh macOS qualification](DIRECTIVES/PLAN/NATIVE_FRESH_20261127/MACOS_RESULTS.md).
 
 LUKS1 and LUKS2 on Windows are planned via WSL 2.
 
@@ -326,7 +328,7 @@ Native CLI tests passed on all 11 build hosts across six Linux distributions, ma
 
 Maturity is independent of feature completeness. Linux HAMMER2 physical-device reliability remains unqualified by its scratch-image tests. macOS UFS2 uses an experimental writer; moving directories between parents is unsupported. Windows OpenZFS is largely implemented; its remaining stream-renaming limitation does not prevent the core workflows.
 
-For Linux, macOS and the BSDs, this planning matrix combines achieved and achievable host-local support, excluding VMs and network filesystems at every layer. Linux covers all six distributions with compatible kernels/modules; this does not establish every filesystem on one booted kernel. Achievable cells can still require Lurker integration, including a local bundled VeraCrypt transport on macOS and aligned device reads for DragonFly XFS/APFS. Read-only access and missing creation remain shortcomings against Create + Read/Write. See the [native-only assessment and limits](docs/filesystem-support-matrix.md#native-only-planning-update). Windows entries are unchanged by this reassessment. The table does not assert completed integration or runtime qualification in Lurker.
+For Linux, macOS and the BSDs, this planning matrix combines achieved and achievable host-local support, excluding VMs and network filesystems at every layer. Linux covers all six distributions with compatible kernels/modules; this does not establish every filesystem on one booted kernel. Achievable cells can still require Lurker integration, including aligned device reads for DragonFly XFS/APFS. Read-only access and missing creation remain shortcomings against Create + Read/Write. See the [native-only assessment and limits](docs/filesystem-support-matrix.md#native-only-planning-update). Windows entries are unchanged by this reassessment. The table does not assert completed integration or runtime qualification in Lurker.
 
 ## Get started
 
