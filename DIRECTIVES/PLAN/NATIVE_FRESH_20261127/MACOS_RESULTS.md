@@ -1,8 +1,8 @@
 # macOS fresh native qualification checkpoint
 
 Status: in progress. These are newly executed observations, not a release pass.
-Buran was not rebooted. Physical USB sampling and frozen-candidate validation
-remain pending. Private evidence is under
+Buran was not rebooted. The two representative physical USB samples passed;
+frozen-candidate package validation remains pending. Private evidence is under
 `target/goal-validation/native-fresh-20261127/hosts/macos/`; the corresponding
 remote root is `/tmp/lurker-native-fresh-20261127-macos`.
 
@@ -22,7 +22,10 @@ remote root is `/tmp/lurker-native-fresh-20261127-macos`.
   was corrected to root:wheel; directory mode and contents were preserved.
 - Toshiba TransMemory identity: external USB, 124923150336 bytes, serial
   `0060E0526069E260600005BB`, vendor 2352/product 5130. Initial disk4 GPT contains
-  EFI and an APFS partition/container with `Untitled`. No USB writes yet.
+  EFI and an APFS partition/container with `Untitled`. After repeat identity
+  verification, the authorized device was partitioned into about 2 GB encrypted
+  APFS and 2 GB exFAT samples, leaving 120.6 GB unallocated. Both samples closed
+  normally; APFS is locked and exFAT is unmounted.
 
 ## Builds and product changes
 
@@ -31,6 +34,9 @@ Baseline `8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d` workspace run
 11 ignored. CLI SHA-256:
 `85d30dfaa47e2a734a1301f3cc8bf08a8d13a1c20339597ca06f5622fafedc34`.
 
+- A later managed-toolchain refresh upgraded stable Rust from 1.99.1 to
+  1.100.0. Final workspace/package run `20261126T211340Z-01ca4a1c` uses
+  frozen candidate `836bf84` and one Cargo worker.
 - `d78799c`: explicit audited macFUSE VeraCrypt build option, preserving the
   FUSE-T default and fixed directory FSKit policy. Eighteen Mac build/package
   tests passed remotely. Fresh pinned VeraCrypt 1.26.31 macFUSE build and all
@@ -91,13 +97,37 @@ can destroy key material; it is ineligible. The native `open_ext4_for_mac` FSKit
 candidate offers LUKS import, not this round's complete create workflow.
 LUKSbox uses its own `.lbx` format and cannot substitute for LUKS1/LUKS2.
 
+The later xlinuxfs assessment found GPL-2.0 native FSKit ext4/XFS/Btrfs source
+(`f9da28e8cfdf6a4574a31e8baa9ba1811ef4c2e4`) using in-process LKL. Its
+repository publishes no release artifacts and actual system mounts require a
+restricted FSKit provisioning profile. Buran has no matching FSKit profile; an
+unsigned build cannot establish a native mount. This is a blocked source-build
+candidate, not evidence that no native FSKit project exists. The separate
+btrfs4mac project explicitly supports reading only.
+
+Six VeraCrypt Auto conformance profiles (AES/Serpent/Twofish, password and binary
+keyfile) each passed 20 checks, totaling 120, including wrong credentials,
+duplicates, busy close and downloaded-payload repeated reopening.
+
+The external APFS-encrypted partition passed four downloaded-payload mount
+phases, including Buran's extra reopen. A Cryptomator directory on the separate
+external exFAT partition also passed. Receipts are `device/apfs-receipt.json` and
+`device/cryptomator-receipt.json`; current identity and before/after/final
+partition inventories accompany them. No internal disk was modified.
+
+Quick feature controls recorded native permissions/ownership and ACL outcomes
+for all seven available filesystems. APFS and ZFS retained ACLs; other selected
+drivers refused ACL additions. NTFS ignored private modes as above. Direct
+`clonefile(2)` succeeded on APFS/ZFS and returned ENOTSUP on exFAT/NTFS/ext4/XFS;
+a native ZFS snapshot retained old bytes after a live overwrite. The original
+`cp -c` control silently fell back on unsupported filesystems and is not used as
+proof of CoW. Journaling/replay observations stay separate from format flags.
+
 ## Remaining work
 
-Complete the running AES/Serpent/Twofish password/keyfile Auto conformance,
-reconcile remaining driver/backend failures, exercise a small verified Toshiba
-sample, package the frozen candidate and verify its CLI/helper, run final remote
-workspace checks and the complete applicable matrix, collect feature observations
-and receipts, and inspect all owned resource cleanup. Reboot persistence remains
+Reconcile remaining driver/backend failures, package the frozen candidate and
+verify its CLI/helper, finish final remote workspace checks and the complete
+applicable matrix, and inspect all owned resource cleanup. Reboot persistence remains
 unexercised on Buran by instruction.
 
 Primary eligibility sources:
@@ -111,3 +141,5 @@ https://github.com/realchonk/fuse-ufs
 https://github.com/h3ct0r/open_ext4_for_mac
 https://github.com/tsujamin/userspaceLUKS
 https://luksbox.penthertz.com/docs/security/cryptography
+https://github.com/HuanchuanTech/xlinuxfs
+https://github.com/gereoffy/btrfs4mac
