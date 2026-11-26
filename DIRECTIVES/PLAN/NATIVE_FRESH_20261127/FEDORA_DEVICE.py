@@ -95,6 +95,11 @@ def main():
                 header_before = hashlib.sha256(stream.read(1024**2)).hexdigest()
             row['header_before_sha256'] = header_before
             cli('create', ['--filesystem', fs, a.device, '--force'])
+            if backend == 'luks':
+                metadata = subprocess.check_output(['cryptsetup', 'luksDump', '--dump-json-metadata', str(a.device)], text=True)
+                row['luks2_metadata'] = json.loads(metadata)
+                (d / 'luks2-metadata.json').write_text(metadata)
+                save()
             wanted = dict(expected)
             for phase in ('write', 'append', 'verify'):
                 cli('mount', [a.device, mountpoint], 'auto')
