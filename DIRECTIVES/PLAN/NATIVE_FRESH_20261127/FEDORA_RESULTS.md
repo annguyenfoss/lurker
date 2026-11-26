@@ -248,3 +248,40 @@ at 1048576 KiB; UFS2 calibrated at 891632 KiB during host load. The native
 relabeled as 1 GiB. A quiet follow-up will retain a separate comparison; no
 product flags are being changed to force a value. Compiler and PBKDF work will
 be serialized on this 3.8-GiB VM.
+
+## Verified RPM and capacity follow-up
+
+The combined `576505d` workspace check, test and build pass; all 386 archived
+source files rehash unchanged. The native RPM SHA256 is
+`0dfc01a676f46fe6c35d1389ce133078c216eaaa9a23d880a5063c8016a22118`;
+staging archive SHA256 is
+`65576e6cf3af9d4ae2b2d2bfd46e10359e19df20b9b4f3d7794c01b0d942f3d4`.
+The actual RPM was extracted, every package-manifest file verified, copied to
+an administrator-controlled prefix, and verified again. This is extracted native
+package qualification on a prepared host; the system package was not replaced.
+The packaged desktop opened a real winit/software X11 window, and the complete
+CLI/helper credential suite passes. All three directory engines pass on the
+selected native NTFS3 backing. A separate quiet UFS2/LUKS2 downloaded-payload
+control passes and records Argon2id memory 1048576 KiB/time 9; the earlier
+891632-KiB observation remains separate.
+
+The full 576 sweep reached 52 passes and eight create failures when the guest
+root filesystem filled. LUKS logs explicitly report ENOSPC; VeraCrypt returned
+an incorrect-size error in the same exhausted environment. Failed fixtures and
+all original results are retained. The same package is retesting those eight
+cases after capacity repair; current passes will be reconciled with the unchanged
+52 successful case receipts, with the initial failures retained as history.
+
+A separate 32-GiB qcow2 now supplies persistent fixture space, independently
+identified by serial `lrkf-fedora-store` and ext4 UUID
+`52bc440f-db46-4924-b708-1bd20bfc96c6`. The qualification scratch disk remains
+serial `lurker-fresh-fedora`. After the sweep became terminal, no round mounts
+or loop sources remained. `FEDORA_FIXTURE_STORE.py` verified 9563 entries
+(26.7 GB logical, approximately 12 GiB allocated), file hashes, owners and modes
+before/after a closed-source copy and private bind at the unchanged round path.
+UUID mount and ordered bind configuration persist through reboot. The original
+underlay was removed only after verification; all failed files remain in the
+verified copy or their original quarantine. Root has 23 GiB free and the fixture
+store initially had 20 GiB free, covering approximately 2 GiB of retries plus a
+9-GiB device-snapshot reserve and 2-GiB margin. No live mapper/backing source was
+moved, and no product or KDF arguments changed for this repair.
