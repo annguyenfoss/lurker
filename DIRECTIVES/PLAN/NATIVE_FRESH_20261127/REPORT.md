@@ -160,6 +160,15 @@ have completed 54 writable container cells each, with stock UFS1 limitations
 recorded separately. Physical-device, conformance and mounted-reboot batches
 remain in progress across the six distributions. Resource-pressure and harness
 failures retain their original receipts and require explicit rerun results.
+The coordinator independently inspected 222 successful embedded receipts from
+Arch, openSUSE, Ubuntu and Gentoo: pinned inputs equaled initial writes, appended
+data equaled final reads, the new file existed, all seven operations succeeded
+and the plaintext mount was closed. The private
+`linux-576-payload-receipt-audit.json` records source hashes and individual checks.
+That audit does not establish driver provenance, application conformance,
+physical-device coverage, reboot persistence or package completion. Fedora has
+also reconciled its eight capacity-related retries to 60 successful container
+cells; its original ENOSPC failures remain preserved.
 
 macOS candidate `3bfed46` includes native Apple encrypted-image ext4/NTFS/ZFS
 integration and guarded VeraCrypt external GPT data partitions. Its workspace
@@ -189,8 +198,10 @@ controls; product physical creation is still under integration.
 BSD SDK/stager changes `782a088`, `88d9315` and `c7f7092` keep FUSE on the host
 and validate its ABI instead of packaging it privately. FreeBSD's fresh package
 passed workspace checks and install/delete/reinstall checks, but a runtime
-symlink-alias comparison defect was found during the native regression. A fix
-and new artifact qualification are required before that package is accepted.
+symlink-alias comparison defect was found during the native regression. Fix
+`d601bc5` validates the resolved provider through the trusted host ABI alias and
+has a native versioned-provider/alias-update regression. New artifact
+qualification is required before that package is accepted.
 
 FreeBSD Btrfs/XFS controls using a separately installed in-process LKL FUSE
 driver passed with direct I/O. They remain a separate eligibility assessment:
