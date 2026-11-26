@@ -1,5 +1,7 @@
 # File encryption working notes
 
+The shell functions shared in discussion describe a personal workflow. Reproducing them and integrating `tar`, `pigz`, or `pv` are out of scope.
+
 ## GnuPG
 
 - Wrap the installed GnuPG. Select one or more usable encryption keys from the user's local keyring, or choose public key files with the OS or desktop environment's native file picker. Use each selected file directly with `--recipient-file`, without importing it.
