@@ -94,6 +94,37 @@ class PlatformPatchTests(unittest.TestCase):
         self.assertIn("src/fspp/fuse/CMakeLists.txt", compiler)
         self.assertEqual(BUILD.selected_patches("gocryptfs", "Darwin"), [])
 
+    def test_freebsd_preserves_the_common_cryfs_durability_patch(self):
+        self.assertEqual(BUILD.selected_patches("cryfs", "FreeBSD"),
+                         ["native/folder/cryfs/fsyncdir.patch"])
+
+
+class FreeBSDRuntimeTests(unittest.TestCase):
+    def test_missing_native_library_or_package_notice_blocks_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "cryfs"
+            linked = "libfuse.so.2 => /usr/local/lib/libfuse.so.2 (0x123)"
+            outputs = {("ldd", str(binary)): linked,
+                       ("pkg", "which", "-q", "/usr/local/lib/libfuse.so.2"): "fusefs-libs-2.9.9",
+                       ("pkg", "query", "%n %v %o", "fusefs-libs-2.9.9"): "fusefs-libs 2.9.9 sysutils/fusefs-libs",
+                       ("pkg", "query", "%L", "fusefs-libs-2.9.9"): "LGPL21"}
+            with patch.object(BUILD, "capture", side_effect=lambda argv, _: outputs[tuple(argv)]), \
+                    patch.object(BUILD, "FREEBSD_LICENSE_ROOT", root / "native-licenses"):
+                with self.assertRaisesRegex(RuntimeError, "package license missing"):
+                    BUILD.freebsd_runtime_packages(binary, root, root / "notices")
+                license_file = root / "native-licenses/fusefs-libs-2.9.9/LICENSE"
+                license_file.parent.mkdir(parents=True)
+                license_file.write_text("native dependency notice")
+                observed, packages = BUILD.freebsd_runtime_packages(binary, root, root / "notices")
+                self.assertEqual(observed, linked)
+                self.assertEqual(packages[0]["origin"], "sysutils/fusefs-libs")
+                self.assertEqual((root / "notices/fusefs-libs-2.9.9/LICENSE").read_text(),
+                                 "native dependency notice")
+            with patch.object(BUILD, "capture", return_value="libfuse.so.2 => not found"):
+                with self.assertRaisesRegex(RuntimeError, "unresolved native runtime"):
+                    BUILD.freebsd_runtime_packages(binary, root, root / "notices")
+
 
 class MacStagingTests(unittest.TestCase):
     def test_private_openmp_license_is_required_and_copied(self):

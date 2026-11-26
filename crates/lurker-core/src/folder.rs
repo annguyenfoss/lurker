@@ -90,14 +90,12 @@ pub(crate) fn detect_type(path: &Path) -> AppResult<VolumeType> {
 
 fn supported(kind: VolumeType) -> bool {
     match kind {
-        VolumeType::Gocryptfs => cfg!(any(
+        VolumeType::Gocryptfs | VolumeType::Cryfs => cfg!(any(
             target_os = "linux",
             target_os = "macos",
             target_os = "freebsd"
         )),
-        VolumeType::Cryfs | VolumeType::Cryptomator => {
-            cfg!(any(target_os = "linux", target_os = "macos"))
-        }
+        VolumeType::Cryptomator => cfg!(any(target_os = "linux", target_os = "macos")),
         _ => false,
     }
 }

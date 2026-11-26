@@ -187,6 +187,8 @@ Version needs section '.gnu.version_r' contains 2 entries:
         self.assertEqual(["fusermount3"], stager.TOOLS["Linux"]["cryptomator"])
         self.assertEqual([["fusermount3", "fusermount"]], stager.TOOLS["Linux"]["gocryptfs"])
         self.assertEqual(["mount_fusefs"], stager.TOOLS["FreeBSD"]["gocryptfs"])
+        self.assertIn("FreeBSD", stager.ALLOW["cryfs"])
+        self.assertEqual(["mount_fusefs", "umount"], stager.TOOLS["FreeBSD"]["cryfs"])
 
     def test_folder_targets_use_go_or_native_target_not_build_host(self):
         with mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.platform, "machine", return_value="x86_64"):

@@ -32,6 +32,7 @@ PLATFORM_PATCHES = {
 }
 DARWIN_GO_FUSE = ("https://github.com/hanwen/go-fuse.git", "2d50fff207d78c197869fa492eff3a79bc1d8408")
 DARWIN_GO_FUSE_PATCH = "native/macos/gocryptfs-fuse-t.patch"
+FREEBSD_LICENSE_ROOT = Path("/usr/local/share/licenses")
 
 
 def selected_patches(name: str, system: str | None = None) -> list[str]:
@@ -277,6 +278,55 @@ def conan_boost_include(conan: list[str], options: list[str], src: Path,
     return include, f"/usr/src/boost-{version}/include"
 
 
+def freebsd_runtime_packages(binary: Path, src: Path, licenses: Path) -> tuple[str, list[dict]]:
+    """Retain the actual official-package closure and its notices, not Conan identities."""
+    linked = capture(["ldd", str(binary)], src)
+    if "not found" in linked:
+        raise RuntimeError("FreeBSD CryFS has unresolved native runtime libraries")
+    packages = {}
+    for line in linked.splitlines():
+        fields = line.split()
+        if len(fields) < 3 or fields[1] != "=>" or not fields[2].startswith("/usr/local/"):
+            continue
+        library = fields[2]
+        owner = capture(["pkg", "which", "-q", library], src)
+        if owner in packages:
+            packages[owner]["libraries"].append(library)
+            continue
+        name, version, origin = capture(["pkg", "query", "%n %v %o", owner], src).split()
+        license_names = capture(["pkg", "query", "%L", owner], src).splitlines()
+        notice = FREEBSD_LICENSE_ROOT / owner
+        if not notice.is_dir() or not any(p.is_file() for p in notice.rglob("*")):
+            raise RuntimeError("FreeBSD runtime package license missing: " + owner)
+        shutil.copytree(notice, licenses / owner, dirs_exist_ok=True)
+        packages[owner] = {"name": name, "version": version, "origin": origin,
+                           "licenses": license_names, "libraries": [library]}
+    if not packages:
+        raise RuntimeError("FreeBSD CryFS runtime package closure is empty")
+    return linked, [packages[key] for key in sorted(packages)]
+
+
+def build_freebsd_cryfs(src: Path, jobs: int, log, env) -> tuple[Path, dict]:
+    """Use FreeBSD's supported native build packages and FUSE ABI 2."""
+    for tool in ("cmake", "ninja", "c++", "pkg-config", "pkg", "ldd"):
+        if not shutil.which(tool):
+            raise RuntimeError("Missing FreeBSD CryFS build prerequisite: " + tool)
+    run(["pkg-config", "--exists", "fuse"], src, log, env)
+    build = src / "build/FreeBSD"
+    configure = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_TESTING=OFF",
+                 "-DCRYFS_UPDATE_CHECKS=OFF", "-DDISABLE_OPENMP=ON", "-DCMAKE_SKIP_RPATH=TRUE",
+                 "-DCMAKE_CXX_FLAGS=-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED"]
+    run(["cmake", "-S", str(src), "-B", str(build), *configure], src, log, env)
+    run(["cmake", "--build", str(build), "--parallel", str(jobs)], src, log, env)
+    return build / "src/cryfs-cli/cryfs", {
+        "native_build": {"provider": "FreeBSD packages", "configure": configure,
+                         "compiler": capture(["c++", "--version"], src).splitlines()[0],
+                         "fuse_abi": capture(["pkg-config", "--modversion", "fuse"], src),
+                         "packages": capture(["pkg", "query", "%n %v %o", "cmake-core", "ninja",
+                                              "boost-libs", "range-v3", "spdlog", "fusefs-libs", "curl"], src).splitlines()},
+    }
+
+
 def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
     url, revision, version = PINS[name]
     logpath = cache / f"{name}.log"
@@ -317,6 +367,12 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
                 # Cross-compiled pure-Go artifacts still require native tests.
                 run(["go", "version", "-m", str(output / name)], src, log, env)
             license_paths = [src / "LICENSE"]
+        elif build_system == "FreeBSD":
+            binary, native_manifest = build_freebsd_cryfs(src, jobs, log, env)
+            shutil.copy2(binary, output / name)
+            run([str(output / name), "--version"], src, log, env)
+            toolchain = capture(["cmake", "--version"], src).splitlines()[0]
+            license_paths = [src / "LICENSE.txt"]
         else:
             if not shutil.which("uv"):
                 raise RuntimeError("uv and native CMake/compiler/FUSE development files are build prerequisites")
@@ -376,6 +432,7 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
         for path in dependency_files:
             shutil.copy2(path, license_dir / path.name)
         dependencies = None
+        native_dependencies = ""
         target = {"os": platform.system(), "machine": platform.machine()}
         if name == "gocryptfs":
             dependencies = go_module_notices(src, license_dir / "modules", module_flags)
@@ -383,6 +440,8 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             (license_dir / "modules.json").write_text(json.dumps(dependencies, indent=2) + "\n")
             runtime_notices = go_runtime_notices(src, license_dir / "go-runtime")
             (license_dir / "go-runtime.json").write_text(json.dumps(runtime_notices, indent=2) + "\n")
+        elif build_system == "FreeBSD":
+            native_dependencies, dependencies = freebsd_runtime_packages(output / name, src, license_dir / "native")
         else:
             shutil.copy2(ROOT / "native/folder/cryfs/conan.lock", license_dir / "conan.lock")
             dependencies = json.loads((license_dir / "conan.lock").read_text())
@@ -391,7 +450,6 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             for path in (cache / "conan/p").glob("**/p/licenses"):
                 dest = license_dir / "dependencies" / path.parent.parent.name
                 shutil.copytree(path, dest, dirs_exist_ok=True)
-        native_dependencies = ""
         if platform.system() == "Linux":
             probe = subprocess.run(["ldd", str(output / name)], capture_output=True, text=True)
             native_dependencies = probe.stdout + probe.stderr

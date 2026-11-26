@@ -23,7 +23,7 @@ SUPPORTED = {"Linux", "FreeBSD", "DragonFly", "NetBSD", "OpenBSD"}
 ALLOW = {
     "luks": {"Linux"}, "luks1": {"Linux", "DragonFly"},
     "veracrypt": {"Linux", "FreeBSD", "DragonFly", "OpenBSD"},
-    "gocryptfs": {"Linux", "FreeBSD"}, "cryfs": {"Linux"},
+    "gocryptfs": {"Linux", "FreeBSD"}, "cryfs": {"Linux", "FreeBSD"},
     "cryptomator": {"Linux"}, "geli": {"FreeBSD"}, "pefs": {"FreeBSD"},
     "cgd": {"NetBSD"}, "softraid": {"OpenBSD"}, "raid1c": {"OpenBSD"},
 }
@@ -45,7 +45,8 @@ TOOLS = {
               "veracrypt": ["cryptsetup", "mkfs.btrfs", "mount", "umount", "losetup"],
               "gocryptfs": [["fusermount3", "fusermount"]], "cryfs": ["fusermount"], "cryptomator": ["fusermount3"]},
     "FreeBSD": {"geli": ["geli", "mdconfig", "newfs", "mount", "umount"],
-                "pefs": ["pefs", "mount", "umount"], "gocryptfs": ["mount_fusefs"]},
+                "pefs": ["pefs", "mount", "umount"], "gocryptfs": ["mount_fusefs"],
+                "cryfs": ["mount_fusefs", "umount"]},
     "NetBSD": {"cgd": ["cgdconfig", "vnconfig", "newfs", "mount", "umount"]},
     "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"],
                 "raid1c": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
@@ -1081,8 +1082,12 @@ def stage(args):
                     "runtime_requirements": ["matching host kernel/filesystem and mount authorization"]
                         + (["Desktop requires a working native display session plus matching winit display/keyboard libraries, including xkbcommon; verify an actual window separately from ELF metadata"] if args.desktop else [])
                         + (["Desktop native operations require host pkexec or sudo and working administrator policy for the installed lurker-helper"] if authorization else [])
-                        + (["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and fusermount)"] if "cryfs" in selected else [])
+                        + (["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and "
+                            + ("mount_fusefs)" if system == "FreeBSD" else "fusermount)")]
+                           if "cryfs" in selected else [])
                         + (["gocryptfs requires FUSE; Linux accepts fusermount3 or fusermount, FreeBSD uses mount_fusefs"] if "gocryptfs" in selected else [])
+                        + (["FreeBSD login-user FUSE directory mounts require vfs.usermount=1"]
+                           if system == "FreeBSD" and selected & {"gocryptfs", "cryfs"} else [])
                         + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])
                         + (["VeraCrypt userspace/LKL requires the FUSE kernel interface and fusermount3"] if "veracrypt-userspace" in artifacts else [])
                         + (["PEFS module must match the FreeBSD kernel"] if "pefs" in selected else [])
