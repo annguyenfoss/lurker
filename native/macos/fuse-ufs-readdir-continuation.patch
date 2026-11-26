@@ -1,0 +1,23 @@
+--- a/fuse-ufs/src/fuse3.rs
++++ b/fuse-ufs/src/fuse3.rs
+@@ -113,9 +113,6 @@
+ 	) {
+ 		let f = || {
+ 			let inr = transino(inr)?;
+-			if offset != 0 {
+-				return Ok(());
+-			}
+ 
+ 			let mut i = 0;
+ 
+--- a/fuse-ufs/src/main.rs
++++ b/fuse-ufs/src/main.rs
+@@ -42,7 +42,7 @@
+ fn main() -> Result<()> {
+ 	let cli = Cli::parse();
+ 	if cli.lurker_capabilities {
+-		println!("{{\"ufs2_write_protocol\":1}}");
++		println!("{{\"ufs2_write_protocol\":1,\"ufs2_directory_protocol\":1}}");
+ 		return Ok(());
+ 	}
+ 	let device = cli.device.as_ref().expect("device required by clap");

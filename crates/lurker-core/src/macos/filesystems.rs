@@ -111,16 +111,18 @@ fn ufs2_driver() -> AppResult<PathBuf> {
     let output = checked(&driver, &args(&["--lurker-capabilities"]), None)?;
     let capabilities: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| AppError::new(format!("Invalid UFS2 driver capabilities: {error}")))?;
-    if capabilities
-        .get("ufs2_write_protocol")
-        .and_then(serde_json::Value::as_u64)
-        != Some(1)
-    {
+    if !qualified_ufs2_capabilities(&capabilities) {
         return Err(AppError::new(
-            "The UFS2 driver lacks the qualified write/sync implementation. Install the matching free private filesystem tools.",
+            "The UFS2 driver lacks qualified write/sync or complete directory enumeration. Install the matching host filesystem tools.",
         ));
     }
     Ok(driver)
+}
+
+fn qualified_ufs2_capabilities(capabilities: &serde_json::Value) -> bool {
+    ["ufs2_write_protocol", "ufs2_directory_protocol"]
+        .into_iter()
+        .all(|name| capabilities.get(name).and_then(serde_json::Value::as_u64) == Some(1))
 }
 
 fn formatter(kind: Kind) -> AppResult<PathBuf> {
@@ -1503,6 +1505,19 @@ pub(super) fn augment(volumes: &mut [Volume]) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ufs2_rejects_drivers_that_truncate_directory_enumeration() {
+        assert!(!qualified_ufs2_capabilities(
+            &serde_json::json!({"ufs2_write_protocol": 1})
+        ));
+        assert!(!qualified_ufs2_capabilities(
+            &serde_json::json!({"ufs2_write_protocol": 1, "ufs2_directory_protocol": "1"})
+        ));
+        assert!(qualified_ufs2_capabilities(
+            &serde_json::json!({"ufs2_write_protocol": 1, "ufs2_directory_protocol": 1})
+        ));
+    }
+
     #[test]
     fn unqualified_xfs_fails_before_tools_credentials_or_allocation() {
         let command = CreateCommand {

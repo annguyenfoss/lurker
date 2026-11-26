@@ -49,6 +49,9 @@ Apply these patches in order to the private fuse-ufs source checkout:
    refuses older reader builds without these write/sync fixes.
 6. `fuse-ufs-cross-parent-directory-guard.patch`: refuse the unsupported directory
    move before touching either directory.
+7. `fuse-ufs-readdir-continuation.patch`: honor nonzero directory offsets so
+   enumeration continues beyond the first reply buffer. Advertise
+   `ufs2_directory_protocol: 1`; Lurker refuses older truncating drivers.
 
 Apply `fuser-0.16-macos-libfuse3.patch`, then
 `fuser-macos-libfuse3-rename.patch` to the private fuser source. The first selects
@@ -73,7 +76,7 @@ target/release/fuse-ufs --lurker-capabilities
 The first offline build requires the locked dependencies to be cached. Fetch
 those explicitly beforehand if needed. Review the lockfile: only fuser's source
 identity should change. Add `--locked` for subsequent builds. Verify linkage to
-`/usr/local/lib/libfuse3.4.dylib` and the exact write-protocol response above.
+`/usr/local/lib/libfuse3.4.dylib` and both `ufs2_write_protocol: 1` and `ufs2_directory_protocol: 1` in the response.
 
 ## Formatter build and staging
 
