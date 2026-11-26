@@ -12,6 +12,7 @@ import {
 
 export component CreateView inherits Card {
     in property <bool> is-linux: true;
+    in property <bool> is-netbsd: false;
     in property <bool> is-dragonfly: false;
     in property <[string]> formats: ["luks", "vera"];
     in property <bool> unprivileged: false;
@@ -34,6 +35,7 @@ export component CreateView inherits Card {
     out property <bool> directory-format: root.format == "gocryptfs" || root.format == "cryfs" || root.format == "cryptomator" || root.format == "pefs";
     out property <bool> variable-cipher: root.format == "luks" || root.format == "luks1" || root.format == "vera";
     out property <bool> supports-keyfile: root.variable-cipher || root.format == "geli" || root.format == "pefs";
+    private property <bool> supports-partition: (root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs" || (root.is-netbsd && root.format == "cgd");
     changed format => {
         root.target-kind = root.directory-format ? "directory" : "file";
         if !root.variable-cipher { root.cipher = "aes"; }
@@ -84,11 +86,11 @@ export component CreateView inherits Card {
 
     // ── Target section ────────────────────────────────────────────────
     CardSection {
-        SectionHead { title: "TARGET"; hint: root.directory-format ? "encrypted directory · grows with your files" : root.is-linux && !root.unprivileged ? "file or partition" : "file container"; }
+        SectionHead { title: "TARGET"; hint: root.directory-format ? "encrypted directory · grows with your files" : root.supports-partition ? "file or partition" : "file container"; }
 
         Rectangle { height: UiTheme.s3; }   // spacer
 
-        if ((root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs"): Segmented {
+        if root.supports-partition: Segmented {
             value <=> root.target-kind;
             options: [
                 { value: "file",      label: "File container" },
@@ -152,7 +154,8 @@ export component CreateView inherits Card {
                 label: "Partition";
                 required: true;
                 if root.format == "apfs": ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/diskNsM"; }
-                if root.format != "apfs": DevicePicker {
+                if root.is-netbsd && root.format == "cgd": ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/dkN"; }
+                if root.format != "apfs" && !(root.is-netbsd && root.format == "cgd"): DevicePicker {
                     devices: root.devices;
                     value <=> root.partition;
                     selected-label: root.partition-label;

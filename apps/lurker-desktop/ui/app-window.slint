@@ -53,7 +53,7 @@ export component MainWindow inherits Window {
     in-out property <string> create-file-path: "~/vaults/";
     in-out property <string> create-file-name: "archive.luks";
     in-out property <string> create-peer-source: "";
-    in-out property <string> create-partition: "/dev/sdb1";
+    in-out property <string> create-partition: "";
     in-out property <string> create-size: "1.0";
     in-out property <string> create-size-unit: "GB";
     in-out property <string> create-cipher: "aes";
@@ -286,6 +286,7 @@ export component MainWindow inherits Window {
 
                             if root.current-view == "create": CreateView {
                                 is-linux: root.is-linux;
+                                is-netbsd: root.platform-os == "netbsd";
                                 is-dragonfly: root.platform-os == "dragonfly";
                                 formats: root.create-formats;
                                 unprivileged: root.unprivileged;
@@ -331,6 +332,7 @@ export component MainWindow inherits Window {
                             if root.current-view == "manage": ManageView {
                                 is-macos: root.is-macos;
                                 is-linux: root.is-linux;
+                                is-netbsd: root.platform-os == "netbsd";
                                 supports-directories: root.is-linux || root.is-macos || root.platform-os == "freebsd";
                                 supports-keyfile: root.platform-os != "netbsd";
                                 supports-raid1c: root.platform-os == "openbsd";

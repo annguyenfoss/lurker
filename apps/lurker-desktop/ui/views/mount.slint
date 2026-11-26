@@ -16,6 +16,7 @@ import {
 export component MountView inherits Card {
     in property <bool> is-macos: false;
     in property <bool> is-linux: true;
+    in property <bool> is-netbsd: false;
     in property <bool> supports-directories: true;
     in property <bool> supports-keyfile: true;
     in property <bool> supports-raid1c: false;
@@ -75,6 +76,10 @@ export component MountView inherits Card {
         { value: "file", label: "File container" },
         { value: "directory", label: "Directory" },
     ];
+    private property <[SegmentOption]> partition-sources: [
+        { value: "file", label: "File container" },
+        { value: "partition", label: "Partition / disk" },
+    ];
 
     // ── Source section ────────────────────────────────────────────────
     CardSection {
@@ -83,9 +88,9 @@ export component MountView inherits Card {
 
         Rectangle { height: UiTheme.s3; }
 
-        if root.supports-directories || root.is-linux: Segmented {
+        if root.supports-directories || root.is-linux || root.is-netbsd: Segmented {
             value: root.source-kind;
-            options: root.is-linux && !root.unprivileged ? root.linux-sources : root.file-sources;
+            options: root.is-netbsd ? root.partition-sources : root.is-linux && !root.unprivileged ? root.linux-sources : root.file-sources;
             selected(v) => { root.source-kind = v; root.source = ""; }
         }
 
@@ -133,7 +138,11 @@ export component MountView inherits Card {
             }
         }
 
-        if root.source-kind == "partition": DevicePicker {
+        if root.source-kind == "partition" && root.is-netbsd: ThemedLineEdit {
+            text <=> root.source;
+            placeholder-text: "/dev/dkN";
+        }
+        if root.source-kind == "partition" && !root.is-netbsd: DevicePicker {
             devices: root.devices;
             value <=> root.source;
             selected-label: root.source-label;

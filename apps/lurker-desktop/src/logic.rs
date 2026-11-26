@@ -68,9 +68,10 @@ pub fn validate_create_platform(
     }
     if command.source_kind == SourceKind::Block
         && (!(os == "macos" && command.volume_type == VolumeType::Apfs)
+            && !(os == "netbsd" && command.volume_type == VolumeType::Cgd)
             && (os != "linux" || mode == lurker_core::PrivilegeMode::Unprivileged))
     {
-        return Err("Physical-device creation requires Linux Privileged mode.".into());
+        return Err("Physical-device creation requires a supported native device backend.".into());
     }
     if mode == lurker_core::PrivilegeMode::Unprivileged
         && !create_formats(os, true)
@@ -626,10 +627,7 @@ mod tests {
             "file", "vera", "/tmp", "vault", "", "1", "GB", "aes", "", "", "key", " "
         )
         .is_err());
-        assert!(
-            build_mount_command("vault", "/mnt/v", "invalid", "password", "", "file")
-                .is_err()
-        );
+        assert!(build_mount_command("vault", "/mnt/v", "invalid", "password", "", "file").is_err());
     }
 
     #[test]
@@ -818,6 +816,36 @@ mod tests {
     }
 
     #[test]
+    fn cgd_partition_uses_the_native_helper_command_without_a_file_size() {
+        let command = build_create_command(
+            "partition",
+            "cgd",
+            "",
+            "",
+            "/dev/dk0",
+            "",
+            "GB",
+            "aes",
+            "password",
+            "password",
+            "pass",
+            "",
+        )
+        .unwrap();
+        assert_eq!(command.source_kind, SourceKind::Block);
+        assert!(command.force);
+        assert!(command.size_gb.is_none());
+        super::validate_create_platform(&command, "netbsd", lurker_core::PrivilegeMode::Privileged)
+            .unwrap();
+        assert!(super::validate_create_platform(
+            &command,
+            "linux",
+            lurker_core::PrivilegeMode::Privileged
+        )
+        .is_err());
+    }
+
+    #[test]
     fn build_create_command_rejects_mismatched_confirm() {
         let err = build_create_command(
             "file", "luks", "~/", "a", "", "1", "GB", "aes", "alpha", "bravo", "pass", "",
@@ -828,8 +856,8 @@ mod tests {
 
     #[test]
     fn build_mount_command_leaves_access_to_backend_capabilities() {
-        let cmd = build_mount_command("/tmp/v.luks", "/mnt/v", "pass", "secret", "", "file")
-            .unwrap();
+        let cmd =
+            build_mount_command("/tmp/v.luks", "/mnt/v", "pass", "secret", "", "file").unwrap();
         assert_eq!(cmd.source, PathBuf::from("/tmp/v.luks"));
         assert_eq!(cmd.mountpoint, PathBuf::from("/mnt/v"));
         assert!(!cmd.readonly);
@@ -838,15 +866,8 @@ mod tests {
 
     #[test]
     fn build_mount_command_accepts_key_file_auth() {
-        let command = build_mount_command(
-            "/tmp/v.luks",
-            "/mnt/v",
-            "key",
-            "",
-            "/tmp/k.key",
-            "file",
-        )
-        .unwrap();
+        let command =
+            build_mount_command("/tmp/v.luks", "/mnt/v", "key", "", "/tmp/k.key", "file").unwrap();
         assert!(command.passphrase.is_none());
         assert_eq!(command.keyfile, Some("/tmp/k.key".into()));
     }
@@ -908,15 +929,8 @@ mod tests {
         assert_eq!(rows[0].source, "/tmp/a.dmg");
         assert_eq!(rows[0].source_kind, "file");
         assert!(rows[0].readonly);
-        let c = build_mount_command(
-            "/tmp/a.dmg",
-            "/tmp/mount",
-            "pass",
-            " secret ",
-            "",
-            "file",
-        )
-        .unwrap();
+        let c = build_mount_command("/tmp/a.dmg", "/tmp/mount", "pass", " secret ", "", "file")
+            .unwrap();
         assert_eq!(c.passphrase.as_deref(), Some(" secret "));
     }
 }
