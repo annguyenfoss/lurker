@@ -2,7 +2,8 @@
 """Add brief native feature observations to the shared Gentoo payload lifecycle.
 
 Run on the assigned Gentoo host with the same arguments as test-filesystem-cli.py.
-LURKER_FEATURE_RECEIPTS names an existing private evidence directory. This wrapper
+LURKER_FEATURE_RECEIPTS optionally names a private evidence directory; otherwise
+observations stay beside the owned mountpoint. This wrapper
 never substitutes an unmounted underlay, and leaves ordinary payload acceptance
 and cleanup to the shared harness.
 """
@@ -84,7 +85,8 @@ def main():
     spec.loader.exec_module(harness)
     native_verify = harness.verify_payload
     captured = set()
-    evidence = Path(os.environ["LURKER_FEATURE_RECEIPTS"]).resolve(strict=True)
+    override = os.environ.get("LURKER_FEATURE_RECEIPTS")
+    evidence = Path(override).resolve(strict=True) if override else None
 
     def verify(mountpoint, expected):
         digests = native_verify(mountpoint, expected)
@@ -92,7 +94,8 @@ def main():
         if key not in captured:
             captured.add(key)
             row = features(mountpoint)
-            path = evidence / (mountpoint.parent.name + "-" + mountpoint.name + ".json")
+            path = (evidence / (mountpoint.parent.name + "-" + mountpoint.name + ".json")
+                    if evidence else mountpoint.parent / (mountpoint.name + ".features.json"))
             temporary = path.with_suffix(".tmp")
             temporary.write_text(json.dumps(row, indent=2) + "\n")
             temporary.replace(path)
