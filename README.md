@@ -274,7 +274,7 @@ lurker unmount vault
 
 Lurker chooses the native format for your OS. Use administrator authorization where required.
 
-## Filesystem Planning
+## Filesystem tested
 
 | Filesystem | Linux | macOS | FreeBSD | OpenBSD | NetBSD | DragonFly BSD | Windows |
 | --- | --- | --- | --- | --- | --- | --- | --- |
