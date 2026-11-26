@@ -1,8 +1,8 @@
 # FreeBSD fresh qualification checkpoint
 
-This is an ordinary-route checkpoint, not a final complete host pass. Device
-product integration, final frozen validation, package staging and reboot
-persistence are still in progress. Old reports are not counted as fresh passes.
+This is an ordinary-route checkpoint, not a final complete host pass. Final container/device matrices and reboot
+persistence are still in progress. Product integration, desktop callbacks and
+canonical package installation have completed the gates recorded below. Old reports are not counted as fresh passes.
 Private receipts are under `target/goal-validation/native-fresh-20261127/hosts/freebsd/`;
 remote logs and preserved fixtures are under `/srv/lurker-fresh-20261127/`.
 
@@ -66,8 +66,10 @@ normally, reopened, verified, appended text/created another file, closed,
 reopened and checked final hashes before closing again.
 
 There are **41 initial product attempts: 30 passes and 11 non-passes**. The
-seven direct-format guards remain unavailable combinations; the four directory
-failures are identified below. This is not 41 eligible passing combinations.
+initial seven direct-format guards include the subsequently corrected GELI/NTFS
+gap. Btrfs/XFS have newer positive native controls pending an eligibility
+decision; APFS still lacks a qualified write route. Four directory failures are
+identified below. This is not 41 eligible passing combinations.
 
 | Filesystem | GELI inner | VeraCrypt inner | PEFS backing | gocryptfs backing | CryFS backing |
 | --- | --- | --- | --- | --- | --- |
@@ -78,13 +80,14 @@ failures are identified below. This is not 41 eligible passing combinations.
 | NTFS | Passed scoped retest | Passed | Native backing failure | Passed | Product publication gap |
 | exFAT | Passed | Passed | Native backing failure | Passed | Product publication gap |
 | ZFS | Passed | Passed | Passed | Passed | Passed |
-| Btrfs | Guard/native append failure | Guard/native append failure | Ineligible backing | Ineligible backing | Ineligible backing |
-| XFS | Guard/native append failure | Guard/native append failure | Ineligible backing | Ineligible backing | Ineligible backing |
+| Btrfs | Product guard; native control now passes | Product guard; native control now passes | Policy decision pending | Policy decision pending | Policy decision pending |
+| XFS | Product guard; native control now passes | Product guard; native control now passes | Policy decision pending | Policy decision pending | Policy decision pending |
 | APFS | Guard/no native write route | Guard/no native write route | Ineligible backing | Ineligible backing | Ineligible backing |
 
 Fresh native package controls created XFS and Btrfs, mounted through packaged
 LKL, wrote payload, closed and reopened. Both then failed append with `EBADF`;
-these are not Create + Read/Write passes. Corrected controls are in
+these initial controls are not Create + Read/Write passes. Later `direct_io`
+controls described below supersede that driver assessment. Initial controls are in
 `native-filesystems-1795725868`; preliminary setup failures are retained.
 Initial GELI/NTFS formatting timed out with the native port's default cache;
 that receipt and the original product guard are retained. A later 512-byte
@@ -179,10 +182,80 @@ wrapper called a function absent from its older harness; that failed receipt
 and its closed partition are retained. Full frozen product/device validation
 and desktop physical-source exposure remain pending.
 
-No owned crypto mappings or plaintext mounts remain at this checkpoint. The
+After that preview, owned crypto mappings and plaintext mounts had closed. The
 scoped conformance nullfs mount and dedicated build pool remain intentional.
-`vfs.usermount` was temporarily enabled for login-user FUSE cases and restored
-to its original zero after each batch. No orderly reboot has yet been counted.
+Each completed user-FUSE batch restored `vfs.usermount` to its original zero.
+The newer final matrix below is actively using its own fixtures; final cleanup
+and orderly reboot persistence have not yet been counted.
+
+## Final ordinary candidate and remaining native gaps
+
+Exact source `d601bc5c4d2af95ecf24145829d7c282a8284791`, native run
+`20261126T232638Z-7ffd0e78`, built all three products and passed workspace check
+and **139 tests, zero failures, 13 explicit privileged ignores**. The consistent
+profile is dev with debug information and incremental compilation disabled.
+Canonical staging under umask 077, native package generation, two install/check/
+remove cycles, the final reinstall, file hashes and root-owned public modes all
+passed. Archive SHA-256 is
+`81d7816a0117720b37542d7655eef4de0105148f634158a29dcf8f87256c7f05`;
+native package is
+`1c953abd084185482e21793770476b9fd414ec653fe89789ff584308516d4a45`.
+Installed products are:
+
+- CLI: `7844aaf653305ad696aa0ba2272d9c705f6abd484de8787c268da0835267e751`
+- helper: `38c4682c6a3c4fcf75ae59b2b50d3a8a403bfef20a75dfe49d8d19d9c90e7588`
+- desktop: `400bb6e30cc218221883b34501ea8b75b227a38a6eded9455f21785f33763f16`
+
+FUSE, including its userspace library, remains a host prerequisite. The final
+VeraCrypt SDK contains only private libiconv. Its engine bytes remain
+`92edaf1363133aab8844ddd2c01656174967e260cd046569bd2dcbac64eec8b4`.
+The host ABI is `libfuse.so.2`; `/usr/local/lib/libfuse.so.2` resolves to the
+administrator-owned versioned provider. Producer hashes record build inputs;
+compatible administrator updates are accepted after current ownership,
+symlink-chain, SONAME, engine-NEEDED and actual cleared-environment loader
+resolution checks. The first native FreeBSD runtime test caught an alias-versus-
+canonical-path comparison bug in `c7f7092`; shared fix `d601bc5` passes all three
+root runtime tests. The independent active-GELI/read-only system-device guard
+test also passes. Failed intermediate package/runtime receipts remain retained.
+
+The installed desktop opened a real winit/software-rendered native X11 window
+as UID 1300 with no loader overrides. Its fresh frame was visually inspected.
+Earlier native helper-backed GUI callbacks passed GELI and physical VeraCrypt;
+the physical create/open fields and actual 120% scrolling to both action
+buttons passed. Root commits `ca14341` and `2e93f78`, and owned `507f9ea`, retain
+those UI changes. The final package window check supplements those callbacks.
+
+The fresh final device is the independent 8 GiB qcow2
+`/srv/build/lurker-native-fresh-20261127/freebsd/device-final.qcow2`, domain
+`freebsd-core-01`, target vdd, guest `/dev/vtbd3`, serial `lurker-fb-final-data`.
+Native size/serial/idle state were verified before creating 17 retained GPT
+partitions. Final container and device batches use the same installed binaries;
+all seven GELI physical filesystem rows have passed. VeraCrypt, directory
+backings, conformance, helper and reboot batches remain in progress. This is
+not a final matrix-pass count.
+
+Ordinary NTFS source assessment also built Tuxera 2026.9.28 natively in a
+separate root-owned host-tool prefix with the official FreeBSD aligned-I/O
+patches. The configured package remains 2022.10.3; the ordinary source control
+preserves its own logs and binary hashes. Unmodified upstream CryFS passes the
+full payload on the newer driver, while the bundled durability patch still
+fails hard-link publication with EIO and kernel rename-no-replace still returns
+EOPNOTSUPP. This newer ordinary driver does not solve the product gap. No custom
+kernel module or weakened publication/durability workaround has been used.
+
+Additional native XFS and Btrfs controls now pass all three payload opens with
+host `lklfuse -o direct_io`. Both also pass through GELI with AES-XTS-256,
+PBKDF2 iterations 600000 and 512-byte sectors; all closes and native detaches are
+normal. Controls are `native-lkl-directio-v2-1795733146` and
+`native-geli512-lkl-directio-1795735582`. The installed official port is
+`fusefs-lkl-4.16.g20180628_5`, GPLv2 source
+`86dd3afb590eccc1903611bdaa8bac87757eb80d`. This is a native FreeBSD ELF process
+statically embedding Linux Kernel Library code with host threads, file I/O and
+host FUSE; it has no VM or network layer. Upstream is active, with inspected
+commit `d0f76a77e8c2ca68bd7d96190b8da09040eab072` dated 2026-09-28. Product
+mount/geometry changes remain held pending the user's explicit eligibility
+preference for this separately installed host route. No positive native control
+has been relabeled as a product pass, and no name-based impossibility is claimed.
 
 ## Primary ordinary-route sources inspected this round
 
@@ -199,3 +272,9 @@ to its original zero after each batch. No orderly reboot has yet been counted.
 - https://raw.githubusercontent.com/tuxera/ntfs-3g/2022.10.3/src/ntfs-3g.c
 - https://raw.githubusercontent.com/relan/exfat/v1.4.0/fuse/main.c
 - https://raw.githubusercontent.com/freebsd/freebsd-ports/main/filesystems/ntfs/files/README.FreeBSD
+
+Additional primary source inputs:
+
+- https://download.tuxera.com/opensource/ntfs-3g_ntfsprogs-2026.9.28.tgz
+- https://github.com/lkl/linux
+- https://api.github.com/repos/lkl/linux/commits/master
