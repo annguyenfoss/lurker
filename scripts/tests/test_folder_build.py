@@ -88,8 +88,9 @@ class PlatformPatchTests(unittest.TestCase):
         mac = BUILD.selected_patches("cryfs", "Darwin")
         self.assertEqual(linux, common + ["native/folder/cryfs/linux-localstate.patch",
                                          "native/folder/cryfs/linux-exclusive-publication.patch"])
-        self.assertEqual(mac, common + ["native/macos/cryfs-fuse-t.patch"])
-        compiler = (BUILD.ROOT / mac[-1]).read_text()
+        self.assertEqual(mac, common + ["native/macos/cryfs-fuse-t.patch",
+                                       "native/folder/cryfs/macos-exclusive-publication.patch"])
+        compiler = (BUILD.ROOT / "native/macos/cryfs-fuse-t.patch").read_text()
         self.assertIn("IdWrapper.h", compiler)
         self.assertIn("fuse-t", compiler)
         self.assertIn("src/fspp/fuse/CMakeLists.txt", compiler)

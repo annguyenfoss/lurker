@@ -215,7 +215,7 @@ Version needs section '.gnu.version_r' contains 2 entries:
         with self.assertRaisesRegex(ValueError, "patch provenance"):
             stager.verify_folder_patches("gocryptfs", correct, source)
 
-    def test_linux_publication_patch_is_required_without_changing_freebsd_inputs(self):
+    def test_platform_publication_patches_do_not_change_freebsd_inputs(self):
         import ast
         def constant(name, variable):
             for node in ast.parse((stager.ROOT / name).read_bytes()).body:
@@ -233,6 +233,12 @@ Version needs section '.gnu.version_r' contains 2 entries:
             stager.verify_folder_patches("cryfs", {"patches": hashes}, source)
             with self.assertRaisesRegex(ValueError, "patch provenance"):
                 stager.verify_folder_patches("cryfs", {"patches": {name: hashes[name] for name in (common, local)}}, source)
+        mac = [common, "native/macos/cryfs-fuse-t.patch", "native/folder/cryfs/macos-exclusive-publication.patch"]
+        mac_hashes = {name: stager.digest(stager.ROOT / name) for name in mac}
+        with mock.patch.object(stager.platform, "system", return_value="Darwin"):
+            stager.verify_folder_patches("cryfs", {"patches": mac_hashes}, source)
+            with self.assertRaisesRegex(ValueError, "patch provenance"):
+                stager.verify_folder_patches("cryfs", {"patches": {name: mac_hashes[name] for name in mac[:-1]}}, source)
         with mock.patch.object(stager.platform, "system", return_value="FreeBSD"):
             stager.verify_folder_patches("cryfs", {"patches": {common: hashes[common]}}, source)
 

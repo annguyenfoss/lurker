@@ -28,7 +28,8 @@ PATCHES = {"cryfs": ["native/folder/cryfs/fsyncdir.patch"]}
 PLATFORM_PATCHES = {
     "Linux": {"cryfs": ["native/folder/cryfs/linux-localstate.patch",
                         "native/folder/cryfs/linux-exclusive-publication.patch"]},
-    "Darwin": {"cryfs": ["native/macos/cryfs-fuse-t.patch"]},
+    "Darwin": {"cryfs": ["native/macos/cryfs-fuse-t.patch",
+                         "native/folder/cryfs/macos-exclusive-publication.patch"]},
     "FreeBSD": {"gocryptfs": ["native/folder/gocryptfs/freebsd-futimes.patch"]},
 }
 DARWIN_GO_FUSE = ("https://github.com/hanwen/go-fuse.git", "2d50fff207d78c197869fa492eff3a79bc1d8408")
