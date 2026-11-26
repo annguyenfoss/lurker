@@ -188,7 +188,11 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool, descriptor: Option
             return Err(AppError::io("Cannot start monitored backend", error));
         }
     };
-    if let Some(process) = process_identity(child.id()) {
+    #[cfg(target_os = "netbsd")]
+    let identity = owned_process_identity(&child);
+    #[cfg(not(target_os = "netbsd"))]
+    let identity = process_identity(child.id());
+    if let Some(process) = identity {
         write_record(&dir, "backend-process.json", &process)?;
     } else if held_fence.is_none() {
         return Err(AppError::new("Cannot confirm monitored backend identity."));

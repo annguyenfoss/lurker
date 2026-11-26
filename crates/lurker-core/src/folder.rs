@@ -20,6 +20,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod supervisor;
 #[path = "folder/fence.rs"]
 mod fence;
+#[cfg(target_os = "netbsd")]
+mod netbsd_process;
 #[cfg(target_os = "macos")]
 #[path = "folder/macos_publication.rs"]
 mod macos_publication;
@@ -452,6 +454,8 @@ fn linux_stat_process_absent(error: &std::io::Error) -> bool {
 // Distinguish a confirmed exit from an inspection/permission failure. An
 // unreadable process must never authorize recovery of an unreadable mount.
 fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
+    #[cfg(target_os = "netbsd")]
+    return netbsd_process::snapshot(pid);
     #[cfg(target_os = "linux")]
     {
         let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
@@ -580,7 +584,7 @@ fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
         }
         unreachable!("bounded process query always returns on its final attempt")
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd", target_os = "netbsd")))]
     {
         let _ = pid;
         Err(AppError::new(
@@ -588,13 +592,29 @@ fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
         ))
     }
 }
-#[cfg(any(test, target_os = "freebsd"))]
+#[cfg(any(test, target_os = "freebsd", target_os = "netbsd"))]
 fn process_query_absent(result: i32, size: usize, error: Option<i32>) -> bool {
     (result == 0 && size == 0) || (result != 0 && error == Some(libc::ESRCH))
 }
 
+#[cfg(not(target_os = "netbsd"))]
 fn process_identity(pid: u32) -> Option<Process> {
     process_snapshot(pid).ok().flatten()
+}
+
+#[cfg(target_os = "netbsd")]
+fn owned_process_identity(child: &Child) -> Option<Process> {
+    // These callers still own an unreaped spawn, so its PID cannot be reused.
+    // NetBSD can briefly omit its user area even after exec has completed.
+    for attempt in 0..200 {
+        if let Ok(snapshot) = process_snapshot(child.id()) {
+            return snapshot;
+        }
+        if attempt < 199 {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    None
 }
 fn alive(process: &Process) -> AppResult<bool> {
     Ok(process_snapshot(process.pid)?.is_some_and(|p| p.birth == process.birth))
@@ -1108,7 +1128,10 @@ fn mount_inner(
     let mut child = command
         .spawn()
         .map_err(|e| AppError::io("Cannot start directory backend", e))?;
-    session.supervisor = process_identity(child.id());
+    #[cfg(target_os = "netbsd")]
+    { session.supervisor = owned_process_identity(&child); }
+    #[cfg(not(target_os = "netbsd"))]
+    { session.supervisor = process_identity(child.id()); }
     save(&dir, &session)?;
     send(&mut child, &secret)?;
     let started = Instant::now();
