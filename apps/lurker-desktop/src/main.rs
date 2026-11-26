@@ -633,6 +633,18 @@ mod tests {
             std::env::var("LURKER_DESKTOP_NATIVE_TEST").as_deref(),
             Ok("1")
         );
+        let mut entropy = [0_u8; 16];
+        std::io::Read::read_exact(
+            &mut std::fs::File::open("/dev/urandom").expect("native fixture entropy source"),
+            &mut entropy,
+        )
+        .expect("native fixture entropy");
+        let suffix = entropy
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let fixture_password = format!("Desktop 密碼 9!{suffix}");
+        assert!(fixture_password.len() < 64);
         let fixture_parent = std::path::PathBuf::from(
             std::env::var_os("LURKER_DESKTOP_NATIVE_ROOT").expect("explicit /tmp fixture root"),
         );
@@ -748,8 +760,8 @@ mod tests {
                 .into(),
             );
             ui.set_create_size_unit("MB".into());
-            ui.set_create_passphrase("desktop native fixture password".into());
-            ui.set_create_confirm("desktop native fixture password".into());
+            ui.set_create_passphrase(fixture_password.as_str().into());
+            ui.set_create_confirm(fixture_password.as_str().into());
             ui.invoke_submit_create();
             wait();
             assert!(source.exists());
@@ -776,7 +788,7 @@ mod tests {
                         "".into()
                     });
                 }
-                ui.set_mount_passphrase("desktop native fixture password".into());
+                ui.set_mount_passphrase(fixture_password.as_str().into());
                 ui.invoke_submit_mount();
                 wait();
                 assert_eq!(ui.get_mount_passphrase(), "");
