@@ -147,11 +147,13 @@ def redact(data, secrets):
             data = data.replace(secret.encode(), b"[REDACTED]")
     return data.decode("utf-8", "replace")
 
-def terminal(args, password, timeout, log):
+def terminal(args, password, timeout, log, confirm_quick_format=False):
     """Drive real CLI/native password prompts over its own controlling TTY.
 
     Only the process we forked is signalled on timeout. Its storage is retained
     for investigation; killing a CLI is never treated as successful cleanup.
+    The caller must verify its disposable device and destructive authorization
+    before opting into the single native VeraCrypt Quick Format confirmation.
     """
     pid, master = pty.fork()
     if pid == 0:
@@ -172,6 +174,7 @@ def terminal(args, password, timeout, log):
     status = None
     pending_prompt = None
     echo_off_since = None
+    quick_confirmations = 0
     try:
         while time.monotonic() < deadline:
             ready = [] if eof else select.select([master], [], [], 0.01 if pending_prompt else 0.1)[0]
@@ -193,6 +196,19 @@ def terminal(args, password, timeout, log):
                     visible = re.sub(rb"\x1b\].*?(?:\x07|\x1b\\)", b"", bytes(transcript), flags=re.S)
                     visible = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b"", visible)
                     match = None if pending_prompt else PROMPT.search(visible[consumed:])
+                    if match and match.group("authorization"):
+                        raise RuntimeError("Unexpected authorization prompt; run with the explicit required privilege route")
+                    if confirm_quick_format and not pending_prompt:
+                        quick = re.search(
+                            rb"Are you sure you want to use Quick Format\? \(y=Yes/n=No\) \[No\]:[ \t]*",
+                            visible[consumed:])
+                        if quick and (not match or quick.start() < match.start()):
+                            if quick_confirmations:
+                                raise RuntimeError("Unexpected repeated Quick Format confirmation")
+                            os.write(master, b"y\n")
+                            quick_confirmations += 1
+                            consumed += quick.end()
+                            match = PROMPT.search(visible[consumed:])
                     if match:
                         # This suite never supplies administrator credentials.
                         if match.group("authorization"):
@@ -246,8 +262,11 @@ def terminal(args, password, timeout, log):
                 raise RuntimeError("CLI exceeded bounded transcript limit")
         if password and password.encode() in transcript:
             raise RuntimeError("CLI exposed a credential in its terminal output")
-        return {"exit_code": os.waitstatus_to_exitcode(status), "prompts": prompts,
-                "timed_out": timed_out}
+        result = {"exit_code": os.waitstatus_to_exitcode(status), "prompts": prompts,
+                  "timed_out": timed_out}
+        if confirm_quick_format:
+            result["native_quick_confirmations"] = quick_confirmations
+        return result
     finally:
         if not finished:
             # Direct owned child only, never an inferred PID/session or VM.

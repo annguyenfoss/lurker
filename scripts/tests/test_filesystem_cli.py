@@ -12,6 +12,52 @@ spec.loader.exec_module(suite)
 
 
 class PromptTests(unittest.TestCase):
+    def test_quick_format_confirmation_is_explicit_and_keeps_password_protected(self):
+        child = r'''
+import os, sys, termios, time
+os.write(1, b'Are you sure you want to use Quick ')
+time.sleep(.02)
+os.write(1, b'Format? (y=Yes/n=No) [No]: ')
+assert sys.stdin.readline() == 'y\n'
+attrs = termios.tcgetattr(0)
+attrs[3] &= ~termios.ECHO
+termios.tcsetattr(0, termios.TCSAFLUSH, attrs)
+os.write(1, b'\r\nEnter password: ')
+sys.exit(0 if sys.stdin.readline().rstrip('\n') == 'test-secret' else 2)
+'''
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "terminal.log"
+            result = suite.terminal([sys.executable, "-c", child], "test-secret", 5,
+                                    log, confirm_quick_format=True)
+            self.assertEqual(result["exit_code"], 0)
+            self.assertEqual(result["native_quick_confirmations"], 1)
+            self.assertEqual(result["prompts"], 1)
+            self.assertNotIn("test-secret", log.read_text())
+
+    def test_quick_format_prompt_gets_no_answer_by_default(self):
+        child = r'''
+import os, select, sys
+os.write(1, b'Are you sure you want to use Quick Format? (y=Yes/n=No) [No]: ')
+sys.exit(2 if select.select([0], [], [], .1)[0] else 0)
+'''
+        with tempfile.TemporaryDirectory() as root:
+            result = suite.terminal([sys.executable, "-c", child], None, 5,
+                                    Path(root) / "terminal.log")
+            self.assertEqual(result["exit_code"], 0)
+            self.assertNotIn("native_quick_confirmations", result)
+
+    def test_repeated_quick_format_confirmation_is_rejected(self):
+        child = r'''
+import os, sys
+for _ in range(2):
+    os.write(1, b'\r\nAre you sure you want to use Quick Format? (y=Yes/n=No) [No]: ')
+    sys.stdin.readline()
+'''
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaisesRegex(RuntimeError, "repeated Quick Format"):
+                suite.terminal([sys.executable, "-c", child], None, 5,
+                               Path(root) / "terminal.log", confirm_quick_format=True)
+
     def test_osc_session_prefix_and_colored_prompt(self):
         # A child with its own TTY must receive the secret only after echo is
         # disabled, including when OSC control text precedes a native prompt.

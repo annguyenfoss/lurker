@@ -219,7 +219,14 @@ def main():
                 if args.keyfile and action in ('create', 'mount'):
                     argv += ['--key-file', str(credential)]
                 log = fixture / f'{len(result["operations"]):02d}-{action}.log'
-                status = harness.terminal(argv, None if args.keyfile else password, 240, log)
+                terminal_options = {}
+                if args.mode == 'device' and action == 'create' and kind == 'veracrypt':
+                    if '--force' not in operands or args.device not in operands:
+                        raise RuntimeError('Quick Format confirmation requires the exact guarded destructive target')
+                    scratch_device_identity(args.device, args.serial)
+                    terminal_options['confirm_quick_format'] = True
+                status = harness.terminal(argv, None if args.keyfile else password, 240, log,
+                                          **terminal_options)
                 result['operations'].append({'action': action, 'log': str(log), **status})
                 atomic(result_path, result)
                 if status['exit_code'] or status['timed_out']:
