@@ -29,10 +29,11 @@ SOURCES = {
 FOLDER_FUSE_MOUNT = {"runtime": "fuse-t", "transport": "fskit", "minimum_os": "26.0"}
 GOCRYPTFS_FUSE_HELPER = Path("/Library/Application Support/fuse-t/bin/go-nfsv4-1.2.9")
 GOCRYPTFS_FUSE_HELPER_SHA256 = "348361a699b768d555ec41803e492075b9179691dbfac6b9020db5c20add5fa7"
-# Historical recipe metadata. Legacy install names are recognized only to reject them.
+# Explicit native transport for hosts with the separately approved kernel driver.
 MACFUSE_REFERENCE = {"package": "fuse", "library": "/usr/local/lib/libfuse.2.dylib",
                      "info": "/Library/Filesystems/macfuse.fs/Contents/Info.plist"}
 FUSE_RUNTIMES = {
+    "macfuse": {**MACFUSE_REFERENCE, "flags": []},
     "fuse-t": {"package": "fuse-t", "library": "/usr/local/lib/libfuse-t.dylib",
                "flags": ["WITHFUSET=1", "VC_OSX_FUSET=1"]},
 }
@@ -167,7 +168,7 @@ def fuse_runtime_info(runtime):
             "pkg_config": package, "library": library, "library_sha256": sha256(library)}
 
 
-def manifest_fuse_runtime(provenance):
+def manifest_fuse_runtime(provenance, *, allow_macfuse=False):
     runtime = provenance.get("fuse_runtime", {}).get("implementation")
     if runtime is None:
         # Existing developer FUSE-T manifests precede explicit runtime selection.
@@ -175,13 +176,13 @@ def manifest_fuse_runtime(provenance):
         if len(choices) != 1 or None in choices:
             raise RuntimeError("Backend manifest does not identify one supported FUSE runtime")
         runtime = choices.pop()
-    if runtime not in FUSE_RUNTIMES:
+    if runtime not in FUSE_RUNTIMES or (runtime == "macfuse" and not allow_macfuse):
         raise RuntimeError("macOS backend manifest must select FUSE-T")
     return runtime
 
 
 def veracrypt_fuse_runtime(provenance):
-    return manifest_fuse_runtime(provenance)
+    return manifest_fuse_runtime(provenance, allow_macfuse=True)
 
 
 def require_veracrypt_fuse_t_version(version):
@@ -202,7 +203,8 @@ def verify_manifest_files(root, files):
 
 def verify_veracrypt_manifest(root, provenance, project_root):
     runtime = veracrypt_fuse_runtime(provenance)
-    require_veracrypt_fuse_t_version(provenance.get("fuse_runtime", {}).get("version"))
+    if runtime == "fuse-t":
+        require_veracrypt_fuse_t_version(provenance.get("fuse_runtime", {}).get("version"))
     expected = {name: {"url": spec[0], "sha256": spec[1]} for name, spec in SOURCES.items()}
     patches = {name: sha256(Path(project_root) / name) for name in VERACRYPT_PATCHES}
     if (provenance.get("veracrypt_revision") != VC_REVISION
@@ -332,7 +334,7 @@ def stage_macho(source_binary, destination, frameworks, architecture, *, fuse_ru
                 external_fuse = "/usr/local/lib/" + dependency.removeprefix("@rpath/")
             runtime = external_fuse_runtime(external_fuse)
             if runtime is not None:
-                if runtime != "fuse-t":
+                if runtime != (fuse_runtime or "fuse-t") or (runtime == "macfuse" and external_fuse != MACFUSE_REFERENCE["library"]):
                     raise RuntimeError(f"Unsupported external FUSE dependency: {dependency}")
                 require_administrator_controlled(external_fuse)
                 resolved_runtime = external_fuse_runtime(str(Path(external_fuse).resolve()))
@@ -375,7 +377,7 @@ def stage_macho(source_binary, destination, frameworks, architecture, *, fuse_ru
     copy_image(Path(source_binary), Path(destination))
     for target in targets:
         for dependency in dependencies(target):
-            if not (is_system(dependency) or is_external_fuse(dependency)
+            if not (is_system(dependency) or dependency in externals
                     or dependency.startswith(("@loader_path/", "@rpath/"))):
                 raise RuntimeError(f"Developer dependency survived staging: {dependency}")
     return targets, sorted(externals)

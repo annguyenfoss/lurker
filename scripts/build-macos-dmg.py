@@ -273,7 +273,9 @@ def main():
             "Drag Lurker.app onto Applications, then eject this disk image.\n"
             "Open Lurker from Applications. No package installer or terminal install is needed.\n\n"
             "Apple encrypted disk images work with built-in macOS tools.\n"
-            f"VeraCrypt support is included. Install FUSE-T {VERACRYPT_FUSE_T_MINIMUM} or later.\n"
+            + (f"VeraCrypt support is included. Install FUSE-T {VERACRYPT_FUSE_T_MINIMUM} or later.\n"
+               if selected_fuse == "fuse-t" else
+               "VeraCrypt support is included. Install macFUSE and approve its kernel extension.\n")
             + ("Included directory backends: " + ", ".join(options.folder_backends) + ".\n"
                if options.folder_backends else "")
             + ("The bundled directory backends require FUSE-T with FSKit enabled (macOS 26+).\n"

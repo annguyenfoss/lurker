@@ -22,8 +22,8 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=ROOT / "target/release/macos-backends")
     parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 2))
     parser.add_argument("--offline", action="store_true")
-    parser.add_argument("--fuse-runtime", choices=["fuse-t"], default="fuse-t",
-                        help="VeraCrypt requires separately installed FUSE-T")
+    parser.add_argument("--fuse-runtime", choices=sorted(FUSE_RUNTIMES), default="fuse-t",
+                        help="Separately installed transport; macfuse requires its approved kernel extension")
     args = parser.parse_args()
     if sys.platform != "darwin" or os.geteuid() == 0:
         parser.error("Build on macOS as the login user, without sudo.")
@@ -33,7 +33,8 @@ def main():
         if not shutil.which(tool):
             parser.error(f"Missing build prerequisite: {tool}")
     runtime = fuse_runtime_info(args.fuse_runtime)
-    require_veracrypt_fuse_t_version(runtime["version"])
+    if args.fuse_runtime == "fuse-t":
+        require_veracrypt_fuse_t_version(runtime["version"])
     cache = args.cache_dir.expanduser().absolute()
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     if cache.is_symlink() or cache.stat().st_uid != os.geteuid() or cache.stat().st_mode & 0o022:
