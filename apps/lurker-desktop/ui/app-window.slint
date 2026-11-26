@@ -262,6 +262,8 @@ export component MainWindow inherits Window {
                 ScrollView {
                     horizontal-stretch: 1;
                     vertical-stretch: 1;
+                    viewport-width: self.visible-width;
+                    viewport-height: max(self.visible-height, work-layout.preferred-height);
 
                     Rectangle {
                         background: UiTheme.bg-0;
@@ -275,7 +277,7 @@ export component MainWindow inherits Window {
                         // .work-wrap — 720px centered column.
                         // Three-child layout with flex spacers avoids the
                         // `width: min(720px, parent.width - …)` binding loop.
-                        HorizontalLayout {
+                        work-layout := HorizontalLayout {
                             padding-top: UiTheme.s5;
                             padding-bottom: UiTheme.s6;
 
