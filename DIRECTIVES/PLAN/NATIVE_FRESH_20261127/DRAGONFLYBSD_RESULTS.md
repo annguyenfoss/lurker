@@ -204,13 +204,40 @@ structure is initialized from kernel bytes. Native `waitid(WNOWAIT)` proves the
 unreaped child; `KERN_PROC_PID` returns explicit zero bytes for that zombie.
 Directory-backend product integration is still pending.
 
+## Initial physical product matrix
+
+`6a4b88c` implements physical LUKS1/VeraCrypt creation and reopen using the
+verified GPT partition, native geometry instead of character-node file length,
+sector-aligned Auto detection and identity-checked raw flushes. LUKS1 retains its
+journaled private metadata activation layer. The tcplay vnode protocol stays 2;
+physical creation additionally requires the measured `physical-protocol` 1
+extension before random initialization. An older wrapper was refused with
+unchanged sampled ciphertext headers, and the qualified wrapper was restored.
+Legacy LUKS1/UFS1 and VeraCrypt/FAT32 file payload regressions also passed.
+
+API admission `34872dd` passed 13 native API tests. The frozen combined development
+inputs have ID `b2833543ae057502ee3b3bd423153347788c2e22d23206acb630f3916ecd71a5`;
+CLI SHA-256 `715035f34734b43b58a8c8286df7d83712d10d3dbdf36024c613e693270f2273`.
+All ten explicit physical cases passed: LUKS1 and VeraCrypt each with UFS1,
+HAMMER2, ext4, NTFS and exFAT. Cases alternated password/keyfile and explicit/Auto
+open, used the full downloaded payload as uid 1300 and verified both normal
+reopens, including append/new-file persistence. Native mount, superblock and GPT
+identity proofs are in every receipt. All mounts and mappings closed.
+
+`device/applicability.json` separately reconciles 130 device cells: 10 initial
+passes, 45 ordinary-route unavailable, 70 not applicable and five CryFS cells
+blocked pending native work. Directory rows refer to physical backing storage.
+These development results do not replace final frozen-candidate validation or
+broader cipher/credential, frontend and reboot checks.
+
 ## Current continuation
 
-Complete the owned raw crypto/backing adaptations and matching native product
-device tests, then CryFS compilation/native control and any justified bounded
-Go-FUSE transport work. CryFS build inputs are prepared; its previously queued
-supervisor was stopped while idle so the stock base install/reboot could finish
-first. No custom kernel feature work has started.
+Native desktop validation is building from coordinator base `cca3c17` and a
+frozen six-file desktop overlay, with one Cargo worker and disk guards. The
+physical matrix finished before this build. CryFS compilation remains deferred
+for the native desktop/helper package and callback gate; its inputs are prepared.
+A bounded Go-FUSE transport assessment follows those priorities. No custom kernel
+feature work has started.
 
 Final frozen-commit workspace check/test/build, all cipher/credential and
 conformance variations, ordinary mounted-vault reboot persistence, helper/Slint
