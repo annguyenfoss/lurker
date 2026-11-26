@@ -184,3 +184,20 @@ Quick Format confirmation was added to the device harness; it responds only
 for the verified scratch device, create, VeraCrypt and explicit force. Earlier
 interrupted device attempts remain forensic evidence, not completed sweeps.
 The final source qualification and reboot evidence remain pending.
+
+## Product UFS1 geometry verification
+
+Exact committed source `93e0630` was freshly archived, built on Fedora, and all
+373 archive files rehashed unchanged after the build. Four new product cases
+pass: AES and Twofish LUKS2/UFS1 containers, and AES and Twofish LUKS2/UFS1 on
+the verified `lurker-fresh-fedora` scratch disk. Each executes create plus three
+mount/payload/normal-close cycles, including append and a second new file.
+All headers identify 512-byte sectors, AES or Twofish XTS plain64 and 64-byte
+keys. Argon2id retains 1048576 KiB memory; actual calibrated time costs and CPU
+counts are recorded in the dumped JSON. No KDF/cipher reduction was needed.
+The existing configured write-enabled native UFS prerequisite remains required.
+
+Private complete evidence is `device/ufs1-geometry-93e0630.tar.gz` and
+`validation/ufs1-geometry-93e0630-summary.json`. The latter four-case proof is
+separate from the earlier raw native-tool geometry experiment. The physical
+controller is terminal with both cases passed and the scratch device closed.
