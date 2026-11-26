@@ -87,7 +87,7 @@ contains the three native filesystem controls. Failed fixtures are retained.
   was built from the current upstream stable archive and pinned BSD port patches.
   A narrow DragonFly compatibility patch tolerates only unsupported raw-device
   locks; regular-file locking remains effective. A held regular-image lock
-  rejected mount, left no mount and preserved the ciphertext hash.
+  rejected mount, left no mount and preserved the image hash.
   Source: https://download.tuxera.com/opensource/ntfs-3g_ntfsprogs-2026.2.25.tgz
   Archive SHA-256:
   `7754f3b32e8baf9c472459b4e9c981e3ae0f5039107cdd8d8201aed0a949008a`.
