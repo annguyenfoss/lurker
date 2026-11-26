@@ -192,7 +192,7 @@ and orderly reboot persistence have not yet been counted.
 
 Exact source `d601bc5c4d2af95ecf24145829d7c282a8284791`, native run
 `20261126T232638Z-7ffd0e78`, built all three products and passed workspace check
-and **139 tests, zero failures, 13 explicit privileged ignores**. The consistent
+and **139 tests, zero failures, 13 explicit native-fixture ignores**. The consistent
 profile is dev with debug information and incremental compilation disabled.
 Canonical staging under umask 077, native package generation, two install/check/
 remove cycles, the final reinstall, file hashes and root-owned public modes all
@@ -230,9 +230,31 @@ The fresh final device is the independent 8 GiB qcow2
 `freebsd-core-01`, target vdd, guest `/dev/vtbd3`, serial `lurker-fb-final-data`.
 Native size/serial/idle state were verified before creating 17 retained GPT
 partitions. Final container and device batches use the same installed binaries;
-all seven GELI physical filesystem rows have passed. VeraCrypt, directory
-backings, conformance, helper and reboot batches remain in progress. This is
-not a final matrix-pass count.
+all **14/14 physical rows** (seven filesystems times GELI/VeraCrypt) have passed
+108 CLI operations. All original hashes match, all append hashes match the final
+five hashes, all targets are UID/GID 1300 mode 0700 and all 14 closed normally.
+Both physical Serpent/Twofish binary-key variants also pass. Directory backings,
+scoped conformance, helper and reboot gates remain in progress; these counts do
+not imply complete host qualification.
+
+Measured filesystem features below describe the created native profiles, not
+all capabilities available under other mount/format options. Both backend rows
+retain raw probes in `device/final-direct-d601bc5.json`.
+
+| Filesystem | Mode/owner mutation | Additional ACL entry | Native observations |
+| --- | --- | --- | --- |
+| ext4 | Both observed | Not supported by this mounted driver | `dumpe2fs` reports `has_journal`, `metadata_csum` and CRC32C; journal replay was not exercised |
+| UFS1 | Both observed | Disabled in this profile | Soft updates enabled; soft-update journaling and gjournal disabled |
+| UFS2 | Both observed | Disabled in this profile | Soft updates enabled; soft-update journaling and gjournal disabled |
+| HAMMER2 | Both observed | Not supported by this mounted driver | Advanced feature controls not exercised |
+| NTFS | Fixed mount UID/GID 1300 and mode 0700; chmod 0640 was not reflected | Not supported in this profile | Native OEM identity verified; publication hard links return EIO |
+| exFAT | Fixed mount UID/GID 1300 and mode 0700; chmod 0640 was not reflected | Not supported in this profile | Native OEM identity verified; hard links unavailable |
+| ZFS | Both observed | NFSv4 ACL mutation passed | Checksum/compression on, sync standard, copies 1; snapshot create/destroy passed |
+
+Btrfs/XFS have separate positive native payload controls below, with product
+eligibility/integration still pending. APFS has no qualified native write route.
+No snapshot, compression, journal-replay or checksum-corruption result is
+inferred where it was not exercised.
 
 Ordinary NTFS source assessment also built Tuxera 2026.9.28 natively in a
 separate root-owned host-tool prefix with the official FreeBSD aligned-I/O
@@ -240,8 +262,10 @@ patches. The configured package remains 2022.10.3; the ordinary source control
 preserves its own logs and binary hashes. Unmodified upstream CryFS passes the
 full payload on the newer driver, while the bundled durability patch still
 fails hard-link publication with EIO and kernel rename-no-replace still returns
-EOPNOTSUPP. This newer ordinary driver does not solve the product gap. No custom
-kernel module or weakened publication/durability workaround has been used.
+EOPNOTSUPP. This newer ordinary driver does not solve the product gap. Additional ordinary `direct_io`, `use_ino` and combined NTFS mount-option
+controls all retain hard-link EIO, rename-no-replace EOPNOTSUPP and successful
+directory fsync (`native-ntfs-mount-options-1795736666`). No custom kernel module
+or weakened publication/durability workaround has been used.
 
 Additional native XFS and Btrfs controls now pass all three payload opens with
 host `lklfuse -o direct_io`. Both also pass through GELI with AES-XTS-256,
