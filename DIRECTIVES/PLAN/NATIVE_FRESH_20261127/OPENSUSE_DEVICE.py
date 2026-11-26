@@ -37,7 +37,9 @@ def main():
             secret="Lurker9!"+secrets.token_urlsafe(24)
             def cli(action,operands,kind=None):
                 log=d/(str(len(row["operations"]))+"-"+action+".log")
-                r=h.terminal([str(a.binary),action,"--type",kind or backend,"--color=never",*map(str,operands)],secret,180,log,confirm_quick_format=action=="create" and backend=="veracrypt")
+                consent=action=='create' and backend=='veracrypt'
+                if consent:assert '--force' in list(map(str,operands)) and str(a.device) in list(map(str,operands))
+                r=h.terminal([str(a.binary),action,"--type",kind or backend,"--color=never",*map(str,operands)],secret,180,log,confirm_quick_format=consent)
                 row["operations"].append({"action":action,"log":str(log),**r});save()
                 if r["exit_code"] or r["timed_out"]:raise RuntimeError("CLI "+action+" failed")
             try:
