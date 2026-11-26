@@ -70,7 +70,10 @@ def features(mountpoint):
         if cow.get("exit_code") == 0:
             clone.write_bytes(b"Independent clone update.\n")
             cow["source_unchanged"] = original.read_bytes() == b"Original native feature sample.\n"
-        cow["status"] = "yes" if cow.get("exit_code") == 0 and cow.get("source_unchanged") else "no"
+        cow["reflink_status"] = "yes" if cow.get("exit_code") == 0 and cow.get("source_unchanged") else "no"
+        cow["status"] = "yes" if filesystem in {"btrfs", "zfs", "apfs"} else cow["reflink_status"]
+        if filesystem in {"btrfs", "zfs", "apfs"}:
+            cow["reason"] = "Native filesystem uses copy-on-write; reflink result recorded separately"
         row["cow"] = cow
         if filesystem == "zfs":
             row["native_properties"] = probe(["zfs", "get", "acltype,compression,recordsize", source])
