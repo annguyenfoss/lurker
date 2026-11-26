@@ -1859,12 +1859,20 @@ fn exec_in_locale(
             });
         }
     }
-    let mut child = command
+    command
         .args(argv)
         .env_clear()
         .env("LC_ALL", locale)
         .env("PATH", "/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/pkg/sbin:/usr/pkg/bin")
-        .env("HOME", "/root")
+        .env("HOME", "/root");
+    // FreeBSD's optional UBLIO cache can loop on a short final-provider read.
+    // Keep native NTFS I/O and GELI geometry intact; disable that cache only
+    // for the two trusted native NTFS tools, never from inherited environment.
+    #[cfg(target_os = "freebsd")]
+    if matches!(program, "/usr/local/sbin/mkntfs" | "/usr/local/bin/ntfs-3g") {
+        command.env("NTFS_USE_UBLIO", "0");
+    }
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
