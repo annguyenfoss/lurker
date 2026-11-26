@@ -8,6 +8,7 @@
 
 ## OpenSSL CMS
 
+- Wrap the installed OpenSSL for CMS file encryption. `openssl enc` compatibility is out of scope.
 - Use AES-256-GCM for new CMS files encrypted to certificates.
 - Use native OS or desktop file pickers for CMS credentials.
 - Encrypt to one or more existing recipient X.509 certificate files. Any selected recipient can decrypt independently.
