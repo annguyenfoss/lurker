@@ -1,8 +1,10 @@
 --- a/src/Core/Unix/OpenBSD/CoreOpenBSD.cpp
 +++ b/src/Core/Unix/OpenBSD/CoreOpenBSD.cpp
 @@ -13,6 +13,11 @@
-  code distribution packages.
- */
+- code distribution packages.
++ code distribution packages.
+-*/
++*/
 -
 +
 +#include <fcntl.h>
@@ -10,17 +12,24 @@
 +#include <sys/disklabel.h>
 +#include <sys/ioctl.h>
 +#include <sys/sysctl.h>
- #include <fstream>
- #include <iostream>
- #include <stdio.h>
+-#include <fstream>
++#include <fstream>
+-#include <iostream>
++#include <iostream>
+-#include <stdio.h>
++#include <stdio.h>
 @@ -102,10 +107,81 @@
- 		}
- 	}
+-		}
++		}
+-	}
++	}
 -
 +
 -	// not sure what this is used for
- 	HostDeviceList CoreOpenBSD::GetHostDevices (bool pathListOnly) const
- 	{
+-	HostDeviceList CoreOpenBSD::GetHostDevices (bool pathListOnly) const
++	HostDeviceList CoreOpenBSD::GetHostDevices (bool pathListOnly) const
+-	{
++	{
 -		throw;
 +		// OpenBSD device nodes also exist for absent disks and unused
 +		// partitions. Enumerate the live kernel inventory and its disklabels.
@@ -95,7 +104,9 @@
 +			devices.push_back (device);
 +		}
 +		return devices;
- 	}
+-	}
++	}
 -
 +
- 	MountedFilesystemList CoreOpenBSD::GetMountedFilesystems (const DevicePath &devicePath, const DirectoryPath &mountPoint) const
+-	MountedFilesystemList CoreOpenBSD::GetMountedFilesystems (const DevicePath &devicePath, const DirectoryPath &mountPoint) const
++	MountedFilesystemList CoreOpenBSD::GetMountedFilesystems (const DevicePath &devicePath, const DirectoryPath &mountPoint) const
