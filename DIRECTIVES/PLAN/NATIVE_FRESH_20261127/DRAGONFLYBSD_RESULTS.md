@@ -8,14 +8,20 @@ remain pending.
 
 ## Host and artifacts
 
-- Running base: DragonFly 6.5-DEVELOPMENT,
-  `v6.5.0.2269.g9f0e62-DEVELOPMENT`, stock kernel built November 24.
+- Running base: DragonFly 6.5-DEVELOPMENT, `e17b9176-DEVELOPMENT`,
+  stock `X86_64_GENERIC` kernel built November 26 and booted at
+  `kern.boottime=1795733143`. Initial container receipts below used the prior
+  `v6.5.0.2269.g9f0e62-DEVELOPMENT` kernel; they are not updated-base final passes.
 - `pkg update -f` and `pkg upgrade -y` completed with exit 0: nine upgrades and
   129 ABI-matched reinstalls. Rust 1.98.1, Python 3.12.16 and Python 3.14.10.
   The previously incomplete Python 3.14 installation now imports its standard
   library. Package vulnerability notices remain recorded in the upgrade log.
-- A November 26 base snapshot is available. DragonFly documents source-based
-  base upgrades; a newer running base is pending.
+- Unmodified stock source `e17b9176356e3afb3427d71c21108a8a849cd4d5` completed
+  `buildworld`, `buildkernel`, `installkernel`, `installworld` and `upgrade`, all
+  exit 0. Build workers: two, with disk guards. A verified boot/etc rollback
+  archive and automatic world backup are retained. The original kernel directory
+  was preserved. Installed kernel SHA-256:
+  `dbc7827922fed75bf63ef0678fd5884f007c178ecc610d5a1ffe467d92ba3d62`.
 - Fresh exact-baseline CLI/helper build completed in run
   `20261126T205225Z-98c4aa71`, with one Cargo worker. The remaining baseline workspace build was cancelled when the
   adapter batch was ready; no workspace pass is claimed. Final complete workspace
@@ -146,22 +152,68 @@ proof. Its plaintext root was uid/gid 1300 and mode 0700. All downloaded payload
 hashes survived both normal reopens; its mount closed and only the successful
 fixture was reclaimed. Receipt: `cases/bounded-runner-smoke-receipt.json`.
 
+## Native scratch-device controls and identity guards
+
+The new 1 GiB qcow2 is attached as libvirt `vda` at PCI `0:5.0`, requested
+serial `lurker-fresh-dragonflybsd`:
+`/srv/build/lurker-native-fresh-20261127/dragonflybsd/scratch.qcow2`.
+After the ordinary updated-base reboot, native boot evidence linked that PCI
+address to `virtio_pci1`, `vtblk0` and `/dev/vbd0`. The exact 1 GiB/512-byte
+geometry, empty partition inventory and zero header/trailer samples were recorded
+before the first write. The stock virtio driver does not expose its requested
+serial in guest disk metadata; PCI topology and geometry provide the link.
+No existing disk is a test target.
+
+A native GPT data partition `/dev/vbd0s1` now has offset 1048576, size 1071644672
+bytes and independently recorded DIOCGPART storage UUID bytes
+`529f6ca8ebe9f1119752010000000000`. Native raw controls passed separately:
+
+- LUKS1: approved AES-XTS/512-bit key, SHA-256 and 5000 ms native formatting;
+  direct native cryptsetup open, UFS1 creation, uid 1300 payload write, normal
+  close/reopen/hash, append/new file and second close/reopen/hash.
+- VeraCrypt: freshly user-built pinned tcplay diagnostic with only the exact
+  verified raw path added to its device filter; administrator-controlled staged
+  executable, full 1022 MiB random initialization and successful raw-device fsync,
+  fixed SHA-512/PIM 0/500000 profile, native mapping, UFS1 and the same complete
+  downloaded-payload lifecycle. This diagnostic is not a product adapter pass.
+
+Both controls checked real mounts and UFS1 superblocks. Their mounts and mappings
+closed. Receipts: `device/native-luks1/receipt.json` and
+`device/native-veracrypt/receipt.json`.
+
+`cb5d22b` adds native GPT partition inspection and idle guards, while physical
+creation remains disabled. It checks the canonical root-owned hardware node,
+measured native geometry ABI, independent GPT row, stable storage UUID,
+path/descriptor identity, and conservative whole-disk mount, swap, key-free
+mapper dependencies and open raw descriptors. Native targeted core checks passed
+14 tests; a separate administrator-controlled native test passed expected GPT
+identity, held-descriptor refusal, idle recovery and system/whole-node rejection.
+Sampled ciphertext header/trailer hashes stayed unchanged.
+
+A filename-filtered `fstat` misses raw descriptors on this OS. A fresh positive
+control established that a full numeric file-table scan exposes their device
+cookies; the adapter uses that route, including native padding before the offset
+colon. The first conservative parser refusal is retained with its fix and rerun.
+
+A separate native directory-backend process probe passed precise PID/start
+second+microsecond identity and live, exited-unreaped and reaped/missing states.
+Current `kinfo_proc` is 1048 bytes; libc 0.2.191 describes a 992-byte older tail,
+whose query failed with ENOMEM. The measured extension and raw primitive-only
+field reads passed matching C/Rust offsets and widths. No whole Rust enum-bearing
+structure is initialized from kernel bytes. Native `waitid(WNOWAIT)` proves the
+unreaped child; `KERN_PROC_PID` returns explicit zero bytes for that zombie.
+Directory-backend product integration is still pending.
+
 ## Current continuation
 
-The unmodified stock base at `e17b9176356e3afb3427d71c21108a8a849cd4d5` is building
-with two jobs and a 2 GiB free-space guard. Persistent state:
-`updates/base-build-state.json`; supervisor PID 23445. No new kernel/base has yet
-been installed or booted.
+Complete the owned raw crypto/backing adaptations and matching native product
+device tests, then CryFS compilation/native control and any justified bounded
+Go-FUSE transport work. CryFS build inputs are prepared; its previously queued
+supervisor was stopped while idle so the stock base install/reboot could finish
+first. No custom kernel feature work has started.
 
-A new 1 GiB qcow2 is attached persistently as libvirt `vda`, with requested serial
-`lurker-fresh-dragonflybsd`, at
-`/srv/build/lurker-native-fresh-20261127/dragonflybsd/scratch.qcow2`.
-The current guest has not enumerated that hotplugged disk. Guest identity and all
-destructive operations await the planned updated-base reboot. No existing disk
-is a test target, and no scratch-device result is claimed.
-
-Next: finish the stock base update and reboot, verify the new disk identity,
-perform native device controls and the physical adapter, and run the final exact
-candidate workspace, cipher/credential/conformance and persistence matrix.
-Reconcile final-candidate receipts for all 130 cells, complete frontend/package
-checks and inspect cleanup before closing the round.
+Final frozen-commit workspace check/test/build, all cipher/credential and
+conformance variations, ordinary mounted-vault reboot persistence, helper/Slint
+frontend/package qualification, final 130-cell receipts and cleanup remain
+pending. Initial assessment and native controls do not substitute for those
+final product passes.
