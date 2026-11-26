@@ -68,20 +68,33 @@ fn tool(name: &str) -> AppResult<PathBuf> {
             "External macOS filesystem tools must run as the login user, never as root.",
         ));
     }
-    let executable_path =
-        std::env::current_exe().map_err(|e| AppError::io("Cannot locate filesystem tools", e))?;
-    let directory = executable_path
-        .parent()
-        .ok_or_else(|| AppError::new("Missing executable directory."))?;
-    [directory.join("macos-filesystems").join(name), directory.join("../libexec/lurker/filesystems").join(name), directory.join("../Helpers/filesystems").join(name)]
-        .into_iter().find(|path| executable(path))
-        .ok_or_else(|| AppError::new(if name == "fuse-ufs" {
-            "Private macOS filesystem tool fuse-ufs is missing. Install the qualified UFS2 build and approve the separately installed macFUSE kernel extension.".into()
-        } else if name == "ufs2tool" {
-            "Private macOS filesystem tool ufs2tool is missing. Install the patched free UFS2 formatter and its .NET runtime.".into()
-        } else {
-            format!("Private macOS filesystem tool {name} is missing. Install the qualified FUSE-T filesystem tools; no driver is run with sudo.")
-        }))
+    host_tool_candidates(name)
+        .into_iter()
+        .find(|path| executable(path))
+        .ok_or_else(|| AppError::new(format!(
+            "Host macOS filesystem tool {name} is missing. Install its native formatter/driver separately; filesystem tools are not bundled with Lurker."
+        )))
+}
+
+fn host_tool_candidates(name: &str) -> Vec<PathBuf> {
+    let mut paths = vec![Path::new("/usr/local/libexec/lurker-filesystems").join(name)];
+    if name == "mkfs.ext4" {
+        paths.extend([
+            PathBuf::from("/opt/homebrew/opt/e2fsprogs/sbin/mkfs.ext4"),
+            PathBuf::from("/usr/local/opt/e2fsprogs/sbin/mkfs.ext4"),
+        ]);
+    }
+    paths.extend(
+        [
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+        ]
+        .into_iter()
+        .map(|root| Path::new(root).join(name)),
+    );
+    paths
 }
 
 fn ufs2_driver() -> AppResult<PathBuf> {
@@ -1239,9 +1252,9 @@ fn start(
             mountpoint.as_os_str().into(),
             "-o".into(),
             if readonly {
-                "ro,debug,backend=nfs".into()
+                "ro,debug,backend=fskit".into()
             } else {
-                "rw+,debug,backend=nfs".into()
+                "rw+,debug,backend=fskit".into()
             },
         ],
         Kind::Xfs => {
@@ -1256,9 +1269,9 @@ fn start(
                 "-f".into(),
                 "-o".into(),
                 if readonly {
-                    "backend=smb,ro".into()
+                    "backend=fskit,ro".into()
                 } else {
-                    "backend=smb".into()
+                    "backend=fskit".into()
                 },
             ]);
             a
@@ -1318,13 +1331,14 @@ fn start(
         if let Some(identity) = mount_identity(mountpoint)? {
             let expected_transport = match kind {
                 Kind::Btrfs => unreachable!("Btrfs has its own mount lifecycle"),
-                Kind::Xfs => " (smbfs,",
-                Kind::Ext4 => " (nfs,",
+                Kind::Xfs | Kind::Ext4 => " (fuse-t,",
                 Kind::Ntfs => unreachable!("native NTFS has its own mount lifecycle"),
                 Kind::Zfs => unreachable!("native ZFS has its own mount lifecycle"),
                 Kind::Ufs2 => " (macfuse,",
             };
-            if !identity.contains(expected_transport) {
+            if !identity.contains(expected_transport)
+                || (matches!(kind, Kind::Ext4 | Kind::Xfs) && !identity.contains(", fskit,"))
+            {
                 return Err(AppError::new(
                     "Filesystem driver published an unexpected transport; preserving session.",
                 ));
@@ -1479,6 +1493,23 @@ pub(super) fn augment(volumes: &mut [Volume]) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn external_filesystem_tools_are_host_prerequisites() {
+        for name in ["fuse-ext2", "fuse-xfs", "mkfs.xfs", "fuse-ufs", "ufs2tool"] {
+            let paths = host_tool_candidates(name);
+            assert_eq!(
+                paths[0],
+                Path::new("/usr/local/libexec/lurker-filesystems").join(name)
+            );
+            assert!(paths.iter().all(|path| path.is_absolute()));
+            assert!(paths
+                .iter()
+                .all(|path| !path.to_string_lossy().contains("macos-filesystems")));
+        }
+        assert!(host_tool_candidates("mkfs.ext4")
+            .contains(&PathBuf::from("/opt/homebrew/opt/e2fsprogs/sbin/mkfs.ext4")));
+    }
+
     #[test]
     fn external_magic_does_not_guess_unknown_filesystems() {
         assert_eq!(detect(b"XFSB"), Some(Kind::Xfs));
