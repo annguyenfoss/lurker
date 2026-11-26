@@ -88,9 +88,9 @@ observations for all ten filesystem rows are retained; UFS1 is blocked by
 the stock read-only driver.
 
 
-The final Linux core/CLI/helper source is frozen at
+The earlier Linux core/CLI/helper candidate was frozen at
 `ca7d2137fca741008648360e98acc06ce559de3d`. Its final exact workspace run is
-`20261126T221423Z-4e5b59b2` and is still running. The helper stdout repair
+`20261126T221423Z-4e5b59b2` and passed. The helper stdout repair
 passed 84 Arch core tests (two ignored), followed by openSUSE native CLI/helper
 checks and strict parsing of nine complete keyfile helper JSON responses across
 LUKS2, LUKS1 and VeraCrypt. The fixed 512-byte LUKS2/UFS1 geometry is included;
@@ -108,5 +108,57 @@ The 28 library tests passed. Native controls verified forwarding file and
 directory fsync to the owned backing file, injected EIO propagation and
 successful retry (three cases passed). Driver SHA-256 is
 `2dd3df260eb9006f1696bb426ca8367522c81d0f8881600135bfa2ebbe307f7c`.
-This driver is a separately installed host prerequisite. Final product cases
-must still run against it; no crash or power-loss guarantee is inferred.
+This driver is a separately installed host prerequisite. All six UFS2 product
+routes passed at ca7d213; no crash or power-loss guarantee is inferred.
+
+
+The complete ca7d213 sweep finished with 54 passed cases and four stock-UFS1
+failures (three disk cases and directory-backing setup), without cleanup errors.
+All nine other filesystem rows passed all six applicable native encryption
+methods. The UFS1 failures exposed Linux mountinfo reporting VFS `rw` together
+with superblock `ro` on encrypted mappers. Commit `576505d` reads both fields
+in core and the payload guard. Its targeted checks passed 85 core tests (two
+ignored) and nine Python tests. Native UFS1 create/reopen now reject the
+read-only downgrade and clean up normally; a writable Btrfs keyfile volume
+passed all downloaded-payload phases. The first native probe lacked its staged
+helper; that staging failure is retained separately and was corrected before
+counting the result.
+
+The final follow-up source for all three products is
+`576505d554d798422840a06322dfa93b899365bc`. Remote run
+`20261126T223513Z-a9473495` passed workspace check, tests and build: 159 passed,
+zero failed, 15 ignored. The native Arch package was built from the verified
+six-backend staging archive, with current Rust dependency notices. Native
+package SHA-256:
+`6fa40a5e78f90b365bfe36c6c053fba03e507e7d57984d9416bb3038bc02318a`;
+staging archive:
+`b8a8220668ccd72813ba300ab6fbf725aa1a51c649552a64065d7496d46d9901`.
+The full follow-up sweep uses an administrator-owned isolated extraction of
+that actual native package; the existing system installation is preserved.
+CLI SHA-256 is
+`59f439699ebeea1c375f578a31cd8c0859610ece536f803bc200309f08a1be6c`;
+helper is
+`6e14d7dedd1607991060e7522dcbfdc0944418da53968b6b3d4e277b01aa041e`.
+Its complete container, variation, device and reboot gates remain running or
+pending; this is not a completed qualification claim.
+
+Independent per-mount blkid observations bind all three follow-up UFS2 inner
+cases to VERSION=2, together with the exact patched driver identity. A private
+wrapper retains subsequent generated test passwords at mode 0600 and records
+its own hash, the unchanged frozen harness hash and executed arguments in each
+receipt. Earlier failed ciphertext with lost in-memory passwords is retained
+honestly as unreopenable. Complete failed images were transferred to the
+coordinator, byte-verified, then reclaimed only from closed owned guest
+fixtures. No unrelated cached artifacts or storage were deleted.
+
+Formatter provenance was refreshed without changing the active tools. A fresh
+unmodified build of https://github.com/kusumi/makefs at
+`607449619ef5f85b6a2b282e16182e342fdebeaa` reproduced the installed
+makefs-freebsd binary exactly (SHA-256
+`a03cc9ffd8f3645b37bfd72c961a11a4c2579f3030b93522f96a5618a5e0b4ce`).
+Its project copyright is BSD-2-Clause, with additional vendored source notices.
+https://github.com/kusumi/hammer2-utils remains at
+`359b25bc2bb5d81e0bdbb5d48439314d80d13086`, version 0.5.0, with a BSD-3-Clause
+copyright. The cached source archive's Git commit metadata and built formatter
+match the installed binary; fresh upstream HEAD queries confirm those source
+identities. Prior runtime receipts do not count as new qualification.
