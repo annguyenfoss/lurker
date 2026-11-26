@@ -9,17 +9,19 @@ def main():
     for key in ('matrix', 'binary', 'harness', 'output'):
         p.add_argument('--' + key, type=Path, required=True)
     p.add_argument('--before-boot-id', required=True)
+    p.add_argument('--prepare', action='store_true', help='Verify and leave owned fixtures mounted before reboot')
     a = p.parse_args()
     if os.geteuid() == 0 or os.uname().nodename != 'fedora-core-01':
         p.error('Run as the Fedora login user')
     boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
-    if boot == a.before_boot_id: p.error('Boot ID did not change')
+    if not a.prepare and boot == a.before_boot_id: p.error('Boot ID did not change')
+    if a.prepare and boot != a.before_boot_id: p.error('Unexpected boot before preparation')
     spec = importlib.util.spec_from_file_location('h', a.harness)
     h = importlib.util.module_from_spec(spec); spec.loader.exec_module(h)
     matrix = json.loads(a.matrix.read_text())
     a.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     result = dict(host=os.uname().nodename, kernel=os.uname().release,
-        before_boot_id=a.before_boot_id, after_boot_id=boot,
+        phase='prepare' if a.prepare else 'verify', before_boot_id=a.before_boot_id, after_boot_id=boot,
         binary_sha256=h.file_hash(a.binary), cases=[], status='running')
     receipt = a.output / 'reboot.json'
 
@@ -60,14 +62,17 @@ def main():
             if old['binary_sha256'] != result['binary_sha256']: raise RuntimeError('Candidate binary changed')
             cli('mount', [old['source'], mountpoint])
             expected = old['verify_sha256']
-            new['after_reboot_hashes'] = payload('verify', expected)
+            new['verified_hashes'] = payload('verify', expected)
+            if a.prepare:
+                new['status'] = 'passed'
+                return
             expected = payload('append', expected)
             cli('unmount', [mountpoint]); cli('mount', [old['source'], mountpoint])
             new['after_reopen_hashes'] = payload('verify', expected)
             cli('unmount', [mountpoint]); new['status'] = 'passed'
         except Exception as e: new.update(status='failed', error=str(e))
         finally:
-            if os.path.ismount(mountpoint):
+            if os.path.ismount(mountpoint) and not (a.prepare and new['status'] == 'passed'):
                 try: cli('unmount', [mountpoint])
                 except Exception as e: new['cleanup_error'] = str(e)
             new['mount_remaining'] = os.path.ismount(mountpoint); save()
@@ -96,7 +101,7 @@ def main():
         except Exception as e:
             result.setdefault('backing_errors', []).append(dict(filesystem=fs, error=str(e))); save()
         finally:
-            if os.path.ismount(mount):
+            if os.path.ismount(mount) and not a.prepare:
                 try: native(['zpool', 'export', backing['pool']] if fs == 'zfs' else ['umount', mount])
                 except Exception as e: result.setdefault('cleanup_errors', []).append(str(e)); save()
     result['status'] = 'terminal'; result['finished'] = time.time(); save()
