@@ -392,6 +392,7 @@ fn luks_create_device(
                 command.keyfile.as_deref(),
                 profile,
                 command.volume_type == VolumeType::Luks1,
+                command.filesystem,
             )?;
 
             ctx.output.msg2(&format!(
@@ -448,6 +449,7 @@ fn luks_create_device(
                 command.keyfile.as_deref(),
                 profile,
                 command.volume_type == VolumeType::Luks1,
+                command.filesystem,
             )?;
 
             ctx.output.msg2(&format!(
@@ -1493,9 +1495,13 @@ fn block_device_tree_has_mounts(ctx: &mut AppContext, device_path: &Path) -> App
         .any(|line| !line.trim().is_empty()))
 }
 
-fn luks_format_arguments(profile: &CreateCipherProfile, luks1: bool) -> Vec<OsString> {
+fn luks_format_arguments(
+    profile: &CreateCipherProfile,
+    luks1: bool,
+    filesystem: Option<CreateFilesystem>,
+) -> Vec<OsString> {
     if !luks1 {
-        return profile.format_args.iter().map(OsString::from).collect();
+        return luks2_format_args(profile, filesystem);
     }
     let cipher = profile
         .format_args
@@ -1534,10 +1540,11 @@ fn luks_format(
     keyfile: Option<&Path>,
     profile: &CreateCipherProfile,
     luks1: bool,
+    filesystem: Option<CreateFilesystem>,
 ) -> AppResult<()> {
     let privileged = is_block_device_target(target);
     let mut args = vec![OsString::from("-v")];
-    args.extend(luks_format_arguments(profile, luks1));
+    args.extend(luks_format_arguments(profile, luks1, filesystem));
     let cryptsetup = ctx.cryptsetup_path().to_path_buf();
     if let Some(keyfile) = keyfile {
         args.extend([
@@ -2709,7 +2716,8 @@ mod tests {
             CreateCipher::Serpent,
             CreateCipher::Twofish,
         ] {
-            let args = luks_format_arguments(cipher_profile(cipher), true);
+            let args =
+                luks_format_arguments(cipher_profile(cipher), true, Some(CreateFilesystem::Ufs1));
             let values: Vec<_> = args.iter().map(|arg| arg.to_str().unwrap()).collect();
             assert!(values.windows(2).any(|pair| pair == ["--type", "luks1"]));
             assert!(values.windows(2).any(|pair| pair == ["--pbkdf", "pbkdf2"]));
@@ -2717,6 +2725,55 @@ mod tests {
             assert!(!values.iter().any(|value| value.starts_with("--pbkdf-")
                 || *value == "--sector-size"
                 || *value == "argon2id"));
+        }
+    }
+
+    #[test]
+    fn ufs1_luks2_geometry_preserves_every_cipher_and_kdf_argument() {
+        for cipher in [
+            CreateCipher::Aes,
+            CreateCipher::Serpent,
+            CreateCipher::Twofish,
+        ] {
+            let profile = cipher_profile(cipher);
+            let args = luks_format_arguments(profile, false, Some(CreateFilesystem::Ufs1));
+            let values: Vec<_> = args.iter().map(|arg| arg.to_str().unwrap()).collect();
+            assert_eq!(
+                values.iter().filter(|&&arg| arg == "--sector-size").count(),
+                1
+            );
+            assert!(
+                values
+                    .windows(2)
+                    .any(|pair| pair == ["--sector-size", "512"])
+            );
+            let without_sector = |input: &[&str]| {
+                let mut result = Vec::new();
+                let mut iter = input.iter();
+                while let Some(&arg) = iter.next() {
+                    if arg == "--sector-size" {
+                        iter.next();
+                    } else {
+                        result.push(arg.to_string());
+                    }
+                }
+                result
+            };
+            assert_eq!(without_sector(&values), without_sector(profile.format_args));
+            for filesystem in [
+                None,
+                Some(CreateFilesystem::Btrfs),
+                Some(CreateFilesystem::Ufs2),
+            ] {
+                assert_eq!(
+                    luks_format_arguments(profile, false, filesystem),
+                    profile
+                        .format_args
+                        .iter()
+                        .map(OsString::from)
+                        .collect::<Vec<_>>()
+                );
+            }
         }
     }
 

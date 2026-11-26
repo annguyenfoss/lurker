@@ -62,13 +62,16 @@ Windows packaging and native qualification are planned. Use `cppcryptfs` for the
 
 - Applies to create flows only.
 - `--filesystem` selects the inner filesystem of a file container or a privileged Linux device where supported by the native adapter and installed filesystem tools. Native macOS APFS data partitions may explicitly select APFS. It does not select a different encryption engine or alter cipher/KDF profiles. Omitting it preserves existing native defaults. Directory engines do not accept this option; native APFS encryption accepts APFS only. Current installation and CLI payload qualification is recorded under `DIRECTIVES/PLAN/FILESYSTEM_ROUND/`; fresh device qualification is in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/`.
-- Linux UFS1 uses `makefs-freebsd` and the native `44bsd` driver. Writable creation requires a matching module built with upstream `CONFIG_UFS_FS_WRITE`; stock distribution modules commonly omit it. Select LUKS1 or privileged VeraCrypt for UFS1 creation: the native `44bsd` driver's 512-byte initial UFS probe cannot read the 4096-byte logical sectors selected by default LUKS2 creation on the qualified guests. Existing 512-byte-sector imports remain eligible. No encryption profile is weakened or changed for filesystem compatibility.
+- Linux UFS1 uses `makefs-freebsd` and the native `44bsd` driver. Writable creation requires a matching module built with upstream `CONFIG_UFS_FS_WRITE`; stock distribution modules commonly omit it. LUKS2 creation selects 512-byte logical sectors for UFS1 because the driver's initial probe requires them. This hardcoded filesystem geometry overrides Twofish's usual 4096-byte sectors and leaves every cipher, key size and KDF cost unchanged. Other filesystems retain their existing sector policy; unlocking existing volumes preserves their geometry.
 - Supported `--cipher` values: `aes`, `serpent`, `twofish` for LUKS/VeraCrypt. Apple images accept only `aes`.
 - No cascades.
 - No user-tunable low-level crypto knobs.
 - Keep these profiles hardcoded in code.
 
 ## LUKS2 Profiles (Linux)
+
+All three profiles use `--sector-size 512` when creating UFS1, as required by
+the native driver's probe. The defaults below apply to other filesystems.
 
 - `aes`
   - label: `AES`

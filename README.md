@@ -210,6 +210,8 @@ On macOS, `--type apfs` creates a plain disk image containing an encrypted APFS 
 
 LUKS1 and LUKS2 on Windows are planned via WSL 2.
 
+On Linux, UFS1 creation requires a write-enabled native UFS driver. LUKS2 selects 512-byte logical sectors for UFS1 while keeping the chosen cipher and KDF costs.
+
 BitLocker on Linux, macOS, and FreeBSD is planned for opening existing volumes. Writable access depends on filesystem qualification.
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.

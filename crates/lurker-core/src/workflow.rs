@@ -125,6 +125,24 @@ fn cipher_profile(cipher: CreateCipher) -> &'static CreateCipherProfile {
     }
 }
 
+// The native Linux 44bsd driver probes UFS1 in 512-byte units. Choose compatible
+// device geometry when creating it; cipher, key size and KDF costs stay fixed.
+#[cfg(target_os = "linux")]
+fn luks2_format_args(
+    profile: &CreateCipherProfile,
+    filesystem: Option<crate::CreateFilesystem>,
+) -> Vec<OsString> {
+    let mut args: Vec<_> = profile.format_args.iter().map(OsString::from).collect();
+    if filesystem == Some(crate::CreateFilesystem::Ufs1) {
+        if let Some(index) = args.iter().position(|arg| arg == "--sector-size") {
+            args[index + 1] = "512".into();
+        } else {
+            args.extend(["--sector-size".into(), "512".into()]);
+        }
+    }
+    args
+}
+
 // Additional LUKS slots keep the create profile's KDF costs without changing
 // the existing volume cipher, sector size or volume key.
 #[cfg(target_os = "linux")]

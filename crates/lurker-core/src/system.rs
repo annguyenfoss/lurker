@@ -350,11 +350,6 @@ impl ToolPaths {
                 filesystem,
                 ..
             }) => {
-                if *filesystem == Some(crate::api::CreateFilesystem::Ufs1)
-                    && matches!(volume_type, VolumeType::Auto | VolumeType::Luks)
-                {
-                    return Err(AppError::new("Linux UFS1 requires 512-byte logical sectors; default LUKS2 creation can select 4096. Select luks1 or veracrypt for UFS1."));
-                }
                 tools.formatter = Some(require_command(linux_formatter(*filesystem)?)?);
                 let module = linux_filesystem_module(*filesystem);
                 if let Some(module) = module {
