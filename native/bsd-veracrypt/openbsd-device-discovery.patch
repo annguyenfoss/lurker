@@ -110,3 +110,56 @@
 +
 -	MountedFilesystemList CoreOpenBSD::GetMountedFilesystems (const DevicePath &devicePath, const DirectoryPath &mountPoint) const
 +	MountedFilesystemList CoreOpenBSD::GetMountedFilesystems (const DevicePath &devicePath, const DirectoryPath &mountPoint) const
+--- a/src/Main/TextUserInterface.cpp
++++ b/src/Main/TextUserInterface.cpp
+@@ -39,6 +39,28 @@
+-
++
+-namespace VeraCrypt
++namespace VeraCrypt
+-{
++{
++#ifdef TC_OPENBSD
++	// Raw/block nodes and symbolic aliases identify the same native device.
++	// Preserve whole-disk partition/system-drive guards for all such paths.
++	static bool IsSameOpenBSDHostDevice (const DevicePath &hostPath, const VolumePath &candidate)
++	{
++		struct stat selected;
++		if (stat (string (candidate).c_str(), &selected) != 0
++			|| (!S_ISBLK (selected.st_mode) && !S_ISCHR (selected.st_mode)))
++			return false;
++		auto sameNode = [&selected] (const string &path)
++		{
++			struct stat node;
++			return stat (path.c_str(), &node) == 0
++				&& (selected.st_mode & S_IFMT) == (node.st_mode & S_IFMT)
++				&& selected.st_rdev == node.st_rdev;
++		};
++		string host = hostPath;
++		return sameNode (host)
++			|| (host.compare (0, 5, "/dev/") == 0 && sameNode ("/dev/r" + host.substr (5)));
++	}
++#endif
++
+-	static bool CheckCustomPimForPassword (const TextUserInterface *ui, const shared_ptr <VolumePassword> &password, int pim, const shared_ptr <Pkcs5Kdf> &kdf, bool interactive)
++	static bool CheckCustomPimForPassword (const TextUserInterface *ui, const shared_ptr <VolumePassword> &password, int pim, const shared_ptr <Pkcs5Kdf> &kdf, bool interactive)
+-	{
++	{
+-		int defaultPim = kdf ? kdf->GetDefaultPim() : 0;
++		int defaultPim = kdf ? kdf->GetDefaultPim() : 0;
+@@ -712,6 +734,9 @@
+-			foreach_ref (const HostDevice &drive, Core->GetHostDevices())
++			foreach_ref (const HostDevice &drive, Core->GetHostDevices())
+-			{
++			{
+-				bool selectedWholeDevice = drive.Path == options->Path;
++				bool selectedWholeDevice = drive.Path == options->Path;
++#ifdef TC_OPENBSD
++				selectedWholeDevice = selectedWholeDevice || IsSameOpenBSDHostDevice (drive.Path, options->Path);
++#endif
+-#ifdef TC_MACOSX
++#ifdef TC_MACOSX
+-				selectedWholeDevice = selectedWholeDevice
++				selectedWholeDevice = selectedWholeDevice
+-					|| IsSameMacOSXDevicePath (string (drive.Path), string (options->Path));
++					|| IsSameMacOSXDevicePath (string (drive.Path), string (options->Path));

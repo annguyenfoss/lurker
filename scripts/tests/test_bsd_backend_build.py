@@ -128,6 +128,7 @@ class SourceProvenance(unittest.TestCase):
                 (("openbsd-vnd-io.patch", "openbsd-ffs-shutdown.patch"),
                  "src/Driver/Fuse/FuseService.cpp"),
                 (("openbsd-device-discovery.patch",), "src/Core/Unix/OpenBSD/CoreOpenBSD.cpp"),
+                (("openbsd-device-discovery.patch",), "src/Main/TextUserInterface.cpp"),
             ):
                 hunks = []
                 for patch_name in patch_names:
