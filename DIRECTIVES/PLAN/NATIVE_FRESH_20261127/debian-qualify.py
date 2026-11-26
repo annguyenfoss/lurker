@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import subprocess
 import time
 
@@ -34,6 +35,10 @@ def main():
     parser.add_argument('--mode', choices=('containers', 'directories', 'device'), required=True)
     parser.add_argument('--device', type=Path)
     parser.add_argument('--serial')
+    parser.add_argument('--filesystems', default=','.join(FILESYSTEMS))
+    parser.add_argument('--backends', help='Comma-separated subset for an affected-case retest')
+    parser.add_argument('--attempt', default='')
+    parser.add_argument('--archive-to', type=Path, help='Owned mounted storage for closed retained fixtures')
     args = parser.parse_args()
     root = args.root.resolve(strict=True)
     if os.uname().sysname != 'Linux' or 'debian' not in Path('/etc/os-release').read_text():
@@ -54,9 +59,17 @@ def main():
     receipts.mkdir(exist_ok=True)
     fixtures = root / 'fixtures'
     fixtures.mkdir(exist_ok=True)
-    for fs in FILESYSTEMS:
-        for backend in (DIRECTORIES if args.mode == 'directories' else BACKENDS):
-            label = f'{args.mode}-{fs}-{backend}'
+    selected_fs = args.filesystems.split(',')
+    selected_backends = args.backends.split(',') if args.backends else (DIRECTORIES if args.mode == 'directories' else BACKENDS)
+    if not set(selected_fs) <= set(FILESYSTEMS) or not set(selected_backends) <= set(DIRECTORIES if args.mode == 'directories' else BACKENDS):
+        parser.error('Selection must be a supported round filesystem/backend subset')
+    if args.archive_to:
+        args.archive_to = args.archive_to.resolve(strict=True)
+        if not os.path.ismount(args.archive_to):
+            parser.error('Archive destination must be an identified mounted storage root')
+    for fs in selected_fs:
+        for backend in selected_backends:
+            label = f'{args.mode}-{fs}-{backend}' + ('-' + args.attempt if args.attempt else '')
             result_path = receipts / (label + '.json')
             if result_path.exists():
                 continue  # Never overwrite a failed receipt or reuse its fixture.
@@ -151,6 +164,14 @@ def main():
                 result['mount_remaining'] = os.path.ismount(mount) or bool(backing_mount and os.path.ismount(backing_mount))
                 result['finished'] = time.time()
                 atomic(result_path, result)
+                if args.archive_to and not result['mount_remaining']:
+                    # Keep the original evidence paths valid. Mounted or failed
+                    # teardown fixtures stay in place for investigation.
+                    retained = args.archive_to / 'retained'
+                    retained.mkdir(exist_ok=True)
+                    target = retained / fixture.name
+                    shutil.move(str(fixture), str(target))
+                    fixture.symlink_to(target, target_is_directory=True)
                 print(json.dumps({'case': label, 'status': result['status'], 'receipt': str(result_path), 'mount_remaining': result['mount_remaining']}), flush=True)
 
 
