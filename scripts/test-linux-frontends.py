@@ -37,10 +37,14 @@ def terminal(args, cwd, cancel=False):
     output = b''
     pending = b''
     prompts = 0
+    prompt_started = None
+    echo_off_since = None
     deadline = time.monotonic() + 180
+    def transcript():
+        return output.replace(PASSWORD.encode(), b'[REDACTED]').decode(errors='replace')
     try:
         while time.monotonic() < deadline:
-            ready, _, _ = select.select([fd], [], [], 1)
+            ready, _, _ = select.select([fd], [], [], .01 if prompt_started else 1)
             if ready:
                 try:
                     data = os.read(fd, 65536)
@@ -55,24 +59,38 @@ def terminal(args, cwd, cancel=False):
                 if re.search(rb'Type[^\r\n]*yes[^\r\n]*capital[^\r\n]*: *$', pending, re.I):
                     os.write(fd, b'YES\n')
                     pending = b''
-                elif re.search(rb'(?:password|passphrase)[^\r\n]*: *$', pending, re.I):
-                    if UNPRIVILEGED:
-                        assert not termios.tcgetattr(fd)[3] & termios.ECHO, 'prompt was shown before echo was disabled'
+                elif re.search(rb'(?:\[sudo\]|sudo )[^\r\n]*(?:password|passphrase)[^\r\n]*: *$', pending, re.I):
+                    raise AssertionError('Unexpected sudo authorization prompt; use the required privilege route')
+                elif prompt_started is None and re.search(rb'(?:password|passphrase)[^\r\n]*: *$', pending, re.I):
+                    prompt_started = time.monotonic()
+                    echo_off_since = None
+            if prompt_started is not None:
+                now = time.monotonic()
+                if not termios.tcgetattr(fd)[3] & termios.ECHO:
+                    if echo_off_since is None:
+                        echo_off_since = now
+                else:
+                    echo_off_since = None
+                if echo_off_since is not None and now - echo_off_since >= .02:
                     prompts += 1
-                    assert prompts <= 3, output.decode(errors='replace')
+                    assert prompts <= 3, transcript()
                     os.write(fd, b'\x03' if cancel else (PASSWORD + '\n').encode())
                     pending = b''
+                    prompt_started = None
+                    echo_off_since = None
+                elif now - prompt_started >= 5:
+                    raise AssertionError('Credential prompt never disabled echo; no credential sent')
             completed, status = os.waitpid(pid, os.WNOHANG)
             if completed:
-                assert (os.waitstatus_to_exitcode(status) != 0 if cancel else os.waitstatus_to_exitcode(status) == 0), output.decode(errors='replace')
                 pid = None
+                assert (os.waitstatus_to_exitcode(status) != 0 if cancel else os.waitstatus_to_exitcode(status) == 0), transcript()
                 break
         else:
-            raise AssertionError('CLI timed out: ' + output.decode(errors='replace'))
+            raise AssertionError('CLI timed out: ' + transcript())
         if pid is not None:
             _, status = os.waitpid(pid, 0)
             pid = None
-            assert (os.waitstatus_to_exitcode(status) != 0 if cancel else os.waitstatus_to_exitcode(status) == 0), output.decode(errors='replace')
+            assert (os.waitstatus_to_exitcode(status) != 0 if cancel else os.waitstatus_to_exitcode(status) == 0), transcript()
         if cancel:
             assert termios.tcgetattr(fd)[3] & termios.ECHO, 'terminal echo was not restored after cancellation'
         assert PASSWORD.encode() not in output, 'passphrase was echoed by terminal'
