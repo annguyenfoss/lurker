@@ -24,7 +24,7 @@ def main():
         if target.exists():
             backup=dest/(name+'-previous.ko');shutil.copy2(target,backup);result.setdefault('previous_modules',{})[name]={'path':str(backup),'sha256':hashlib.sha256(backup.read_bytes()).hexdigest()}
         run(['sudo','-n','install','-D','-m644',module,target],name+'-install')
-        result.setdefault('modules',{})[name]={'path':str(target),'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'source_commit':PINS[name],'vermagic':subprocess.check_output(['/sbin/modinfo','-F','vermagic',str(target)],text=True).strip()};save()
+        result.setdefault('modules',{})[name]={'path':str(target),'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'source_commit':PINS.get(name,PINS['zfs']),'vermagic':subprocess.check_output(['/sbin/modinfo','-F','vermagic',str(target)],text=True).strip()};save()
     save()
     for name in ('apfs','hammer2','zfs'):
         source=ROOT/'drivers'/name
@@ -41,11 +41,16 @@ def main():
                 run(['./configure','--prefix='+str(ZFS_PREFIX),'--libdir='+str(ZFS_PREFIX/'lib'),'--with-linux='+str((Path('/lib/modules')/KERNEL/'source').resolve()),'--with-linux-obj='+str((Path('/lib/modules')/KERNEL/'build').resolve()),'--with-config=all','--disable-pyzfs'],'zfs-configure',source,env)
                 run(['make','-j1'],'zfs-build',source,env)
                 stage=dest/'zfs-stage';stage.mkdir(exist_ok=True)
+                # Mirror this host's /lib -> usr/lib layout inside DESTDIR.
+                # Kernel modules_install uses usr/lib; OpenZFS cleanup uses lib.
+                (stage/'usr/lib').mkdir(parents=True,exist_ok=True)
+                if not os.path.lexists(stage/'lib'):(stage/'lib').symlink_to('usr/lib')
                 run(['make','install','DESTDIR='+str(stage)],'zfs-stage',source,env)
                 staged=stage/str(ZFS_PREFIX).lstrip('/')
                 if not staged.is_dir() or ZFS_PREFIX.exists():raise RuntimeError('Missing staged prefix or refusing to overwrite an existing private prefix')
                 run(['sudo','-n','cp','-a',staged,ZFS_PREFIX],'zfs-prefix-copy')
                 run(['sudo','-n','chown','-R','root:root',ZFS_PREFIX],'zfs-prefix-owner')
+                install_module('spl',source/'module/spl.ko')
                 install_module(name,source/'module/zfs.ko')
                 result['zfs_prefix']=str(ZFS_PREFIX)
             result.setdefault('outcomes',{})[name]='built-and-staged; not running until kernel boot and native tests'
