@@ -98,8 +98,8 @@ fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> AppResult<T> {
 }
 
 fn veracrypt() -> Option<PathBuf> {
-    // Only the private build has the specified FUSE-T dependency. An installed
-    // VeraCrypt.app or PATH binary may instead require macFUSE.
+    // The private build records its qualified FUSE runtime. An unrelated
+    // VeraCrypt.app or PATH binary may require a different runtime.
     let current = std::env::current_exe().ok()?;
     private_veracrypt_candidates(&current)
         .into_iter()
@@ -131,7 +131,7 @@ fn executable(path: &Path) -> bool {
 }
 
 fn require_veracrypt() -> AppResult<PathBuf> {
-    veracrypt().ok_or_else(|| AppError::new("The private FUSE-T VeraCrypt backend is missing. Install a complete Lurker package or build scripts/build-macos-backends.py. Install FUSE-T separately for VeraCrypt operations."))
+    veracrypt().ok_or_else(|| AppError::new("The private VeraCrypt backend is missing. Install a complete Lurker package or build scripts/build-macos-backends.py, with its matching FUSE runtime installed separately."))
 }
 
 pub fn probe_system() -> AppResult<SystemProbe> {
