@@ -13,11 +13,13 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = {
@@ -31,10 +33,20 @@ PLATFORM_PATCHES = {
     "Darwin": {"cryfs": ["native/macos/cryfs-fuse-t.patch",
                          "native/folder/cryfs/macos-exclusive-publication.patch"]},
     "FreeBSD": {"gocryptfs": ["native/folder/gocryptfs/freebsd-futimes.patch"]},
+    "NetBSD": {"cryfs": ["native/folder/cryfs/netbsd-platform.patch"]},
 }
 DARWIN_GO_FUSE = ("https://github.com/hanwen/go-fuse.git", "2d50fff207d78c197869fa492eff3a79bc1d8408")
 DARWIN_GO_FUSE_PATCH = "native/macos/gocryptfs-fuse-t.patch"
 FREEBSD_LICENSE_ROOT = Path("/usr/local/share/licenses")
+NETBSD_NOTICE_INPUTS = {
+    "boost-license": ("https://raw.githubusercontent.com/NetBSD/pkgsrc/trunk/licenses/boost-license",
+                      "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"),
+    "spdlog-1.17.0": ("https://raw.githubusercontent.com/gabime/spdlog/v1.17.0/LICENSE",
+                      "d678c20826e1392578508e1c78649a1e3c31bda05ef4388d967dbd654461b140"),
+    "fmtlib-12.2.0": ("https://raw.githubusercontent.com/fmtlib/fmt/12.2.0/LICENSE",
+                      "a65fcc5a1095fc33cc37e4fff69366e49d7e92f613558a2b95ed1b70e33758b4"),
+}
+
 
 
 def selected_patches(name: str, system: str | None = None) -> list[str]:
@@ -329,6 +341,119 @@ def build_freebsd_cryfs(src: Path, jobs: int, log, env) -> tuple[Path, dict]:
     }
 
 
+
+def netbsd_refuse_environment(build: Path, env: dict, include=Path("/usr/include")) -> tuple[dict, dict]:
+    """Select the actual base API29 headers before pkgsrc SYSTEM includes."""
+    headers = [include / name for name in ("fuse.h", "fuse_opt.h")]
+    if any(not header.is_file() for header in headers):
+        raise RuntimeError("NetBSD base ReFUSE development headers are missing")
+    overlay, pkgconfig = build / "refuse-include", build / "refuse-pkgconfig"
+    overlay.mkdir(parents=True, exist_ok=True)
+    pkgconfig.mkdir(parents=True, exist_ok=True)
+    for header in headers:
+        (overlay / header.name).write_text('#include "' + str(header) + '"\n')
+    contents = ("prefix=/usr\nlibdir=${prefix}/lib\nincludedir=${prefix}/include\n"
+                "Name: NetBSD base ReFUSE\nDescription: Native ReFUSE high-level API29\n"
+                "Version: 2.9\nLibs: -L${libdir} -lrefuse -lpuffs -lutil\n"
+                "Cflags: " + shlex.quote("-Wp,-I," + str(overlay)) + "\n")
+    (pkgconfig / "fuse.pc").write_text(contents)
+    native_env = env.copy()
+    native_env["PKG_CONFIG_PATH"] = ":".join(filter(None, [str(pkgconfig), "/usr/pkg/lib/pkgconfig", env.get("PKG_CONFIG_PATH")]))
+    native_env["LDFLAGS"] = (env.get("LDFLAGS", "") + " -L/usr/pkg/lib -Wl,-rpath,/usr/pkg/lib").strip()
+    return native_env, {"headers": {str(path): sha256(path) for path in headers},
+                        "pkg_config_sha256": sha256(pkgconfig / "fuse.pc"),
+                        "preprocessor_include": "-Wp,-I," + str(overlay)}
+
+
+def netbsd_refuse_symbols(text: str) -> None:
+    symbols = {line.split()[-1].split("@", 1)[0] for line in text.splitlines() if line.split()}
+    if "__fuse_main" not in symbols or any("fuse_main_real" in name for name in symbols):
+        raise RuntimeError("CryFS must use the NetBSD base ReFUSE API29 entry point, not pkgsrc compatibility FUSE")
+
+
+def build_netbsd_cryfs(src: Path, jobs: int, log, env) -> tuple[Path, dict]:
+    for tool in ("cmake", "ninja", "c++", "pkg-config", "pkg_info", "ldd", "nm"):
+        if not shutil.which(tool):
+            raise RuntimeError("Missing NetBSD CryFS build prerequisite: " + tool)
+    build = src / "build/NetBSD"
+    native_env, refuse = netbsd_refuse_environment(build, env)
+    configure = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_TESTING=OFF",
+                 "-DCRYFS_UPDATE_CHECKS=OFF", "-DDISABLE_OPENMP=ON", "-DCMAKE_SKIP_RPATH=TRUE",
+                 "-DCMAKE_CXX_FLAGS=-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED",
+                 "-DCMAKE_PREFIX_PATH=/usr/pkg", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
+    run(["cmake", "-S", str(src), "-B", str(build), *configure], src, log, native_env)
+    run(["cmake", "--build", str(build), "--parallel", str(jobs)], src, log, native_env)
+    binary = build / "src/cryfs-cli/cryfs"
+    symbols = capture(["nm", "-u", str(binary)], src)
+    netbsd_refuse_symbols(symbols)
+    return binary, {"native_build": {
+        "provider": "NetBSD packages and base ReFUSE", "configure": configure,
+        "compiler": capture(["c++", "--version"], src).splitlines()[0],
+        "fuse_provider": "NetBSD base ReFUSE", "fuse_api": 29,
+        "fuse_entrypoint": "__fuse_main", "refuse": refuse,
+        "link_flags": native_env["LDFLAGS"],
+    }}
+
+
+def pinned_netbsd_notice(name: str, cache: Path, destination: Path) -> dict:
+    url, expected = NETBSD_NOTICE_INPUTS[name]
+    cache.mkdir(parents=True, exist_ok=True)
+    path = cache / (expected + ".txt")
+    if not path.exists():
+        with urllib.request.urlopen(url, timeout=60) as response:
+            data = response.read(1024 * 1024 + 1)
+        if len(data) > 1024 * 1024 or hashlib.sha256(data).hexdigest() != expected:
+            raise RuntimeError("NetBSD native package notice checksum differs: " + name)
+        path.write_bytes(data)
+    if path.is_symlink() or sha256(path) != expected:
+        raise RuntimeError("NetBSD native package notice cache differs: " + name)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    copy_notice(path, destination)
+    return {"source": url, "sha256": expected, "notice": str(destination.name)}
+
+
+def netbsd_runtime_packages(binary: Path, src: Path, licenses: Path, include=Path("/usr/include")) -> tuple[str, list[dict]]:
+    linked = capture(["ldd", str(binary)], src)
+    if "not found" in linked or "/usr/lib/librefuse.so." not in linked or re.search(r"/libfuse(?:3)?\.so", linked):
+        raise RuntimeError("NetBSD CryFS requires resolved base ReFUSE without pkgsrc FUSE/perfuse")
+    libraries = [match.group(1) for match in re.finditer(r"=>\s+(/usr/pkg/\S+)", linked)]
+    headers = ["/usr/pkg/include/boost/version.hpp", "/usr/pkg/include/range/v3/all.hpp"]
+    packages = {}
+    for path in [*libraries, *headers]:
+        owner = capture(["pkg_info", "-Fe", path], src)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]*", owner):
+            raise RuntimeError("Ambiguous NetBSD native package owner: " + path)
+        if owner not in packages:
+            info = capture(["pkg_info", "-B", owner], src)
+            metadata = dict(line.split("=", 1) for line in info.splitlines() if "=" in line)
+            if not info.startswith("Information for " + owner + ":\n"):
+                raise RuntimeError("NetBSD native package identity differs: " + owner)
+            family, _, version = owner.rpartition("-")
+            license_name = metadata.get("LICENSE", "")
+            if license_name == "boost-license" and family in {"boost-libs", "boost-headers", "range-v3"}:
+                notice = "boost-license"
+            else:
+                notice = family + "-" + re.sub(r"nb[0-9]+$", "", version)
+                if license_name != "mit" or notice not in NETBSD_NOTICE_INPUTS:
+                    raise RuntimeError("Unreviewed NetBSD native package license/version: " + owner)
+            copied = pinned_netbsd_notice(notice, src.parent / "native-notices", licenses / owner / "LICENSE")
+            packages[owner] = {"name": family, "version": version, "package": owner,
+                               "origin": metadata.get("PKGPATH"), "license": license_name,
+                               "upstream_notice": copied, "libraries": [], "headers": []}
+        packages[owner]["libraries" if path in libraries else "headers"].append(path)
+    for name in ("fuse.h", "fuse_opt.h"):
+        data = (include / name).read_bytes()
+        notice, marker, _ = data.partition(b"#ifndef")
+        if not marker or b"Copyright" not in notice or b"Redistribution" not in notice:
+            raise RuntimeError("NetBSD base ReFUSE header license notice is missing: " + name)
+        destination = licenses / "NetBSD-base-ReFUSE" / (name + ".notice")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(notice)
+    if not libraries or not packages:
+        raise RuntimeError("NetBSD CryFS native package closure is empty")
+    return linked, [packages[key] for key in sorted(packages)]
+
+
 def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
     url, revision, version = PINS[name]
     logpath = cache / f"{name}.log"
@@ -371,6 +496,12 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             license_paths = [src / "LICENSE"]
         elif build_system == "FreeBSD":
             binary, native_manifest = build_freebsd_cryfs(src, jobs, log, env)
+            shutil.copy2(binary, output / name)
+            run([str(output / name), "--version"], src, log, env)
+            toolchain = capture(["cmake", "--version"], src).splitlines()[0]
+            license_paths = [src / "LICENSE.txt"]
+        elif build_system == "NetBSD":
+            binary, native_manifest = build_netbsd_cryfs(src, jobs, log, env)
             shutil.copy2(binary, output / name)
             run([str(output / name), "--version"], src, log, env)
             toolchain = capture(["cmake", "--version"], src).splitlines()[0]
@@ -444,6 +575,8 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             (license_dir / "go-runtime.json").write_text(json.dumps(runtime_notices, indent=2) + "\n")
         elif build_system == "FreeBSD":
             native_dependencies, dependencies = freebsd_runtime_packages(output / name, src, license_dir / "native")
+        elif build_system == "NetBSD":
+            native_dependencies, dependencies = netbsd_runtime_packages(output / name, src, license_dir / "native")
         else:
             shutil.copy2(ROOT / "native/folder/cryfs/conan.lock", license_dir / "conan.lock")
             dependencies = json.loads((license_dir / "conan.lock").read_text())

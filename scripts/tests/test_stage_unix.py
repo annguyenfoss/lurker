@@ -79,6 +79,24 @@ class PackagingPolicy(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "inside a JAR"):
                 stager.audit_dependencies(embedded)
 
+    def test_netbsd_cryfs_requires_base_refuse_linkage_and_api29_entrypoint(self):
+        manifest = {"native_build": {"fuse_provider": "NetBSD base ReFUSE", "fuse_api": 29,
+                                      "fuse_entrypoint": "__fuse_main"}}
+        info = {"needed": ["librefuse.so.2", "libpuffs.so.2", "libutil.so.7"]}
+        with mock.patch.object(stager.shutil, "which", side_effect=lambda name: "/trusted/" + name), mock.patch.object(stager, "elf_info", return_value=info), mock.patch.object(stager.subprocess, "check_output", return_value=" U __fuse_main\n") as symbols:
+            stager.verify_netbsd_cryfs(self.root, manifest)
+            manifest["native_build"]["fuse_api"] = 26
+            with self.assertRaisesRegex(ValueError, "ReFUSE API29"):
+                stager.verify_netbsd_cryfs(self.root, manifest)
+            manifest["native_build"]["fuse_api"] = 29
+            info["needed"].append("libfuse.so.2")
+            with self.assertRaisesRegex(ValueError, "without pkgsrc FUSE"):
+                stager.verify_netbsd_cryfs(self.root, manifest)
+            info["needed"].pop()
+            symbols.return_value = " U fuse_main_real_v26\n"
+            with self.assertRaisesRegex(ValueError, "incompatible FUSE entry"):
+                stager.verify_netbsd_cryfs(self.root, manifest)
+
     def test_traversal_and_absolute_manifest_paths_are_rejected(self):
         for name in ("../private", "/etc/passwd", "safe/../../private"):
             with self.assertRaisesRegex(ValueError, "unsafe relative path"):
@@ -266,6 +284,12 @@ Version needs section '.gnu.version_r' contains 2 entries:
                 stager.verify_folder_patches("cryfs", {"patches": {name: mac_hashes[name] for name in mac[:-1]}}, source)
         with mock.patch.object(stager.platform, "system", return_value="FreeBSD"):
             stager.verify_folder_patches("cryfs", {"patches": {common: hashes[common]}}, source)
+        netbsd = [common, "native/folder/cryfs/netbsd-platform.patch"]
+        netbsd_hashes = {name: stager.digest(stager.ROOT / name) for name in netbsd}
+        with mock.patch.object(stager.platform, "system", return_value="NetBSD"):
+            stager.verify_folder_patches("cryfs", {"patches": netbsd_hashes}, source)
+            with self.assertRaisesRegex(ValueError, "patch provenance"):
+                stager.verify_folder_patches("cryfs", {"patches": {common: hashes[common]}}, source)
 
     def test_freebsd_gocryptfs_requires_its_platform_patch(self):
         name = "native/folder/gocryptfs/freebsd-futimes.patch"

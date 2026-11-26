@@ -231,5 +231,83 @@ class PatchedSourceTests(unittest.TestCase):
                     BUILD.source("fake", cache, log)
 
 
+class NetBSDNativeTests(unittest.TestCase):
+    def test_base_refuse_headers_precede_pkgsrc_and_reject_compatibility_entrypoints(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            include = root / "base-include"
+            include.mkdir()
+            for name in ("fuse.h", "fuse_opt.h"):
+                (include / name).write_text("/* base ReFUSE fixture */\n")
+            env, provenance = BUILD.netbsd_refuse_environment(root / "build", {
+                "PKG_CONFIG_PATH": "/existing/pkgconfig", "LDFLAGS": "-Wl,-zrelro"}, include)
+            self.assertTrue(env["PKG_CONFIG_PATH"].startswith(str(root / "build/refuse-pkgconfig") + ":"))
+            pc = (root / "build/refuse-pkgconfig/fuse.pc").read_text()
+            self.assertIn("Cflags: -Wp,-I,", pc)
+            self.assertIn("-lrefuse -lpuffs -lutil", pc)
+            self.assertNotIn("-lfuse", pc)
+            self.assertIn("/usr/pkg/lib", env["LDFLAGS"])
+            for name in ("fuse.h", "fuse_opt.h"):
+                self.assertEqual((root / "build/refuse-include" / name).read_text(), '#include "' + str(include / name) + '"\n')
+            self.assertEqual(2, len(provenance["headers"]))
+        BUILD.netbsd_refuse_symbols(" U __fuse_main\n U fuse_get_context\n")
+        for symbols in (" U fuse_main_real_v26\n", " U __fuse_main\n U fuse_main_real\n"):
+            with self.assertRaisesRegex(RuntimeError, "base ReFUSE API29"):
+                BUILD.netbsd_refuse_symbols(symbols)
+
+    def test_native_notice_cache_preserves_reviewed_bytes_and_rejects_mutation(self):
+        import hashlib
+        import io
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = b"native dependency copyright and license\n"
+            checksum = hashlib.sha256(data).hexdigest()
+            with patch.dict(BUILD.NETBSD_NOTICE_INPUTS, {"fixture": ("https://example.invalid/LICENSE", checksum)}), patch.object(BUILD.urllib.request, "urlopen", return_value=io.BytesIO(data)) as download:
+                result = BUILD.pinned_netbsd_notice("fixture", root / "cache", root / "notices/LICENSE")
+                self.assertEqual(data, (root / "notices/LICENSE").read_bytes())
+                self.assertEqual(checksum, result["sha256"])
+                BUILD.pinned_netbsd_notice("fixture", root / "cache", root / "notices/LICENSE")
+                self.assertEqual(1, download.call_count)
+                (root / "cache" / (checksum + ".txt")).write_bytes(b"changed")
+                with self.assertRaisesRegex(RuntimeError, "cache differs"):
+                    BUILD.pinned_netbsd_notice("fixture", root / "cache", root / "notices/LICENSE")
+
+    def test_native_closure_notices_include_header_only_packages_without_bundling_refuse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            include = root / "include"
+            include.mkdir()
+            for name in ("fuse.h", "fuse_opt.h"):
+                (include / name).write_bytes(b"/* Copyright fixture. Redistribution permitted. */\n#ifndef FIXTURE\n")
+            binary = root / "cryfs"
+            linked = "\t-lrefuse.2 => /usr/lib/librefuse.so.2\n\t-lboost.1 => /usr/pkg/lib/libboost.so.1\n\t-lspdlog.1 => /usr/pkg/lib/libspdlog.so.1\n\t-lfmt.12 => /usr/pkg/lib/libfmt.so.12\n"
+            owners = {"/usr/pkg/lib/libboost.so.1": "boost-libs-1.92.0", "/usr/pkg/lib/libspdlog.so.1": "spdlog-1.17.0", "/usr/pkg/lib/libfmt.so.12": "fmtlib-12.2.0", "/usr/pkg/include/boost/version.hpp": "boost-headers-1.92.0", "/usr/pkg/include/range/v3/all.hpp": "range-v3-0.10.0nb1"}
+            def capture(argv, cwd):
+                if argv[0] == "ldd":
+                    return linked
+                if argv[1] == "-Fe":
+                    return owners[argv[2]]
+                owner = argv[2]
+                license_name = "mit" if owner.startswith(("spdlog-", "fmtlib-")) else "boost-license"
+                return f"Information for {owner}:\nLICENSE={license_name}\nPKGPATH=devel/fixture\n"
+            def notice(name, cache, destination):
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(name)
+                return {"source": "fixture", "sha256": "0" * 64, "notice": "LICENSE"}
+            with patch.object(BUILD, "capture", side_effect=capture), patch.object(BUILD, "pinned_netbsd_notice", side_effect=notice):
+                observed, packages = BUILD.netbsd_runtime_packages(binary, root, root / "notices", include)
+                self.assertEqual(linked, observed)
+                self.assertEqual(5, len(packages))
+                self.assertEqual(3, sum(bool(p["libraries"]) for p in packages))
+                self.assertEqual(2, sum(bool(p["headers"]) for p in packages))
+                self.assertTrue((root / "notices/NetBSD-base-ReFUSE/fuse.h.notice").is_file())
+                linked += "\t-lfuse.2 => /usr/pkg/lib/libfuse.so.2\n"
+                with self.assertRaisesRegex(RuntimeError, "base ReFUSE"):
+                    BUILD.netbsd_runtime_packages(binary, root, root / "rejected", include)
+
+    def test_native_netbsd_patch_does_not_change_other_os_input_sets(self):
+        self.assertEqual(BUILD.selected_patches("cryfs", "NetBSD"), ["native/folder/cryfs/fsyncdir.patch", "native/folder/cryfs/netbsd-platform.patch"])
+        self.assertEqual(BUILD.selected_patches("cryfs", "FreeBSD"), ["native/folder/cryfs/fsyncdir.patch"])
+
 if __name__ == "__main__":
     unittest.main()

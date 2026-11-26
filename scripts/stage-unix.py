@@ -23,7 +23,7 @@ SUPPORTED = {"Linux", "FreeBSD", "DragonFly", "NetBSD", "OpenBSD"}
 ALLOW = {
     "luks": {"Linux"}, "luks1": {"Linux", "DragonFly"},
     "veracrypt": {"Linux", "FreeBSD", "DragonFly", "OpenBSD"},
-    "gocryptfs": {"Linux", "FreeBSD"}, "cryfs": {"Linux", "FreeBSD"},
+    "gocryptfs": {"Linux", "FreeBSD"}, "cryfs": {"Linux", "FreeBSD", "NetBSD"},
     "cryptomator": {"Linux"}, "geli": {"FreeBSD"}, "pefs": {"FreeBSD"},
     "cgd": {"NetBSD"}, "softraid": {"OpenBSD"}, "raid1c": {"OpenBSD"},
 }
@@ -47,7 +47,8 @@ TOOLS = {
     "FreeBSD": {"geli": ["geli", "mdconfig", "newfs", "mount", "umount"],
                 "pefs": ["pefs", "mount", "umount"], "gocryptfs": ["mount_fusefs"],
                 "cryfs": ["mount_fusefs", "umount"]},
-    "NetBSD": {"cgd": ["cgdconfig", "vnconfig", "newfs", "mount", "umount"]},
+    "NetBSD": {"cgd": ["cgdconfig", "vnconfig", "newfs", "mount", "umount"],
+               "cryfs": ["umount"]},
     "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"],
                 "raid1c": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
     "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "dmsetup", "kldload", "newfs", "mount", "umount"],
@@ -336,6 +337,27 @@ def verify_folder_patches(kind, manifest, source):
         fail("folder artifact patch provenance differs from exact source: " + kind)
 
 
+
+def verify_netbsd_cryfs(root, manifest):
+    native = manifest.get("native_build", {})
+    if (native.get("fuse_provider") != "NetBSD base ReFUSE" or native.get("fuse_api") != 29
+            or native.get("fuse_entrypoint") != "__fuse_main"):
+        fail("NetBSD CryFS requires the qualified base ReFUSE API29 build")
+    readelf = shutil.which("readelf") or shutil.which("llvm-readelf")
+    nm = shutil.which("nm")
+    if not readelf or not nm:
+        fail("readelf and nm are required to validate NetBSD ReFUSE")
+    info = elf_info(root / "cryfs", readelf)
+    needed = info.get("needed", []) if info else []
+    if (not any(re.fullmatch(r"librefuse\.so\.[0-9.]+", name) for name in needed)
+            or any(re.match(r"lib(?:fuse|perfuse)", name) for name in needed)):
+        fail("NetBSD CryFS must link base ReFUSE without pkgsrc FUSE/perfuse")
+    text = subprocess.check_output([nm, "-u", str(root / "cryfs")], text=True, timeout=30)
+    symbols = {line.split()[-1].split("@", 1)[0] for line in text.splitlines() if line.split()}
+    if "__fuse_main" not in symbols or any("fuse_main_real" in name for name in symbols):
+        fail("NetBSD CryFS has an incompatible FUSE entry point")
+
+
 def verify_cryptomator_sources(root, source):
     # The helper is Lurker code, so a dependency lock alone cannot identify its
     # runtime behavior. Documentation changes do not require rebuilding Java.
@@ -541,6 +563,8 @@ def validate_backend(kind, directory, source):
         if manifest.get("revision") != pin[1] or manifest.get("source") != pin[0] or digest(root / kind) != manifest.get("sha256"):
             fail("folder artifact source/binary differs from its pinned build manifest")
         verify_folder_patches(kind, manifest, source)
+        if kind == "cryfs" and platform.system() == "NetBSD":
+            verify_netbsd_cryfs(root, manifest)
         license_files = manifest.get("license_files")
         if not license_files:
             fail("folder artifact license inventory is missing")
@@ -1167,8 +1191,9 @@ def stage(args):
                     "runtime_requirements": ["matching host kernel/filesystem and mount authorization"]
                         + (["Desktop requires a working native display session plus matching winit display/keyboard libraries, including xkbcommon; verify an actual window separately from ELF metadata"] if args.desktop else [])
                         + (["Desktop native operations require host pkexec or sudo and working administrator policy for the installed lurker-helper"] if authorization else [])
-                        + (["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and "
-                            + ("mount_fusefs)" if system == "FreeBSD" else "fusermount)")]
+                        + ((["CryFS requires NetBSD base ReFUSE/puffs, /dev/putter access and native user-mount authorization"]
+                            if system == "NetBSD" else ["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and "
+                            + ("mount_fusefs)" if system == "FreeBSD" else "fusermount)")])
                            if "cryfs" in selected else [])
                         + (["gocryptfs requires FUSE; Linux accepts fusermount3 or fusermount, FreeBSD uses mount_fusefs"] if "gocryptfs" in selected else [])
                         + (["FreeBSD login-user FUSE directory mounts require vfs.usermount=1"]
