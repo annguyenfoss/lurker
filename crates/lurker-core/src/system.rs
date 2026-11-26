@@ -216,7 +216,7 @@ impl AppContext {
     }
 
     fn ensure_sudo(&mut self) -> AppResult<()> {
-        if self.is_root || self.sudo_ready {
+        if self.try_ensure_sudo() {
             return Ok(());
         }
 
@@ -244,16 +244,8 @@ impl AppContext {
         let Ok(sudo) = crate::trusted_system_executable("sudo") else {
             return false;
         };
-        let Ok(status) = Command::new(sudo)
-            .arg("-v")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-        else {
-            return false;
-        };
-        if status.success() {
+        let true_program = crate::trusted_system_executable("true").ok();
+        if noninteractive_sudo_authorized(&sudo, true_program.as_deref()) {
             self.sudo_ready = true;
             true
         } else {
@@ -277,6 +269,7 @@ impl AppContext {
                 return false;
             };
             let mut command = Command::new(sudo);
+            command.args(["-n", "--"]);
             command.arg(program);
             command.args(args);
             command
@@ -292,6 +285,26 @@ impl AppContext {
             .map(|status| status.success())
             .unwrap_or(false)
     }
+}
+
+fn noninteractive_sudo_authorized(sudo: &Path, true_program: Option<&Path>) -> bool {
+    let run = |arguments: &[OsString]| {
+        Command::new(sudo)
+            .args(arguments)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    };
+    // Refresh a cached authorization when policy permits validation. Some
+    // NOPASSWD policies require a password for -v while allowing commands.
+    if run(&["-n".into(), "-v".into()]) {
+        return true;
+    }
+    true_program
+        .is_some_and(|program| run(&["-n".into(), "--".into(), program.as_os_str().to_os_string()]))
+    // Every subsequent privileged command still goes through sudo policy.
 }
 
 impl Drop for AppContext {
@@ -821,6 +834,68 @@ mod tests {
         ] {
             assert!(!super::writable_ntfs_description(description));
         }
+    }
+
+    fn sudo_probe_fixture(body: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("lurker-sudo-probe-{nonce}"));
+        std::fs::create_dir(&root).unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let program = root.join("sudo");
+        std::fs::write(
+            &program,
+            format!("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$0.log\"\n{body}\n"),
+        )
+        .unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+        program
+    }
+
+    #[test]
+    fn noninteractive_sudo_accepts_command_only_nopasswd_policy() {
+        let program =
+            sudo_probe_fixture("if [ \"$1\" = -n ] && [ \"$2\" = -- ]; then exit 0; fi\nexit 1");
+        assert!(super::noninteractive_sudo_authorized(
+            &program,
+            Some(std::path::Path::new("/bin/true"))
+        ));
+        assert_eq!(
+            std::fs::read_to_string(program.with_extension("log")).unwrap(),
+            "-n -v\n-n -- /bin/true\n"
+        );
+        std::fs::remove_dir_all(program.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn noninteractive_sudo_never_prompts_when_policy_denies_both_probes() {
+        let program = sudo_probe_fixture("exit 1");
+        assert!(!super::noninteractive_sudo_authorized(
+            &program,
+            Some(std::path::Path::new("/bin/true"))
+        ));
+        assert_eq!(
+            std::fs::read_to_string(program.with_extension("log")).unwrap(),
+            "-n -v\n-n -- /bin/true\n"
+        );
+        std::fs::remove_dir_all(program.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn noninteractive_sudo_refreshes_cached_authorization_before_command_probe() {
+        let program = sudo_probe_fixture("exit 0");
+        assert!(super::noninteractive_sudo_authorized(
+            &program,
+            Some(std::path::Path::new("/bin/true"))
+        ));
+        assert_eq!(
+            std::fs::read_to_string(program.with_extension("log")).unwrap(),
+            "-n -v\n"
+        );
+        std::fs::remove_dir_all(program.parent().unwrap()).unwrap();
     }
 
     #[test]
