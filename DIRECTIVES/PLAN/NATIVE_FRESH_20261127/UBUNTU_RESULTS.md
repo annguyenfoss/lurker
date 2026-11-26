@@ -1,20 +1,21 @@
 # Ubuntu fresh native qualification — in progress
 
-The fresh baseline and corrected host-prerequisite followups currently qualify
-**51 of 60 applicable filesystem/encryption cells** for the required PDF/text
-write, normal close, reopen, append and final-hash lifecycle. Seventy further
-cells are explicitly not applicable to Linux's native routes. Final-candidate,
-cipher/keyfile/conformance, destructive-device and OS reboot validation remain
-outstanding. The private 130-cell ledger is
+The frozen follow-up candidate now qualifies **54 of 60 applicable native
+container/backing-filesystem cells** for downloaded PDF/text write, normal
+close, reopen, append/create and final-hash verification. All six UFS1 cells
+are unavailable with Ubuntu's stock read-only driver; 70 other combinations
+are explicitly not applicable to Linux. Cipher/keyfile/conformance, helper/GUI,
+OS reboot and destructive-device gates are still in progress. The private
+130-cell ledger is
 `target/goal-validation/native-fresh-20261127/hosts/ubuntu/cases/applicability.json`.
 
 | Filesystem | LUKS1 | LUKS2 | VeraCrypt | gocryptfs backing | CryFS backing | Cryptomator backing |
 | --- | --- | --- | --- | --- | --- | --- |
-| ext4 | Actual ext2; retest | Actual ext2; retest | Actual ext2; retest | Pass | Pass | Pass |
+| ext4 | Pass | Pass | Pass | Pass | Pass | Pass |
 | Btrfs | Pass | Pass | Pass | Pass | Pass | Pass |
 | XFS | Pass | Pass | Pass | Pass | Pass | Pass |
 | APFS | Pass | Pass | Pass | Pass | Pass | Pass |
-| UFS1 | Stock read-only | Stock read-only / sector policy | Stock read-only | Stock read-only | Stock read-only | Stock read-only |
+| UFS1 | Stock read-only | Stock read-only | Stock read-only | Stock read-only | Stock read-only | Stock read-only |
 | UFS2 | Pass | Pass | Pass | Pass | Pass with fresh engine | Pass with patched driver |
 | HAMMER2 | Pass | Pass | Pass | Pass | Pass | Pass |
 | NTFS | Pass | Pass | Pass | Pass | Pass | Pass with native ntfs3 |
@@ -154,3 +155,30 @@ verification on persistent storage. Only duplicate expanded staging payloads
 and terminal compiler incremental caches were removed, retaining archives and
 manifests. The planned new destructive scratch disk is 1 GiB; the separately
 identified 16 GiB disk remains fixture/evidence storage.
+
+The completed follow-up sweep has 54 passing receipt rows and four expected
+UFS1 failure rows (three native cases and one backing setup representing three
+folder cells). A fresh build of hammer2-utils `359b25bc2bb5d81e0bdbb5d48439314d80d13086`
+version 0.5.0 exactly reproduces the installed formatter SHA-256
+`c86edb153ec1f20d74c3f7f28e0b06e6d34234cea6d6e20baf22558a7bdb5566`.
+The older makefs formatter lacked a source manifest, so its binary was retained
+and replaced during an idle formatter interval by unmodified makefs r16 source
+`607449619ef5f85b6a2b282e16182e342fdebeaa`, fresh build SHA-256
+`1aca69ac4434b9433d9d3a0bc8b180e097fa8ba3957bb579734c067f52b09c37`.
+All three affected UFS2 native container cases passed independent retests;
+subsequent directory backings use the refreshed formatter. Fresh native controls
+independently verify superblock VERSION=1/read-only and VERSION=2/read-write.
+The patched FUSE driver also checks the exclusive UFS2 magic `0x19540119` before
+mounting; its source/installed-byte proof supplements the generic FUSE labels.
+Formatter sources/notices remain host prerequisites, separate from Lurker:
+https://github.com/kusumi/makefs
+https://github.com/kusumi/hammer2-utils
+
+The idle 54-fixture preparation queue is held for explicit resource sizing.
+After the remaining conformance/GUI gates finish, a current-candidate six-backend
+mounted pilot will measure daemon RSS, native memory overhead and task/FUSE
+limits. Cohort size will retain a 1 GiB modeled RAM reserve and 2 GiB storage
+reserve; smaller ordinary-reboot cohorts will be used if needed. Eight closed
+owned raw failure/control images were made sparse by removing only allocated
+zero ranges; before/after SHA-256 checks preserved every logical byte and
+released 3,058,233,344 bytes. Failed encrypted images remain intact.
