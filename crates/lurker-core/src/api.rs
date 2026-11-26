@@ -130,14 +130,22 @@ impl CreateCommand {
         if self.filesystem.is_none() {
             return Ok(());
         }
+        let native_device = self.source_kind == SourceKind::Block
+            && self.privilege_mode == PrivilegeMode::Privileged
+            && ((os == "linux"
+                && matches!(
+                    self.volume_type,
+                    VolumeType::Luks | VolumeType::Luks1 | VolumeType::Veracrypt
+                ))
+                || (os == "macos" && self.volume_type == VolumeType::Apfs));
         if !matches!(
             os,
             "linux" | "macos" | "freebsd" | "openbsd" | "netbsd" | "dragonfly"
-        ) || self.source_kind != SourceKind::File
+        ) || (self.source_kind != SourceKind::File && !native_device)
             || self.volume_type.is_directory()
         {
             return Err(crate::AppError::new(
-                "Filesystem selection requires an encrypted file container on a supported OS.",
+                "Filesystem selection requires a supported encrypted file container or native device route.",
             ));
         }
         if self.volume_type == VolumeType::Apfs && self.filesystem != Some(CreateFilesystem::Apfs) {
@@ -312,6 +320,39 @@ pub struct OperationResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn filesystem_selection_accepts_existing_native_device_routes() {
+        let mut command: CreateCommand = serde_json::from_value(serde_json::json!({
+            "target": "/dev/test-disk", "source_kind": "block", "force": true,
+            "volume_type": "luks", "filesystem": "ext4", "passphrase": null,
+            "size_gb": null
+        }))
+        .unwrap();
+        for backend in [VolumeType::Luks, VolumeType::Luks1, VolumeType::Veracrypt] {
+            command.volume_type = backend;
+            assert!(command.validate_filesystem("linux").is_ok());
+            command.privilege_mode = PrivilegeMode::Unprivileged;
+            assert!(command.validate_filesystem("linux").is_err());
+            command.privilege_mode = PrivilegeMode::Privileged;
+        }
+        command.volume_type = VolumeType::Apfs;
+        command.filesystem = Some(CreateFilesystem::Apfs);
+        assert!(command.validate_filesystem("macos").is_ok());
+        command.filesystem = Some(CreateFilesystem::Exfat);
+        assert!(command.validate_filesystem("macos").is_err());
+        for (os, backend) in [
+            ("freebsd", VolumeType::Geli),
+            ("netbsd", VolumeType::Cgd),
+            ("openbsd", VolumeType::Softraid),
+            ("dragonfly", VolumeType::Luks1),
+        ] {
+            command.volume_type = backend;
+            assert!(command.validate_filesystem(os).is_err());
+        }
+        command.volume_type = VolumeType::Gocryptfs;
+        assert!(command.validate_filesystem("linux").is_err());
+    }
 
     fn raid_create() -> CommandAction {
         serde_json::from_value(serde_json::json!({
@@ -510,6 +551,8 @@ mod tests {
         let value = serde_json::json!({"action":"mount", "source":"vault.hc", "mountpoint":"mnt",
             "tag":null, "volume_type":"auto", "passphrase":null, "readonly":true});
         let error = serde_json::from_value::<CommandAction>(value).unwrap_err();
-        assert!(error.to_string().contains("Read-only mode has been removed"));
+        assert!(error
+            .to_string()
+            .contains("Read-only mode has been removed"));
     }
 }

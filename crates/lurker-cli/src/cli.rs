@@ -977,7 +977,7 @@ pub fn render_help(script_name: &str, color_mode: ColorMode, stdout_destination:
     };
 
     let mount_help = "\nMount access follows filesystem and driver capabilities.\n";
-    let filesystem_help = "\nFilesystems (file-container create only):\n  --filesystem ext4|btrfs|xfs|apfs|ufs1|ufs2|hammer2|ntfs|exfat|zfs\n  Native default when omitted. Available choices depend on the OS, encryption route and installed tools.\n";
+    let filesystem_help = "\nFilesystems (file-container create, Linux privileged devices, macOS APFS partitions):\n  --filesystem ext4|btrfs|xfs|apfs|ufs1|ufs2|hammer2|ntfs|exfat|zfs\n  Native default when omitted. Available choices depend on the OS, encryption route and installed tools.\n";
     let directory_help = "\nDirectory backends (where supported):\n  create --type gocryptfs|cryfs|cryptomator|pefs <directory>\n  mount --type BACKEND <encrypted-directory> <mountpoint>\n  unmount --type BACKEND <mountpoint>\n  No size or cipher option; fixed native encryption profile.\n";
     let session_help = "\nSession shutdown hook:\n  session-close --type BACKEND [--timeout SECONDS] <absolute-vault-source>\n";
     let raid_help = if cfg!(target_os = "openbsd") {
@@ -1153,12 +1153,18 @@ mod tests {
         let source = executable.to_str().unwrap();
         let target = std::env::temp_dir();
         let mountpoint = target.to_str().unwrap();
-        for os in ["linux", "macos", "freebsd", "dragonfly", "netbsd", "openbsd"] {
+        for os in [
+            "linux",
+            "macos",
+            "freebsd",
+            "dragonfly",
+            "netbsd",
+            "openbsd",
+        ] {
             let parse = |arguments: &[&str]| {
                 super::parse_args_for_platform(arguments.iter().copied().map(OsString::from), os)
             };
-            let ParseOutcome::Run(cli) =
-                parse(&["lurker", "mount", source, mountpoint]).unwrap()
+            let ParseOutcome::Run(cli) = parse(&["lurker", "mount", source, mountpoint]).unwrap()
             else {
                 panic!("expected a mount command on {os}");
             };
@@ -1167,14 +1173,7 @@ mod tests {
             };
             assert!(!command.readonly);
             for option in ["--readonly", "--readonly=true", "--readonly=false"] {
-                let failure = parse(&[
-                    "lurker",
-                    "mount",
-                    option,
-                    source,
-                    mountpoint,
-                ])
-                .unwrap_err();
+                let failure = parse(&["lurker", "mount", option, source, mountpoint]).unwrap_err();
                 assert!(failure
                     .message
                     .unwrap()

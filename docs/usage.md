@@ -31,13 +31,15 @@ option. Mount uses writable access where the filesystem and driver support it.
 Reader-only access or unavailable creation is a degraded capability, not a
 completed create-and-write workflow.
 
-File-container creation also accepts `--filesystem NAME`. Names are `ext4`,
+File-container creation and privileged Linux device creation accept
+`--filesystem NAME`. Names are `ext4`,
 `btrfs`, `xfs`, `apfs`, `ufs1`, `ufs2`, `hammer2`, `ntfs`, `exfat`, and `zfs`;
 availability depends on the OS, encryption route and installed formatter/mount
 driver. Unsupported combinations fail explicitly. Omit the option to retain
 the native default. Mounting detects the existing inner filesystem; it does
 not reformat it. Native APFS encryption remains APFS-only, and directory
-encryption engines do not take a filesystem selection.
+encryption engines do not take a filesystem selection. External macOS APFS
+data partitions may explicitly select `--filesystem apfs`.
 
 For example, on a Linux host with the required ext4 tools:
 
