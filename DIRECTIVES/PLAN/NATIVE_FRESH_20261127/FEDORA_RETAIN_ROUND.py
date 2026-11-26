@@ -160,6 +160,7 @@ def main():
                         retained.mkdir(parents=True, exist_ok=True)
                         destination = retained / (backing.name + '.img')
                         shutil.move(str(image), str(destination))
+                        result['backing_records'][-1]['image'] = str(destination)
                         result.setdefault('retained_backings',[]).append(str(destination))
                     else:
                         result.setdefault('retained_backings',[]).append(str(image))
