@@ -1285,10 +1285,10 @@ fn mount_open_mapper(
         }
     }
     let mut args = Vec::new();
-    // A distro may also ship a read-only mount.apfs helper. Request the
-    // selected native kernel adapter explicitly instead of invoking it.
-    if filesystem_type.as_deref() == Some("apfs") {
-        args.extend(["-i".into(), "-t".into(), "apfs".into()]);
+    // Name separately installed native drivers explicitly so mount can load
+    // them after a reboot, without selecting an older read-only helper.
+    if let Some(filesystem @ ("apfs" | "hammer2")) = filesystem_type.as_deref() {
+        args.extend(["-i".into(), "-t".into(), filesystem.into()]);
     }
     let mut options: Vec<String> = Vec::new();
     if filesystem_type
