@@ -48,6 +48,25 @@ An inherited writable directory mode in the newly copied private prefix caused
 the first ext4/VeraCrypt attempt to fail its trust check. The owned prefix mode
 was corrected; that failed attempt also remains for a separate retest.
 
+A second shared defect invalidates the selected-ext4 baseline qualification:
+canonical `mkfs.ext4` becomes `mke2fs`, whose default creates ext2. Both initial
+LUKS/ext4 mount receipts report `ext2`, despite completing their byte lifecycle.
+The ext4 directory cases in this Debian-specific initial recipe also used those
+LUKS-created ext2 backings. These are wrong-filesystem failures, not ext4 passes.
+The Linux owner is batching explicit ext4 format selection with the kmod repair.
+The Debian driver now rejects an unexpected native mount type before payload
+access; its rejection and positive ext4 checks ran on the remote host. The
+shared raw-backing harness invokes `mkfs.ext4` directly and is a separate route.
+
+The initial 30 disk-container operations finished: 22 completed their lifecycle
+and eight failed operations. After filesystem-identity review, only 20 qualify
+for their requested filesystem; two completed on the wrong filesystem. The
+initial directory sweep is still running. Current Linux-patched Cryptomator has
+passed Btrfs; its initial ext4 attempt failed because my raw image copy retained
+private Java-library modes after root ownership. The owned staged copy has been
+normalized to ordinary staged executable/data permissions. The failure is retained
+for a fresh retest and is not attributed to the product or upstream engine.
+
 UFS1 succeeds through the existing matching upstream module compiled with
 `CONFIG_UFS_FS_WRITE`. This is an explicit configuration prerequisite, not a
 stock Debian capability. LUKS2/UFS1 is blocked by the fixed default logical-sector
@@ -60,7 +79,9 @@ successful small lifecycle results do not remove that upstream limitation.
 The system disk and old work are preserved. New fixture storage is
 `/srv/build/lurker-native-fresh-20261127/debian/fixture-storage.qcow2`, attached
 to domain `debian-core-01`. Guest identity was checked as a new 32 GiB disk with
-observed virtio serial `lurker-fresh-debian-` before formatting. It is mounted at
+observed virtio serial `lurker-fresh-debian-` before formatting. This owned disk
+was subsequently grown online to 64 GiB, with serial, source, size and mount
+checked before resizing its ext4 filesystem. It is mounted at
 `/var/tmp/lurker-native-fresh-20261127-debian-storage`. Closed current-round
 fixtures are retained there with their original evidence paths preserved.
 The later destructive device matrix will use a separately identified scratch disk.
