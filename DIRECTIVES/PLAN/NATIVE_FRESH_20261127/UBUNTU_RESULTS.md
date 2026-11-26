@@ -1,92 +1,108 @@
-# Ubuntu fresh qualification — work in progress
+# Ubuntu fresh native qualification — in progress
 
-Owner: Ubuntu host agent, exclusive `adjutant@ubuntu-core-01`.
-Product baseline: `8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d`.
-Private evidence: `target/goal-validation/native-fresh-20261127/hosts/ubuntu/`.
+The fresh baseline and corrected host-prerequisite followups currently qualify
+**49 of 60 applicable filesystem/encryption cells** for the required PDF/text
+write, normal close, reopen, append and final-hash lifecycle. Seventy further
+cells are explicitly not applicable to Linux's native routes. Final-candidate,
+cipher/keyfile/conformance, destructive-device and OS reboot validation remain
+outstanding. The private 130-cell ledger is
+`target/goal-validation/native-fresh-20261127/hosts/ubuntu/cases/applicability.json`.
 
-Ubuntu 26.10 is running `7.3.0-11-generic`, boot
-`09e433ed-a944-4a3d-809c-bf5f81f3e0a2`. Fresh apt index refresh and full upgrade
-completed, followed by ordinary `linux-generic`, matching headers, filesystem
-tools, ACL tools and APFS DKMS installation. The combined update/install job
-returned zero; subsequent full-upgrade simulation reports no pending upgrades.
-No reboot-required marker was present. APFS DKMS 0.3.21 and Ubuntu ZFS 2.4.4
-load against the running kernel. Stock UFS write configuration is disabled;
-UFS1 writable qualification remains unresolved. UFS2 has a separately installed
-FUSE driver requiring fresh control and product tests.
+| Filesystem | LUKS1 | LUKS2 | VeraCrypt | gocryptfs backing | CryFS backing | Cryptomator backing |
+| --- | --- | --- | --- | --- | --- | --- |
+| ext4 | Actual ext2; retest | Actual ext2; retest | Actual ext2; retest | Pass | Pass | Pass |
+| Btrfs | Pass | Pass | Pass | Pass | Pass | Pass |
+| XFS | Pass | Pass | Pass | Pass | Pass | Pass |
+| APFS | Pass | Pass | Pass | Pass | Pass | Pass |
+| UFS1 | Stock read-only | Stock read-only / sector policy | Stock read-only | Stock read-only | Stock read-only | Stock read-only |
+| UFS2 | Pass | Pass | Pass | Pass | Publication failure; fix pending | Pass with patched driver |
+| HAMMER2 | Pass | Pass | Pass | Pass | Pass | Pass |
+| NTFS | Pass | Pass | Pass | Pass | Pass | Pass with native ntfs3 |
+| exFAT | Pass | Pass | Pass | Pass | Publication failure; fix pending | Pass |
+| ZFS | Pass | Pass | Pass | Pass | Pass | Pass |
 
-Fresh exact-source workspace check, workspace test and workspace build run:
-`20261126T203534Z-2d1d70ae` (one Cargo worker). `cargo check --workspace`
-passed in 4m53s. Workspace tests passed **147, failed 0, ignored 13**; the
-workspace binary build also passed. Runtime qualification remains incomplete. Payload copies use the round's downloaded Bitcoin, Ethereum and
-Transformer PDFs and text. Runtime, container matrix, device matrix, reboot
-persistence and final-candidate checks remain incomplete.
+For each filesystem, hdiutil Apple disk-image encryption and diskutil APFS
+encryption require the macOS native adapters; GELI/PEFS require FreeBSD's native
+facilities, CGD requires NetBSD, and softraid CRYPTO/RAID1C require OpenBSD.
+Those seven method/OS exclusions are recorded individually in the ledger.
+Directory columns name the native backing filesystem, rather than an alternate
+inner format.
 
-Current-source manifest verification accepted the cached private gocryptfs,
-CryFS and Cryptomator inputs and complete runtime hashes. These are reusable
-build inputs only, with fresh runtime tests still required. Native VeraCrypt
-creator source/archive/patch/binary/private-library verification passed
-separately from the LKL helper; the
-LKL filesystem route does not count toward native acceptance.
+Host: exclusive `adjutant@ubuntu-core-01`, Ubuntu 26.10, running
+`7.3.0-11-generic`, initial boot `09e433ed-a944-4a3d-809c-bf5f81f3e0a2`.
+A fresh apt refresh/full upgrade and ordinary kernel-meta/header/tool installation
+completed successfully; subsequent full-upgrade simulation had no pending
+upgrades and no reboot-required marker. No custom kernel was built.
 
-Source candidates for ordinary external drivers are pinned to HAMMER2
-`09c130bf8bac021b0bb6a8ed9c9685a5bd9bbbd0` (1.0.112, BSD-3-Clause) and
-fuse-ufs `ee5c4a447da98220a11edb69a225d51379afc4fb` (0.6.0, BSD-2-Clause).
-Both advertise experimental write routes suitable only for the authorized
-scratch-media assessment; fresh matching builds and runtime tests are queued.
-Sources: https://github.com/jdmanring/linux_hammer2 and
-https://github.com/realchonk/fuse-ufs
-
-The initial UFS1 LUKS1/VeraCrypt observations used an inherited custom write
-module and are **excluded from ordinary-route qualification**. Its loaded
-source version `7932A71D9C37C40AAC2BEE3` matched the old cached custom module,
-while the stock module is `201E180B8E6BE4EDF81A513`. With zero references and no
-UFS mounts, the owner unloaded that module and loaded the stock module. The
-stock loaded/installed versions now match and its module taint is empty.
-`updates/ufs-stock-restoration.json` preserves the evidence. Fresh stock UFS1
-retests and controls are still required. APFS, ZFS and HAMMER2 loaded versions
-also match their currently installed modules. No custom kernel was built.
-
-The required applicability ledger is ten filesystems × thirteen methods.
-LUKS1, LUKS2 and VeraCrypt require independent inner-filesystem cases; gocryptfs,
-CryFS and Cryptomator require independent backing-filesystem cases. Apple's
-hdiutil/diskutil, GELI, PEFS, softraid CRYPTO/RAID1C and CGD are outside the Linux
-native adapter scope and must each retain an explicit not-applicable entry.
-No runtime cell has yet been credited as passed in this fresh round.
-
-The fresh CLI SHA-256 is
+Baseline product source is `8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d`.
+Exact-source workspace run `20261126T203534Z-2d1d70ae` passed check, tests and
+build with one Cargo worker: **147 tests passed, 0 failed, 13 ignored**.
+CLI SHA-256 is
 `44fe7d0ff20f5e780c3c98a5fc837f680012fadc216f739806cdc5ddd5175a1a`;
 helper SHA-256 is
 `e1dcf92659a19c9115fa0bee2cde6b6b4c52fa9c93007995577f43184d1632a6`.
-Full identities and checks are in the private `build/result.json`.
+Current-source manifests verified the reused private engine build inputs and
+runtime bytes. The new CLI/helper were tested from an administrator-controlled
+private prefix; system-installed Lurker was preserved. These are staged-artifact
+results, with no installed-system-package claim.
 
-Next: complete the queued matching driver builds, execute ordinary containers including
-native controls for missing capabilities, batch demonstrated fixes, then attach
-and identify a new `lurker-fresh-ubuntu` qcow2 for device cases. Existing disks,
-fixtures, sessions and installed Lurker artifacts are preserved.
+Ordinary native prerequisites include Ubuntu APFS DKMS 0.3.21 and ZFS 2.4.4,
+matching the running kernel. The newly built HAMMER2 module uses upstream
+`09c130bf8bac021b0bb6a8ed9c9685a5bd9bbbd0` (1.0.112, BSD-3-Clause).
+The fuse-ufs host driver uses upstream
+`ee5c4a447da98220a11edb69a225d51379afc4fb` (0.6.0, BSD-2-Clause), Fedora's
+reviewed FUSE_RENAME2/destination-check patch, and a FreeBSD-only test-import lint
+fix. Its local source commit is
+`aeaa67a2cdce89432e00de27d306d527f975004d`; installed SHA-256 is
+`48f7cf2d19938a39ba18e767c573d9d43bd7ce11c0283b5ebe7cacbbb52f6f0e`.
+Twenty-eight library tests, upstream `make prepare`, the prescribed Makefile
+build, native no-replace rename/collision controls and full payload reopens
+passed. The temporary nightly formatter was removed after checks. Drivers remain
+host prerequisites. Sources:
+https://github.com/jdmanring/linux_hammer2
+https://github.com/realchonk/fuse-ufs
 
-Initial container batch is terminal: **58 receipt rows, 47 raw passes and 11
-failures**. UFS1's failed backing setup represents three blocked directory
-cells. Four raw passes are excluded: the two inherited custom-UFS1 cases and
-the two requested-ext4 cases that actually produced ext2. This leaves **43
-provisional ordinary-route cells** passing the payload lifecycle at the baseline,
-with no final-candidate claim. The private 130-cell applicability ledger retains
-each exclusion and receipt reference.
+The initial container batch retained **58 rows, 47 raw passes and 11 failures**.
+Four raw passes are excluded: two requested-ext4 cases mounted actual ext2,
+and two UFS1 cases inherited an old custom write module. With zero UFS references
+and no mounts, the owner restored the stock module: loaded/installed source
+version `201E180B8E6BE4EDF81A513`, empty per-module taint. All three stock UFS1
+disk retests and the native UFS1 control now demonstrate the ordinary-route
+limitation. APFS, ZFS and HAMMER2 loaded source versions match installed modules.
 
-The manual staging prefix had two corrected errors: a nested VeraCrypt creator
-copy, and unreadable Java runtime library modes after copying Cryptomator as
-root. The latter affected ext4, Btrfs, XFS and APFS initialization before the
-permission correction. These remain staging failures pending independent
-retests, distinct from product/backend failures. Native package staging will
-use normalized executable/data modes for the final candidate.
+Two manual staging mistakes were corrected and retained as distinct failures:
+a nested VeraCrypt creator copy and root-owned Java libraries retaining private
+0600 modes. All four affected Cryptomator backings passed independent followups.
+The same original Cryptomator engine also passed UFS2 with the corrected host
+driver and NTFS with kernel ntfs3. The old NTFS-3G EIO and unpatched-UFS2 EIO
+remain in original receipts. CryFS's UFS2/exFAT publication failures await the
+coordinator's source/artifact fix.
 
-Fresh post-correction findings are CryFS create failures on UFS2 and exFAT,
-and Cryptomator write EIO on UFS2 and NTFS-3G. Native-driver controls and eligible
-alternatives are being assessed. All three disk-encryption methods and all
-three directory engines passed on HAMMER2 and ZFS. The initial batch left no
-mounts or cleanup errors; failed backings and their receipts are retained.
+Native feature controls passed nine filesystems, including real ext4 journal
+and extent flags, Btrfs CoW identification and XFS reflink/internal-log flags.
+ACL, chmod/chown, hardlink and atomic no-replace observations are retained per
+control; unsupported or unavailable feature queries are reported explicitly.
+Stock UFS1 mounts read-only. The real desktop-helper JSON lifecycle passed all
+six implemented Linux backends with payload append/reopens. Three initial folder
+helper requests had the harness's wrong source kind, were correctly rejected,
+and were replaced by successful directory-kind requests.
 
-Stock UFS1 retests, ten filesystem feature/control cases and six real helper
-lifecycles are running serially in the queued post-matrix job. Device and reboot
-qualification remain outstanding. The coordinator authorized dedicated 16 GiB
-fixture storage, separate from the small destructive scratch disk, for persistent
-fixtures and private test credentials across the ordinary reboot.
+Dedicated persistent fixture storage is a new 16 GiB qcow2 at
+`/srv/build/lurker-native-fresh-20261127/ubuntu-fixture-storage-20261127.qcow2`,
+domain `ubuntu-core-01`, serial `lrkf-fixture-ubuntu`, guest by-id
+`/dev/disk/by-id/virtio-lrkf-fixture-ubuntu`. Domain, source, serial, size,
+empty guest inventory and holders were checked before formatting. Its ext4 UUID
+is `0656b0c1-ede9-4986-98f4-cbe2c3f0d0c9`, mounted under the host owner's
+persistent home cache. Eight identified failed images moved there with source
+and destination SHA-256 checks before original removal; aliases retain receipt
+paths. Unrelated retained fixtures are untouched. A separate small destructive
+scratch disk is still required.
+
+The persistent reboot harness passed a six-backend Btrfs pilot with private
+0600 test credentials, correct backing mounts, all payload hashes and normal
+closure. **OS reboot is still unexercised.** Next: receive the frozen candidate
+and rebuilt CryFS artifact, validate that exact candidate, finish applicable
+containers and variations, run the identified scratch-device matrix, prepare
+persistent fixtures, perform the ordinary reboot, reopen/hash-check and inspect
+final cleanup. Full private evidence and resumable state remain under
+`target/goal-validation/native-fresh-20261127/hosts/ubuntu/` and its checkpoint.
