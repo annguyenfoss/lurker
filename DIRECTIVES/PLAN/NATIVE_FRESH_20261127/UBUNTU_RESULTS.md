@@ -135,5 +135,22 @@ The coordinator subsequently froze follow-up source
 `576505d554d798422840a06322dfa93b899365bc`, including the Linux mount
 read-only parser correction and desktop form integration. The already live ca7
 sweep continues under its own identity. Fresh follow-up workspace job
-`20261126T223704Z-d691528f` is running; the idle ca7 variation queue was cancelled
-before any case. Remaining runtime gates will use the follow-up package.
+`20261126T223704Z-d691528f` passed workspace check/test/build: **159 tests passed,
+0 failed, 15 ignored**, plus the separately enabled native kmod regression
+passed. The idle ca7 variation queue was cancelled before any case. The ca7
+sweep finished with 53 passes and five failures: stock UFS1's three native
+cases and backing setup, plus the original metadata-mode rejection.
+
+The formal follow-up native-selection package SHA-256 is
+`1e1a151753102e6baf514245ef2e8a545007591ccf5e2301df2a326a96ee23e6`.
+Its CLI is `f0075e015f0387315aeb232d1bbbd7be2a1ca7e23c09bb978843b57ebadde617`,
+helper `daa70a13c28230ab21db85f9f718bc1489fcf5bae10943fddd18501e850b99b5`,
+and desktop `9b2ee9e2c39e8f485774df6e9f52fbc9522c55d27eedf3352962610810ea15c5`.
+All 1,101 package files match the separately installed prefix's bytes and modes.
+The native matrix is running as PID 200458; all three requested-ext4 native
+cases have passed. Remaining container, GUI, reboot and device gates use this
+package. Completed build artifacts and logs were retained with full hash
+verification on persistent storage. Only duplicate expanded staging payloads
+and terminal compiler incremental caches were removed, retaining archives and
+manifests. The planned new destructive scratch disk is 1 GiB; the separately
+identified 16 GiB disk remains fixture/evidence storage.
