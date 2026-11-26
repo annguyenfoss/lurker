@@ -172,7 +172,35 @@ Rust notices; the new package installed with exact workspace hashes.
   `24da9205fe18dae81caea5f75d5a2d855e3b65ae179689b72088a9ff85d0cc51`.
 
 The follow-up desktop rendered as UID 1300 in an authenticated private X11
-session and cleaned up its owned resources. Final storage and disk-only
+session and cleaned up its owned resources. All six backend families subsequently
+passed the bound Slint create/mount/write/reopen/unmount callback test, using the
+exact workspace test artifact and installed helper as the login user. Native
+cipher conformance passed 108 checks, folder conformance passed 36 checks, and
+all three binary-keyfile negative suites passed. All three HAMMER2 methods also
+passed Auto reopen after explicit module unloading. The first cold-test launch
+used a relative executable with execv and was retained as an invocation failure;
+the absolute launcher retry passed without a product change.
+
+Six Btrfs fixtures (three disk methods and three folder engines on native file
+backings) passed ordinary reboot persistence from official 7.3 to the preserved
+default 6.12.118. All five payload hashes and exact binaries matched; all nine
+intentionally mounted layers closed normally after verification. New boot ID:
+`ed3b4968-c43a-420b-9571-4833ab868577`.
+
+Read-only auditing recovered the original UFS module build script/log/compiler
+commands and source receipt from its prior cache. Installed module SHA-256
+`74ded149aabb284025263a784928ef69cb14474fc78a4ca87c12565848792fe6` matches
+that cached artifact. All 15 material source/build files and original Git blob
+IDs independently match Linux stable 6.12.118 commit
+`b869a5313cbfe7102873d3de318ddb68675146d0`. This is explicitly an existing
+non-stock `CONFIG_UFS_FS_WRITE=1` prerequisite, evaluated as supplemental
+configuration-dependent evidence; the stock cloud kernel has `CONFIG_UFS_FS`
+disabled. No new module/kernel build or configuration change was made.
+All three final UFS1 disk methods passed, and the LUKS2 header independently
+confirms the repaired 512-byte logical sector geometry. No encryption profile
+was weakened. The remaining native APFS/ZFS cohort is finishing before scratch
+writes begin.
+ Final storage and disk-only
 conformance/helper batches are running independently; directory gates are
 serialized. All final container and physical cases will use this follow-up.
 Remaining: complete repaired candidate containers in both kernel cohorts; cipher and credential/conformance
