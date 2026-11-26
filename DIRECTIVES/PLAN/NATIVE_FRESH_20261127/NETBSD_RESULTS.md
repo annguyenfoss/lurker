@@ -1,6 +1,6 @@
 # NetBSD fresh qualification — 2026-11-27
 
-Status: ordinary native qualification remains in progress while the stable CryFS source assessment and installed-package matrix finish. Prior-round receipts are not fresh passes.
+Status: final candidate `cca3c17079b32d7739d7fe30f5f78c7229056db1` is frozen for native workspace, package and CryFS backing-filesystem qualification. Prior-round receipts are not fresh passes.
 
 The assigned host is `adjutant@netbsd-core-01`, running NetBSD 11.1 amd64,
 GENERIC dated 2026-11-02. The current formal release and release-specific
@@ -212,6 +212,45 @@ returned to baseline.
 The current 130-cell ledger therefore has six completed
 CGD cells, one ZFS reboot block, ten pending CryFS cells, 53 unavailable cells
 and 60 platform-inapplicable cells.
+
+CryFS core integration is now committed in `bd65b08`, its native factory and
+stager registration in `d806711`, and desktop directory forms in `cca3c17`.
+The native process adapter queries kernel PID, birth seconds/microseconds and
+zombie state with `KERN_PROC2`; a bounded capture handles the observed transient
+invalid birth fields only for the unreaped owned child. Invalid live queries
+remain errors. Native core tests passed 55 with 4 ignored. The first test race
+and raw state-transition observations are retained separately.
+
+The official factory engine SHA-256 is
+`e1b3f3c9663acdf3c933e0d40dbb352ccd279ac28b7b8cd135ee2413a8b5c7e8`.
+It passed fresh ordinary-user product PDF write/append/verify, three native fsid
+and owner observations, metadata preservation and normal close. Native builder
+and stager Python suites passed 64/64. The manifest records fourteen notice
+files, five native dependency identities and the two BSD inline-header notices;
+base ReFUSE remains a separately provided host prerequisite.
+
+The unchanged full conformance workload exposed a separate ReFUSE limitation:
+SQLite WAL shared-memory mapping fails with `SQLITE_IOERR_SHMMAP`. A direct
+`MAP_SHARED` probe returns EOPNOTSUPP; stock ReFUSE unconditionally sets the
+PUFFS no-cache flag and the kernel rejects the required mapping. The failed
+suite and encrypted fixture remain intact. Separate explicitly labelled
+credential/lifecycle subsets passed 12/12 with explicit selection and 12/12
+with Auto, covering wrong passwords, duplicate aliases, busy close and existing
+target protection. Those subsets do not turn the failed SQLite workload into
+a pass. No cache, flush, filesystem or SQLite mode was weakened.
+
+Native desktop tests passed 40 with one ignored callback test. That callback
+separately passed as UID 1300 using the real helper and official engine: create,
+mount, synced one-MiB write, normal close, Auto reopen, read and close. Its
+software-rendered CryFS create forms at 100% and 120% were inspected and fit.
+The initial callback created the vault but failed its automatic native-volume
+refresh because the default administrator policy denied `list-native`; its
+failure and fixture are retained. The successful test temporarily authorized
+only the exact root-owned helper digest/path with `--as-root list-native`.
+CryFS operations stayed unprivileged. The rule was removed, visudo passed,
+user-mount policy returned to zero, and the original root:wheel 0600 device
+identity/metadata and full mount baseline were restored. This records a tested
+administrator-policy prerequisite, not a default installed user policy.
 
 Eligibility references:
 
