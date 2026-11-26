@@ -199,7 +199,17 @@ setting and original device owner/group/mode were restored afterward. It does
 not establish default ordinary-user host policy. The ReFUSE engine has no
 privileged execution route. Core lifecycle, packaging and backing-filesystem
 matrix integration remain pending, so these native controls do not become ten
-CryFS product passes. The current 130-cell ledger therefore has six completed
+CryFS product passes. The actual installed CGD CLI also passed a separate ordinary mounted reboot
+for NTFS, ext4 and HAMMER2 containers and the GUID-identified UFS2 partition.
+The qualified native CryFS/ReFUSE fixture passed the same reboot on its FFS
+backing store, including the appended text and new file. The boot changed from
+22:12:36 to 23:03:13 UTC on 2026-11-26. All five fixtures reopened with identical
+payload hashes and closed normally. Persistent CGD parameter bytes were stable;
+`kern.sbmax=4194304` survived. Native user-mount policy and device permissions
+were restored after the post-boot proof, and the full mount/mapping inventory
+returned to baseline.
+
+The current 130-cell ledger therefore has six completed
 CGD cells, one ZFS reboot block, ten pending CryFS cells, 53 unavailable cells
 and 60 platform-inapplicable cells.
 
