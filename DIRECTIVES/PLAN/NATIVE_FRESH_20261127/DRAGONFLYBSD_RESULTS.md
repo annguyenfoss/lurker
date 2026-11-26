@@ -115,6 +115,37 @@ contains the three native filesystem controls. Failed fixtures are retained.
   its removal remains part of cleanup. Helper capabilities run as the login user
   through that policy; full frontend lifecycle validation remains pending.
 
+## Initial applicability reconciliation
+
+`applicability.json` now accounts for all 130 initial container cells: 10 passed,
+45 unavailable through assessed ordinary native routes, 70 not applicable, and
+5 blocked pending CryFS native-source work. Every cell carries its filesystem
+role, source/evidence identities and eligibility or driver reason. These counts
+are initial assessment; every final-candidate cell remains pending. Device
+results are a separate dimension.
+
+The five writable native filesystem rows are UFS1, HAMMER2, ext4, NTFS and exFAT.
+Btrfs, XFS, APFS, UFS2 and ZFS have no qualified native writable creation route
+on this host. Reader libraries, converters and unrelated package names do not
+supply that route. LUKS2, gocryptfs and Cryptomator have no qualified ordinary
+native engine/provider artifact; this is not a claim that a source port is
+impossible. OS-specific facilities from the other BSDs and macOS are marked not
+applicable with their owning-OS reason.
+
+CryFS 1.0.3 source pin `5d0cc36785d93e12250696a3ffc928042f2e8d61`, its tag and
+submodules were freshly verified. Native CMake configuration passed with official
+DragonFly Boost, range-v3, spdlog and FUSE 2 packages. Source inspection found a
+missing DragonFly guard for the native `sysconf` physical-memory API. A minimal
+platform patch and the existing common durability patch are prepared for a
+serialized diagnostic build after the stock base build. No CryFS runtime or
+product pass is claimed.
+
+An additional ext4/LUKS1/keyfile/Auto smoke passed with bounded payload workers,
+an exact native session/mount match and independent ext4 extents-superblock
+proof. Its plaintext root was uid/gid 1300 and mode 0700. All downloaded payload
+hashes survived both normal reopens; its mount closed and only the successful
+fixture was reclaimed. Receipt: `cases/bounded-runner-smoke-receipt.json`.
+
 ## Current continuation
 
 The unmodified stock base at `e17b9176356e3afb3427d71c21108a8a849cd4d5` is building
@@ -132,5 +163,5 @@ is a test target, and no scratch-device result is claimed.
 Next: finish the stock base update and reboot, verify the new disk identity,
 perform native device controls and the physical adapter, and run the final exact
 candidate workspace, cipher/credential/conformance and persistence matrix.
-Complete all 130 applicability cells, frontend/package checks and cleanup before
-closing the round.
+Reconcile final-candidate receipts for all 130 cells, complete frontend/package
+checks and inspect cleanup before closing the round.
