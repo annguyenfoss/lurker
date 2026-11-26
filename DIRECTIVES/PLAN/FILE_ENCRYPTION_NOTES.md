@@ -2,6 +2,8 @@
 
 ## File workflow
 
+Prioritize personal use, including transferring secrets between one person's machines and sharing with a few people. Shared passwords and shared keyfiles are the primary credentials. Public-key recipients are an additional option.
+
 OpenSSL CMS, age, and GnuPG each take one input file and produce one output file per operation. Archive creation and extraction, compression, and decompression are out of scope.
 
 The shell functions shared in discussion describe a personal workflow. Reproducing them and integrating `tar`, `pigz`, or `pv` are out of scope.
