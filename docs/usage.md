@@ -83,6 +83,36 @@ Linux examples:
 ./target/release/lurker unmount /mnt/vault
 ```
 
+### Encrypt and decrypt individual files
+
+Use `encrypt` and `decrypt` as your normal login user. Specify `--type age`,
+`--type gnupg`, or `--type openssl` and provide an input and an output path.
+Use `--force` to replace an existing regular output file after success.
+
+```sh
+lurker encrypt --type age --passphrase report.pdf report.pdf.age
+lurker decrypt --type age --passphrase report.pdf.age restored.pdf
+lurker keys --type gnupg
+lurker encrypt --type gnupg --public-key Alice.asc report.pdf report.pdf.gpg
+lurker decrypt --type gnupg report.pdf.gpg restored.pdf
+lurker encrypt --type openssl --public-key Alice.crt report.pdf report.pdf.cms
+lurker decrypt --type openssl --private-key Alice.key --certificate Alice.crt report.pdf.cms restored.pdf
+```
+
+Each example assumes a fresh output path. Repeat `--public-key` for multiple
+recipients. For age, use public recipient files and a matching `--private-key`
+identity file, or use `--passphrase` for both operations. GnuPG accepts a local
+key fingerprint or an exported public key file. It uses `--key-file` to read
+the first line of a passphrase file. GnuPG and OpenSSL CMS can add multiple
+credential types during encryption. Any one matching credential opens the file.
+For OpenSSL CMS, `--key-file` supplies a 256-bit AES key as 32 raw bytes or 64
+hex digits. `--passphrase` prompts for the shared passphrase.
+
+Age is built into the CLI. GnuPG requires an installed `gpg`. OpenSSL CMS
+requires installed OpenSSL and uses its matching `libcrypto` for shared AES
+keys and passphrases. The [native implementation plan](../DIRECTIVES/PLAN/FILE_ENCRYPTION.md)
+lists tool paths and package choices for the build hosts.
+
 ### Opt-in session and shutdown close on Linux and BSD
 
 Add one `session-close` call for each managed vault to the script that ends your

@@ -10,6 +10,9 @@ serde.workspace = true
 libc = "0.2.191"
 serde_json.workspace = true
 rpassword = "7.5"
+age = { version = "0.12.1", features = ["armor", "ssh"] }
+libloading = "0.8"
+tempfile = "3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1", features = ["fs"] }

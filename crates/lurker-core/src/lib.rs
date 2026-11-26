@@ -8,6 +8,7 @@ mod api;
 mod bsd;
 mod credentials;
 mod error;
+pub mod file_crypto;
 mod folder;
 #[cfg(target_os = "linux")]
 mod keyslots;
@@ -40,8 +41,9 @@ mod userspace;
 mod workflow;
 
 pub use api::{
-    ActiveVolume, CommandAction, CreateCommand, CreateFilesystem, KeyslotOperation, KeyslotsCommand,
-    MountCommand, NativeVolumeListResponse, OperationResponse, SystemProbe, ToolStatus, UnmountCommand,
+    ActiveVolume, CommandAction, CreateCommand, CreateFilesystem, KeyslotOperation,
+    KeyslotsCommand, MountCommand, NativeVolumeListResponse, OperationResponse, SystemProbe,
+    ToolStatus, UnmountCommand,
 };
 pub use error::{AppError, AppResult};
 #[doc(hidden)]
@@ -51,9 +53,9 @@ pub use model::{
     ColorMode, CreateCipher, PrivilegeMode, ResolvedTargetKind, SourceKind, VolumeType,
 };
 pub use output::{Output, OutputBuffer, OutputEntry, OutputLevel};
-pub use trust::{trusted_privileged_executable, trusted_system_executable};
 #[cfg(not(target_os = "macos"))]
 pub use trust::trusted_privileged_storage_source;
+pub use trust::{trusted_privileged_executable, trusted_system_executable};
 
 #[cfg(target_os = "linux")]
 use crate::linux::{canonical_device_path, read_mountinfo};
@@ -125,7 +127,10 @@ pub fn request_requires_user_session(command: &CommandAction) -> AppResult<bool>
 /// Auto is deliberately conservative: paths/formats may change before helper
 /// execution, and an older helper cannot be trusted to detect a fenced vault.
 pub fn request_requires_cryptomator_fence(command: &CommandAction) -> AppResult<bool> {
-    Ok(folder::requires_fence_protocol(command.volume_type(), cfg!(target_os = "macos")))
+    Ok(folder::requires_fence_protocol(
+        command.volume_type(),
+        cfg!(target_os = "macos"),
+    ))
 }
 
 fn native_directory_request(command: &CommandAction) -> bool {

@@ -1,4 +1,5 @@
 mod cli;
+mod file_cli;
 #[cfg(not(target_os = "macos"))]
 mod session_close;
 
@@ -16,7 +17,11 @@ fn main() {
 }
 
 fn main_entry() -> i32 {
-    match cli::parse_env_args(std::env::args_os()) {
+    let args: Vec<_> = std::env::args_os().collect();
+    if let Some(code) = file_cli::run_if_selected(&args[1..]) {
+        return code;
+    }
+    match cli::parse_env_args(args) {
         Ok(ParseOutcome::Run(command)) => {
             let output = Output::new(command.color_mode);
             let error_output = output.clone();
@@ -76,7 +81,8 @@ fn main_entry() -> i32 {
         }
         Ok(ParseOutcome::Help(help)) => {
             let output = Output::new(help.color_mode);
-            let rendered = cli::render_help(&help.script_name, help.color_mode, help.to_stdout);
+            let mut rendered = cli::render_help(&help.script_name, help.color_mode, help.to_stdout);
+            rendered.push_str(file_cli::HELP);
             if help.to_stdout {
                 output.raw_stdout(&rendered);
             } else {
