@@ -36,6 +36,16 @@ scratch-media assessment; fresh matching builds and runtime tests are queued.
 Sources: https://github.com/jdmanring/linux_hammer2 and
 https://github.com/realchonk/fuse-ufs
 
+The initial UFS1 LUKS1/VeraCrypt observations used an inherited custom write
+module and are **excluded from ordinary-route qualification**. Its loaded
+source version `7932A71D9C37C40AAC2BEE3` matched the old cached custom module,
+while the stock module is `201E180B8E6BE4EDF81A513`. With zero references and no
+UFS mounts, the owner unloaded that module and loaded the stock module. The
+stock loaded/installed versions now match and its module taint is empty.
+`updates/ufs-stock-restoration.json` preserves the evidence. Fresh stock UFS1
+retests and controls are still required. APFS, ZFS and HAMMER2 loaded versions
+also match their currently installed modules. No custom kernel was built.
+
 The required applicability ledger is ten filesystems × thirteen methods.
 LUKS1, LUKS2 and VeraCrypt require independent inner-filesystem cases; gocryptfs,
 CryFS and Cryptomator require independent backing-filesystem cases. Apple's
