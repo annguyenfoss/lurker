@@ -145,7 +145,7 @@ def main():
                 if fs == 'ntfs':
                     if ntfs_driver != 'ntfs-3g': args.append('-i')
                     args += ['-t',ntfs_driver]
-                if fs == 'apfs': args += ['-i','-t','apfs']
+                if fs in {'apfs', 'hammer2'}: args += ['-i', '-t', fs]
                 command([*args, image, mount])
             deadline = time.monotonic() + 5
             while not os.path.ismount(mount) and time.monotonic() < deadline:
