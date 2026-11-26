@@ -9,6 +9,7 @@ use std::process::{Command, Stdio};
 
 fn command() -> AppResult<Command> {
     let path = std::env::var_os("PATH").unwrap_or_default();
+    let elevated = unsafe { libc::geteuid() } == 0;
     let directories = std::env::split_paths(&path).chain(
         [
             "/opt/homebrew/bin",
@@ -20,11 +21,17 @@ fn command() -> AppResult<Command> {
         .map(std::path::PathBuf::from),
     );
     let executable = directories
+        .filter(|dir| dir.is_absolute())
         .flat_map(|dir| [dir.join("gpg"), dir.join("gpg2")])
-        .find(|candidate| {
-            fs::metadata(candidate).is_ok_and(|metadata| {
-                metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
-            })
+        .find_map(|candidate| {
+            if elevated {
+                return crate::trusted_privileged_executable(&candidate).ok();
+            }
+            fs::metadata(&candidate)
+                .is_ok_and(|metadata| {
+                    metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+                })
+                .then_some(candidate)
         })
         .ok_or_else(|| {
             AppError::new("GnuPG is unavailable. Install gpg and make it available on PATH.")
