@@ -1,0 +1,17 @@
+{
+  "suite": "file-encryption-cli",
+  "privilege_route": "login-user",
+  "stages": [
+    {
+      "name": "cli-build",
+      "commands": [["env", "CARGO_PROFILE_DEV_DEBUG=0", "CARGO_INCREMENTAL=0", "cargo", "build", "--locked", "-p", "lurker-cli"]],
+      "timeout": 1800
+    },
+    {
+      "name": "pdf-round-trips",
+      "commands": [["{python}", "scripts/test-file-encryption-cli.py"]],
+      "timeout": 600
+    }
+  ],
+  "artifacts": ["debug/lurker"]
+}
