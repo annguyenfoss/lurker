@@ -1308,10 +1308,12 @@ fn mount_open_mapper(
     }
     if filesystem_type.as_deref() == Some("ntfs") {
         // Prefer the writable native driver; retain NTFS-3G on hosts without it.
-        args.extend([
-            OsString::from("-t"),
-            OsString::from(crate::system::linux_ntfs_mount_driver()),
-        ]);
+        let driver = crate::system::linux_ntfs_mount_driver();
+        if driver != "ntfs-3g" {
+            // mount.ntfs can be an alias for the userspace NTFS-3G helper.
+            args.push("-i".into());
+        }
+        args.extend([OsString::from("-t"), OsString::from(driver)]);
     }
     if filesystem_type.as_deref() == Some("apfs") && !readonly {
         // The separately installed upstream Linux APFS module requires this

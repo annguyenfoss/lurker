@@ -393,19 +393,44 @@ pub(crate) fn linux_filesystem_module(
         Some(crate::api::CreateFilesystem::Hammer2) => Some("hammer2"),
         Some(crate::api::CreateFilesystem::Zfs) => Some("zfs"),
         Some(crate::api::CreateFilesystem::Ufs1) => Some("ufs"),
-        Some(crate::api::CreateFilesystem::Ntfs) if native_filesystem_available("ntfs3") => {
-            Some("ntfs3")
-        }
+        Some(crate::api::CreateFilesystem::Ntfs) => match linux_ntfs_mount_driver() {
+            "ntfs3" => Some("ntfs3"),
+            "ntfs" => Some("ntfs"),
+            _ => None,
+        },
         _ => None,
     }
 }
 
 pub(crate) fn linux_ntfs_mount_driver() -> &'static str {
     if native_filesystem_available("ntfs3") {
-        "ntfs3"
-    } else {
-        "ntfs-3g"
+        return "ntfs3";
     }
+    // The newer ntfs module is writable, unlike the legacy reader. Check its
+    // explicit capability identity rather than assuming every ntfs module
+    // is writable, including older kernels and vendor backports.
+    if let Ok((program, arguments)) = linux_module_invocation(
+        "modinfo",
+        &["-F".into(), "description".into(), "ntfs".into()],
+    ) {
+        if Command::new(program)
+            .args(arguments)
+            .output()
+            .is_ok_and(|output| {
+                output.status.success()
+                    && writable_ntfs_description(&String::from_utf8_lossy(&output.stdout))
+            })
+        {
+            return "ntfs";
+        }
+    }
+    "ntfs-3g"
+}
+
+fn writable_ntfs_description(description: &str) -> bool {
+    description
+        .lines()
+        .any(|line| line.trim() == "NTFS read-write filesystem driver")
 }
 
 fn native_filesystem_available(name: &str) -> bool {
@@ -786,6 +811,21 @@ mod tests {
         assert!(super::find_executable_with_path("true", None).is_some());
         assert!(super::find_executable_with_path("true", Some("".into())).is_none());
         assert!(super::find_executable_with_path("lurker-no-such-tool", None).is_none());
+    }
+
+    #[test]
+    fn native_ntfs_selection_rejects_legacy_reader_descriptions() {
+        assert!(super::writable_ntfs_description(
+            "NTFS read-write filesystem driver\n"
+        ));
+        for description in [
+            "NTFS filesystem driver",
+            "NTFS 1.2/3.x driver",
+            "NTFS read-only filesystem driver",
+            "",
+        ] {
+            assert!(!super::writable_ntfs_description(description));
+        }
     }
 
     #[test]
