@@ -124,7 +124,7 @@ def main():
                 if fs == 'apfs': options.append('readwrite')
                 args = ['sudo', '-n', 'mount', '-o', ','.join(options)]
                 if fs == 'ntfs': args += ['-t','ntfs-3g']
-                if fs == 'apfs': args += ['-i','-t','apfs']
+                if fs in {'apfs', 'hammer2'}: args += ['-i', '-t', fs]
                 command([*args, image, mount])
             deadline = time.monotonic() + 5
             while not os.path.ismount(mount) and time.monotonic() < deadline:
