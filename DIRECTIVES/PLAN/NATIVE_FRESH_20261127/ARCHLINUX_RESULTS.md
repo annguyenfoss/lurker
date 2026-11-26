@@ -28,23 +28,47 @@ Fresh runtime tests use an isolated administrator-owned staging prefix, not an
 installed system package. Existing LKL functionality is retained but excluded
 from OS-native filesystem acceptance.
 
-The initial container matrix is running through ten filesystem rows with
-LUKS2, LUKS1 and privileged VeraCrypt, followed by directory encryption on each
-backing filesystem. The shared downloaded Bitcoin, Ethereum and Transformer
-PDFs and text are used. A first clean LUKS2/ext4 attempt with an incorrectly
-typed source field was excluded; its logs remain under
-`cases/abandoned-metadata-typo/`. Correctly identified tests restart in
-`cases/baseline/`.
+The complete initial container matrix recorded 56 attempts: 44 passed and 12
+failed. Disk containers passed 24 of 30 attempts across ext4, Btrfs, XFS, APFS,
+UFS2, HAMMER2, NTFS and exFAT. UFS1 and missing ZFS modules account for six
+initial failures. Directory encryption passed 20 cases; CryFS failed on UFS2
+and exFAT because its atomic publication requires unavailable hardlinks, and
+Cryptomator returned EIO on UFS2 and NTFS-3G. UFS1 and ZFS backing setup failed.
+The original source and binary identities above apply to all initial cases.
 
-Known issues awaiting the complete initial batch: stock UFS1 omits
-`CONFIG_UFS_FS_WRITE`; stable OpenZFS 2.4.4 lacks Linux 7.3 compatibility.
-HAMMER2 has passed the first LUKS2 lifecycle using the shared 0.5 GiB fixture;
-the formatter's stated 1 GiB minimum for explicit `-s` is not an observed
-automatic-size limitation. A current
-OpenZFS development source advertising Linux 7.3 support has been fetched for
-ordinary external-module assessment. Custom kernels remain deferred. Debian
-also reproduced a shared kmod applet-name bug when canonicalizing modinfo and
-modprobe; the Linux owner is preparing a narrow fix after initial attempts.
+Matched native NTFS3 backing controls passed all three directory engines with
+the same candidate, engines and downloaded payload. NTFS-3G Cryptomator failure
+is therefore a driver-route limitation, with an eligible working alternative.
+Native publication controls show exFAT supports atomic rename-without-replace
+and preserves the destination on EEXIST; UFS2 fuse-ufs rejects both hardlinks
+and rename-without-replace. Native permissions, ownership, ACL and reflink
+observations are retained separately and do not establish every engine's
+feature support. Stock UFS1 write support is absent; the loaded UFS module's
+source version matches the new stock module. Custom kernels remain deferred.
+
+Ordinary external OpenZFS development source
+https://github.com/openzfs/zfs commit
+`3b6d727ddd8d6d005774605964f044f364ee6456` advertises Linux 7.3 support. Its
+2.4.99 module and userland built with one Make worker, staged unprivileged,
+then installed into an administrator-owned isolated prefix. Module loading
+succeeded; the old 2.4.4 prefix remains intact. The first fresh ZFS/LUKS2
+payload lifecycle passed; remaining ZFS cases are running.
+
+Shared fixes committed after the complete initial attempt batch include kmod
+applet-name preservation (`294e983`), explicit ext4 formatter selection
+(`1b03e52`, corrected native-test import `f22ee9f`), verified native mount
+readiness (`836bf84`), and preserving failed fixtures at their active backing
+paths (`f78b88e`). Native module and ext4-superblock regressions each passed.
+The readiness overlay passed 78 core unit tests and three NTFS-3G payload
+lifecycles. It is precommit regression evidence, not final frozen qualification.
+The first ext4 regression log contained a missing-trait compilation failure;
+the corrected log and follow-up commit are retained without rewriting history.
+NTFS3 preference and backend/native-driver fixes remain under validation.
+
+A first clean LUKS2/ext4 attempt with an incorrectly typed source field was
+excluded; its logs remain under `cases/abandoned-metadata-typo/`. Original
+backing setup failures predate the harness preservation fix; fresh native
+controls retain their failed images. No native device passes are claimed yet.
 
 Private evidence is under
 `target/goal-validation/native-fresh-20261127/hosts/archlinux/`. The persistent
@@ -53,6 +77,6 @@ remote round root is
 prescribed `/tmp/lurker-native-fresh-20261127-archlinux` symlink. The initial
 inventory was saved before reboot; the package transaction was recovered from
 `/var/log/pacman.log` after volatile `/tmp` was cleared. The applicability
-ledger currently marks unfinished native combinations pending. Device tests,
+ledger retains unfinished native combinations as pending. Device tests,
 feature probes, credential/cipher variations, reboot persistence, final
 candidate validation and final cleanup remain incomplete.
