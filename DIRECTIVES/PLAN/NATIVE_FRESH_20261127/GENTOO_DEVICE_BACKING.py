@@ -18,7 +18,7 @@ def command(argv,**kw):
  if r.returncode:raise RuntimeError(str(argv[0])+' failed: '+(r.stderr or r.stdout)[-3000:])
  return r.stdout
 def guard():
- identity=json.loads(command(['lsblk','--json','--bytes','-o','PATH,SERIAL,SIZE,TYPE,MOUNTPOINTS',device]))['blockdevices'][0]
+ identity=json.loads(command(['lsblk','--json','--tree','--bytes','-o','PATH,SERIAL,SIZE,TYPE,MOUNTPOINTS',device]))['blockdevices'][0]
  if identity.get('serial')!='lurker-fresh-gentoo' or identity.get('size')!=2147483648 or identity.get('type')!='disk':raise RuntimeError('Physical scratch identity differs')
  if identity.get('children') or any(identity.get('mountpoints') or []) or list((Path('/sys/class/block')/device.name/'holders').iterdir()):raise RuntimeError('Physical scratch is busy; refusing format')
  return identity

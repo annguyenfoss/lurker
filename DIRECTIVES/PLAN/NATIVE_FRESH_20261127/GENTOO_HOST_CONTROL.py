@@ -14,7 +14,7 @@ def command(argv,allowed=(0,)):
 def identity(path,serial,size):
  d=Path(path).resolve(strict=True)
  if not stat.S_ISBLK(d.stat().st_mode):raise RuntimeError('Block device required')
- j=json.loads(command(['lsblk','--json','--bytes','-o','PATH,SERIAL,SIZE,TYPE,FSTYPE,UUID,MOUNTPOINTS',d]))['blockdevices'][0]
+ j=json.loads(command(['lsblk','--json','--tree','--bytes','-o','PATH,SERIAL,SIZE,TYPE,FSTYPE,UUID,MOUNTPOINTS',d]))['blockdevices'][0]
  if j.get('serial')!=serial or j.get('size')!=size or j.get('type')!='disk':raise RuntimeError('Owned disk identity differs')
  return d,j
 def mount_record(path):

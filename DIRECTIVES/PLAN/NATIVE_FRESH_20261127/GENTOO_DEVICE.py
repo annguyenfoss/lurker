@@ -27,7 +27,7 @@ def main():
     if os.geteuid()!=0: p.error('Use administrator-controlled harness and binary through sudo')
     device=a.device.resolve(strict=True)
     if not stat.S_ISBLK(device.stat().st_mode): p.error('Expected identified scratch block device')
-    identity=json.loads(subprocess.check_output(['lsblk','--json','--bytes','-o','PATH,SERIAL,SIZE,TYPE,MOUNTPOINTS',str(device)]))['blockdevices'][0]
+    identity=json.loads(subprocess.check_output(['lsblk','--json','--tree','--bytes','-o','PATH,SERIAL,SIZE,TYPE,MOUNTPOINTS',str(device)]))['blockdevices'][0]
     if identity.get('serial')!=a.serial or a.serial!='lurker-fresh-gentoo' or identity.get('type')!='disk' or identity.get('size')!=2147483648:
         p.error('Scratch identity differs; refusing destructive commands')
     spec=importlib.util.spec_from_file_location('payload',Path(__file__).with_name('test-filesystem-cli.py'))
@@ -67,7 +67,7 @@ def main():
                 if receipt['exit_code'] or receipt['timed_out']: raise RuntimeError('CLI '+action+' failed')
             try:
                 # Re-check holders and mounts before every destructive create.
-                current=json.loads(subprocess.check_output(['lsblk','--json','-o','PATH,SERIAL,TYPE,MOUNTPOINTS',str(device)]))['blockdevices'][0]
+                current=json.loads(subprocess.check_output(['lsblk','--json','--tree','-o','PATH,SERIAL,TYPE,MOUNTPOINTS',str(device)]))['blockdevices'][0]
                 holders=list((Path('/sys/class/block')/device.name/'holders').iterdir())
                 if current.get('serial')!=a.serial or current.get('children') or any(current.get('mountpoints') or []) or holders:
                     row['identity_or_busy_guard_failed']=True
