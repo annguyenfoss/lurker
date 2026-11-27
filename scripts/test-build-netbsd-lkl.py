@@ -20,6 +20,22 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD" and os.environ.get("LURKER_NETBSD_LKL_SOURCE"), "built native LKL library required")
+    def test_captured_credentials_umask_and_restoration_poison(self):
+        source = Path(os.environ["LURKER_NETBSD_LKL_SOURCE"]).resolve(strict=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "credential-control"
+            control = BUILDER.ROOT / "native/netbsd/lkl/credential-control.c"
+            subprocess.run(["/usr/bin/cc", "-O2", "-g",
+                            "-I" + str(source / "tools/lkl/include"),
+                            "-I" + str(source / "tools/lkl/include/lkl"), str(control),
+                            str(source / "tools/lkl/liblkl.a"), "-lpthread", "-lrt", "-o", str(binary)],
+                           check=True, timeout=30)
+            result = subprocess.run([str(binary), str(Path(tmp) / "held-source")],
+                                    capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            print(result.stdout, end="")
+
     @unittest.skipUnless(platform.system() == "NetBSD" and os.environ.get("LURKER_NETBSD_LKL_SOURCE"), "built native LKL UAPI required")
     def test_native_file_transport_retains_transient_io_failures(self):
         source = Path(os.environ["LURKER_NETBSD_LKL_SOURCE"]).resolve(strict=True)

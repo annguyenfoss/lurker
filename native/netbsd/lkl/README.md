@@ -151,6 +151,23 @@ failures, not hardware-generated errors. They prove the sticky-error requirement
 they do not establish Btrfs/XFS formatting, native mounted access or driver
 lifecycle support. The raw diagnostic client still does not use this component.
 
+`netbsd-caller.h` obtains bounded, birth/UID/GID/full-group-stable native
+`KERN_PROC2` snapshots. PID zero, dead callers, short results and live invalid
+queries cannot become authenticated requests. `netbsd-credentials.h` applies
+captured authority and a validated FUSE-context umask inside LKL, then verifies
+restoration of root IDs, empty supplementary groups and umask zero. Native VFS
+already masks creation modes on this ABI; context umask zero preserves those
+modes rather than applying LKL's default mask again.
+
+A restoration failure permanently poisons new operations. It does not exit or
+close source/channel resources. Only previously captured-authority barrier and
+release cleanup can recover enough state to close held handles; recovery never
+clears the failure. The native RAM-only control checks an actual dead opener's
+held authority, owner/group, root-chown denial, set-ID clearing, explicit/zero
+umasks and an injected restoration failure while its native source FD stays
+held. This component is not yet wired into the diagnostic frontend and does
+not establish mounted cleanup behavior.
+
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
 https://man.netbsd.org/mmap.2
 https://github.com/bminor/glibc/blob/glibc-2.42/elf/elf.h
