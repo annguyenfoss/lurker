@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <unistd.h>
 static int has(const struct ob_caller *c,gid_t group)
@@ -16,7 +17,9 @@ int main(int argc,char **argv)
     assert(!ob_stable_caller(tid,1300,1300,&before) && has(&before,0));
     DIR *dir=opendir(argv[4]);assert(dir);assert(!closedir(dir));
     int dfd=open(argv[4],O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);assert(dfd>=0);
+    struct stat st;assert(!fstat(dfd,&st) && st.st_uid==32766 && st.st_gid==0 && (st.st_mode&07777)==0770);
     int fd=openat(dfd,"group-only",O_RDWR|O_NOFOLLOW|O_CLOEXEC);assert(fd>=0);
+    assert(!fstat(fd,&st) && st.st_uid==32766 && st.st_gid==0 && (st.st_mode&07777)==0660);
     assert(pwrite(fd,"C",1,0)==1);char c;assert(pread(fd,&c,1,0)==1 && c=='C');assert(!close(fd));assert(!close(dfd));
     assert(write(command,"G",1)==1);assert(read(ack,&c,1)==1 && c=='G');
     assert(!ob_stable_caller(tid,1300,1300,&after));
