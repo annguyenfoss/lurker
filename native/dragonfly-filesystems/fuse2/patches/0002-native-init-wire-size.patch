@@ -1,0 +1,29 @@
+--- lib/fuse_lowlevel.c
++++ lib/fuse_lowlevel.c
+@@ -11,6 +11,9 @@
+ #include "config.h"
+ #include "fuse_i.h"
+ #include "fuse_kernel.h"
++#ifdef __DragonFly__
++#include "dragonfly-init.h"
++#endif
+ #include "fuse_opt.h"
+ #include "fuse_misc.h"
+ #include "fuse_common_compat.h"
+@@ -1884,6 +1887,16 @@
+ 		        outarg.congestion_threshold);
+ 	}
+ 
++#ifdef __DragonFly__
++    /* The native kernel audits its complete INIT structure even after a
++     * lower minor-version negotiation. Add only zero-filled extension fields. */
++    if (arg->minor >= 23) {
++        struct dragonfly_fuse_init_out wire = {0};
++        wire.prefix = outarg;
++        send_reply_ok(req, &wire, sizeof(wire));
++        return;
++    }
++#endif
+ 	send_reply_ok(req, &outarg, arg->minor < 5 ? 8 : sizeof(outarg));
+ }
+ 

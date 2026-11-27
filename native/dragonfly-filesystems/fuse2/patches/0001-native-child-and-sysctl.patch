@@ -1,0 +1,43 @@
+--- lib/mount_bsd.c
++++ lib/mount_bsd.c
+@@ -207,7 +207,8 @@
+ /* Check if kernel is doing init in background */
+ static int init_backgrounded(void)
+ {
+-	unsigned ibg, len;
++	unsigned ibg;
++	size_t len;
+ 
+ 	len = sizeof(ibg);
+ 
+@@ -280,7 +281,7 @@
+ 			if (pid == -1) {
+ 				perror("fuse: fork() failed");
+ 				close(fd);
+-				exit(1);
++				_exit(1);
+ 			}
+ 		}
+ 
+@@ -290,7 +291,7 @@
+ 
+ 			if (! fdnam && asprintf(&fdnam, "%d", fd) == -1) {
+ 				perror("fuse: failed to assemble mount arguments");
+-				exit(1);
++				_exit(1);
+ 			}
+ 
+ 			argv[a++] = mountprog;
+@@ -303,10 +304,10 @@
+ 			argv[a++] = NULL;
+ 			execvp(mountprog, (char **) argv);
+ 			perror("fuse: failed to exec mount program");
+-			exit(1);
++			_exit(1);
+ 		}
+ 
+-		exit(0);
++		_exit(0);
+ 	}
+ 
+ 	if (waitpid(cpid, &status, 0) == -1 || WEXITSTATUS(status) != 0) {

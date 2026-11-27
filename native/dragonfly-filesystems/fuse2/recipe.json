@@ -1,0 +1,98 @@
+{
+  "archive_sha256": "d0e69d5d608cc22ff4843791ad097f554dd32540ddc9bed7638cc6fea7c1b4b5",
+  "DPorts_revision": "40ee064a7f3a03b897130a8193a16feb67684934",
+  "official_patches": [
+    {
+      "name": "patch-lib_fuse__versionscript",
+      "sha256": "13971824a1acccba8cfa00447755b87e23ca6cb6a2e4c2d30533a6f0dd24cd3a",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/files/patch-lib_fuse__versionscript"
+    },
+    {
+      "name": "patch-lib_helper.c",
+      "sha256": "0220a136c6d66731ca283b7f92e3e0a5dc864661d63768ce072483bb82fea696",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/files/patch-lib_helper.c"
+    },
+    {
+      "name": "patch-lib_mount__bsd.c",
+      "sha256": "f628a149a605cf098d8dfc956982f351a4d89947289d17f55d31a09ef7908c43",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/files/patch-lib_mount__bsd.c"
+    },
+    {
+      "name": "patch-lib_mount__util.c",
+      "sha256": "8aad9b90afca1b3721bc4583e21b9296e8df526340f1408a0b16312c2c2b14d3",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/files/patch-lib_mount__util.c"
+    },
+    {
+      "name": "patch-lib_mount__util.h",
+      "sha256": "25fb94c36e2dbc2cee9f23527e57daf79ef9328ffd1d0c174a3cb8c0625bc619",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/files/patch-lib_mount__util.h"
+    },
+    {
+      "name": "dragonfly/patch-configure.ac",
+      "sha256": "e9a33af0d710eeb7fbe13decffcc607f44c441d5c8fc1dec09ab6794d8d14106",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/dragonfly/patch-configure.ac"
+    },
+    {
+      "name": "dragonfly/patch-include_fuse__compat.h",
+      "sha256": "b9f684f79b5ec562371cd93119969d75180fff07f96960f4d60391ddf2d506fe",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/dragonfly/patch-include_fuse__compat.h"
+    },
+    {
+      "name": "dragonfly/patch-include_fuse__lowlevel__compat.h",
+      "sha256": "1d2a11982a2422cc9e4ba10e8e8ef6154ec85c54b8fccc813114f2e9f569b198",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/dragonfly/patch-include_fuse__lowlevel__compat.h"
+    },
+    {
+      "name": "dragonfly/patch-lib_fuse.c",
+      "sha256": "8823cd05effd7c1ef476e5ff686aa2cc4b84b3a06f33a557b63ca14f2d811177",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/dragonfly/patch-lib_fuse.c"
+    },
+    {
+      "name": "dragonfly/patch-lib_fuse__lowlevel.c",
+      "sha256": "72bf56c840ac10c8198a174ef0339f15357ec4a950807461197828ac30790225",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/dragonfly/patch-lib_fuse__lowlevel.c"
+    },
+    {
+      "name": "dragonfly/patch-lib_helper.c",
+      "sha256": "71d5157ad4c24d0b69b3b63b3ed36acd619bd3799428a555e58c8411a6f5414d",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs/dragonfly/patch-lib_helper.c"
+    }
+  ],
+  "schema": 1,
+  "name": "libfuse",
+  "version": "2.9.9",
+  "target_os": "DragonFly",
+  "license": "LGPL-2.1-only",
+  "source_url": "https://github.com/libfuse/libfuse/releases/download/fuse-2.9.9/fuse-2.9.9.tar.gz",
+  "kind": "static support library of separately-installed external native host filesystem prerequisite",
+  "distribution": "Never include in Lurker app or private crypto package; global installed provider remains unchanged.",
+  "DragonFly_patches": [
+    "patches/0001-native-child-and-sysctl.patch",
+    "patches/0002-native-init-wire-size.patch"
+  ],
+  "source_files": [
+    {
+      "path": "dragonfly-init.h",
+      "target": "lib/dragonfly-init.h",
+      "sha256": "0caeb7506e110b4016026c3dbd52d0d79d6c0df682b3601d66f3f041b186b223"
+    }
+  ],
+  "configure": [
+    "--prefix=/usr/local",
+    "--with-pkgconfigdir=/usr/local/libdata/pkgconfig",
+    "--disable-shared",
+    "--enable-static",
+    "--disable-example",
+    "--disable-util",
+    "--disable-kernel-module"
+  ],
+  "build": [
+    "gmake",
+    "-j1",
+    "-C",
+    "lib",
+    "V=1"
+  ],
+  "jobs": 1,
+  "scope": "Native ABI and static library compilation passed; final linked driver privilege/runtime remains unqualified."
+}
