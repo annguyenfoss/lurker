@@ -169,6 +169,33 @@ class AdapterInputs(unittest.TestCase):
         self.assertLess(setup.index("tick_suspend_local();"), setup.index("lkl_ops->timer_quiesce();"))
         self.assertLess(setup.index("lkl_ops->timer_quiesce();"), setup.index("free_mem();", setup.index("lkl_ops->timer_quiesce();")))
 
+    @unittest.skipUnless(os.environ.get("LURKER_OPENBSD_LKL_ARCHIVE"), "requires native pinned archive")
+    def test_native_signal_aliases_restored_after_reviewed_import(self):
+        archive = Path(os.environ["LURKER_OPENBSD_LKL_ARCHIVE"])
+        self.assertEqual(build.digest(archive), build.SOURCE_SHA256)
+        rendered = build.patched_inputs(archive, ROOT / build.HOST_PATCH, build.HOST_PATCH_SHA256)
+        text = rendered["tools/lkl/include/lkl.h"].decode()
+        start = text.index('#pragma push_macro("__unused")')
+        end = text.index('#pragma pop_macro("__unused")') + len('#pragma pop_macro("__unused")')
+        guard = text[start:end] + "\n"
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            stub = root / "lkl/asm/syscalls.h"
+            stub.parent.mkdir(parents=True)
+            stub.write_text('struct imported_aliases {int si_pid,si_uid,si_status; void *si_addr; int sa_handler;};\n'
+                            'static int imported_fields(void){struct imported_aliases s={1,2,3,0,4};'
+                            'return s.si_pid+s.si_uid+s.si_status+s.sa_handler;}\n')
+            source = root / "aliases.c"
+            source.write_text('#include <signal.h>\n#include <endian.h>\n#include <netinet/in.h>\n' + guard +
+                              'int main(void){siginfo_t n={0};struct sigaction a={0};'
+                              'n.si_pid=123;n.si_uid=456;n.si_status=7;n.si_addr=0;'
+                              'a.sa_handler=SIG_IGN;return !(imported_fields()==10 && a.sa_handler==SIG_IGN); }\n')
+            binary = root / "aliases"
+            subprocess.run(["/usr/bin/cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror",
+                            "-I" + str(root), str(source), "-o", str(binary)],
+                           check=True, capture_output=True, timeout=30)
+            subprocess.run([str(binary)], check=True, capture_output=True, timeout=10)
+
     @unittest.skipUnless(os.environ.get("LURKER_OPENBSD_LKL_ELF_HEADER"), "requires verified ELF input cache")
     def test_native_endian_and_unchanged_elf_file_format_header(self):
         with tempfile.TemporaryDirectory() as temp:
