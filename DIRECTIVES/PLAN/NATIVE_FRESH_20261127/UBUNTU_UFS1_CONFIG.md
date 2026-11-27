@@ -125,3 +125,8 @@ mounted intentionally; the new2GiB scratch remains attached with four closed
 partitions and its final raw SHA256 recorded. Images, credentials, failures,
 source/config inputs and the bootable original are retained. No unrelated
 nine-filesystem test was rerun, and no product binary was rebuilt.
+
+Folder cases used explicit `--mount-root` plaintext FUSE mountpoints on the ext4
+work volume, with ciphertext backing on UFS1, as recorded in their arguments.
+Host FUSE policy remained unchanged. The desktop sample above used the native
+physical LUKS1/UFS1 row, separately from those folder-backend cases.
