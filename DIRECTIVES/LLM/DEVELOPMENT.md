@@ -37,6 +37,40 @@ old receipts never count as freshly executed tests.
    artifact identities, test outcomes, and remaining issues or scope
    exceptions. Preserve unrelated work in the index and working tree.
 
+## Kernel integration boundary
+
+Lurker integrates established kernel capabilities; it does not act as an
+experimental kernel developer. Judge a change by its provenance, maturity and
+technical effect, not whether it is needed specifically to make Lurker work.
+The phrase "Lurker-specific kernel patch" is not a reliable scope distinction.
+
+- **Allowed:** apply pre-made patches, or follow established patch/configuration
+  guidance, for specific well-known upstream or mainstream kernel, driver or
+  OS projects. Applying such a change for Lurker is still in scope. Building
+  and testing that established configuration to verify Lurker integration is
+  also in scope, subject to the round's host and scheduling restrictions.
+- **Out of scope:** invent unproven, unknown or novel kernel code, kernel ABI
+  changes, lifecycle hooks or experimental ports, then use this project to
+  develop and validate that kernel work. A small patch or a passing local test
+  does not make novel kernel development eligible. Newly publishing our own
+  experimental patch does not turn it into an established upstream solution.
+
+This boundary covers host boot kernels, kernel modules and kernels embedded in
+native userspace tools such as LKL. Calling an embedded kernel a library does
+not exempt its kernel changes. Conversely, ordinary userspace integration is
+not automatically kernel development merely because it uses kernel APIs or
+builds an established kernel-based tool.
+
+Record the existing patch or relevant documented procedure, its upstream or
+mainstream project, and the evidence that the approach is already established
+and tested. Evaluate build, header and linker changes by what they do; neither
+their pathname nor implementation language settles the classification. If a
+route requires novel kernel development and no established alternative is
+available, report the capability limitation and continue other in-scope work.
+The existing deferral of eligible kernel-build work until the ordinary-route
+assessment is finished remains in force; deferral is not permission to perform
+experimental kernel development later.
+
 ## Remote execution boundary
 
 Use the workstation to edit, dispatch SSH jobs, and collect evidence. Run

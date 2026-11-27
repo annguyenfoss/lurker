@@ -73,11 +73,17 @@ stdin only, never tracked files, argv, transcripts or reported output.
 Orderly VM reboot is permitted after observing job/mount state and retaining
 evidence. Never reboot/shutdown Buran. Record a macOS update requiring reboot
 as pending; do not claim it installed/running. The user's host authorization
-covers scoped updates without another permission round. Custom kernel builds
-on the ten VMs are deferred until ordinary candidates and tests have finished
-and the complete ordinary-route assessment has been reported. Do not begin
-them merely because one cell lacks a stock driver. Ordinary matching external
-driver modules are assessed separately from a customized kernel.
+covers scoped updates without another permission round. Kernel work follows
+the integration boundary in `DIRECTIVES/LLM/DEVELOPMENT.md`: applying pre-made
+patches or established guidance from well-known upstream/mainstream projects
+is allowed; inventing and validating novel kernel code, ABI hooks or ports is
+out of scope, including inside LKL. "Needed for Lurker" does not decide scope.
+Eligible kernel builds on the ten VMs remain deferred until ordinary candidates
+and tests have finished and the complete ordinary-route assessment has been
+reported. Do not begin them merely because one cell lacks a stock driver.
+Ordinary matching external driver modules are assessed separately, with the
+same established-solution requirement. Passing our tests alone does not qualify
+an experimental kernel change.
 
 For device tests attach a new small qcow2 per VM through qemu:///system libvirt.
 Record domain, image, serial and guest identity before any destructive command.
