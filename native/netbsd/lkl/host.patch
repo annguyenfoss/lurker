@@ -203,12 +203,12 @@
  	if (ret < 0) {
 --- a/tools/lkl/include/lkl.h
 +++ b/tools/lkl/include/lkl.h
-@@ -20,7 +20,79 @@
+@@ -20,7 +20,82 @@
  #pragma push_macro("__unused")
  #undef __unused
  
 +#if defined(__NetBSD__)
-+/* Native signal aliases must not rewrite imported LKL field names. */
++/* Native signal/IP aliases must not rewrite imported LKL field names. */
 +#pragma push_macro("si_fd")
 +#undef si_fd
 +#pragma push_macro("si_args")
@@ -253,9 +253,12 @@
 +#undef si_pe_report_event
 +#pragma push_macro("si_code")
 +#undef si_code
++#pragma push_macro("ipi_spec_dst")
++#undef ipi_spec_dst
 +#endif
  #include <lkl/asm/syscalls.h>
 +#if defined(__NetBSD__)
++#pragma pop_macro("ipi_spec_dst")
 +#pragma pop_macro("si_code")
 +#pragma pop_macro("si_pe_report_event")
 +#pragma pop_macro("si_band")

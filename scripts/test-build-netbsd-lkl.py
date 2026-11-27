@@ -34,15 +34,19 @@ class BuildInputs(unittest.TestCase):
             stub = work / "lkl/asm/syscalls.h"
             stub.parent.mkdir(parents=True)
             stub.write_text("struct imported_signal {int si_signo,si_errno,si_code,si_pid,si_uid;};\n"
-                            "static int imported_signal_fields(void) {struct imported_signal s={1,2,3,4,5};return s.si_signo+s.si_errno+s.si_code+s.si_pid+s.si_uid;}\n")
-            source = "#include <signal.h>\n#include <sys/endian.h>\n" + guard + "\n" + r'''
+                            "static int imported_signal_fields(void) {struct imported_signal s={1,2,3,4,5};return s.si_signo+s.si_errno+s.si_code+s.si_pid+s.si_uid;}\n"
+                            "struct imported_packet {int ipi_spec_dst,ipi_addr;};\n"
+                            "static int imported_packet_fields(void) {struct imported_packet p={3,4};return p.ipi_spec_dst+p.ipi_addr;}\n")
+            source = "#include <signal.h>\n#include <sys/endian.h>\n#include <netinet/in.h>\n" + guard + "\n" + r'''
 int main(void) {
     siginfo_t native={0};
     native.si_signo=SIGUSR1; native.si_errno=1; native.si_code=2;
     native.si_pid=123; native.si_uid=456;
+    struct in_pktinfo packet={0}; packet.ipi_spec_dst.s_addr=7;
     return !(imported_signal_fields()==15 && native.si_signo==SIGUSR1 &&
              native.si_errno==1 && native.si_code==2 &&
-             native.si_pid==123 && native.si_uid==456);
+             native.si_pid==123 && native.si_uid==456 &&
+             imported_packet_fields()==7 && packet.ipi_addr.s_addr==7);
 }
 '''
             (work / "probe.c").write_text(source)
