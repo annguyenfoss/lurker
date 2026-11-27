@@ -1,5 +1,12 @@
 # Debian fresh native qualification — complete within the recorded host scope
 
+The subsequent targeted namespace supplement passed 28 scopes but exposed a
+UFS2 unlink `EIO` and daemon loss. Its three remaining UFS2 rows are quarantined;
+NTFS and HAMMER2 supplement rows remain held. The older payload matrices below
+retain their original narrower scope and identities, without establishing full
+namespace support. See `DEBIAN_NAMESPACE_SUPPLEMENT.md` for exact receipts,
+preserved failure ciphertext and terminal normal cleanup.
+
 The new 2026-11-27 round completes **60/60 container cells and 60/60 scratch
 cells** across ten filesystems and six applicable Linux encryption methods.
 Scratch cells comprise three direct disk-encryption methods and three directory
