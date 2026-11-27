@@ -41,6 +41,9 @@ fn keyfile_only_userspace_workflows() {
         .unwrap();
     fs::write(&key, random).unwrap();
     fs::write(&wrong, b"wrong keyfile").unwrap();
+    for path in [&key, &wrong] {
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+    }
     for cipher in [
         CreateCipher::Aes,
         CreateCipher::Serpent,
@@ -119,6 +122,7 @@ impl Fixture {
             std::process::id()
         ));
         fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         let runtime = root.join("runtime");
         fs::create_dir(&runtime).unwrap();
         fs::set_permissions(&runtime, fs::Permissions::from_mode(0o700)).unwrap();
@@ -168,7 +172,7 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        let mut clean = true;
+        let mut clean = !std::thread::panicking();
         if let Ok(volumes) = list_active_volumes() {
             for v in volumes {
                 if v.privilege_mode == PrivilegeMode::Unprivileged
@@ -298,6 +302,12 @@ fn real_userspace_veracrypt_workflows() {
         assert_eq!(volume.filesystem_type.as_deref(), Some("btrfs"));
         assert!(!volume.readonly);
         assert_eq!(fs::metadata(&at).unwrap().uid(), effective_uid());
+        assert_eq!(
+            fs::metadata(&at).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        // Existing-volume opens must preserve deliberate permission changes.
+        fs::set_permissions(&at, fs::Permissions::from_mode(0o750)).unwrap();
         fs::create_dir(at.join("folder")).unwrap();
         fs::write(at.join("folder/data"), b"persistent userspace data").unwrap();
         assert_eq!(
@@ -350,6 +360,10 @@ fn real_userspace_veracrypt_workflows() {
         );
         ok(mount(&source, &at));
         assert!(!f.active(&source).readonly);
+        assert_eq!(
+            fs::metadata(&at).unwrap().permissions().mode() & 0o777,
+            0o750
+        );
         assert_eq!(
             fs::read(at.join("renamed")).unwrap(),
             b"persistent userspace data"

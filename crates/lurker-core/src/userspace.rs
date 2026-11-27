@@ -1194,6 +1194,14 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
                 None,
             )?;
             start_filesystem(tools, &dir, &mut session, true)?;
+            // Formatters commonly initialize the root as 0755. Protect only
+            // this newly formatted root; reopening existing volumes preserves
+            // their stored ownership and permissions.
+            fs::set_permissions(&init_mount, fs::Permissions::from_mode(0o700))
+                .map_err(|e| AppError::io("Failed to protect new filesystem root", e))?;
+            File::open(&init_mount)
+                .and_then(|root| root.sync_all())
+                .map_err(|e| AppError::io("Failed to sync new filesystem root", e))?;
             Ok(())
         })();
         live_session = Some((dir.clone(), session.clone()));
