@@ -1,238 +1,153 @@
 # Arch Linux fresh native qualification
 
-Status: running; no prior-round receipts count toward this round.
+Status: final follow-up running. No prior-round runtime receipts count. All
+applicable container and physical baseline cells are reconciled; stock UFS1 is
+blocked by its read-only driver. Physical cipher variations, final desktop and
+reboot gates remain in progress.
 
-The full synchronized pacman update completed on 2026-11-27 local time,
-installing Linux and headers 7.3.6, tpm2-tss and zstd. An orderly reboot changed
-boot ID from `68eb9a41-7454-4f21-9dbf-165c9e7f6951` to
-`0ba450f0-990b-418d-ae87-a0016f1db4e4`; the running kernel is
-`7.3.6-arch1-1`. ACL tools, attributes, gocryptfs 2.7.0, stable CryFS 1.0.3 and
-DKMS were installed. APFS 0.3.22 from the official Arch DKMS package built and
-loaded against that kernel. The ordinary external HAMMER2 module built from
-https://github.com/jdmanring/linux_hammer2 commit
-`09c130bf8bac021b0bb6a8ed9c9685a5bd9bbbd0` and loaded successfully. These
-installation observations are not filesystem lifecycle passes.
+The synchronized pacman update and orderly reboot completed. Running kernel is
+`7.3.6-arch1-1`; boot ID changed from `68eb9a41-7454-4f21-9dbf-165c9e7f6951`
+to `0ba450f0-990b-418d-ae87-a0016f1db4e4`. Native packages include APFS DKMS
+0.3.22, matching the running kernel. Ordinary external HAMMER2 source is
+https://github.com/jdmanring/linux_hammer2 at
+`09c130bf8bac021b0bb6a8ed9c9685a5bd9bbbd0`. OpenZFS source is
+https://github.com/openzfs/zfs at
+`3b6d727ddd8d6d005774605964f044f364ee6456`, version 2.4.99 with Linux 7.3
+support. Both matching external modules and native tools were built, installed
+and exercised freshly; the old OpenZFS 2.4.4 prefix is preserved. No custom
+kernel was built. Stock UFS module source identity matches its installed module
+and `CONFIG_UFS_FS_WRITE` remains unset.
 
-Fresh source `c5feaece7277dc4e0562fdcf26641aa63fa53642` passed remote
-`cargo check --workspace`, `cargo test --workspace` and workspace binary build
-with one Cargo worker: 147 tests passed, 0 failed, 13 ignored. Run ID:
-`20261126T203728Z-80ad6623`. CLI SHA-256:
-`cf7f2ae09fd482dd1a7b23f9d46941da034582003933e239975e411d7b0a5410`;
-helper: `7c11ddf497d6d7690e560596f8de1631e456e39b80e6bfa63c34912178353599`.
+The complete baseline uses source `576505d554d798422840a06322dfa93b899365bc`.
+Its exact workspace check/test/build passed 159 tests, zero failures, 15 ignored.
+All nine writable filesystem rows passed all three native disk methods and all
+three directory engines, both in containers and on the new physical scratch
+disk: 54 positive cells in each dimension. The 130-cell ledger records 70
+OS-inapplicable combinations and six UFS1 driver-blocked cells per dimension.
+Directory engines use the named filesystem as their native backing, rather than
+as a selectable inner format. LKL filesystem routes are excluded from native
+acceptance.
 
-The current package verifier accepted the cached gocryptfs, patched stable
-CryFS and Linux-patched Cryptomator inputs. VeraCrypt/LKL was verified against
-its original exact source `16aa1f4071fff516a8124bbd1f1cdd1937fc7fdb`, retaining
-that engine identity; executable inputs are unchanged at the Rust candidate.
-Fresh runtime tests use an isolated administrator-owned staging prefix, not an
-installed system package. Existing LKL functionality is retained but excluded
-from OS-native filesystem acceptance.
+| Filesystem | Container cells | Physical cells | Native route |
+| --- | ---: | ---: | --- |
+| ext4 | 6 passed | 6 passed | kernel ext4; actual identity and journal verified |
+| Btrfs | 6 passed | 6 passed | kernel Btrfs |
+| XFS | 6 passed | 6 passed | kernel XFS |
+| APFS | 6 passed | 6 passed | matching APFS writable module |
+| UFS1 | 6 blocked | 6 blocked | stock driver mounts read-only; safe admission rejection |
+| UFS2 | 6 passed | 6 passed | separately installed patched fuse-ufs; independent VERSION=2 proof |
+| HAMMER2 | 6 passed | 6 passed | matching external writable module; explicit native type |
+| NTFS | 6 passed | 6 passed | stock writable NTFS3; NTFS-3G failure retained separately |
+| exFAT | 6 passed | 6 passed | kernel exFAT; private backing masks explicit |
+| ZFS | 6 passed | 6 passed | matching OpenZFS 2.4.99 module and userland |
 
-The complete initial container matrix recorded 56 attempts: 44 passed and 12
-failed. Disk harnesses reported 24 of 30 attempts passed across selected ext4, Btrfs, XFS, APFS,
-UFS2, HAMMER2, NTFS and exFAT. UFS1 and missing ZFS modules account for six
-initial failures. Directory encryption passed 20 cases; CryFS failed on UFS2
-and exFAT because its atomic publication requires unavailable hardlinks, and
-Cryptomator returned EIO on UFS2 and NTFS-3G. UFS1 and ZFS backing setup failed.
-The original source and binary identities above apply to all initial cases.
-Selected ext4 cases were subsequently invalidated: canonical mkfs.ext4 invoked
-mke2fs without its applet name and formatted ext2. These are filesystem-identity
-failures, not ext4 passes. The corrected formatter regression verifies the ext4
-journal and extents flags; final cases use the actual mount-type guard.
+Final runtime source is `67894f68525c55d5cbb48c743e1a98a308bd970f`. Exact run
+`20261127T000844Z-4b4285b2` passed workspace check/test/build: 168 passed,
+zero failed, 15 ignored. This follow-up isolates only non-console sudo loop
+leases into their own process group while preserving their session and cached
+TTY authorization. Ubuntu reproduced the prior password frontend failure and
+passed the unchanged frontend suite plus keyfile lifecycle with the fix; 168
+process samples showed the same session, a separate group and no stopped tasks.
+Arch GNU-sudo controls also passed. Unchanged baseline coverage retains its
+original 576505d identities, as specified by LINUX_FOLLOWUP.md.
 
-Matched native NTFS3 backing controls passed all three directory engines with
-the same candidate, engines and downloaded payload. NTFS-3G Cryptomator failure
-is therefore a driver-route limitation, with an eligible working alternative.
-Native publication controls show exFAT supports atomic rename-without-replace
-and preserves the destination on EEXIST; UFS2 fuse-ufs rejects both hardlinks
-and rename-without-replace. Native permissions, ownership, ACL and reflink
-observations are retained separately and do not establish every engine's
-feature support. Stock UFS1 write support is absent; the loaded UFS module's
-source version matches the new stock module. Custom kernels remain deferred.
+The final native Arch package is installed through an administrator-owned
+isolated extraction; the existing system installation is preserved. Package
+SHA-256 is `59b39ef1df0db51f222b1f60948074a1a1c72c0e697459ea83ce556106101f0a`;
+staging archive is
+`d1cb36edf329f8669c5fdc09e49410fd03a317fdc277194651da34b1ea713e62`.
+Component SHA-256 values are:
 
-Ordinary external OpenZFS development source
-https://github.com/openzfs/zfs commit
-`3b6d727ddd8d6d005774605964f044f364ee6456` advertises Linux 7.3 support. Its
-2.4.99 module and userland built with one Make worker, staged unprivileged,
-then installed into an administrator-owned isolated prefix. Module loading
-succeeded; the old 2.4.4 prefix remains intact. All six supplemental ZFS cases passed: three disk containers and three folder
-engines on a native ZFS backing, with the same initial Rust candidate.
+- CLI: `9b1ef704eb1c3cac38127cc5caf6e26df177b4d3f14321c93416a557429dcf02`
+- helper: `a156086e4b70afbbd39724b63b8e6a42264cb9162f8a768afb6a1b8ef8d31d6e`
+- desktop: `d88c1b2d2d6030b12a5445e1a580b9416142eb1233c2beb98a7b27c28bf1325f`
 
-Shared fixes committed after the complete initial attempt batch include kmod
-applet-name preservation (`294e983`), explicit ext4 formatter selection
-(`1b03e52`, corrected native-test import `f22ee9f`), verified native mount
-readiness (`836bf84`), and preserving failed fixtures at their active backing
-paths (`f78b88e`). Native module and ext4-superblock regressions each passed.
-The readiness overlay passed 78 core unit tests and three NTFS-3G payload
-lifecycles. It is precommit regression evidence, not final frozen qualification.
-The first ext4 regression log contained a missing-trait compilation failure;
-the corrected log and follow-up commit are retained without rewriting history.
-NTFS3 preference, explicit HAMMER2 mounts and modern writable NTFS selection
-were subsequently committed after matched native controls.
+Packaging policy is identified separately: producer `7d8f9a4` and consumer
+`fa063ac`. The original verified VeraCrypt creator bytes remain
+`7975cc4724d558fd10bafcc670627c56959a1c76d721f7f83dce855eb0052769`;
+its original source/static-wx identity is retained. Its refreshed private closure
+contains legitimate zlib, while signed host FUSE ABI4 resolves through the native
+GNU loader. No FUSE library is bundled. The portable CryFS donor remains the
+fresh Debian build at `195b56b`, validated against all three Linux patches and
+16 license inputs; binary SHA-256 is
+`2ec7b6f5bd7b999b81750fec75ffb3ca13174f4643d2326ba250143e9f444a14`.
+Cached gocryptfs 2.7 and Linux-patched Cryptomator retain their independently
+verified source and executable identities. Native runtime observations are new.
 
-A first clean LUKS2/ext4 attempt with an incorrectly typed source field was
-excluded; its logs remain under `cases/abandoned-metadata-typo/`. Original
-backing setup failures predate the harness preservation fix; fresh native
-controls retain their failed images. No native device passes are claimed yet.
+UFS2 uses https://github.com/realchonk/fuse-ufs at
+`ee5c4a447da98220a11edb69a225d51379afc4fb`, BSD-2-Clause, with separate host
+patches `94da64c`, `e97e480` and `9e27dcc`. Final driver SHA-256 is
+`e6af0568c2039eb9d078e24f046384bf0b3d5f37ed693e22e3908d50b9cdbc9a`.
+The 28 library tests passed. Native controls reproduce the old 204-of-512 listing
+and omitted new entry, then verify all 512 entries and 513 after creation with
+the corrected driver. File/directory backing-fsync forwarding and injected EIO
+propagation/retry controls passed separately. All twelve affected UFS2 container
+and physical product cases passed again on the installed final package, with
+independent version/driver proof and complete downloaded-PDF normal reopens.
+New physical folder logs are copied outside the backing before reformatting.
+
+Final installed-package normal-user file lifecycles passed all six combinations
+of LUKS1/LUKS2/VeraCrypt and password/binary keyfile, with Auto reopen and full
+PDF/text write, close/reopen, append/new-file, close/reopen hashes. The unmodified
+native frontend suite passed its interactive CLI, helper success/error and
+terminal-survival checks. Strict helper physical samples passed all three disk
+methods, wrong-key rejection/recovery and all 30 complete stdout JSON parses.
+Three physical UFS1 creates safely reject read-only initialization without owned
+mounts or children remaining. Each changed disk was exported and all one-GiB
+bytes verified before the next overwrite. The LUKS2 UFS1 header confirms sector
+size 512 and unchanged Argon2id memory 1,048,576 KiB. These are successful
+negative controls, not writable-UFS1 passes. Physical cipher/keyfile factors,
+final window/default callbacks, fresh helper file cohort and ordinary reboot
+verification are still running or queued.
+
+The baseline additionally passed 18 Btrfs cipher/authentication/Auto variations,
+36 kernel and 36 folder conformance cases, and an actual native desktop
+winit/software-rendered window. Feature samples cover all ten filesystem rows
+with commands and yes/no/unknown observations. CoW is not inferred false from
+absent reflink. The final UFS2 feature sample confirms persistent chmod/chown;
+ACLs and hardlinks remain unsupported, while atomic no-replace rename and
+EEXIST collision preservation work. Feature samples are not attributed to every
+crypto combination. GUI native-default coverage is distinct from the explicit
+filesystem matrix through CLI/helper API; no all-filesystem GUI selector is
+claimed. No crash or power-loss guarantee is inferred.
+
+Formatter provenance was refreshed. A fresh unmodified build of
+https://github.com/kusumi/makefs at
+`607449619ef5f85b6a2b282e16182e342fdebeaa` reproduced the installed
+makefs-freebsd SHA-256
+`a03cc9ffd8f3645b37bfd72c961a11a4c2579f3030b93522f96a5618a5e0b4ce`.
+Its project license is BSD-2-Clause with additional vendored notices.
+https://github.com/kusumi/hammer2-utils at
+`359b25bc2bb5d81e0bdbb5d48439314d80d13086`, version 0.5.0, has a BSD-3-Clause
+copyright; cached archive commit metadata, source files and built formatter
+match the installed executable. These host tools and drivers are not bundled.
+
+The new one-GiB qcow2 is identified by domain `archlinux-core-01`, serial
+`lurker-fresh-archlinux` and recorded guest rdev. Every destructive operation
+checks identity, size, type, children and mounts. The initial HAMMER2 physical
+backing probe stopped before engine execution because blkid lacks its signature;
+`file` and header magic supplied independent proof after a verified raw snapshot.
+A completed whole-disk exFAT format created a recursive MBR partition; the child
+guard stopped the next setup before mutation, and that exact closed owned layout
+was verified before clearing it. Neither was a product failure.
+
+Complete failed ciphertext and available synthetic credentials are retained
+privately. Earlier failed ciphertext with lost in-memory passwords is explicitly
+unreopenable; later retaining wrappers save credentials at mode 0600. The prior
+24 successful physical folder cases retained complete structured operations and
+hash receipts but lost their console-log bytes when their backings were
+reformatted. This limitation is retained; ZFS logs were recovered before its
+format was cleared, and affected reruns preserve external logs. The retired
+576505d reboot cohort's 327 files were fully archived and byte-verified before
+three closed guest images were reclaimed. Only fully transferred terminal
+staging artifacts and successful closed synthetic ciphertext have otherwise
+been reclaimed. Unrelated storage, jobs and cached sources are preserved.
 
 Private evidence is under
-`target/goal-validation/native-fresh-20261127/hosts/archlinux/`. The persistent
-remote round root is
-`/home/adjutant/.cache/lurker/native-fresh-20261127-archlinux`, exposed by the
-prescribed `/tmp/lurker-native-fresh-20261127-archlinux` symlink. The initial
-inventory was saved before reboot; the package transaction was recovered from
-`/var/log/pacman.log` after volatile `/tmp` was cleared. The applicability
-ledger retains unfinished native combinations as pending. Device tests, credential/cipher variations, reboot persistence, final
-candidate validation and final cleanup remain incomplete. Native feature
-observations for all ten filesystem rows are retained; UFS1 is blocked by
-the stock read-only driver.
-
-
-The earlier Linux core/CLI/helper candidate was frozen at
-`ca7d2137fca741008648360e98acc06ce559de3d`. Its final exact workspace run is
-`20261126T221423Z-4e5b59b2` and passed. The helper stdout repair
-passed 84 Arch core tests (two ignored), followed by openSUSE native CLI/helper
-checks and strict parsing of nine complete keyfile helper JSON responses across
-LUKS2, LUKS1 and VeraCrypt. The fixed 512-byte LUKS2/UFS1 geometry is included;
-Arch still requires an eligible writable UFS1 driver before runtime acceptance.
-
-The current portable CryFS donor was freshly built on Debian at `195b56b`,
-validated against all three Linux patches and its 16 license inputs, and passed
-Arch exFAT/UFS2 downloaded-payload reopen tests. Its binary SHA-256 is
-`2ec7b6f5bd7b999b81750fec75ffb3ca13174f4643d2326ba250143e9f444a14`.
-The previous engine and prefix remain preserved.
-
-Arch rebuilt fuse-ufs upstream `ee5c4a447da98220a11edb69a225d51379afc4fb`
-with the scoped no-replace and barrier patches from `94da64c` and `e97e480`.
-The 28 library tests passed. Native controls verified forwarding file and
-directory fsync to the owned backing file, injected EIO propagation and
-successful retry (three cases passed). Driver SHA-256 is
-`2dd3df260eb9006f1696bb426ca8367522c81d0f8881600135bfa2ebbe307f7c`.
-This driver is a separately installed host prerequisite. All six UFS2 product
-routes passed at ca7d213; no crash or power-loss guarantee is inferred.
-
-
-The complete ca7d213 sweep finished with 54 passed cases and four stock-UFS1
-failures (three disk cases and directory-backing setup), without cleanup errors.
-All nine other filesystem rows passed all six applicable native encryption
-methods. The UFS1 failures exposed Linux mountinfo reporting VFS `rw` together
-with superblock `ro` on encrypted mappers. Commit `576505d` reads both fields
-in core and the payload guard. Its targeted checks passed 85 core tests (two
-ignored) and nine Python tests. Native UFS1 create/reopen now reject the
-read-only downgrade and clean up normally; a writable Btrfs keyfile volume
-passed all downloaded-payload phases. The first native probe lacked its staged
-helper; that staging failure is retained separately and was corrected before
-counting the result.
-
-The final follow-up source for all three products is
-`576505d554d798422840a06322dfa93b899365bc`. Remote run
-`20261126T223513Z-a9473495` passed workspace check, tests and build: 159 passed,
-zero failed, 15 ignored. The native Arch package was built from the verified
-six-backend staging archive, with current Rust dependency notices. Native
-package SHA-256:
-`6fa40a5e78f90b365bfe36c6c053fba03e507e7d57984d9416bb3038bc02318a`;
-staging archive:
-`b8a8220668ccd72813ba300ab6fbf725aa1a51c649552a64065d7496d46d9901`.
-The full follow-up sweep uses an administrator-owned isolated extraction of
-that actual native package; the existing system installation is preserved.
-CLI SHA-256 is
-`59f439699ebeea1c375f578a31cd8c0859610ece536f803bc200309f08a1be6c`;
-helper is
-`6e14d7dedd1607991060e7522dcbfdc0944418da53968b6b3d4e277b01aa041e`.
-Its complete container, variation, device and reboot gates remain running or
-pending; this is not a completed qualification claim.
-
-Independent per-mount blkid observations bind all three follow-up UFS2 inner
-cases to VERSION=2, together with the exact patched driver identity. A private
-wrapper retains subsequent generated test passwords at mode 0600 and records
-its own hash, the unchanged frozen harness hash and executed arguments in each
-receipt. Earlier failed ciphertext with lost in-memory passwords is retained
-honestly as unreopenable. Complete failed images were transferred to the
-coordinator, byte-verified, then reclaimed only from closed owned guest
-fixtures. No unrelated cached artifacts or storage were deleted.
-
-Formatter provenance was refreshed without changing the active tools. A fresh
-unmodified build of https://github.com/kusumi/makefs at
-`607449619ef5f85b6a2b282e16182e342fdebeaa` reproduced the installed
-makefs-freebsd binary exactly (SHA-256
-`a03cc9ffd8f3645b37bfd72c961a11a4c2579f3030b93522f96a5618a5e0b4ce`).
-Its project copyright is BSD-2-Clause, with additional vendored source notices.
-https://github.com/kusumi/hammer2-utils remains at
-`359b25bc2bb5d81e0bdbb5d48439314d80d13086`, version 0.5.0, with a BSD-3-Clause
-copyright. The cached source archive's Git commit metadata and built formatter
-match the installed binary; fresh upstream HEAD queries confirm those source
-identities. Prior runtime receipts do not count as new qualification.
-
-
-The complete 576505d container follow-up now passes all 54 applicable positive
-cells across the nine writable filesystems. The six UFS1 cells remain blocked
-by the unchanged stock read-only driver; its three inner create paths reject
-that downgrade and release their resources. Three exFAT retention-wrapper
-checks stopped before invoking a backend because the initial mask synthesized
-mode 0700 for private files. Separate reruns with explicit `fmask=0177,dmask=0077`
-passed all three folder engines. These were harness setup failures, with the
-original receipts and closed backing images retained.
-
-The additional Btrfs cipher/credential sweep passed 18 cases across all three
-native disk methods, AES/Serpent/Twofish, password/binary keyfile and Auto reopen.
-Native CLI/helper frontend checks passed. Kernel and folder conformance suites
-each passed 36 cases. Actual desktop winit/software rendering passed, and six
-strict-JSON helper fixtures are prepared for the pending reboot gate.
-
-A new one-GiB qcow2 scratch disk was attached with serial
-`lurker-fresh-archlinux`; every destructive operation checks its serial, size,
-type, device number, mounts and children. All 27 physical inner cases passed:
-nine writable filesystems times LUKS2, LUKS1 and VeraCrypt. The native physical
-folder-backing sweep has passed 15 engine cases on ext4, Btrfs, XFS, APFS and
-UFS2. Its initial HAMMER2 metadata probe stopped before backend execution because
-blkid lacks that signature; `file` and the header independently identified
-HAMMER2. The complete quiescent disk was exported and byte-verified before
-correcting that private harness check and continuing. Remaining physical
-backings, factor cases, stock-UFS1 negatives and reboot persistence are pending.
-
-A separately identified loop-lease follow-up, commit `67894f6`, isolates only
-sudo-elevated socket helpers into their own process group while preserving their
-session and controlling terminal. The exact overlay passed 88 Arch core tests
-(two ignored), native password frontend checks and a seven-action keyfile
-payload lifecycle. Ubuntu reproduced the native password frontend failure with
-576505d and passed the unchanged frontend harness plus keyfile lifecycle with
-this overlay. Its 168 process samples show the same session, a separate lease
-process group and no stopped processes. Existing 576505d storage receipts keep
-their original binary identities; they do not claim to test the follow-up.
-
-
-The 576505d physical baseline is now complete for the nine writable filesystem
-rows: 27 encrypted inner cases and 27 directory-engine cases on native physical
-backings passed. The whole-disk exFAT formatter created a recursive MBR entry;
-the strict child guard stopped the following setup before mutation. The exact
-owned partition geometry, absent holders/mounts and completed preceding case
-were verified before clearing that scratch layout. ZFS then passed separately.
-Stock UFS1's physical native backing mounted read-only and was rejected before
-any folder backend ran; its complete raw image is retained and byte-verified.
-
-The private folder wrapper embedded complete operation and hash receipts but
-initially left successful console logs inside the subsequently reformatted
-backing. This affects the prior 24 successful physical folder cases. Their
-structured runtime receipts remain evidence; ZFS's 21 console logs were recovered
-before its backing was cleared. Future affected gates copy logs outside the
-backing before reformatting. No failed physical ciphertext was overwritten
-without a complete verified snapshot.
-
-Final Linux runtime source is now `67894f68525c55d5cbb48c743e1a98a308bd970f`,
-with the targeted follow-up scope in LINUX_FOLLOWUP.md. Exact workspace run
-`20261127T000844Z-4b4285b2` passed check/test/build: 168 passed, zero failed,
-15 ignored. Native packaging currently stops at the host-FUSE closure policy:
-the historical VeraCrypt closure included libfuse3.so.4 privately. The assigned
-producer/consumer repair is pending; that block is not a runtime pass. Existing
-576505d package and matrix identities are retained.
-
-The UFS2 prerequisite now includes the pagination patch from `9e27dcc`, after
-the prior no-replace and barrier patches. Arch reproduced the old driver's
-204-of-512 listing and missing newly created entry. The rebuilt driver passed
-28 library tests and returned all 512 entries, then 513 including the new entry,
-with consistent repeated enumeration and normal unmount. Its SHA-256 is
-`e6af0568c2039eb9d078e24f046384bf0b3d5f37ed693e22e3908d50b9cdbc9a`.
-All 12 affected UFS2 container/device product cases will run on the final package.
-The earlier six prepared helper fixtures were fully archived and byte-verified;
-three closed encrypted images were reclaimed before preparing a fresh final
-reboot cohort. They are marked retired before reboot, not reboot passes.
+`target/goal-validation/native-fresh-20261127/hosts/archlinux/`, including the
+130-cell applicability ledger, exact source/build archives, package and component
+manifests, driver/tool provenance, per-case operation/hash receipts, failed raw
+snapshots, conformance/feature results and live checkpoint. Persistent remote
+root is `/home/adjutant/.cache/lurker/native-fresh-20261127-archlinux`, exposed by
+`/tmp/lurker-native-fresh-20261127-archlinux`. Final reboot, cleanup and scratch
+detachment are pending; this report does not claim completed qualification.
