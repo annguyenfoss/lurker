@@ -1,103 +1,76 @@
-# Native DragonFly LKL host driver
+# Native DragonFly LKL host driver construction
 
-This source recipe describes a separately installed native filesystem driver.
-It uses DragonFly threads, local device/file I/O and host FUSE. It is external to
-Lurker's private package; it supplies no VM or network filesystem transport.
+This is a separately installed native host filesystem prerequisite. It uses
+DragonFly threads, local FD I/O and the stock host FUSE facility, with no VM,
+network transport or syscall-hijack library. It must never enter Lurker's app or
+private crypto bundle. The source, official DPorts patches, ordered DragonFly
+patches and required header hashes are pinned in `recipe.json`.
 
-The baseline is the official DPorts `filesystems/lkl` recipe, its seven patches
-and checksum-pinned upstream source listed in `recipe.json`. Compile as an
-unprivileged user with one worker. Preserve baseline failures separately from
-DragonFly compatibility patches. The first native baseline C failure was missing
-foreign ELF relocation constants in the host `modpost` tool. Patch 0001 uses the
-values already defined by that exact upstream source's x86, ARM and MIPS headers.
+Apply every patch and source header before a fresh one-worker build. The old
+outer Makefile does not track incremental kernel changes: a changed kernel or
+generated host ABI requires rebuilding its forwarded `tools/lkl/lib/lkl.o` and
+headers. Incremental diagnostic receipts are not a fresh factory qualification.
+UFS2 is not enabled; the native client accepts only Btrfs and XFS. Native
+formatter construction is separate from imported-image driver controls.
 
-Runtime support is unqualified. Before admission, verify native ELF dependencies,
-measured device geometry, flush/error forwarding, checked normal drain, source
-and FUSE identity, actual created-file ownership, caller reads/writes and foreign
-user denial. The Linux emulated filesystem credentials and errno values require
-an explicit native boundary audit. Host process UID or a FUSE mount-owner gate
-alone does not prove those properties. Existing positive Lurker matrices and
-blocked CryFS integration are separate evidence.
+The host adapter supplies native thread identity and monotonic one-shot timers.
+Its explicit shutdown hook drains timer callbacks after CPU/clock shutdown and
+before guest memory is freed. Native UAPI layout/timer controls and all35 upstream
+RAM boot tests passed; these alone provide no host-storage runtime credit.
 
-UFS2 is not enabled by this recipe. Its conditional Linux write implementation
-and a separate native UFS2 formatter need their own assessment and controls.
+Regular backing files require positive512-byte-unit sizes. Character devices
+require native DIOCGPART512-byte sectors, consistent media blocks/bytes and an
+agreeing SEEK_END result. Uncertain geometry fails before block publication.
+The built-in writable backend advertises FLUSH and forwards it to native fsync.
+Any failed block request latches a per-disk I/O error until removal. This matters:
+a genuine native FLUSH failure shut down XFS while remount/unmount still returned
+zero. The final native internal control now reports drain=-EIO for that failure;
+normal fsync/readback/unmount reports zero. Original-root FD restoration, checked
+read-only remount/unmount/native fsync and the sticky status govern drain.
 
-The native host-glue diagnostic now compiles and passes the 35 upstream boot
-checks, the strict native UAPI layout/explicit shutdown-hook probe, and the
-monotonic timer lifecycle control. These tests do not mount host storage.
-Patch 0002 provides nonblocking runtime timer cancellation and an optional host
-callback that drains timers after CPU/clock shutdown, before guest memory is
-freed. It also selects filesystem-only host features and a non-executable stack.
-Patch 0003 prevents native aliases from changing imported Linux structure fields.
-The generated host headers and kernel-library object must come from the same
-patched tree; the old outer Makefile does not track incremental kernel changes.
-Preserve/rebuild its forwarded `tools/lkl/lib/lkl.o` when those inputs change.
+Each FUSE return boundary translates symbolic generated LKL errno values to
+native errno values. Internal comparisons stay Linux values; positive results
+remain unchanged. Only xattr ENODATA becomes ENOATTR. Unknown errors are logged
+and fail as EIO.
 
-`tests/timer-control.c` checks cancellation, rearm, self-free and callback drain
-using the actual native timer adapter. `tests/host-contract.c` links the freshly
-built library and checks imported wire layouts and the shutdown-hook ordering.
-Run both on native DragonFly as the ordinary user. Full native filesystem,
-flush/error, ownership and permission controls remain required before admission.
+Pathname and metadata operations require two complete, stable native process
+snapshots agreeing on PID, birth, live state, effective UID/GID and the complete
+group vector. The context umask is explicit; inherited groups are cleared before
+applying a request. Every exit restores namespace UID/GID zero, no supplementary
+groups and umask zero. Invalid, mismatched, dead and PID-zero pathname identities
+fail closed. No caller umask is inferred from kinfo_proc.
 
-Patch 0004 advertises read-only state and, for the built-in writable host
-backend, FLUSH support. It accepts the two-buffer FLUSH request and forwards it
-to the existing native fsync implementation. `tests/block-flush.c` wraps that
-same backend for measurement without substituting a custom disk operation
-(which would bypass the advertised capability). On a new native-formatted XFS
-image, normal write/fsync/readback and internal unmount pass with nine successful
-native flushes. A separate fault image makes only a FLUSH request use an invalid
-native FD; the real backend fsync error propagates as Linux EIO from file fsync.
-Fault-case unmount errors are retained and reported. These are unprivileged
-internal-LKL diagnostic controls, not host FUSE or product lifecycle proof.
+DragonFly sends actual cached WRITE requests with PID zero. Registered opaque
+handle tokens therefore retain the validated opener identity/groups/umask and
+exact held Linux FD/directory. PID-zero data I/O uses that handle's opener,
+without namespace-root privilege or pathname authorization. Close/release accepts
+only registered handles; current authentication remains required for metadata
+changes. The original native baseline's UID1300 writer created UID0/GID0 children;
+that failure is retained and supplies no caller-support credit.
 
-Patch 0005 translates known LKL failures only at each FUSE callback's return
-boundary. The native table uses named generated Linux and native errno macros;
-internal syscall comparisons remain Linux values and positive results remain
-unchanged. ENODATA maps to ENOATTR only for xattr callbacks. Unknown errors are
-diagnosed and fail as EIO. The strict native `tests/errno-boundary.c` control
-verifies ENOTEMPTY=66, ENOSYS=78, EOPNOTSUPP=45 and ENOATTR=87, positive-result
-preservation and unknown-error diagnostics. Actual host-mounted negative probes
-remain required.
+The client uses the native exported unmounted FUSE2 channel constructor. It never
+calls fuse_mount, fuse_unmount or their force-capable BSD helpers. It requires a
+foreground single-threaded controller, protected administrator-owned mountpoint
+and alias ancestry, an inherited exact /dev/fuse vnode and a readiness pipe. LKL
+and the FUSE session are prepared before the controller publishes the mount.
+Captured native FSID/source/target must be globally absent before drain and
+channel/session disposal. Signals keep service alive; moved/replaced/uncertain
+mounts retain the source/channel. Ordinary user-chosen mountpath admission needs
+a separately reviewed supervisor/FD-bound target contract.
 
-Patch 0006 keeps the original LKL root directory FD, restores that namespace for
-shutdown, checks read-only remount/unmount/native fsync, and makes failures affect
-the driver's exit status. A sticky per-disk host I/O error survives successful
-later barriers and is checked after halt. This is necessary: the first real
-native FLUSH fault made XFS shut down while remount/unmount still returned zero.
-The retained failed control demonstrates that false success before the sticky
-status change. The final control passes both normal drain=0 and genuine failed
-native flush drain=-EIO, using the actual driver's start/stop functions through
-`tests/drain.c`. Copy that test into `tools/lkl/tests/dragonfly-drain.c` and link
-with the patched native library and FUSE2 using the driver's large-file and
-no-strict-aliasing compiler flags. Host FUSE lifecycle proof remains separate.
+The scoped FUSE2 static library recipe is in `../fuse2`; the global installed
+provider is unchanged. Its64-byte native INIT reply preserves the negotiated
+7.19 prefix/features and zeroes40 extension bytes. The observed channel checks
+the actual INIT bytes/send result and latches transport failures. Native public
+channel delegates temporarily bind the sole session to the native inner channel
+and restore the outer channel on every path. Unexpected termination is never
+normalized to success. Explicit DESTROY and checked global absence govern close.
 
-`dragonfly-credentials.h` supplies a native credential primitive: two complete
-bounded kinfo_proc snapshots must agree on PID, birth, live state, effective
-UID/GID and the full group vector. Invalid, PID-zero, mismatched, exited or
-reaped identities deny access. Applying a request first clears inherited groups;
-all exits restore namespace UID/GID zero and an empty supplementary group list.
-The native `tests/credentials.c` control proves actual LKL UID/GID/group changes,
-restoration after a failed syscall and the denial cases. Its native waitid
-WNOWAIT proof also covers exited/unreaped children even when KERN_PROC_PID omits
-them. This primitive is not yet wired into FUSE callbacks. DragonFly sends real
-cached WRITE operations with PID zero, so integration additionally requires a
-registry of opaque handles with validated opener credentials, distinct from
-pathname authentication. Native kernel default_permissions remains mandatory.
-
-Patch 0007 ends the single-threaded FUSE loop from the explicit DESTROY callback.
-The stock native kernel sends DESTROY before marking the channel dead and then
-returns ENOTCONN on further reads. Unexpected loop termination remains a failure;
-no transport error is normalized to success. A real native mount/unmount control
-now records unmount=0, driver exit=0, checked internal drain and absent mount and
-process. It retains the observed UID-zero child ownership failure. The separate
-FUSE2 INIT response-size mismatch remains unqualified at this point.
-
-Patch 0010 validates native backing capacity. Regular files require a positive
-512-byte-unit size. Character devices additionally require native DIOCGPART
-512-byte sectors, consistent media blocks/bytes and an agreeing SEEK_END result.
-Other nodes and unsupported or uncertain geometry fail before block-device
-publication. Capacity failures return an I/O error rather than an allocation
-error. Native `tests/capacity.c` controls aligned regular files and rejection of
-irregular sizes, /dev/null and invalid FDs. Its optional `--inspect` mode opens
-read-only and reports the held FD's capacity/device identity; raw/mapped-device
-qualification remains a separate privileged control.
+Native unprivileged controls cover UAPI/timers/boot, symbolic errno, real fsync
+failure forwarding, driver internal drain, capacity validation, complete
+credential apply/restore and native channel attachment/error restoration. A
+native ELF with the scoped PIC FUSE2 archive links successfully. The new mounted
+client remains unqualified pending root review/trusted copy, actual native INIT,
+caller/foreign permissions, ownership/mode/time/set-ID checks, opener-death and
+inherited-descriptor controls, full payload/reopen and physical geometry tests.
+No Lurker product or matrix pass follows from these construction receipts.

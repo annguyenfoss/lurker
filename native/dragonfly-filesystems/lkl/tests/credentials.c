@@ -16,12 +16,13 @@
 int main(void)
 {
     assert(getuid() == 1300 && geteuid() == 1300);
-    struct fuse_context context = {.pid = getpid(), .uid = geteuid(), .gid = getegid()};
+    struct fuse_context context = {.pid = getpid(), .uid = geteuid(), .gid = getegid(), .umask = 0077};
     struct df_request_identity a, b;
     assert(df_credential_snapshot(&context, &a) == 0 &&
            df_credential_snapshot(&context, &b) == 0 && df_same_credentials(&a, &b));
     assert(lkl_start_kernel(&lkl_host_ops, "mem=128M") == 0);
     assert(df_enter_request(&context) == 0);
+    assert(lkl_sys_umask(0077) == 0077);
     assert(lkl_sys_getuid() == 1300 && lkl_sys_geteuid() == 1300);
     assert(lkl_sys_getgid() == 1300 && lkl_sys_getegid() == 1300);
     lkl_gid_t groups[NGROUPS];
@@ -38,6 +39,8 @@ int main(void)
     assert(lkl_sys_getuid() == 0 && lkl_sys_geteuid() == 0 &&
            lkl_sys_getgid() == 0 && lkl_sys_getegid() == 0 &&
            lkl_sys_getgroups(0, NULL) == 0);
+    assert(lkl_sys_umask(0) == 0);
+    context.umask = 01000; assert(df_enter_request(&context) == -EACCES); context.umask = 0077;
     context.uid = 65534; assert(df_enter_request(&context) == -EACCES); context.uid = 1300;
     context.gid = 65534; assert(df_enter_request(&context) == -EACCES); context.gid = 1300;
     context.pid = 0; assert(df_enter_request(&context) == -EACCES);

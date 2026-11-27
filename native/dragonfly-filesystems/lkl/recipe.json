@@ -56,6 +56,8 @@
     "patches/0005-dragonfly-fuse-errno-boundary.patch",
     "patches/0006-checked-filesystem-drain.patch",
     "patches/0007-native-orderly-fuse-destroy.patch",
+    "patches/0008-authenticated-fuse-requests-and-handles.patch",
+    "patches/0009-native-unmounted-channel-lifecycle.patch",
     "patches/0010-native-capacity-proof.patch"
   ],
   "native_build_prerequisites": [
@@ -71,7 +73,7 @@
   ],
   "jobs": 1,
   "ufs2_config": "not enabled; requires separate experimental assessment",
-  "runtime_qualification": "unproven; no product admission",
+  "runtime_qualification": "Native primitives/compile/ELF only; new mounted client awaits root review and actual native caller/foreign/held-handle controls.",
   "distribution": "External host prerequisite; never include filesystem driver or FUSE in the Lurker private package.",
   "kernel_driver_config": [
     "BTRFS_FS=y",
@@ -91,7 +93,22 @@
     {
       "path": "dragonfly-credentials.h",
       "target": "tools/lkl/dragonfly-credentials.h",
-      "sha256": "523c00d521b4ab90b30b571579682c50b4f11eca659832d7bd184d25f509ac28"
+      "sha256": "87db06e3127f8bb48bc92079f31d4dae80ed2105079dba8381576d1f45b51738"
+    },
+    {
+      "path": "dragonfly-handles.h",
+      "target": "tools/lkl/dragonfly-handles.h",
+      "sha256": "2bb7e24b7ac2383d0a51c97b2cad49fa977b4ce5a36978edbca0335f013f60da"
+    },
+    {
+      "path": "dragonfly-lifecycle.h",
+      "target": "tools/lkl/dragonfly-lifecycle.h",
+      "sha256": "87de3b3b2f86f52aa58d0de106534dc8fab670db971424524daa523f3d23dbfa"
+    },
+    {
+      "path": "dragonfly-channel.h",
+      "target": "tools/lkl/dragonfly-channel.h",
+      "sha256": "04ebce13d26580e9cd6067fefd29a95a22cb8abe872a23e277144a9527ce4d94"
     }
   ],
   "host_features": {
@@ -100,5 +117,20 @@
     "native_thread_id": "pthread_getthreadid_np",
     "host_network_adapters": false,
     "syscall_hijack_library": false
+  },
+  "native_static_FUSE2_recipe": "../fuse2/recipe.json",
+  "native_client_contract": {
+    "foreground": true,
+    "single_threaded": true,
+    "types": [
+      "btrfs",
+      "xfs"
+    ],
+    "memory_MiB_default": 128,
+    "mount_publication": "external trusted native controller after readiness pipe; requires administrator-owned target/alias ancestry",
+    "mount_source": "exact protected symlink to the inherited /dev/fuse vnode",
+    "kernel_mount_flags": "default_permissions|allow_other plus NOSUID|NODEV|NOEXEC",
+    "cleanup": "captured FSID/source/target globally absent, checked internal drain and no sticky I/O/transport failure",
+    "product_admission": false
   }
 }

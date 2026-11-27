@@ -1,0 +1,152 @@
+--- tools/lkl/lklfuse.c
++++ tools/lkl/lklfuse.c
+@@ -7,6 +7,8 @@
+ #include <string.h>
+ #include <errno.h>
+ #include <unistd.h>
++#include <sys/user.h>
++#include <sys/sysctl.h>
+ #define FUSE_USE_VERSION 26
+ #include <fuse.h>
+ #include <fuse/fuse_opt.h>
+@@ -234,8 +236,21 @@
+ 	else
+ 		return -EINVAL;
+ 
+-	if (create)
+-		flags |= LKL_O_CREAT;
++    if (fi->flags & (O_SHLOCK | O_EXLOCK | O_ASYNC))
++        return -EOPNOTSUPP;
++    const struct { int native, linux; } map[] = {
++        {O_APPEND, LKL_O_APPEND}, {O_TRUNC, LKL_O_TRUNC},
++        {O_SYNC, LKL_O_SYNC}, {O_NOFOLLOW, LKL_O_NOFOLLOW},
++        {O_NONBLOCK, LKL_O_NONBLOCK}, {O_NOCTTY, LKL_O_NOCTTY},
++        {O_DIRECT, LKL_O_DIRECT}, {O_CLOEXEC, LKL_O_CLOEXEC},
++        {O_DIRECTORY, LKL_O_DIRECTORY},
++    };
++    for (size_t i = 0; i < sizeof(map)/sizeof(map[0]); i++)
++        if (fi->flags & map[i].native) flags |= map[i].linux;
++    if (create) {
++        flags |= LKL_O_CREAT;
++        if (fi->flags & O_EXCL) flags |= LKL_O_EXCL;
++    }
+ 
+ 	ret = lkl_sys_open(path, flags, mode);
+ 	if (ret < 0)
+@@ -445,10 +460,14 @@
+ {
+ 	struct lkl_timespec ts[2];
+ 
+-	ts[0].tv_sec = tv[0].tv_sec;
+-	ts[0].tv_nsec = tv[0].tv_nsec;
+-	ts[1].tv_sec = tv[0].tv_sec;
+-	ts[1].tv_nsec = tv[0].tv_nsec;
++    /* Pinned include/linux/stat.h defines these outside the exported UAPI. */
++    enum { DF_LKL_UTIME_NOW = (1L << 30) - 1L,
++           DF_LKL_UTIME_OMIT = (1L << 30) - 2L };
++    for (int i = 0; i < 2; i++) {
++        ts[i].tv_sec = tv[i].tv_sec;
++        ts[i].tv_nsec = tv[i].tv_nsec == UTIME_NOW ? DF_LKL_UTIME_NOW :
++                        tv[i].tv_nsec == UTIME_OMIT ? DF_LKL_UTIME_OMIT : tv[i].tv_nsec;
++    }
+ 
+ 	return df_lkl_result(lkl_sys_utimensat(-1, path, ts, LKL_AT_SYMLINK_NOFOLLOW), 0);
+ }
+@@ -458,6 +477,8 @@
+ {
+ 	return df_lkl_result(lkl_sys_fallocate(fi->fh, mode, offset, len), 0);
+ }
++
++#include "dragonfly-handles.h"
+ 
+ static struct fuse *active_fuse;
+ static int orderly_destroy;
+@@ -476,45 +497,45 @@
+ 	.flag_nopath = 1,
+ 	.flag_utime_omit_ok = 1,
+ 
+-	.getattr = lklfuse_getattr,
+-	.readlink = lklfuse_readlink,
+-	.mknod = lklfuse_mknod,
+-	.mkdir = lklfuse_mkdir,
+-	.unlink = lklfuse_unlink,
+-	.rmdir = lklfuse_rmdir,
+-	.symlink = lklfuse_symlink,
+-	.rename = lklfuse_rename,
+-	.link = lklfuse_link,
+-	.chmod = lklfuse_chmod,
+-	.chown = lklfuse_chown,
+-	.truncate = lklfuse_truncate,
+-	.open = lklfuse_open,
+-	.read = lklfuse_read,
+-	.write = lklfuse_write,
+-	.statfs = lklfuse_statfs,
+-	.flush = lklfuse_flush,
+-	.release = lklfuse_release,
+-	.fsync = lklfuse_fsync,
+-	.setxattr = lklfuse_setxattr,
+-	.getxattr = lklfuse_getxattr,
+-	.listxattr = lklfuse_listxattr,
+-	.removexattr = lklfuse_removexattr,
+-	.opendir = lklfuse_opendir,
+-	.readdir = lklfuse_readdir,
+-	.releasedir = lklfuse_releasedir,
+-	.fsyncdir = lklfuse_fsyncdir,
+-	.access = lklfuse_access,
+-	.create = lklfuse_create,
+-	.fgetattr = lklfuse_fgetattr,
++	.getattr = df_getattr,
++	.readlink = df_readlink,
++	.mknod = df_mknod,
++	.mkdir = df_mkdir,
++	.unlink = df_unlink,
++	.rmdir = df_rmdir,
++	.symlink = df_symlink,
++	.rename = df_rename,
++	.link = df_link,
++	.chmod = df_chmod,
++	.chown = df_chown,
++	.truncate = df_truncate,
++	.open = df_open,
++	.read = df_read,
++	.write = df_write,
++	.statfs = df_statfs,
++	.flush = df_flush,
++	.release = df_release,
++	.fsync = df_fsync,
++	.setxattr = df_setxattr,
++	.getxattr = df_getxattr,
++	.listxattr = df_listxattr,
++	.removexattr = df_removexattr,
++	.opendir = df_opendir,
++	.readdir = df_readdir,
++	.releasedir = df_releasedir,
++	.fsyncdir = df_fsyncdir,
++	.access = df_access,
++	.create = df_create,
++	.fgetattr = df_fgetattr,
+ 	/* .lock, */
+-	.utimens = lklfuse_utimens,
++	.utimens = df_utimens,
+ 	/* .bmap, */
+ 	/* .ioctl, */
+ 	/* .poll, */
+ 	/* .write_buf, (SG io) */
+ 	/* .read_buf, (SG io) */
+ 	/* .flock, */
+-	.fallocate = lklfuse_fallocate,
++	.fallocate = df_fallocate,
+ };
+ 
+ static int original_root = -1;
+@@ -705,6 +726,10 @@
+ 		fprintf(stderr, "warning: multithreaded mode not supported\n");
+ 
+ 	ret = fuse_loop(fuse);
++    if (df_handles) {
++        fprintf(stderr, "lklfuse: registered handles remain after FUSE shutdown\n");
++        ret = -1;
++    }
+     if (!orderly_destroy) {
+         fprintf(stderr, "lklfuse: FUSE loop ended without an orderly DESTROY\n");
+         ret = -1;

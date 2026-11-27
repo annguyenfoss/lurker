@@ -1,0 +1,306 @@
+--- tools/lkl/lklfuse.c
++++ tools/lkl/lklfuse.c
+@@ -7,6 +7,7 @@
+ #include <string.h>
+ #include <errno.h>
+ #include <unistd.h>
++#include <sys/mount.h>
+ #include <sys/user.h>
+ #include <sys/sysctl.h>
+ #define FUSE_USE_VERSION 26
+@@ -29,8 +30,13 @@
+ 	int part;
+ 	int ro;
+ 	int mb;
++	const char *source_alias;
++	int ready_fd;
++	int native_allow_other;
++	int native_default_permissions;
+ } lklfuse = {
+-	.mb = 64,
++	.mb = 128,
++	.ready_fd = -1,
+ };
+ 
+ #define LKLFUSE_OPT(t, p, v) { t, offsetof(struct lklfuse, p), v }
+@@ -42,6 +48,10 @@
+ 
+ static struct fuse_opt lklfuse_opts[] = {
+ 	LKLFUSE_OPT("log=%s", log, 0),
++	LKLFUSE_OPT("source_alias=%s", source_alias, 0),
++	LKLFUSE_OPT("ready_fd=%d", ready_fd, 0),
++	LKLFUSE_OPT("allow_other", native_allow_other, 1),
++	LKLFUSE_OPT("default_permissions", native_default_permissions, 1),
+ 	LKLFUSE_OPT("type=%s", type, 0),
+ 	LKLFUSE_OPT("mb=%d", mb, 0),
+ 	LKLFUSE_OPT("opts=%s", opts, 0),
+@@ -77,8 +87,8 @@
+ {
+ 	switch (key) {
+ 	case FUSE_OPT_KEY_OPT:
+-		if (strcmp(arg, "ro") == 0)
+-			lklfuse.ro = 1;
++        if (!strcmp(arg, "ro")) { lklfuse.ro = 1; return 0; }
++        if (!strcmp(arg, "rw")) { lklfuse.ro = 0; return 0; }
+ 		return 1;
+ 
+ 	case FUSE_OPT_KEY_NONOPT:
+@@ -89,16 +99,12 @@
+ 		return 1;
+ 
+ 	case KEY_HELP:
+-		usage();
+-		fuse_opt_add_arg(args, "-ho");
+-		fuse_main(args->argc, args->argv, NULL, NULL);
+-		exit(1);
++        usage();
++        exit(0);
+ 
+ 	case KEY_VERSION:
+-		printf("lklfuse version %s\n", LKLFUSE_VERSION);
+-		fuse_opt_add_arg(args, "--version");
+-		fuse_main(args->argc, args->argv, NULL, NULL);
+-		exit(0);
++        printf("dragonfly-lkl-host-io-1 lklfuse %s FUSE%d\n", LKLFUSE_VERSION, fuse_version());
++        exit(0);
+ 
+ 	default:
+ 		fprintf(stderr, "internal error\n");
+@@ -479,6 +485,8 @@
+ }
+ 
+ #include "dragonfly-handles.h"
++#include "dragonfly-lifecycle.h"
++#include "dragonfly-channel.h"
+ 
+ static struct fuse *active_fuse;
+ static int orderly_destroy;
+@@ -486,6 +494,7 @@
+ static void dragonfly_destroy(void *private_data)
+ {
+     (void)private_data;
++    df_native_observe();
+     orderly_destroy = 1;
+     if (active_fuse)
+         fuse_exit(active_fuse);
+@@ -654,109 +663,114 @@
+ 
+ int main(int argc, char **argv)
+ {
+-	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+-	struct fuse_chan *ch;
+-	struct fuse *fuse;
+-	struct stat st;
+-	char *mnt;
+-	int fg, mt, ret;
+-
+-	if (fuse_opt_parse(&args, &lklfuse, lklfuse_opts, lklfuse_opt_proc))
+-		return 1;
+-
+-	if (!lklfuse.file || !lklfuse.type) {
+-		fprintf(stderr, "no file or filesystem type specified\n");
+-		return 1;
+-	}
+-
+-	if (fuse_parse_cmdline(&args, &mnt, &mt, &fg))
+-		return 1;
+-
+-	ret = stat(mnt, &st);
+-	if (ret) {
+-		perror(mnt);
+-		goto out_free;
+-	}
+-
+-	ret = open(lklfuse.file, lklfuse.ro ? O_RDONLY : O_RDWR);
+-	if (ret < 0) {
+-		perror(lklfuse.file);
+-		goto out_free;
+-	}
+-
+-	lklfuse.disk.fd = ret;
+-	lklfuse.disk.read_only = lklfuse.ro;
+-
+-	ret = lkl_disk_add(&lklfuse.disk);
+-	if (ret < 0) {
+-		fprintf(stderr, "can't add disk: %s\n", lkl_strerror(ret));
+-		goto out_close_disk;
+-	}
+-
+-	lklfuse.disk_id = ret;
+-
+-	ch = fuse_mount(mnt, &args);
+-	if (!ch) {
+-		ret = -1;
+-		goto out_close_disk;
+-	}
+-
+-	fuse = fuse_new(ch, &args, &lklfuse_ops, sizeof(lklfuse_ops), NULL);
+-	if (!fuse) {
+-		ret = -1;
+-		goto out_fuse_unmount;
+-	}
+-
+-	active_fuse = fuse;
+-	fuse_opt_free_args(&args);
+-
+-	if (fuse_daemonize(fg) ||
+-	    fuse_set_signal_handlers(fuse_get_session(fuse))) {
+-		ret = -1;
+-		goto out_fuse_destroy;
+-	}
+-
+-	ret = start_lkl();
+-	if (ret) {
+-		ret = -1;
+-		goto out_remove_signals;
+-	}
+-
+-	if (mt)
+-		fprintf(stderr, "warning: multithreaded mode not supported\n");
+-
+-	ret = fuse_loop(fuse);
+-    if (df_handles) {
+-        fprintf(stderr, "lklfuse: registered handles remain after FUSE shutdown\n");
+-        ret = -1;
+-    }
+-    if (!orderly_destroy) {
+-        fprintf(stderr, "lklfuse: FUSE loop ended without an orderly DESTROY\n");
+-        ret = -1;
+-    }
+-
+-	if (stop_lkl() < 0)
+-		ret = -1;
+-
+-out_remove_signals:
+-	fuse_remove_signal_handlers(fuse_get_session(fuse));
+-
+-out_fuse_unmount:
+-	if (ch)
+-		fuse_unmount(mnt, ch);
+-
+-out_fuse_destroy:
+-	if (fuse)
+-		fuse_destroy(fuse);
+-
+-out_close_disk:
+-	if (close(lklfuse.disk.fd) != 0) {
+-		perror("lklfuse: close disk");
+-		ret = -1;
+-	}
+-
+-out_free:
+-	free(mnt);
+-
+-	return ret < 0 ? 1 : 0;
+-}
++    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
++    struct fuse_chan *channel = NULL;
++    struct fuse *filesystem = NULL;
++    char *target = NULL;
++    int foreground, multithreaded, result = -1, started = 0;
++    int handed_off = 0, lifecycle_error = 0;
++    int native_fd = -1;
++    lklfuse.disk.fd = -1;
++    sigset_t termination;
++    sigemptyset(&termination);
++    sigaddset(&termination, SIGTERM);
++    sigaddset(&termination, SIGINT);
++    sigaddset(&termination, SIGHUP);
++    if (pthread_sigmask(SIG_BLOCK, &termination, NULL)) return 1;
++    struct sigaction action = {0};
++    action.sa_handler = df_signal;
++    sigemptyset(&action.sa_mask);
++    if (sigaction(SIGTERM, &action, NULL) || sigaction(SIGINT, &action, NULL) ||
++        sigaction(SIGHUP, &action, NULL) || signal(SIGPIPE, SIG_IGN) == SIG_ERR)
++        return 1;
++    if (fuse_opt_parse(&args, &lklfuse, lklfuse_opts, lklfuse_opt_proc) ||
++        !lklfuse.file || !lklfuse.type || !lklfuse.source_alias ||
++        fuse_parse_cmdline(&args, &target, &multithreaded, &foreground)) goto finish;
++    if (!foreground || multithreaded || lklfuse.mb < 32 || lklfuse.mb > 512 ||
++        !lklfuse.native_allow_other ||
++        !lklfuse.native_default_permissions ||
++        (strcmp(lklfuse.type, "xfs") && strcmp(lklfuse.type, "btrfs"))) {
++        fprintf(stderr, "lklfuse: native diagnostic requires -s -f and type xfs or btrfs\n");
++        goto finish;
++    }
++    const char *descriptor = getenv("FUSE_DEV_FD");
++    char *end = NULL;
++    errno = 0;
++    long inherited = descriptor ? strtol(descriptor, &end, 10) : -1;
++    if (!descriptor || !*descriptor || !end || *end || errno || inherited < 3 ||
++        inherited > INT_MAX || !getenv("FUSE_NO_MOUNT") ||
++        strcmp(getenv("FUSE_NO_MOUNT"), "1") ||
++        df_native_inputs(target, lklfuse.source_alias, inherited, lklfuse.ready_fd)) {
++        fprintf(stderr, "lklfuse: invalid protected native channel handoff\n");
++        goto finish;
++    }
++    lklfuse.disk.fd = open(lklfuse.file,
++        (lklfuse.ro ? O_RDONLY : O_RDWR) | O_NOFOLLOW | O_CLOEXEC);
++    if (lklfuse.disk.fd < 0) { perror("lklfuse: open disk"); goto finish; }
++    lklfuse.disk.read_only = lklfuse.ro;
++    lklfuse.disk_id = lkl_disk_add(&lklfuse.disk);
++    if (lklfuse.disk_id < 0) goto finish;
++    native_fd = fcntl(inherited, F_DUPFD_CLOEXEC, 3);
++    if (native_fd < 0) goto finish;
++    if (close(inherited)) { perror("lklfuse: close inherited FUSE fd"); goto finish; }
++    channel = fuse_kern_chan_new(native_fd);
++    if (!channel) goto finish;
++    native_fd = -1; /* channel owns this duplicate from here */
++    struct fuse_chan *observed = df_observed_channel(channel);
++    if (!observed) goto finish;
++    channel = observed;
++    filesystem = fuse_new(channel, &args, &lklfuse_ops, sizeof(lklfuse_ops), NULL);
++    if (!filesystem) goto finish;
++    active_fuse = filesystem;
++    if (start_lkl() < 0) goto finish;
++    started = 1;
++    df_observe_native_mount = df_native_observe;
++    sigset_t pending;
++    if (df_signal_seen || sigpending(&pending) ||
++        sigismember(&pending, SIGTERM) || sigismember(&pending, SIGINT) ||
++        sigismember(&pending, SIGHUP) || df_native_clear(0)) goto finish;
++    /* The root controller publishes only after this complete pipe message.
++     * No FUSE mount/unmount helper is called anywhere in this client. */
++    const char ready[] = "dragonfly-lkl-ready-1\n";
++    ssize_t bytes;
++    do { bytes = write(lklfuse.ready_fd, ready, sizeof(ready)-1); }
++    while (bytes < 0 && errno == EINTR);
++    handed_off = bytes > 0;
++    if (bytes != sizeof(ready)-1) {
++        perror("lklfuse: readiness pipe"); lifecycle_error = 1;
++        if (!handed_off) goto finish;
++    }
++    if (close(lklfuse.ready_fd)) { perror("lklfuse: close readiness pipe"); lifecycle_error = 1; }
++    lklfuse.ready_fd = -1;
++    if (pthread_sigmask(SIG_UNBLOCK, &termination, NULL)) lifecycle_error = 1;
++    for (;;) {
++        if (!orderly_destroy) {
++            fuse_session_reset(fuse_get_session(filesystem));
++            result = fuse_loop(filesystem);
++            if (result < 0) lifecycle_error = 1;
++        }
++        df_native_observe();
++        if (df_native_clear(1) == 0) break;
++        /* Never drain/close an active, moved, replaced or uncertain mount. */
++        fprintf(stderr, "lklfuse: retaining native channel/source pending global FSID absence\n");
++        usleep(50000);
++    }
++    if (!orderly_destroy || lifecycle_error || df_native_uncertain || df_handles ||
++        df_transport_error || !df_init_sent) {
++        fprintf(stderr, "lklfuse: incomplete native lifecycle or registered handles\n");
++        result = -1;
++    } else result = 0;
++finish:
++    /* Before handoff no caller may publish. After handoff only the loop's
++     * complete global absence proof reaches cleanup. Constructors never mount. */
++    if (started && stop_lkl() < 0) result = -1;
++    if (filesystem) fuse_destroy(filesystem);
++    else if (channel) fuse_chan_destroy(channel);
++    else if (native_fd >= 0 && close(native_fd)) result = -1;
++    if (lklfuse.disk.fd >= 0 && close(lklfuse.disk.fd)) {
++        perror("lklfuse: close disk"); result = -1;
++    }
++    fuse_opt_free_args(&args);
++    free(target);
++    return result == 0 ? 0 : 1;
++}
