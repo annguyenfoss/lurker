@@ -821,10 +821,18 @@ write admission is enabled by this preparation.
 
 ### Updated kernel-patch scope: source audit and admission hold
 
-All further LKL/kernel-domain builds, changes, admission and storage tests are
-held under the user's narrower scope: kernel patches must already be published
-and tested in mainstream use, including embedded LKL. Existing artifacts and
-failures remain preserved; in-process library execution is not an exemption.
+Further LKL builds, admission and storage tests remain held pending explicit
+runtime/lifecycle coordination. Final directive `10fbc99`
+allows existing supported configuration, reproducible customized builds and
+established pre-made patches or documented upstream/mainstream guidance.
+It excludes kernel behavior, code, ABI, hooks or ports invented by Lurker,
+including embedded LKL. Excluded running, partial and planned work must be cut;
+established patches are not excluded merely because they contain kernel code.
+Existing artifacts and failures remain preserved. No LKL build was active when
+this stop-and-cut rule arrived, and none has been restarted. The never-started
+custom FreeBSD FUSE RENAME2 kernel plan is removed; no such module was built.
+The retained v5 recovery processes are still nonterminal, not cancelled
+or successfully recovered. Independent userspace work continues.
 
 A read-only audit compared all 63,047 pinned pristine source entries to the
 frozen final12 input manifest. It found exactly eleven content-changed files:
@@ -841,9 +849,13 @@ multiprocessing fork for Python 3.14). It also contains custom virtual block
 FLUSH advertisement/request handling/error latching, native provider/barrier
 host glue, host API declarations and the userspace FUSE client. Current final12
 raw-provider/durability/error controls depend on those local changes; they are
-not being credited as already published/tested mainstream patches. No local
-Btrfs/XFS filesystem, kernel/ or mm/ C changes were made, and `.config` came
-from pinned upstream defconfig, but these facts do not override the scope hold.
+not being credited as already published/tested mainstream patches. Coordinator
+review classifies the seven Ports patches as established, Python fork-context
+as documented toolchain adaptation, and the local virtio FLUSH/latch, native
+barrier and client code as integration using existing kernel APIs without
+injecting new kernel behavior. That eligibility decision does not complete
+runtime admission or restart a held job. No local Btrfs/XFS filesystem, kernel/
+or mm/ C changes were made, and `.config` came from pinned upstream defconfig.
 Product write guards remain unchanged. Standalone userspace guardian/codec and
 Cryptomator native header/FFM controls are independent of LKL execution.
 
@@ -859,3 +871,52 @@ Evidence is `validation/guardian-codec-v2/` and
 show SCM_CREDS2 on each write, not each partial read; a wrapper must retain and
 recheck the authenticated writer over a bounded frame. No embedded kernel
 change or mount test is part of these standalone userspace controls.
+
+
+### Genuine FreeBSD Cryptomator ABI and source-kit preparation
+
+Debian-owned source commits `b536fa2` and `2424fb3` add a genuine FreeBSD/amd64
+jFUSE provider derived from matching native FUSE3 headers. No Linux ABI or OS
+identity is substituted. The frozen candidate2 archive is
+`55176e8d03ae1cec85d41ce7fd5b0eb0d89a020e798e646fac7a0795d5d12680`.
+Native LLVM19/JDK25 checks pass for nine structure layouts, 92 memory field
+controls, all 30 registered callback upcalls and three real C-string pointer
+controls. All eleven build stages and eleven focused producer tests pass.
+The provider loads host FUSE3 3.18.3, constructs/closes its callback arena and
+registers FSYNC, with FSYNCDIR explicitly absent. The provider test deliberately
+uses a memory-only FileStore fixture: upstream real factory, fuse_new, mount,
+payload and normal-close behavior remain unproven. The helper's FreeBSD mount
+refusal and product capability guards remain in place.
+
+`build/cryptomator-port-source/native-candidate-2/` retains the exact manifest,
+raw logs and complete output archive
+`5dbef685e0642bd434c19a5bf16d920dc8ed8969560a7771471c4c218d83de93`.
+A separate metadata-only derivation adds the exact original source/recipe/POM/
+lock inputs to a new image, preserves every compiled/runtime byte and passes
+13 focused tests without rebuilding or invoking Java. Its final manifest is
+`561337eb729ff984479356c078d955a3916ee400e6f62a2af4aa18a34d751ff0`;
+new image archive is
+`519840233a4a4275226a0053fcd18bc9ffcc1473461674562c2d36039cba9094`.
+Evidence is `build/cryptomator-port-source/native-sourcekit-1/`.
+
+Candidate1 remains separately blocked, not a terminal failed build: its real
+FileStore factory reaches `getfsstat` and waits in native `vfs_busy`. Controller
+55751 and Java55792 remain nonterminal; the original stage timeout did not reap
+the kernel-blocked child. Exact starts, current process states and earlier raw
+Java/kernel diagnostics are in
+`build/cryptomator-port-source/native-candidate-1/`. No new signal, mount or
+recovery action was used for this collection. Candidate2 does not establish
+success for that skipped real factory dependency.
+
+Before any mounted gate, source review found a concrete cleanup blocker in
+pinned host libfuse3 3.18.3: `fuse_unmount` delegates to `fuse_kern_unmount`,
+which closes its channel then calls native `unmount(..., MNT_FORCE)`
+unconditionally. The candidate's generated unmount method still calls it.
+The mounted gate is held; no force-based normal-close pass is claimed.
+A source-backed alternative is ordinary native unmount followed by independent
+captured mount absence and terminal-loop checks, then `fuse_destroy`, whose
+session destructor closes the owned descriptor without a native unmount call.
+That alternative still requires implementation and native lifecycle controls,
+including busy, moved/replaced mount and startup failure cases. Exact upstream
+release sources and hashes are retained in
+`inventory/cryptomator-fuse3-lifecycle/manifest.json`.
