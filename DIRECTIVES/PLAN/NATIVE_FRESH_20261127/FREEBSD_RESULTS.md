@@ -1187,3 +1187,21 @@ is not included among these results.
   production adoption. Endpoint closure alone grants no storage authority;
   actual service/common callbacks/native teardown and product admission remain
   pending. No LKL/FUSE/mount/device job was started.
+
+
+### Real Cryptomator pilot image: preparation only
+
+- Purpose/input: compose qualified provider3 image `9b213272...` with the
+  independently tested shared managed helper `216831ca...`; no native mount
+  authorized by this preparation. Recipe `prepare.py` hash `a4606dd4...` in
+  `build/cryptomator-real-pilot-image-v1/`.
+- Command/outcome: user-only copy and full SHA/metadata verification. All 275
+  original provider entries, 14 new shared source inputs and 27 locked original
+  dependencies match. The provider's two explicit API/NIO derivations and native
+  platform JAR stay byte-identical. Only compiled change is helper JAR
+  `3f39c3b4...` to `216831ca...`; source provenance is appended separately.
+- Evidence/cleanup: new manifest `2bd353c5...`, 291 entries and 21 preserved
+  symlinks; full archive `0110d5b9...` SHA and gzip CRC verified. Original image,
+  helper, sourcekit and manifest metadata/bytes remain unchanged. Assembly
+  process is terminal; no Java, build, test, vault, mount or native channel
+  operation ran. Real controller/source review and mounted gates remain pending.
