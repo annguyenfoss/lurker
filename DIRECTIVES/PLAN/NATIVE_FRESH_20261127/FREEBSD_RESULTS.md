@@ -130,10 +130,13 @@ rename, a partially visible target, or weakened durability. Custom kernel
 work is deferred by the round instructions until the complete ordinary-route
 assessment is reported. No such custom build has started.
 
-The private `cases/applicability.json` enumerates all **130 method/filesystem
-cells**, with initial receipts and scoped retests. GELI/NTFS now raises the
-current successful pair count to 31; the initial 41 attempts remain 30 passes
-and 11 non-passes. The installed replay is reconciled separately below.
+The private `cases/applicability.json` retains the initial **130 method/filesystem
+cells**, receipts and scoped retests. The separate
+`cases/applicability-installed-d601bc5-with-recovery.json` reconciles all 130 current
+cells, installed file/device/directory-backing routes, writer credentials,
+failed stock shutdown, clone recovery and the later PEFS guard without rewriting
+that history. GELI/NTFS raises installed lifecycle passes to 31; the original 41
+attempts remain 30 passes and 11 non-passes. The installed replay is detailed below.
 OS-specific hdiutil,
 diskutil, CGD and softraid methods are not FreeBSD providers. No eligible native
 LUKS1/LUKS2 read/write implementation has been established: libluksde is an
