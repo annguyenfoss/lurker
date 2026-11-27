@@ -262,3 +262,27 @@ separate from the earlier private-prefix receipts. The resource pilot now uses
 and are mounted while daemon/kernel memory is sampled. After normal pilot
 closure, LUKS1/VeraCrypt/CryFS/Cryptomator installed default callbacks will
 complete the six-backend callback gate before any reboot cohort is armed.
+
+All six installed default callback backends have now passed. The remaining four
+ran after the resource pilot had measured and normally closed its six fixtures.
+The pilot observed approximately 133 MiB steady folder-daemon RSS and a roughly
+1 GiB CryFS startup/KDF high-water mark that is released before steady service.
+The preserved initial projection incorrectly multiplied transient high-water
+usage per mounted folder; the reviewed model uses steady RSS per filesystem,
+one sequential 1,120 MiB operation peak, a 1 GiB reserve and a separate native
+filesystem budget. Cohorts of 12, 18 or 54 fail that conservative admission.
+Nine one-filesystem cohorts of six fixtures fit, with a modeled minimum reserve
+of approximately 1.15 GiB. Live create/open checks enforce the peak plus reserve.
+No larger cohort was armed.
+
+The ext4 and Btrfs cohorts have passed two ordinary Ubuntu guest reboots:
+**12/12 full five-file payload hash sets verified after normal Auto reopen and
+normal closure**. Boot identities are explicitly chained in the persistent
+ledger. Ext4 preparation retained at least 2,133,440 KiB available RAM; Btrfs
+retained at least 2,394,804 KiB. The first controller's SSH poll timed out during
+the second reboot; that harness receipt is retained, retry handling was corrected,
+and the already booted Btrfs cohort verified normally. There was no product
+failure or forced recovery. The ordinary kernel remains 7.3.0-11-generic; the
+persistent storage disk is remounted only after domain/serial/size/UUID checks.
+XFS and the remaining eligible filesystem cohorts are in progress. Scratch-device
+testing remains pending after these persistence gates.
