@@ -625,7 +625,8 @@ mod tests {
     #[test]
     #[ignore = "requires an explicitly configured remote native fixture and real helper"]
     fn native_gui_callbacks_create_mount_reopen_and_unmount() {
-        use std::os::unix::fs::DirBuilderExt;
+        use std::io::Write;
+        use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
         use std::sync::atomic::Ordering;
         use std::time::{Duration, Instant};
         let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
@@ -660,6 +661,11 @@ mod tests {
             std::env::var("LURKER_DESKTOP_NATIVE_FORMAT").unwrap_or_else(|_| "gocryptfs".into());
         let backend = lurker_core::VolumeType::parse(&format).expect("backend name");
         assert!(backend.supports_platform(std::env::consts::OS));
+        let unprivileged =
+            std::env::var("LURKER_DESKTOP_NATIVE_UNPRIVILEGED").as_deref() == Ok("1");
+        if unprivileged {
+            assert!(cfg!(target_os = "linux") && backend == lurker_core::VolumeType::Veracrypt);
+        }
         let mirrored = backend == lurker_core::VolumeType::Raid1c;
         let uid = lurker_core::effective_uid();
         if let Ok(expected) = std::env::var("LURKER_DESKTOP_NATIVE_EXPECT_UID") {
@@ -677,9 +683,21 @@ mod tests {
             );
         }
         let fixture = fixture_parent.join(format!("gui-{}", std::process::id()));
-        std::fs::create_dir(&fixture).unwrap();
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&fixture)
+            .unwrap();
+        let mut recovery = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(fixture.join("synthetic-password"))
+            .unwrap();
+        recovery.write_all(fixture_password.as_bytes()).unwrap();
+        recovery.sync_all().unwrap();
         let partition = std::env::var_os("LURKER_DESKTOP_NATIVE_PARTITION");
         let physical_partition = partition.is_some();
+        assert!(!unprivileged || !physical_partition);
         let source = if let Some(partition) = partition {
             use std::os::unix::fs::FileTypeExt;
             assert!(
@@ -751,6 +769,11 @@ mod tests {
             operation_busy: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
         super::bind_callbacks(&ui, &state);
+        if unprivileged {
+            super::apply_privilege_mode(&ui, "unprivileged");
+            assert_eq!(ui.get_privilege_mode(), "unprivileged");
+        }
+        eprintln!("native GUI selected mode={}", ui.get_privilege_mode());
         ui.show().unwrap();
         let wait = || {
             let deadline = Instant::now() + Duration::from_secs(120);
@@ -777,11 +800,14 @@ mod tests {
             );
         };
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            ui.set_create_format(if backend == lurker_core::VolumeType::Veracrypt {
-                "vera"
-            } else {
-                format.as_str()
-            }.into());
+            ui.set_create_format(
+                if backend == lurker_core::VolumeType::Veracrypt {
+                    "vera"
+                } else {
+                    format.as_str()
+                }
+                .into(),
+            );
             render(&window);
             ui.set_create_target_kind(
                 if physical_partition {
@@ -846,6 +872,18 @@ mod tests {
                 ui.invoke_submit_mount();
                 wait();
                 assert_eq!(ui.get_mount_passphrase(), "");
+                if unprivileged {
+                    let volumes = state.active_volumes.lock().unwrap();
+                    let volume = volumes
+                        .iter()
+                        .find(|volume| owns_volume(volume))
+                        .expect("GUI-owned volume");
+                    assert_eq!(
+                        volume.privilege_mode,
+                        lurker_core::PrivilegeMode::Unprivileged
+                    );
+                    eprintln!("native GUI active row mode={:?}", volume.privilege_mode);
+                }
             };
             let unmount = || {
                 let index = state
