@@ -1,0 +1,1290 @@
+diff --git a/include/bitops.h b/include/bitops.h
+index d0c5582..914cae9 100644
+--- a/include/bitops.h
++++ b/include/bitops.h
+@@ -6,6 +6,7 @@
+  * fls: find last bit set.
+  */
+ 
++#ifndef LURKER_DARWIN_MKFS
+ static inline int fls(int x)
+ {
+ 	int r = 32;
+@@ -34,6 +35,8 @@ static inline int fls(int x)
+ 	return r;
+ }
+ 
++#endif /* Darwin provides native fls with the same bit-position contract */
++
+ static inline int fls64(__u64 x)
+ {
+ 	__u32 h = x >> 32;
+diff --git a/include/darwin.h b/include/darwin.h
+new file mode 100644
+index 0000000..93edbe3
+--- /dev/null
++++ b/include/darwin.h
+@@ -0,0 +1,137 @@
++/* SPDX-License-Identifier: LGPL-2.1 */
++/* Copyright (c) 2004-2005 Silicon Graphics, Inc. All Rights Reserved.
++ * Native platform definitions adapt the upstream XFS public host interface.
++ */
++/* Native Darwin host definitions for the formatter only. No Linux syscalls. */
++#ifndef XFS_DARWIN_H
++#define XFS_DARWIN_H
++#include <errno.h>
++#include <fcntl.h>
++#include <getopt.h>
++#include <inttypes.h>
++#include <machine/endian.h>
++#include <signal.h>
++#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <sys/disk.h>
++#include <sys/ioctl.h>
++#include <sys/mount.h>
++#include <sys/param.h>
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <unistd.h>
++#include <uuid/uuid.h>
++/* Keep XFS internal page variables distinct from native Mach macros. */
++#undef PAGE_SIZE
++#undef PAGE_SHIFT
++/* Fixed-width XFS internal/on-disk types, not a Linux host ABI. */
++typedef uint8_t __u8;
++typedef int8_t __s8;
++typedef uint16_t __u16;
++typedef int16_t __s16;
++typedef uint32_t __u32;
++typedef int32_t __s32;
++typedef uint64_t __u64;
++typedef int64_t __s64;
++typedef off_t loff_t;
++typedef off_t xfs_off_t;
++typedef uint64_t xfs_ino_t;
++typedef uint32_t xfs_dev_t;
++typedef int64_t xfs_daddr_t;
++typedef uint32_t xfs_nlink_t;
++#define __BYTE_ORDER BYTE_ORDER
++#define __BIG_ENDIAN BIG_ENDIAN
++#define __LITTLE_ENDIAN LITTLE_ENDIAN
++#define EFSCORRUPTED EILSEQ
++#define EFSBADCRC EBADMSG
++static inline void *memalign(size_t alignment, size_t length)
++{
++	void *result = NULL;
++	int error = posix_memalign(&result, alignment, length);
++	if (error) {
++		errno = error;
++		return NULL;
++	}
++	return result;
++}
++static inline int platform_uuid_compare(uuid_t *a, uuid_t *b)
++{
++	return uuid_compare(*a, *b);
++}
++static inline void platform_uuid_unparse(uuid_t *u, char *s)
++{
++	uuid_unparse(*u, s);
++}
++static inline int platform_uuid_parse(const char *s, uuid_t *u)
++{
++	return uuid_parse(s, *u);
++}
++static inline int platform_uuid_is_null(uuid_t *u) { return uuid_is_null(*u); }
++static inline void platform_uuid_generate(uuid_t *u) { uuid_generate(*u); }
++static inline void platform_uuid_clear(uuid_t *u) { uuid_clear(*u); }
++static inline void platform_uuid_copy(uuid_t *a, uuid_t *b)
++{
++	uuid_copy(*a, *b);
++}
++/* Discard is optional. Report unsupported honestly; never fake successful I/O.
++ */
++static inline int platform_discard_blocks(int fd, uint64_t start,
++					  uint64_t length)
++{
++	(void)fd;
++	(void)start;
++	(void)length;
++	return ENOTSUP;
++}
++static inline void platform_crash(void) { kill(getpid(), SIGKILL); }
++/* Existing upstream XFS inode attribute representation and flag values. */
++struct fsxattr {
++	__u32 fsx_xflags;     /* xflags field value (get/set) */
++	__u32 fsx_extsize;    /* extsize field value (get/set)*/
++	__u32 fsx_nextents;   /* nextents field value (get)	*/
++	__u32 fsx_projid;     /* project identifier (get/set) */
++	__u32 fsx_cowextsize; /* cow extsize field value (get/set) */
++	unsigned char fsx_pad[8];
++};
++#define FS_XFLAG_REALTIME 0x00000001	 /* data in realtime volume */
++#define FS_XFLAG_PREALLOC 0x00000002	 /* preallocated file extents */
++#define FS_XFLAG_IMMUTABLE 0x00000008	 /* file cannot be modified */
++#define FS_XFLAG_APPEND 0x00000010	 /* all writes append */
++#define FS_XFLAG_SYNC 0x00000020	 /* all writes synchronous */
++#define FS_XFLAG_NOATIME 0x00000040	 /* do not update access time */
++#define FS_XFLAG_NODUMP 0x00000080	 /* do not include in backups */
++#define FS_XFLAG_RTINHERIT 0x00000100	 /* create with rt bit set */
++#define FS_XFLAG_PROJINHERIT 0x00000200	 /* create with parents projid */
++#define FS_XFLAG_NOSYMLINKS 0x00000400	 /* disallow symlink creation */
++#define FS_XFLAG_EXTSIZE 0x00000800	 /* extent size allocator hint */
++#define FS_XFLAG_EXTSZINHERIT 0x00001000 /* inherit inode extent size */
++#define FS_XFLAG_NODEFRAG 0x00002000	 /* do not defragment */
++#define FS_XFLAG_FILESTREAM 0x00004000	 /* use filestream allocator */
++#define FS_XFLAG_DAX 0x00008000		 /* use DAX for IO */
++#define FS_XFLAG_HASATTR 0x80000000	 /* no DIFLAG for this	*/
++
++#ifndef FS_XFLAG_COWEXTSIZE
++#define FS_XFLAG_COWEXTSIZE 0x00010000 /* CoW extent size allocator hint */
++#endif
++
++#ifndef FS_XFLAG_VERITY
++#define FS_XFLAG_VERITY 0x00020000 /* fs-verity enabled */
++#endif
++
++/*
++ * Case handling flags (read-only, cannot be set via ioctl).
++ * Default (neither set) indicates POSIX semantics: case-sensitive
++ * lookups and case-preserving storage.
++ */
++#ifndef FS_XFLAG_CASEFOLD
++#define FS_XFLAG_CASEFOLD 0x00040000 /* case-insensitive lookups */
++#endif
++
++#ifndef FS_XFLAG_CASENONPRESERVING
++#define FS_XFLAG_CASENONPRESERVING 0x00080000 /* case not preserved */
++#endif
++
++#endif
+diff --git a/include/libxfs.h b/include/libxfs.h
+index e28b79d..f2c8471 100644
+--- a/include/libxfs.h
++++ b/include/libxfs.h
+@@ -17,6 +17,9 @@
+ #include "libxfs_api_defs.h"
+ #include "platform_defs.h"
+ #include "xfs.h"
++#ifdef LURKER_DARWIN_MKFS
++#include "xfs_arch.h"
++#endif
+ 
+ #include "list.h"
+ #include "hlist.h"
+diff --git a/include/platform_defs.h b/include/platform_defs.h
+index 5d1bfb1..dfeb533 100644
+--- a/include/platform_defs.h
++++ b/include/platform_defs.h
+@@ -24,7 +24,9 @@
+ #include <stdbool.h>
+ #include <libgen.h>
+ #include <urcu.h>
++#ifndef LURKER_DARWIN_MKFS
+ #include <linux/blkzoned.h>
++#endif
+ 
+ /* long and pointer must be either 32 bit or 64 bit */
+ #define BITS_PER_LONG (sizeof(long) * CHAR_BIT)
+@@ -82,8 +84,12 @@ struct timespec64 {
+ 	long		tv_nsec;		/* nanoseconds */
+ };
+ 
++#ifndef NSEC_PER_SEC
+ #define NSEC_PER_SEC	(1000000000ULL)
++#endif
++#ifndef NSEC_PER_USEC
+ #define NSEC_PER_USEC	(1000ULL)
++#endif
+ 
+ /* Simplified from version in include/linux/overflow.h */
+ 
+@@ -320,6 +326,7 @@ struct kvec {
+  * Local definitions for the new cached report zones added in Linux 6.19 in case
+  * the system <linux/blkzoned.h> doesn't provide them yet.
+  */
++#ifndef LURKER_DARWIN_MKFS
+ #ifndef BLKREPORTZONEV2
+ #define BLKREPORTZONEV2		_IOWR(0x12, 142, struct blk_zone_report)
+ #endif
+@@ -330,6 +337,8 @@ struct kvec {
+ #define BLK_ZONE_COND_ACTIVE	0xff
+ #endif
+ 
++#endif /* !LURKER_DARWIN_MKFS */
++
+ /* xfs_attr.h */
+ #ifndef __counted_by_ptr
+ #define __counted_by_ptr(member)
+diff --git a/include/xfs.h b/include/xfs.h
+index a2f159a..ad468c2 100644
+--- a/include/xfs.h
++++ b/include/xfs.h
+@@ -7,6 +7,8 @@
+ 
+ #if defined(__linux__)
+ #include <xfs/linux.h>
++#elif defined(__APPLE__) && defined(LURKER_DARWIN_MKFS)
++#include <xfs/darwin.h>
+ #else
+ # error unknown platform... have fun porting!
+ #endif
+diff --git a/libfrog/crc32.c b/libfrog/crc32.c
+index d07e537..cdab3e7 100644
+--- a/libfrog/crc32.c
++++ b/libfrog/crc32.c
+@@ -36,7 +36,11 @@
+ #include <stdio.h>
+ #include <sys/types.h>
+ #include <inttypes.h>
++#ifdef LURKER_DARWIN_MKFS
++#include "darwin.h"
++#else
+ #include <asm/types.h>
++#endif
+ #include <sys/time.h>
+ /* For endian conversion routines */
+ #include "xfs_arch.h"
+diff --git a/libfrog/darwin.c b/libfrog/darwin.c
+new file mode 100644
+index 0000000..36ed515
+--- /dev/null
++++ b/libfrog/darwin.c
+@@ -0,0 +1,345 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Native host operations for the Darwin mkfs-only build. */
++#include <DiskArbitration/DiskArbitration.h>
++#include "platform_defs.h"
++#include "xfs.h"
++#include "libfrog/platform.h"
++#include <sys/disk.h>
++#include <sys/file.h>
++#include <sys/ioctl.h>
++#include <sys/mount.h>
++#include <sys/sysctl.h>
++
++extern char *progname;
++static int maximum_io_alignment;
++
++/* Normalize the native block/raw-device spelling without inventing an alias. */
++static const char *disk_name(const char *name)
++{
++	if (!strncmp(name, "/dev/rdisk", 10))
++		return name + 6;
++	if (!strncmp(name, "/dev/disk", 9))
++		return name + 5;
++	return NULL;
++}
++
++/* Special-device vnodes reject advisory locks in XNU. Claim the whole native
++ * disk through Disk Arbitration instead; keep the session alive until close. */
++static DASessionRef claim_session;
++static DADiskRef claim_disk;
++static bool claim_done;
++static DAReturn claim_status;
++static int claimed_fd = -1;
++
++static void claim_complete(DADiskRef disk, DADissenterRef dissenter,
++			   void *context)
++{
++	(void)disk;
++	(void)context;
++	claim_status = dissenter ? DADissenterGetStatus(dissenter) : 0;
++	claim_done = true;
++}
++static DADissenterRef refuse_claim_release(DADiskRef disk, void *context)
++{
++	(void)disk;
++	(void)context;
++	return DADissenterCreate(kCFAllocatorDefault, kDAReturnBusy,
++				 CFSTR("Native formatter holds this source"));
++}
++static void release_native_claim(void)
++{
++	if (claim_disk) {
++		if (claim_done && !claim_status)
++			DADiskUnclaim(claim_disk);
++		CFRelease(claim_disk);
++		claim_disk = NULL;
++	}
++	if (claim_session) {
++		DASessionUnscheduleFromRunLoop(claim_session,
++					       CFRunLoopGetCurrent(),
++					       kCFRunLoopDefaultMode);
++		CFRelease(claim_session);
++		claim_session = NULL;
++	}
++	claimed_fd = -1;
++}
++void platform_release_device(int fd)
++{
++	if (fd == claimed_fd)
++		release_native_claim();
++}
++static int claim_native_device(const char *path)
++{
++	DADiskRef source;
++	CFAbsoluteTime deadline;
++	const char *whole;
++	char whole_path[PATH_MAX];
++	if (claim_session) {
++		errno = EBUSY;
++		return -1;
++	}
++	claim_session = DASessionCreate(kCFAllocatorDefault);
++	if (!claim_session) {
++		errno = ENXIO;
++		return -1;
++	}
++	source =
++	    DADiskCreateFromBSDName(kCFAllocatorDefault, claim_session, path);
++	if (!source)
++		goto fail;
++	claim_disk = DADiskCopyWholeDisk(source);
++	CFRelease(source);
++	if (!claim_disk)
++		goto fail;
++	whole = DADiskGetBSDName(claim_disk);
++	if (!whole || snprintf(whole_path, sizeof(whole_path), "/dev/%s",
++			       whole) >= sizeof(whole_path))
++		goto fail;
++	if (platform_check_ismounted(whole_path, whole_path, NULL, 1))
++		goto fail;
++	claim_done = false;
++	claim_status = kDAReturnError;
++	DASessionScheduleWithRunLoop(claim_session, CFRunLoopGetCurrent(),
++				     kCFRunLoopDefaultMode);
++	DADiskClaim(claim_disk, kDADiskClaimOptionDefault, refuse_claim_release,
++		    NULL, claim_complete, NULL);
++	deadline = CFAbsoluteTimeGetCurrent() + 3.0;
++	while (!claim_done && CFAbsoluteTimeGetCurrent() < deadline)
++		CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
++	if (!claim_done || claim_status) {
++		fprintf(stderr,
++			"%s: native disk claim refused or timed out (status "
++			"0x%x)\n",
++			progname, claim_status);
++		goto fail;
++	}
++	if (platform_check_ismounted(whole_path, whole_path, NULL, 1))
++		goto fail;
++	return 0;
++fail:
++	release_native_claim();
++	errno = EBUSY;
++	return -1;
++}
++
++int platform_check_ismounted(char *path, char *block, struct stat *known,
++			     int verbose)
++{
++	struct stat st;
++	struct statfs *mounts;
++	const char *target, *mounted;
++	int count, actual, busy = 0;
++	size_t bytes, length;
++	(void)known;
++	(void)verbose;
++	if (lstat(block, &st) < 0)
++		return 1;
++	if (S_ISREG(st.st_mode))
++		return 0; /* held-fd O_EXLOCK enforces file exclusion */
++	if (!S_ISBLK(st.st_mode) && !S_ISCHR(st.st_mode))
++		return 1;
++	target = disk_name(block);
++	if (!target)
++		return 1;
++	length = strlen(target);
++	count = getfsstat(NULL, 0, MNT_NOWAIT);
++	if (count < 0 || count > INT_MAX / (int)sizeof(*mounts) - 16)
++		return 1;
++	bytes = (size_t)(count + 16) * sizeof(*mounts);
++	mounts = calloc(1, bytes);
++	if (!mounts)
++		return 1;
++	actual = getfsstat(mounts, (int)bytes, MNT_NOWAIT);
++	if (actual < 0 || (size_t)actual >= (size_t)count + 16)
++		busy = 1;
++	else
++		for (int i = 0; i < actual; i++) {
++			mounted = disk_name(mounts[i].f_mntfromname);
++			if (mounted && !strncmp(mounted, target, length) &&
++			    (mounted[length] == '\0' ||
++			     mounted[length] == 's')) {
++				busy = 1;
++				break;
++			}
++		}
++	free(mounts);
++	if (busy)
++		fprintf(stderr,
++			"%s: mounted or indeterminate native source %s\n",
++			progname, path);
++	return busy;
++}
++int platform_check_iswritable(char *path, char *block, struct stat *st)
++{
++	return platform_check_ismounted(path, block, st, 1);
++}
++
++int platform_open_device(const char *path, int flags, bool create)
++{
++	struct stat before, held, after;
++	uint32_t writable = 0;
++	int fd, saved;
++	/* Never O_TRUNC: the claim and inode validation must precede any
++	 * writes. */
++	flags &= ~(O_TRUNC | O_EXCL | O_CREAT);
++	flags |= O_NOFOLLOW | O_CLOEXEC;
++	if (create) {
++		flags |= O_CREAT | O_EXCL | O_EXLOCK | O_NONBLOCK;
++	} else {
++		if (lstat(path, &before) < 0)
++			return -1;
++		if (S_ISREG(before.st_mode))
++			flags |= O_EXLOCK | O_NONBLOCK;
++		else if (S_ISBLK(before.st_mode) || S_ISCHR(before.st_mode)) {
++			if (claim_native_device(path) < 0)
++				return -1;
++		} else {
++			errno = EINVAL;
++			return -1;
++		}
++	}
++	fd = open(path, flags, 0600);
++	if (fd < 0) {
++		int error = errno;
++		release_native_claim();
++		errno = error;
++		return -1;
++	}
++	if (fstat(fd, &held) < 0 || lstat(path, &after) < 0)
++		goto fail;
++	if (held.st_dev != after.st_dev || held.st_ino != after.st_ino ||
++	    (!create &&
++	     (held.st_dev != before.st_dev || held.st_ino != before.st_ino))) {
++		errno = ESTALE;
++		goto fail;
++	}
++	if (S_ISREG(held.st_mode)) {
++		if (held.st_uid != getuid() || held.st_nlink != 1) {
++			errno = EPERM;
++			goto fail;
++		}
++	} else if (S_ISBLK(held.st_mode) || S_ISCHR(held.st_mode)) {
++		if (create || !disk_name(path) ||
++		    platform_check_ismounted((char *)path, (char *)path, &held,
++					     1)) {
++			errno = EBUSY;
++			goto fail;
++		}
++		if (ioctl(fd, DKIOCISWRITABLE, &writable) < 0)
++			goto fail;
++		if (!writable) {
++			errno = EROFS;
++			goto fail;
++		}
++	} else {
++		errno = EINVAL;
++		goto fail;
++	}
++	if (claim_session)
++		claimed_fd = fd;
++	return fd;
++fail:
++	saved = errno;
++	close(fd);
++	release_native_claim();
++	errno = saved;
++	return -1;
++}
++
++int platform_flush_device(int fd)
++{
++	struct stat st;
++	if (fstat(fd, &st) < 0 || fsync(fd) < 0)
++		return -1;
++	if (S_ISREG(st.st_mode))
++		return fcntl(fd, F_FULLFSYNC);
++	if (S_ISBLK(st.st_mode) || S_ISCHR(st.st_mode))
++		return ioctl(fd, DKIOCSYNCHRONIZECACHE, 0);
++	errno = EINVAL;
++	return -1;
++}
++
++void platform_findsizes(char *path, int fd, long long *size, int *blocksize)
++{
++	struct stat st;
++	uint32_t logical = 512;
++	uint64_t count, bytes;
++	if (fstat(fd, &st) < 0)
++		goto fail;
++	if (S_ISREG(st.st_mode)) {
++		if (st.st_size < 0 || st.st_size % 512) {
++			errno = EINVAL;
++			goto fail;
++		}
++		*size = st.st_size / 512;
++		*blocksize = 512;
++		return;
++	}
++	if (!S_ISBLK(st.st_mode) && !S_ISCHR(st.st_mode)) {
++		errno = EINVAL;
++		goto fail;
++	}
++	if (ioctl(fd, DKIOCGETBLOCKSIZE, &logical) < 0 ||
++	    ioctl(fd, DKIOCGETBLOCKCOUNT, &count) < 0)
++		goto fail;
++	if (logical < 512 || logical > 32768 || (logical & (logical - 1)) ||
++	    !count || count > (uint64_t)LLONG_MAX / logical) {
++		errno = EOVERFLOW;
++		goto fail;
++	}
++	bytes = count * logical;
++	if ((int)logical > maximum_io_alignment)
++		maximum_io_alignment = (int)logical;
++	if (bytes % 512) {
++		errno = EINVAL;
++		goto fail;
++	}
++	*size = (long long)(bytes / 512);
++	*blocksize = (int)logical;
++	return;
++fail:
++	fprintf(stderr, "%s: native geometry failed for %s: %s\n", progname,
++		path, strerror(errno));
++	exit(1);
++}
++void platform_set_blocksize(int fd, char *path, dev_t device, int blocksize,
++			    bool fatal)
++{
++	long long size;
++	int logical;
++	(void)device;
++	platform_findsizes(path, fd, &size, &logical);
++	if (blocksize < logical || blocksize % logical) {
++		fprintf(stderr,
++			"%s: requested block size is incompatible with native "
++			"geometry\n",
++			progname);
++		if (fatal)
++			exit(1);
++	}
++}
++int platform_direct_blockdev(void) { return 0; } /* buffered native I/O */
++int platform_align_blockdev(void)
++{
++	int page = getpagesize();
++	return maximum_io_alignment > page ? maximum_io_alignment : page;
++}
++int platform_nproc(void)
++{
++	int count;
++	size_t length = sizeof(count);
++	if (sysctlbyname("hw.ncpu", &count, &length, NULL, 0) < 0 || count < 1)
++		return 1;
++	return count;
++}
++unsigned long platform_physmem(void)
++{
++	uint64_t bytes;
++	size_t length = sizeof(bytes);
++	if (sysctlbyname("hw.memsize", &bytes, &length, NULL, 0) < 0 ||
++	    bytes / 1024 > ULONG_MAX) {
++		perror("native physical memory query");
++		exit(1);
++	}
++	return (unsigned long)(bytes / 1024);
++}
+diff --git a/libfrog/fsgeom.c b/libfrog/fsgeom.c
+index ad04767..1b34ad1 100644
+--- a/libfrog/fsgeom.c
++++ b/libfrog/fsgeom.c
+@@ -112,6 +112,7 @@ xfs_report_geom(
+ }
+ 
+ /* Try to obtain the xfs geometry.  On error returns a negative error code. */
++#ifndef LURKER_DARWIN_MKFS
+ int
+ xfrog_geometry(
+ 	int			fd,
+@@ -257,6 +258,8 @@ xfrog_rtgroup_geometry(
+ 	return 0;
+ }
+ 
++#endif /* Linux filesystem query entrypoints */
++
+ enum {
+ 	B_SIZE = 0,
+ 	B_MAX_OPTS,
+diff --git a/libfrog/platform.h b/libfrog/platform.h
+index 39d558f..2e9a3cb 100644
+--- a/libfrog/platform.h
++++ b/libfrog/platform.h
+@@ -7,6 +7,10 @@
+ #ifndef __LIBFROG_PLATFORM_H__
+ #define __LIBFROG_PLATFORM_H__
+ 
++#ifdef LURKER_DARWIN_MKFS
++int platform_open_device(const char *path, int flags, bool create);
++void platform_release_device(int fd);
++#endif
+ int platform_check_ismounted(char *path, char *block, struct stat *sptr,
+ 		int verbose);
+ int platform_check_iswritable(char *path, char *block, struct stat *sptr);
+diff --git a/libfrog/projects.c b/libfrog/projects.c
+index 4b2aec5..6aacd64 100644
+--- a/libfrog/projects.c
++++ b/libfrog/projects.c
+@@ -156,6 +156,7 @@ getprpathent(void)
+ }
+ 
+ 
++#ifndef LURKER_DARWIN_MKFS
+ int
+ getprojid(
+ 	const char	*name,
+@@ -187,3 +188,5 @@ setprojid(
+ 	}
+ 	return error;
+ }
++
++#endif /* Linux mounted-filesystem project-ID ioctl entrypoints */
+diff --git a/libxfs/buf_mem.c b/libxfs/buf_mem.c
+index 29e23c3..46d465b 100644
+--- a/libxfs/buf_mem.c
++++ b/libxfs/buf_mem.c
+@@ -353,8 +353,13 @@ xmbuf_stale(
+ 	ASSERT(xfs_buftarg_is_mem(bp->b_target));
+ 
+ 	pos = BBTOB(xfs_buf_daddr(bp)) + xf->partition_pos;
++#ifdef LURKER_DARWIN_MKFS
++ fpunchhole_t hole = { .fp_offset = pos, .fp_length = BBTOB(bp->b_length) };
++ fcntl(xf->fcb->fd, F_PUNCHHOLE, &hole);
++#else
+ 	fallocate(xf->fcb->fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, pos,
+ 			BBTOB(bp->b_length));
++#endif
+ }
+ 
+ /*
+diff --git a/libxfs/darwin_topology.h b/libxfs/darwin_topology.h
+new file mode 100644
+index 0000000..0dafe70
+--- /dev/null
++++ b/libxfs/darwin_topology.h
+@@ -0,0 +1,61 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* Included after the unmodified portable AG geometry algorithms in topology.c.
++ */
++int check_overwrite(const char *path)
++{
++	struct stat st;
++	if (!path || !*path || lstat(path, &st) < 0)
++		return -1;
++	/* Fail closed without a native filesystem-signature scanner. -f is
++	 * explicit. */
++	return !S_ISREG(st.st_mode) || st.st_size != 0;
++}
++static void darwin_get_topology(struct libxfs_dev *dev,
++				struct device_topology *dt)
++{
++	int fd, logical;
++	long long size;
++	uint32_t physical;
++	if (!dev->name)
++		return;
++	if (dev->isfile) {
++		dt->logical_sector_size = 512;
++		dt->physical_sector_size = 512;
++		return;
++	}
++	fd = open(dev->name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
++	if (fd < 0) {
++		perror(dev->name);
++		exit(1);
++	}
++	platform_findsizes(dev->name, fd, &size, &logical);
++	physical = (uint32_t)logical;
++	if (ioctl(fd, DKIOCGETPHYSICALBLOCKSIZE, &physical) < 0) {
++		int error = errno;
++		close(fd);
++		errno = error;
++		perror("native physical-sector query");
++		exit(1);
++	}
++	if (physical > INT_MAX || physical < (uint32_t)logical ||
++	    physical % logical || (physical & (physical - 1))) {
++		close(fd);
++		fprintf(stderr, "Invalid native physical-sector geometry\n");
++		exit(1);
++	}
++	if (close(fd) < 0) {
++		perror("close geometry query");
++		exit(1);
++	}
++	dt->logical_sector_size = logical;
++	dt->physical_sector_size = physical;
++}
++void libxfs_get_topology(struct libxfs_init *xi, struct fs_topology *ft,
++			 bool force)
++{
++	(void)force;
++	memset(ft, 0, sizeof(*ft));
++	darwin_get_topology(&xi->data, &ft->data);
++	darwin_get_topology(&xi->log, &ft->log);
++	darwin_get_topology(&xi->rt, &ft->rt);
++}
+diff --git a/libxfs/init.c b/libxfs/init.c
+index bc5322f..617fd31 100644
+--- a/libxfs/init.c
++++ b/libxfs/init.c
+@@ -123,17 +123,25 @@ libxfs_device_open(
+ 	} else {
+ 		if (xi->flags & LIBXFS_EXCLUSIVELY)
+ 			flags |= O_EXCL;
++#ifndef LURKER_DARWIN_MKFS
+ 		if ((xi->flags & LIBXFS_DIRECT) && platform_direct_blockdev())
+ 			flags |= O_DIRECT;
++#endif
+ 	}
+ 
+ retry:
++#ifdef LURKER_DARWIN_MKFS
++	dev->fd = platform_open_device(dev->name, flags, dev->create);
++#else
+ 	dev->fd = open(dev->name, flags, 0666);
++#endif
+ 	if (dev->fd < 0) {
++#ifndef LURKER_DARWIN_MKFS
+ 		if (errno == EINVAL && (flags & O_DIRECT)) {
+ 			flags &= ~O_DIRECT;
+ 			goto retry;
+ 		}
++#endif
+ 		fprintf(stderr, _("%s: cannot open %s: %s\n"),
+ 			progname, dev->name, strerror(errno));
+ 		exit(1);
+@@ -145,6 +153,7 @@ retry:
+ 		exit(1);
+ 	}
+ 
++#ifndef LURKER_DARWIN_MKFS
+ 	if (!(xi->flags & LIBXFS_ISREADONLY) &&
+ 	    xi->setblksize &&
+ 	    (statb.st_mode & S_IFMT) == S_IFBLK) {
+@@ -156,6 +165,7 @@ retry:
+ 				xi->setblksize, flags & O_DIRECT);
+ 	}
+ 
++#endif
+ 	/*
+ 	 * Get the device number from the stat buf - unless we're not opening a
+ 	 * real device, in which case choose a new fake device number.
+@@ -181,9 +191,18 @@ libxfs_device_close(
+ 	_("%s: flush of device %s failed, err=%d"),
+ 			progname, dev->name, ret);
+ 	}
+-	close(dev->fd);
+-
+-	dev->fd = -1;
++#ifdef LURKER_DARWIN_MKFS
++ if (close(dev->fd) < 0) {
++  if (!ret) ret = -errno;
++  perror("closing native formatter source");
++ }
++ platform_release_device(dev->fd);
++ /* The final flush/close cannot turn a failed formatter into exit zero. */
++ if (ret) exit(1);
++#else
++ close(dev->fd);
++#endif
++ dev->fd = -1;
+ }
+ 
+ /*
+diff --git a/libxfs/rdwr.c b/libxfs/rdwr.c
+index 6447690..b6df61a 100644
+--- a/libxfs/rdwr.c
++++ b/libxfs/rdwr.c
+@@ -76,12 +76,14 @@ libxfs_device_zero(struct xfs_buftarg *btp, xfs_daddr_t start, uint len)
+ 
+ 	/* try to use special zeroing methods, fall back to writes if needed */
+ 	len_bytes = LIBXFS_BBTOOFF64(len);
++#ifndef LURKER_DARWIN_MKFS
+ 	error = fallocate(fd, FALLOC_FL_ZERO_RANGE, start_offset, len_bytes);
+ 	if (!error) {
+ 		xfs_buftarg_trip_write(btp);
+ 		return 0;
+ 	}
+ 
++#endif
+ 	zsize = min(BDSTRAT_SIZE, BBTOB(len));
+ 	if ((z = memalign(libxfs_device_alignment(), zsize)) == NULL) {
+ 		fprintf(stderr,
+diff --git a/libxfs/topology.c b/libxfs/topology.c
+index 5571c9d..29f914a 100644
+--- a/libxfs/topology.c
++++ b/libxfs/topology.c
+@@ -12,10 +12,14 @@
+ 
+ #include "xfs_platform.h"
+ #include "libxcmd.h"
++#ifndef LURKER_DARWIN_MKFS
+ #include <blkid/blkid.h>
++#endif
+ #include "xfs_multidisk.h"
+ #include "libfrog/platform.h"
++#ifndef LURKER_DARWIN_MKFS
+ #include "libfrog/statx.h"
++#endif
+ 
+ #define TERABYTES(count, blog)	((uint64_t)(count) << (40 - (blog)))
+ #define GIGABYTES(count, blog)	((uint64_t)(count) << (30 - (blog)))
+@@ -143,6 +147,9 @@ done:
+  *	 0 for nothing found
+  *	-1 for internal error
+  */
++#ifdef LURKER_DARWIN_MKFS
++#include "darwin_topology.h"
++#else
+ int
+ check_overwrite(
+ 	const char	*device)
+@@ -378,3 +385,5 @@ libxfs_get_topology(
+ 	get_device_topology(&xi->rt, &ft->rt, force_overwrite);
+ 	get_device_topology(&xi->log, &ft->log, force_overwrite);
+ }
++
++#endif /* native host topology */
+diff --git a/libxfs/xfile.c b/libxfs/xfile.c
+index 6532197..5e8c13b 100644
+--- a/libxfs/xfile.c
++++ b/libxfs/xfile.c
+@@ -6,9 +6,11 @@
+ #include "xfs_platform.h"
+ #include "libxfs.h"
+ #include "libxfs/xfile.h"
++#ifndef LURKER_DARWIN_MKFS
+ #include <linux/memfd.h>
++#endif
+ #include <sys/mman.h>
+-#ifndef HAVE_MEMFD_CREATE
++#if !defined(HAVE_MEMFD_CREATE) && !defined(LURKER_DARWIN_MKFS)
+ #include <sys/syscall.h>
+ #endif
+ #include <sys/types.h>
+@@ -45,7 +47,7 @@
+  * (2018).  In case a libc is not providing the wrapper, we provide
+  * one here.
+  */
+-#ifndef HAVE_MEMFD_CREATE
++#if !defined(HAVE_MEMFD_CREATE) && !defined(LURKER_DARWIN_MKFS)
+ static int memfd_create(const char *name, unsigned int flags)
+ {
+ 	return syscall(SYS_memfd_create, name, flags);
+@@ -69,7 +71,16 @@ xfile_create_fd(
+ 	 * causes -EINVAL on old kernels, so fall back to omitting it so that
+ 	 * new xfs_repair can run on an older recovery cd kernel.
+ 	 */
+-	fd = memfd_create(description, MFD_CLOEXEC | MFD_NOEXEC_SEAL);
++#ifdef LURKER_DARWIN_MKFS
++ char template[] = "/tmp/lurker-xfs-scratch-XXXXXX";
++ fd = mkstemp(template);
++ if (fd < 0) return -1;
++ if (unlink(template) < 0 || fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) {
++  int saved = errno; close(fd); errno = saved; return -1;
++ }
++ goto got_fd;
++#else
++ fd = memfd_create(description, MFD_CLOEXEC | MFD_NOEXEC_SEAL);
+ 	if (fd >= 0)
+ 		goto got_fd;
+ 	fd = memfd_create(description, MFD_CLOEXEC);
+@@ -99,6 +110,7 @@ xfile_create_fd(
+ 	if (!errno)
+ 		errno = EOPNOTSUPP;
+ 	return -1;
++#endif
+ got_fd:
+ 	/*
+ 	 * Turn off mode bits we don't want -- group members and others should
+@@ -415,6 +427,11 @@ xfile_discard(
+ 	loff_t			pos,
+ 	unsigned long long	count)
+ {
+-	fallocate(xf->fcb->fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+-			pos, count);
++#ifdef LURKER_DARWIN_MKFS
++ fpunchhole_t hole = { .fp_offset = pos, .fp_length = count };
++ fcntl(xf->fcb->fd, F_PUNCHHOLE, &hole);
++#else
++ fallocate(xf->fcb->fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
++   pos, count);
++#endif
+ }
+diff --git a/libxfs/xfs_fs.h b/libxfs/xfs_fs.h
+index 185f09f..ff7d488 100644
+--- a/libxfs/xfs_fs.h
++++ b/libxfs/xfs_fs.h
+@@ -329,6 +329,7 @@ typedef struct xfs_growfs_rt {
+ /*
+  * Structures returned from ioctl XFS_IOC_FSBULKSTAT & XFS_IOC_FSBULKSTAT_SINGLE
+  */
++#ifndef LURKER_DARWIN_MKFS
+ typedef struct xfs_bstime {
+ 	__kernel_long_t tv_sec;		/* seconds		*/
+ 	__s32		tv_nsec;	/* and nanoseconds	*/
+@@ -364,6 +365,8 @@ struct xfs_bstat {
+ 	__u16		bs_aextents;	/* attribute number of extents	*/
+ };
+ 
++#endif /* Linux legacy bulkstat ABI is not a native formatter interface */
++
+ /* New bulkstat structure that reports v5 features and fixes padding issues */
+ struct xfs_bulkstat {
+ 	uint64_t	bs_ino;		/* inode number			*/
+@@ -427,12 +430,15 @@ struct xfs_bulkstat {
+  * and using two 16bit values to hold new 32bit projid was chosen
+  * to retain compatibility with "old" filesystems).
+  */
++#ifndef LURKER_DARWIN_MKFS
+ static inline uint32_t
+ bstat_get_projid(const struct xfs_bstat *bs)
+ {
+ 	return (uint32_t)bs->bs_projid_hi << 16 | bs->bs_projid_lo;
+ }
+ 
++#endif
++
+ /*
+  * The user-level BulkStat Request interface structure.
+  */
+@@ -675,6 +681,7 @@ typedef struct xfs_handle {
+ /*
+  * Structure passed to XFS_IOC_SWAPEXT
+  */
++#ifndef LURKER_DARWIN_MKFS
+ typedef struct xfs_swapext
+ {
+ 	int64_t		sx_version;	/* version */
+@@ -686,6 +693,7 @@ typedef struct xfs_swapext
+ 	char		sx_pad[16];	/* pad space, unused */
+ 	struct xfs_bstat sx_stat;	/* stat of target b4 copy */
+ } xfs_swapext_t;
++#endif
+ 
+ /*
+  * Flags for going down operation
+diff --git a/libxfs/xfs_platform.h b/libxfs/xfs_platform.h
+index f76ca7b..e7ceac3 100644
+--- a/libxfs/xfs_platform.h
++++ b/libxfs/xfs_platform.h
+@@ -120,7 +120,11 @@ extern char    *progname;
+ #define XFS_STATS_DEC(mp, count)	do { (mp) = (mp); } while (0)
+ #define XFS_STATS_ADD(mp, count, x)	do { (mp) = (mp); } while (0)
+ 
++#ifdef LURKER_DARWIN_MKFS
++#define __section(section) __attribute__((__section__("__DATA,__xfs_once")))
++#else
+ #define __section(section)	__attribute__((__section__(section)))
++#endif
+ 
+ #define xfs_printk_once(func, dev, fmt, ...)			\
+ ({								\
+diff --git a/mkfs/proto.c b/mkfs/proto.c
+index f17ed3b..146e8e1 100644
+--- a/mkfs/proto.c
++++ b/mkfs/proto.c
+@@ -9,7 +9,9 @@
+ #include <sys/resource.h>
+ #include <sys/stat.h>
+ #include <sys/xattr.h>
++#ifndef LURKER_DARWIN_MKFS
+ #include <linux/xattr.h>
++#endif
+ #include "libfrog/convert.h"
+ #include "proto.h"
+ 
+@@ -23,10 +25,12 @@ static void rsvfile(xfs_mount_t *mp, xfs_inode_t *ip, long long len);
+ static int newregfile(char **pp, char **fname);
+ static void rtinit(xfs_mount_t *mp);
+ static off_t filesize(int fd);
++#ifndef LURKER_DARWIN_MKFS
+ static void populate_from_dir(struct xfs_mount *mp, struct fsxattr *fsxp,
+ 		char *source_dir);
+ static void walk_dir(struct xfs_mount *mp, struct xfs_inode *pip,
+ 		struct fsxattr *fsxp, char *path_buf, int path_len);
++#endif
+ static int preserve_atime;
+ static int slashes_are_spaces;
+ 
+@@ -82,7 +86,11 @@ setup_proto(
+ 		return result;
+ 	}
+ 
+-	if ((fd = open(fname, O_RDONLY)) < 0 || (size = filesize(fd)) < 0) {
++#ifdef LURKER_DARWIN_MKFS
++ fprintf(stderr, "Prototype import is not available in the Darwin formatter candidate.\n");
++ exit(1);
++#endif
++ if ((fd = open(fname, O_RDONLY)) < 0 || (size = filesize(fd)) < 0) {
+ 		fprintf(stderr, _("%s: failed to open %s: %s\n"),
+ 			progname, fname, strerror(errno));
+ 		goto out_fail;
+@@ -406,6 +414,7 @@ writefile(
+ 		fail(_("error committing isize transaction"), error);
+ }
+ 
++#ifndef LURKER_DARWIN_MKFS
+ static void
+ writeattr(
+ 	struct xfs_inode	*ip,
+@@ -511,6 +520,8 @@ out_namebuf:
+ 	free(namebuf);
+ }
+ 
++#endif
++
+ static int
+ newregfile(
+ 	char		**pp,
+@@ -985,7 +996,9 @@ parseproto(
+ 	libxfs_parent_finish(mp, ppargs);
+ 	if (fmt == IF_REGULAR) {
+ 		writefile(ip, fname, fd);
++#ifndef LURKER_DARWIN_MKFS
+ 		writeattrs(ip, fname, fd);
++#endif
+ 		close(fd);
+ 	}
+ 	libxfs_irele(ip);
+@@ -1011,7 +1024,11 @@ parse_proto(
+ 		parseproto(mp, NULL, fsx, &protosource->data, NULL);
+ 		break;
+ 	case PROTO_SRC_DIR:
+-		populate_from_dir(mp, fsx, protosource->data);
++#ifdef LURKER_DARWIN_MKFS
++  fail("Directory import is unavailable in the Darwin formatter candidate", ENOTSUP);
++#else
++  populate_from_dir(mp, fsx, protosource->data);
++#endif
+ 		break;
+ 	case PROTO_SRC_NONE:
+ 		fail(_("invalid or unreadable source path"), ENOENT);
+@@ -1253,6 +1270,7 @@ filesize(
+ }
+ 
+ /* Try to allow as many open directories as possible. */
++#ifndef LURKER_DARWIN_MKFS
+ static void
+ bump_max_fds(void)
+ {
+@@ -1937,3 +1955,5 @@ populate_from_dir(
+ 	 */
+ 	libxfs_irele(ip);
+ }
++
++#endif /* directory import host ABI */
+diff --git a/mkfs/xfs_mkfs.c b/mkfs/xfs_mkfs.c
+index e56efff..0340e58 100644
+--- a/mkfs/xfs_mkfs.c
++++ b/mkfs/xfs_mkfs.c
+@@ -14,7 +14,9 @@
+ #include "libfrog/crc32cselftest.h"
+ #include "libfrog/dahashselftest.h"
+ #include "libfrog/fsproperties.h"
++#ifndef LURKER_DARWIN_MKFS
+ #include "libfrog/zones.h"
++#endif
+ #include "proto.h"
+ #include <ini.h>
+ 
+@@ -1401,7 +1403,11 @@ check_device_type(
+ 		return;
+ 	}
+ 
+-	if (S_ISBLK(statbuf.st_mode)) {
++	if (S_ISBLK(statbuf.st_mode)
++#ifdef LURKER_DARWIN_MKFS
++	    || S_ISCHR(statbuf.st_mode)
++#endif
++	) {
+ 		if (dev->isfile) {
+ 			fprintf(stderr,
+ 	_("specified \"-%s file\" on a block device %s\n"),
+@@ -2600,7 +2606,7 @@ _("log stripe unit specified, using v2 logs\n"));
+ 	}
+ }
+ 
+-struct zone_info {
++struct mkfs_zone_info {
+ 	/* number of zones, conventional or sequential */
+ 	unsigned int		nr_zones;
+ 	/* number of conventional zones */
+@@ -2613,14 +2619,15 @@ struct zone_info {
+ };
+ 
+ struct zone_topology {
+-	struct zone_info	data;
+-	struct zone_info	rt;
+-	struct zone_info	log;
++	struct mkfs_zone_info	data;
++	struct mkfs_zone_info	rt;
++	struct mkfs_zone_info	log;
+ };
+ 
++#ifndef LURKER_DARWIN_MKFS
+ static void
+ zone_validate_capacity(
+-	struct zone_info	*zi,
++	struct mkfs_zone_info	*zi,
+ 	__u64			capacity,
+ 	bool			conventional)
+ {
+@@ -2643,7 +2650,7 @@ zone_validate_capacity(
+ static void
+ report_zones(
+ 	const char		*name,
+-	struct zone_info	*zi)
++	struct mkfs_zone_info	*zi)
+ {
+ 	struct xfrog_zone_report *rep = NULL;
+ 	bool			found_seq = false;
+@@ -2743,6 +2750,8 @@ out_close:
+ 	close(fd);
+ }
+ 
++#endif
++
+ static void
+ validate_zoned(
+ 	struct mkfs_params	*cfg,
+@@ -2750,8 +2759,15 @@ validate_zoned(
+ 	struct mkfs_default_params *dft,
+ 	struct zone_topology	*zt)
+ {
+-	if (!cli->xi->data.isfile) {
+-		report_zones(cli->xi->data.name, &zt->data);
++#ifdef LURKER_DARWIN_MKFS
++ if (cli->sb_feat.zoned || cli->rtstart || cli->rtreserved ||
++     cli->rtsize || cli->xi->rt.name || cli->xi->log.name || !cli->loginternal) {
++  fprintf(stderr, "Darwin mkfs supports only conventional storage with an internal log.\n");
++  exit(1);
++ }
++#else
++ if (!cli->xi->data.isfile) {
++  report_zones(cli->xi->data.name, &zt->data);
+ 		if (zt->data.nr_zones) {
+ 			if (!zt->data.nr_conv_zones) {
+ 				fprintf(stderr,
+@@ -2799,6 +2815,7 @@ _("rtstart override not allowed on zoned devices.\n"));
+ 
+ 	if (cli->rtreserved)
+ 		cfg->rtreserved = cli->rtreserved;
++#endif
+ }
+ 
+ /*
+@@ -3885,7 +3902,11 @@ reset_zones(
+ 	uint64_t		size,
+ 	bool			quiet)
+ {
+-	struct blk_zone_range range = {
++#ifdef LURKER_DARWIN_MKFS
++ fprintf(stderr, "Zoned formatting is unavailable on Darwin.\n");
++ exit(1);
++#else
++ struct blk_zone_range range = {
+ 		.nr_sectors	= size,
+ 	};
+ 
+@@ -3900,6 +3921,7 @@ reset_zones(
+ 	}
+ 	if (!quiet)
+ 		printf("Done.\n");
++#endif
+ }
+ 
+ static void
+@@ -4105,11 +4127,16 @@ ddev_is_solidstate(
+ 	unsigned short		rotational = 1;
+ 	int			error;
+ 
+-	error = ioctl(xi->data.fd, BLKROTATIONAL, &rotational);
++#ifdef LURKER_DARWIN_MKFS
++ /* Native geometry does not infer rotational media; use conservative layout. */
++ return false;
++#else
++ error = ioctl(xi->data.fd, BLKROTATIONAL, &rotational);
+ 	if (error)
+ 		return false;
+ 
+ 	return rotational == 0;
++#endif
+ }
+ 
+ static void
+@@ -4459,11 +4486,16 @@ rtdev_is_solidstate(
+ 	unsigned short		rotational = 1;
+ 	int			error;
+ 
+-	error = ioctl(xi->rt.fd, BLKROTATIONAL, &rotational);
++#ifdef LURKER_DARWIN_MKFS
++ /* Native geometry does not infer rotational media; use conservative layout. */
++ return false;
++#else
++ error = ioctl(xi->rt.fd, BLKROTATIONAL, &rotational);
+ 	if (error)
+ 		return false;
+ 
+ 	return rotational == 0;
++#endif
+ }
+ 
+ static void
+@@ -6157,6 +6189,18 @@ main(
+ 	struct list_head	buffer_list;
+ 	int			error;
+ 
++#ifdef LURKER_DARWIN_MKFS
++	dft.sb_feat.spinodes = false;
++	dft.sb_feat.rmapbt = false;
++	dft.sb_feat.reflink = false;
++	dft.sb_feat.inobtcnt = false;
++	dft.sb_feat.parent_pointers = false;
++	dft.sb_feat.bigtime = false;
++	dft.sb_feat.nrext64 = false;
++	dft.sb_feat.exchrange = false;
++	dft.sb_feat.metadir = false;
++#endif
++
+ 	platform_uuid_generate(&cli.uuid);
+ 	progname = basename(argv[0]);
+ 	setlocale(LC_ALL, "");
+@@ -6269,7 +6313,20 @@ main(
+ 
+ 	validate_log_sectorsize(&cfg, &cli, &dft, &ft);
+ 	validate_zoned(&cfg, &cli, &dft, &zt);
+-	validate_sb_features(&cfg, &cli);
++#ifdef LURKER_DARWIN_MKFS
++ if (!cli.sb_feat.crcs_enabled || !cli.sb_feat.finobt || !cli.sb_feat.dirftype ||
++     cli.sb_feat.spinodes || cli.sb_feat.rmapbt || cli.sb_feat.reflink ||
++     cli.sb_feat.inobtcnt || cli.sb_feat.parent_pointers || cli.sb_feat.bigtime ||
++     cli.sb_feat.nrext64 || cli.sb_feat.exchrange || cli.sb_feat.metadir ||
++     cli.sb_feat.nci || cli.sb_feat.qflags || cli.protofile || cfg.blocksize != 4096 ||
++     (cli.inodesize && cli.inodesize != 512) || cli.max_atomic_write ||
++     cli.autofsck != FSPROP_AUTOFSCK_UNSET) {
++  fprintf(stderr, "Darwin candidate requires the conservative V5 CRC/finobt/ftype profile.\n");
++  exit(1);
++ }
++ discard = 0;
++#endif
++ validate_sb_features(&cfg, &cli);
+ 
+ 	/*
+ 	 * If the filesystem has full backreferences and the user didn't
