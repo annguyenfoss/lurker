@@ -58,3 +58,15 @@ diagnosed and fail as EIO. The strict native `tests/errno-boundary.c` control
 verifies ENOTEMPTY=66, ENOSYS=78, EOPNOTSUPP=45 and ENOATTR=87, positive-result
 preservation and unknown-error diagnostics. Actual host-mounted negative probes
 remain required.
+
+Patch 0006 keeps the original LKL root directory FD, restores that namespace for
+shutdown, checks read-only remount/unmount/native fsync, and makes failures affect
+the driver's exit status. A sticky per-disk host I/O error survives successful
+later barriers and is checked after halt. This is necessary: the first real
+native FLUSH fault made XFS shut down while remount/unmount still returned zero.
+The retained failed control demonstrates that false success before the sticky
+status change. The final control passes both normal drain=0 and genuine failed
+native flush drain=-EIO, using the actual driver's start/stop functions through
+`tests/drain.c`. Copy that test into `tools/lkl/tests/dragonfly-drain.c` and link
+with the patched native library and FUSE2 using the driver's large-file and
+no-strict-aliasing compiler flags. Host FUSE lifecycle proof remains separate.

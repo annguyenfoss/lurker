@@ -1,0 +1,216 @@
+--- tools/lkl/include/lkl.h
++++ tools/lkl/include/lkl.h
+@@ -159,6 +159,11 @@
+  */
+ int lkl_disk_remove(struct lkl_disk disk);
+ 
++/** Return a sticky negative I/O error after any failed request on this disk.
++ * Query before removing the host disk; successful later barriers do not clear it.
++ */
++int lkl_disk_get_io_error(struct lkl_disk disk);
++
+ /**
+  * lkl_get_virtiolkl_encode_dev_from_sysfs_blkdev - extract device id from sysfs
+  *
+--- tools/lkl/lib/virtio_blk.c
++++ tools/lkl/lib/virtio_blk.c
+@@ -7,6 +7,7 @@
+ 	struct lkl_virtio_blk_config config;
+ 	struct lkl_dev_blk_ops *ops;
+ 	struct lkl_disk disk;
++	int io_error;
+ };
+ 
+ struct virtio_blk_req_trailer {
+@@ -27,6 +28,9 @@
+ 	struct lkl_virtio_blk_outhdr *h;
+ 	struct virtio_blk_req_trailer *t;
+ 	struct lkl_blk_req lkl_req;
++	int success = 0;
++
++	blk_dev = container_of(dev, struct virtio_blk_dev, dev);
+ 
+ 	if (req->buf_count < 2) {
+ 		lkl_printf("virtio_blk: no status buf\n");
+@@ -35,8 +39,6 @@
+ 
+ 	h = req->buf[0].iov_base;
+ 	t = req->buf[req->buf_count - 1].iov_base;
+-	blk_dev = container_of(dev, struct virtio_blk_dev, dev);
+-
+ 	t->status = LKL_DEV_BLK_STATUS_IOERR;
+ 
+ 	if (req->buf[0].iov_len != sizeof(*h)) {
+@@ -63,8 +65,11 @@
+ 	lkl_req.count = req->buf_count - 2;
+ 
+ 	t->status = blk_dev->ops->request(blk_dev->disk, &lkl_req);
++	success = t->status == LKL_DEV_BLK_STATUS_OK;
+ 
+ out:
++	if (!success)
++		__atomic_store_n(&blk_dev->io_error, -LKL_EIO, __ATOMIC_RELAXED);
+ 	virtio_req_complete(req, 0);
+ 	return 0;
+ }
+@@ -86,6 +91,7 @@
+ 		return -LKL_ENOMEM;
+ 
+ 	disk->dev = dev;
++	dev->io_error = 0;
+ 
+ 	dev->dev.device_id = LKL_VIRTIO_ID_BLOCK;
+ 	dev->dev.vendor_id = 0;
+@@ -140,3 +146,11 @@
+ 
+ 	return 0;
+ }
++
++int lkl_disk_get_io_error(struct lkl_disk disk)
++{
++    struct virtio_blk_dev *dev = disk.dev;
++    if (!dev)
++        return -LKL_EINVAL;
++    return __atomic_load_n(&dev->io_error, __ATOMIC_RELAXED);
++}
+--- tools/lkl/lklfuse.c
++++ tools/lkl/lklfuse.c
+@@ -505,6 +505,44 @@
+ 	.fallocate = lklfuse_fallocate,
+ };
+ 
++static int original_root = -1;
++
++/* Restore the namespace root so no root/cwd reference pins the disk mount. */
++static int drain_filesystem(void)
++{
++    int ret;
++    if (original_root < 0)
++        return -LKL_EBADF;
++    ret = lkl_sys_fchdir(original_root);
++    if (ret < 0) return ret;
++    ret = lkl_sys_chroot(".");
++    if (ret < 0) return ret;
++    ret = lkl_sys_chdir("/");
++    if (ret < 0) return ret;
++    ret = lkl_sys_close(original_root);
++    if (ret < 0) return ret;
++    original_root = -1;
++    lkl_sys_sync();
++    if (!lklfuse.ro) {
++        char mpoint[32];
++        unsigned int dev;
++        ret = lkl_get_virtio_blkdev(lklfuse.disk_id, lklfuse.part, &dev);
++        if (ret < 0) return ret;
++        snprintf(mpoint, sizeof(mpoint), "/mnt/%08x", dev);
++        /* Force checked journal/data drain before releasing the filesystem. */
++        ret = lkl_sys_mount(NULL, mpoint, NULL,
++                            LKL_MS_REMOUNT | LKL_MS_RDONLY, NULL);
++        if (ret < 0) return ret;
++    }
++    ret = lkl_umount_dev(lklfuse.disk_id, lklfuse.part, 0, 10000);
++    if (ret < 0) return ret;
++    if (!lklfuse.ro && fsync(lklfuse.disk.fd) != 0) {
++        fprintf(stderr, "lklfuse: final native fsync failed: %s\n", strerror(errno));
++        return -LKL_EIO;
++    }
++    return 0;
++}
++
+ static int start_lkl(void)
+ {
+ 	long ret;
+@@ -517,6 +555,12 @@
+ 		goto out;
+ 	}
+ 
++    original_root = lkl_sys_open("/", LKL_O_RDONLY | LKL_O_DIRECTORY, 0);
++    if (original_root < 0) {
++        ret = original_root;
++        goto out_halt;
++    }
++
+ 	ret = lkl_mount_dev(lklfuse.disk_id, lklfuse.part, lklfuse.type,
+ 			    lklfuse.ro ? LKL_MS_RDONLY : 0, lklfuse.opts,
+ 			    mpoint, sizeof(mpoint));
+@@ -535,28 +579,44 @@
+ 
+ 	return 0;
+ 
+-out_umount:
+-	lkl_umount_dev(lklfuse.disk_id, lklfuse.part, 0, 1000);
++out_umount: {
++    int cleanup = drain_filesystem();
++    if (cleanup < 0)
++        fprintf(stderr, "lklfuse: startup cleanup failed: %s\n", lkl_strerror(cleanup));
++}
++
+ 
+ out_halt:
++    if (original_root >= 0) {
++        int cleanup = lkl_sys_close(original_root);
++        if (cleanup < 0)
++            fprintf(stderr, "lklfuse: root descriptor cleanup failed: %s\n", lkl_strerror(cleanup));
++        original_root = -1;
++    }
+ 	lkl_sys_halt();
+ 
+ out:
+ 	return ret;
+ }
+ 
+-static void stop_lkl(void)
+-{
+-	int ret;
+-
+-	ret = lkl_sys_chdir("/");
+-	if (ret)
+-		fprintf(stderr, "can't chdir to /: %s\n", lkl_strerror(ret));
+-	ret = lkl_sys_umount("/", 0);
+-	if (ret)
+-		fprintf(stderr, "failed to umount disk: %d: %s\n",
+-			lklfuse.disk_id, lkl_strerror(ret));
+-	lkl_sys_halt();
++static int stop_lkl(void)
++{
++    int ret = drain_filesystem();
++    if (ret < 0)
++        fprintf(stderr, "lklfuse: failed to drain filesystem: %s\n", lkl_strerror(ret));
++    int halt = lkl_sys_halt();
++    if (halt < 0) {
++        fprintf(stderr, "lklfuse: failed to halt: %s\n", lkl_strerror(halt));
++        if (!ret) ret = halt;
++    }
++    /* A filesystem shutdown may hide its failed barrier behind successful
++     * remount/unmount calls. Inspect the sticky host status after all I/O ends. */
++    int io = lkl_disk_get_io_error(lklfuse.disk);
++    if (io < 0) {
++        fprintf(stderr, "lklfuse: disk retained failed I/O: %s\n", lkl_strerror(io));
++        if (!ret) ret = io;
++    }
++    return ret;
+ }
+ 
+ int main(int argc, char **argv)
+@@ -633,7 +693,8 @@
+ 
+ 	ret = fuse_loop(fuse);
+ 
+-	stop_lkl();
++	if (stop_lkl() < 0)
++		ret = -1;
+ 
+ out_remove_signals:
+ 	fuse_remove_signal_handlers(fuse_get_session(fuse));
+@@ -647,7 +708,10 @@
+ 		fuse_destroy(fuse);
+ 
+ out_close_disk:
+-	close(lklfuse.disk.fd);
++	if (close(lklfuse.disk.fd) != 0) {
++		perror("lklfuse: close disk");
++		ret = -1;
++	}
+ 
+ out_free:
+ 	free(mnt);

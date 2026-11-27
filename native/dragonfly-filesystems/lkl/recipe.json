@@ -53,7 +53,8 @@
     "patches/0002-dragonfly-posix-host.patch",
     "patches/0003-dragonfly-uapi-native-macros.patch",
     "patches/0004-durable-block-flush.patch",
-    "patches/0005-dragonfly-fuse-errno-boundary.patch"
+    "patches/0005-dragonfly-fuse-errno-boundary.patch",
+    "patches/0006-checked-filesystem-drain.patch"
   ],
   "native_build_prerequisites": [
     "GNU make",
