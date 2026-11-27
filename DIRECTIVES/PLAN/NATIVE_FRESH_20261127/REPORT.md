@@ -12,8 +12,9 @@ The chronological milestones below retain their original candidate and scope.
 Recorded candidate qualification reports cover all six Linux distributions,
 macOS, DragonFly and NetBSD within their stated driver/source scopes. The native
 LKL eligibility clarification has reopened ordinary driver assessment on several
-hosts. OpenBSD installed-package qualification and FreeBSD adapter work remain
-active. Whole-round completion is unproven.
+hosts. OpenBSD's recorded installed-package round is now reconciled within its
+partial ledger; its newly assessed native LKL route and the FreeBSD adapter
+remain active. Whole-round completion is unproven.
 
 Nine host owners now provide private `completion-evidence-index.json` files
 mapping the acceptance requirements to exact receipts and limitations. Root's
@@ -188,8 +189,23 @@ command logs in
 fixture-root setup failures remain separately archived. The first four-backend
 reboot preparation stopped before reboot because its harness omitted VeraCrypt's
 auxiliary mount from the inventory guard; this is not reboot-persistence proof.
-Ordinary reboot qualification remains active, and these milestones do not
-establish whole-round completion.
+The subsequent four-backend ordinary reboot passed. Root independently checked
+the changed boot identity, exact prepared mounts and VeraCrypt auxiliary scope,
+actual UID/GID 1300 original/appended payload hashes, direct Auto reopens and
+all 24 raw command logs. The final audit also corroborates 865 installed payload
+hashes/root ownership, empty native helper discovery, normal resource cleanup,
+restored authorization and removal of only the task-owned package. Its receipt
+is `hosts/openbsd/validation/root-four-reboot-and-cleanup8c-audit.json`; all 71
+references in the frozen ordinary-route index matched. The ledger remains
+15 passed, one CryFS exFAT failure, 64 unavailable and 50 platform-inapplicable
+cells, with distinct `123d177` block-container and `8c6f2b6` later identities.
+Directory-fsync command success does not prove FUSE forwarding: the new native
+source assessment identifies a kernel directory-fsync no-op. These results
+establish ordinary reboot persistence within the recorded scope, not power-loss
+durability or whole-round completion. Assessment `ee0e34b` identifies concrete
+OpenBSD thread-ID, timer, ABI, namespace-sync and provider-flush requirements for
+a native LKL prerequisite. Its isolated build/boot work is now authorized; no
+new LKL filesystem mount or product capability follows from the assessment.
 
 CryFS exFAT failures on OpenBSD and NetBSD are now matched to native hardlink
 `ENOSYS`, while ordinary file create/write/fsync/read/rename/unlink work. This
