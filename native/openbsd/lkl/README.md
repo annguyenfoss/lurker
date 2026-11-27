@@ -46,3 +46,11 @@ shutdown and before freeing emulated memory. Native tests cover self-rearm,
 self-free, a blocked callback with nonblocking free and delayed quiescence,
 replacement/cancellation, large deadlines and 32 drained workers. This component
 is not yet wired into an LKL build or a filesystem mount.
+
+The native memory control checks pthread stack-top conversion against a real
+local variable, refuses destructive fixed mappings, preserves an occupied hint,
+and verifies that only its own alternate mapping is released. A read-only
+mquery checks that cleanup; the mapping implementation never uses query-then-map
+or MAP_FIXED. Failed mmap, unaligned/overflow requests, anonymous reuse and an
+actual shared-file mapping are covered. This primitive is not yet wired into
+LKL, and MMU remains outside the initial boot profile.

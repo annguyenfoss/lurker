@@ -107,6 +107,22 @@ class NativeTools(unittest.TestCase):
             self.assertIn("GCC", identity["compiler_version"])
 
 
+class NativeMemory(unittest.TestCase):
+    def test_real_stack_bounds_and_collision_preserving_mmap(self):
+        with tempfile.TemporaryDirectory() as temp:
+            binary = Path(temp) / "memory-control"
+            source = ROOT / "native/openbsd/lkl/memory-control.c"
+            subprocess.run(["/usr/bin/cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            "-pthread", "-I" + str(source.parent), str(source), "-o", str(binary)],
+                           check=True, capture_output=True, timeout=30)
+            process = subprocess.run([str(binary)], check=True, capture_output=True,
+                                     text=True, timeout=10)
+            print(process.stdout, end="")
+            self.assertIn("native stack top converted", process.stdout)
+            self.assertIn("only returned alternate mapping released passed", process.stdout)
+            self.assertIn("failed syscall does not unmap", process.stdout)
+
+
 class NativeTimer(unittest.TestCase):
     def test_monotonic_refcounted_timer_and_explicit_quiescence(self):
         with tempfile.TemporaryDirectory() as temp:
