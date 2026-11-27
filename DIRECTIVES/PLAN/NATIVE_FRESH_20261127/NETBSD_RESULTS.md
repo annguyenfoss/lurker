@@ -209,9 +209,10 @@ payload hashes and closed normally. Persistent CGD parameter bytes were stable;
 were restored after the post-boot proof, and the full mount/mapping inventory
 returned to baseline.
 
-The current 130-cell ledger therefore has six completed
-CGD cells, one ZFS reboot block, ten pending CryFS cells, 53 unavailable cells
-and 60 platform-inapplicable cells.
+That checkpoint ledger recorded six CGD payload cells, one ZFS reboot block,
+ten pending CryFS cells, 53 unavailable cells and 60 platform-inapplicable cells.
+The later ordinary-user permission gate below remains required before final
+cell counts or support claims are assigned.
 
 CryFS core integration is now committed in `bd65b08`, its native factory and
 stager registration in `d806711`, and desktop directory forms in `cca3c17`.
@@ -251,6 +252,62 @@ CryFS operations stayed unprivileged. The rule was removed, visudo passed,
 user-mount policy returned to zero, and the original root:wheel 0600 device
 identity/metadata and full mount baseline were restored. This records a tested
 administrator-policy prerequisite, not a default installed user policy.
+
+The frozen `cca3c17` native workspace passed check and 124 tests, with five
+ignored. Its actual native development package contains 861 files and selects
+CGD and CryFS; package SHA-256
+`8cb949f574a4940be52699782b998e596f61469ec92c5d95b785d85e2adb6121`.
+It declares Boost, fmt, spdlog, xkbcommon and sudo native dependencies. Normal
+package tools replaced only this round's prior registered test package, and
+installed file hashes and root ownership match the staging manifest. Installed
+CLI/helper/desktop hashes are respectively
+`47381a4f60eeb59e1f7aab43a1efc63dbf5537676345de5ac908c7bf30c1d83d`,
+`ac8c5ddd1f826468f78955577fa32a89ee4dd50f5adc382631d647189ce493eb`,
+and `c288885dadfb03f0cb7d35fe7f9607f6b3891af4c5368a61c8a0edee10f3ee86`.
+The actual installed desktop opened normally as UID 1300, and its collected
+window was inspected. The frozen-source real GUI callback separately passed
+through the installed helper. Installed helper JSON passed the full common PDF
+lifecycle, wrong password, duplicate and busy close as actual UID 1300.
+
+Backing-store tests then exposed a distinct native permission problem. Earlier
+CGD payload matrix syscalls were UID 0; selecting ownership with `SUDO_UID` did
+not make those writes ordinary-user operations. The earlier actual UID 1300
+CGD/helper payload proof used UFS2. Fresh NTFS/exFAT backing tests reported
+1300:1300 mode 0700 but denied the caller's initial directory creation. A normal
+same-mode root update enabled writes without changing metadata or timestamps,
+but stronger tests found that real unrelated UID 32767 could read private data.
+That draft Lurker workaround was withheld and preserved privately. A native FFS
+control correctly denied the unrelated user, confirming a PUFFS library issue.
+
+An isolated build of exact NetBSD `netbsd-11` userland source
+`4299530ca04c23eff6e740a3d97d29bca16c22fe` identified the permission-bit ABI
+mismatch: kernel read requests use 0400 while libpuffs' public read bit is 04.
+It also identified stale libperfuse cached attributes and missing ReFUSE access
+and mounting-user admission. The tested userland correction normalizes native
+and legacy access bits, keeps cached attributes current, and enforces standard
+FUSE admission across credential-bearing operations with access/permission
+fallbacks. No kernel, PUFFS cache flags, flush behavior or crypto profile changed.
+
+The final isolated library variant passed actual UID/EUID 1300 list, read,
+create, synced write, append and read on both native NTFS and exFAT. Actual
+UID/EUID 32767 was denied listing, reading and writing. The unchanged official
+CryFS engine then passed all common PDF phases and metadata persistence while
+the unrelated user was denied all three actions through a deliberately
+traversable test parent; all closes and engine exits were normal. Process maps
+verified the exact administrator-owned preview libraries. Capability version
+functions return 1. Host settings and device permissions returned to baseline.
+These libraries remain external host prerequisites; system replacement and
+product preflight detection are still pending review. Existing system libraries
+remain unchanged and lack those capabilities. No final installed backing-matrix
+pass is claimed from the isolated controls.
+
+An accidentally overlapping helper probe caused five fail-closed global-folder
+lock rejections in the initial backing dispatch. The original failures are
+retained. Fresh serial ext4, HAMMER2 and ZFS container cases and UFS1 device case
+passed; exFAT independently reproduced the permission denial. Completed failed
+scratch-partition captures were transferred to private coordinator evidence,
+SHA-256 verified, and retained with their parameters, credentials, logs and
+relocation receipts to preserve guest build space.
 
 Eligibility references:
 
