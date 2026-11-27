@@ -199,3 +199,31 @@ regular-file identity/resize/replacement rejection, flush and close behavior.
 The character-provider branch is compiled but is not credited as a runtime
 provider/guardian acceptance result. Native stream peer-credential probes are
 separate evidence; a live guardian/state-machine integration remains pending.
+
+
+### Guardian worker inheritance primitive
+
+`guardian-platform.h` now supplies a pre-thread `posix_spawn` helper with the
+production contract: connected progress channel FD3 and held source FD4 only.
+The guardian keeps its status descriptor CLOEXEC. Input descriptors are first
+duplicated above the fixed range; child actions install null stdin, private
+regular-file stdout/stderr, channel3/source4, then close all descriptors from 5.
+The worker immediately marks 3/4 CLOEXEC before any potential helper execution.
+Executable/environment/binding trust remains the caller's responsibility;
+root execution additionally rejects writable/non-root executable ancestry.
+This helper inherits native credentials; a root-to-login-worker credential
+transition and driver/service integration are not implemented or qualified here.
+
+A native multi-threaded caller is refused. If duplicate cleanup fails after
+spawn, an error return preserves the positive owned child PID: callers must
+retain/reap it and source/session custody. This never means that no child ran.
+The native user-only controls pass 36 parent checks plus the dummy-worker FD,
+stdio, group and mask assertions; the prior 29 identity/source checks still pass.
+Their immutable source/log receipt is `build/guardian-platform-spawn-v2/` in
+the round evidence. No LKL, FUSE, mount or device operation ran, and the helper
+is not wired into the installed protocol1 tool or any crypto teardown authority.
+
+The preceding v1 gate passed 35 parent checks. V2 publishes the output PID only
+after actual spawn success and adds a real executable-not-found control; an
+ENOENT result leaves no published child, while a later duplicate-close error
+retains the positive owned child. Both source/log sets remain preserved.

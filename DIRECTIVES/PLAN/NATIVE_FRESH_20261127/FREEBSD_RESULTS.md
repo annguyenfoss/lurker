@@ -1025,3 +1025,18 @@ must remain distinct from ordinary shutdown and product qualification.
   Archive `a4367a78...` hash and gzip CRC verified.
 - Limit/cleanup: no native mount, FUSE, device or geometry qualification. Owned
   children reaped, controller terminal, private regular-file fixtures retained.
+
+
+### Guardian production FD inheritance: native user-only gate
+
+- Purpose/input: channel3/source4 worker inheritance, guardian-only status;
+  v1 archive `6c6e9652...`, then v2 PID-publication refinement; native login user.
+- Command/log: strict C11 builds and both control runs in
+  `build/guardian-platform-spawn-v1/` and `guardian-platform-spawn-v2/`, raw logs 0–3.
+- Outcome: 29 identity/source checks pass in both gates; spawn parent checks
+  pass 35 in v1 and 36 in v2, adding native pre-exec ENOENT/no-published-PID.
+  Dummy workers verify no FD 5/100, null stdin/private logs, CLOEXEC, process group and
+  signal mask. Multi-threaded launch is refused. Injected post-spawn cleanup
+  error preserves a positive child PID, with actual owned-child wait retained.
+- Limit/cleanup: no root credential transition, LKL/FUSE/mount/device execution
+  or completion authority. Both children reaped; private regular fixtures kept.

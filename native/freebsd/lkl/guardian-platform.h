@@ -17,9 +17,16 @@
 #include <sys/time.h>
 #include <sys/disk.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/proc.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <spawn.h>
+#include <signal.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -132,5 +139,160 @@ static inline int lfbg_source_close(int *fd) {
     *fd = -1;
     result = close(owned);
     return result;
+}
+
+/* Production inheritance is channel 3 + source 4 ONLY. Status stays in the
+ * guardian. All arguments, environment and executable trust/digest must be
+ * validated by the native caller before this helper. No PATH lookup occurs.
+ * With root privileges, also reject a writable/non-root executable ancestry.
+ */
+struct lfbg_spawn_inputs {
+    const char *executable;
+    char *const *argv;
+    char *const *environment;
+    int channel_fd, source_fd, status_fd, log_fd;
+};
+#ifndef LFBG_CLOSE_INTERNAL
+#define LFBG_CLOSE_INTERNAL close
+#endif
+static inline int lfbg_connected_stream(int fd) {
+    int type;
+    socklen_t length = sizeof(type);
+    struct sockaddr_un peer;
+    socklen_t peer_length = sizeof(peer);
+    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &length) < 0 ||
+        getpeername(fd, (struct sockaddr *)&peer, &peer_length) < 0) return -1;
+    if (length != sizeof(type) || type != SOCK_STREAM ||
+        peer.sun_family != AF_LOCAL) { errno = EINVAL; return -1; }
+    return 0;
+}
+static inline int lfbg_private_regular(int fd, struct stat *out) {
+    struct stat st;
+    int flags = fcntl(fd, F_GETFL);
+    if (flags < 0 || fstat(fd, &st) < 0) return -1;
+    if (!S_ISREG(st.st_mode) || st.st_uid != geteuid() || st.st_nlink != 1 ||
+        (st.st_mode & 0777) != 0600 || (flags & O_ACCMODE) == O_RDONLY) {
+        errno = EPERM; return -1;
+    }
+    if (out) *out = st;
+    return 0;
+}
+static inline int lfbg_root_executable(const char *path) {
+    char canonical[PATH_MAX], parent[PATH_MAX];
+    struct stat st;
+    if (!realpath(path, canonical)) return -1;
+    if (strcmp(path, canonical)) { errno = EPERM; return -1; }
+    if (lstat(path, &st) < 0) return -1;
+    if (!S_ISREG(st.st_mode) || st.st_uid || (st.st_mode & 0022) ||
+        !(st.st_mode & 0111)) { errno = EPERM; return -1; }
+    memcpy(parent, canonical, strlen(canonical) + 1);
+    for (;;) {
+        char *slash = strrchr(parent, '/');
+        if (!slash) { errno = EINVAL; return -1; }
+        if (slash == parent) parent[1] = 0; else *slash = 0;
+        if (lstat(parent, &st) < 0) return -1;
+        if (!S_ISDIR(st.st_mode) || st.st_uid || (st.st_mode & 0022)) {
+            errno = EPERM; return -1;
+        }
+        if (slash == parent) return 0;
+    }
+}
+/* On post-spawn cleanup failure, return -1 BUT leave *child positive: the
+ * caller still owns that child and must retain session/source custody. Never
+ * retry an uncertain close or treat a cleanup error as "nothing spawned".
+ */
+static inline int lfbg_spawn_worker(const struct lfbg_spawn_inputs *in,
+                                    pid_t *child) {
+    struct kinfo_proc process;
+    size_t process_length = sizeof(process);
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
+    struct stat source, status, log;
+    int copies[4] = {-1, -1, -1, -1}, null_fd = -1;
+    int actions_live = 0, attr_live = 0, error = 0, rc;
+    posix_spawn_file_actions_t actions;
+    posix_spawnattr_t attr;
+    pid_t spawned = -1;
+    sigset_t mask, defaults;
+    if (!child) { errno = EINVAL; return -1; }
+    *child = -1;
+    if (!in || !in->executable || in->executable[0] != '/' || !in->argv ||
+        !in->argv[0] || strcmp(in->argv[0], in->executable) ||
+        !in->environment || in->status_fd < 0 ||
+        in->status_fd == in->channel_fd || in->status_fd == in->source_fd ||
+        in->status_fd == in->log_fd) { errno = EINVAL; return -1; }
+    memset(&process, 0, sizeof(process));
+    if (sysctl(mib, 4, &process, &process_length, NULL, 0) < 0) return -1;
+    if (process_length != sizeof(process) || process.ki_numthreads != 1) {
+        errno = EBUSY; return -1;
+    }
+    if (!geteuid() && lfbg_root_executable(in->executable) < 0) return -1;
+    if (lfbg_connected_stream(in->channel_fd) < 0 ||
+        lfbg_private_regular(in->status_fd, &status) < 0 ||
+        lfbg_private_regular(in->log_fd, &log) < 0 ||
+        fstat(in->source_fd, &source) < 0) return -1;
+    rc = fcntl(in->source_fd, F_GETFL);
+    if (rc < 0) return -1;
+    if ((!S_ISREG(source.st_mode) && !S_ISCHR(source.st_mode)) ||
+        (rc & O_ACCMODE) != O_RDWR ||
+        (source.st_dev == status.st_dev && source.st_ino == status.st_ino) ||
+        (log.st_dev == status.st_dev && log.st_ino == status.st_ino) ||
+        (log.st_dev == source.st_dev && log.st_ino == source.st_ino)) {
+        errno = EINVAL; return -1;
+    }
+    rc = fcntl(in->status_fd, F_GETFD);
+    if (rc < 0 || fcntl(in->status_fd, F_SETFD, rc | FD_CLOEXEC) < 0) return -1;
+    copies[0] = fcntl(in->channel_fd, F_DUPFD_CLOEXEC, 16);
+    if (copies[0] < 0) { error = errno; goto done; }
+    copies[1] = fcntl(in->source_fd, F_DUPFD_CLOEXEC, 16);
+    if (copies[1] < 0) { error = errno; goto done; }
+    copies[2] = fcntl(in->log_fd, F_DUPFD_CLOEXEC, 16);
+    if (copies[2] < 0) { error = errno; goto done; }
+    null_fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    if (null_fd < 0) { error = errno; goto done; }
+    copies[3] = fcntl(null_fd, F_DUPFD_CLOEXEC, 16);
+    if (copies[3] < 0) { error = errno; goto done; }
+    if ((rc = posix_spawn_file_actions_init(&actions))) { error = rc; goto done; }
+    actions_live = 1;
+    if ((rc = posix_spawnattr_init(&attr))) { error = rc; goto done; }
+    attr_live = 1;
+    sigemptyset(&mask); sigemptyset(&defaults);
+    sigaddset(&defaults, SIGTERM); sigaddset(&defaults, SIGINT);
+    sigaddset(&defaults, SIGHUP); sigaddset(&defaults, SIGPIPE);
+    sigaddset(&defaults, SIGQUIT); sigaddset(&defaults, SIGCHLD);
+#define LFBG_SPAWN_STEP(expr) do { if ((rc = (expr))) { error = rc; goto done; } } while (0)
+    LFBG_SPAWN_STEP(posix_spawnattr_setflags(&attr,
+        POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF));
+    LFBG_SPAWN_STEP(posix_spawnattr_setpgroup(&attr, 0));
+    LFBG_SPAWN_STEP(posix_spawnattr_setsigmask(&attr, &mask));
+    LFBG_SPAWN_STEP(posix_spawnattr_setsigdefault(&attr, &defaults));
+    LFBG_SPAWN_STEP(posix_spawn_file_actions_adddup2(&actions, copies[3], 0));
+    LFBG_SPAWN_STEP(posix_spawn_file_actions_adddup2(&actions, copies[2], 1));
+    LFBG_SPAWN_STEP(posix_spawn_file_actions_adddup2(&actions, copies[2], 2));
+    LFBG_SPAWN_STEP(posix_spawn_file_actions_adddup2(&actions, copies[0], 3));
+    LFBG_SPAWN_STEP(posix_spawn_file_actions_adddup2(&actions, copies[1], 4));
+    LFBG_SPAWN_STEP(posix_spawn_file_actions_addclosefrom_np(&actions, 5));
+    LFBG_SPAWN_STEP(posix_spawn(&spawned, in->executable, &actions, &attr,
+                               in->argv, in->environment));
+    *child = spawned;
+#undef LFBG_SPAWN_STEP
+done:
+    if (attr_live && (rc = posix_spawnattr_destroy(&attr)) && !error) error = rc;
+    if (actions_live && (rc = posix_spawn_file_actions_destroy(&actions)) && !error) error = rc;
+    for (unsigned i = 0; i < 4; ++i)
+        if (copies[i] >= 0 && LFBG_CLOSE_INTERNAL(copies[i]) < 0 && !error) error = errno;
+    if (null_fd >= 0 && LFBG_CLOSE_INTERNAL(null_fd) < 0 && !error) error = errno;
+    if (error) { errno = error; return -1; }
+    return 0;
+}
+/* First worker action, before any library/helper startup. A later exec must
+ * never carry either the private channel or held provider into another image.
+ */
+static inline int lfbg_worker_fds_prepare(void) {
+    if (lfbg_connected_stream(3) < 0) return -1;
+    for (int fd = 3; fd <= 4; ++fd) {
+        int flags = fcntl(fd, F_GETFD);
+        if (flags < 0 || fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0) return -1;
+    }
+    return 0;
 }
 #endif
