@@ -207,6 +207,27 @@ route, not Lurker support. The installed fuse_mount(3) manual requires root for
 mount/unmount; trusted privileged integration, reproducible producer/staging
 and actual product cases remain required before enabling this OS. Failed
 source/runtime receipts and fixtures remain preserved separately.
+The privileged route additionally requires confinement protocol 1. A negative
+native regression showed that pre-exec unveil does not constrain an executed
+program; that failure and the earlier lifecycle-only controls remain separate.
+The reviewed native engine entrypoint now establishes and locks unveil after
+exec, before Random/CLI/credential handling, using three distinct inherited
+source/mountpoint/state directory descriptors. Its updated port SHA-256 is
+`2a17db5ab6c6302b41e600b4a536241b8d21379d9af67305ae459a593e1777bb`;
+its diagnostic engine SHA-256 is
+`c7e87a02c927f56a13075b87f728fceeebc9892a7a8a1d78bdebff60b3dd121f`.
+Four actual-engine source/mountpoint symlink and directory replacement cases
+refused access, preserving foreign fixtures with no foreign mount. The same
+engine then passed the complete three-mount payload/append/hash lifecycle.
+Native kinfo_proc reported both unveil and locked-unveil flags (12) on all three
+mounted engines. Inherited syscall-only traces showed exactly one initial
+execve and one direct mount syscall per lifecycle: no separate mount helper
+executes after confinement. Evidence is retained in
+`logs/cryfs-postexec-confined-native-proof.tar.gz`. A native producer trial
+compiled the engine but exposed a package-owner metadata parsing error; its
+failed result remains distinct from these native controls. Trusted product
+integration and final producer/package validation remain pending.
+
 Other requested
 portable engines retain their explicit per-cell assessment in the ledger.
 

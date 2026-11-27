@@ -144,3 +144,82 @@
  }
  
  int Fuse::mkdir(const bf::path &path, ::mode_t mode) {
+--- a/src/cryfs-cli/main.cpp
++++ b/src/cryfs-cli/main.cpp
+@@ -6,6 +6,63 @@
+ 
+ #if defined(_MSC_VER)
+ #include <VersionHelpers.h>
++#endif
++
++
++#if defined(__OpenBSD__)
++#include <sys/stat.h>
++#include <unistd.h>
++#include <cerrno>
++#include <climits>
++#include <cstdlib>
++#include <cstring>
++
++namespace {
++int nativeDirectory(const char *name) {
++    const char *value = std::getenv(name);
++    if (!value || !*value) return -1;
++    for (const char *p = value; *p; ++p) if (*p < '0' || *p > '9') return -1;
++    errno = 0;
++    char *end = nullptr;
++    long fd = std::strtol(value, &end, 10);
++    if (errno || !end || *end || fd < 3 || fd > INT_MAX) return -1;
++    struct stat info;
++    if (fstat(static_cast<int>(fd), &info) || !S_ISDIR(info.st_mode)) return -1;
++    return static_cast<int>(fd);
++}
++
++bool nativeConfinement() {
++    const char *protocol = std::getenv("LURKER_CRYFS_UNVEIL_PROTOCOL");
++    if (!protocol) {
++        // Direct administrator native controls remain an upstream CLI route.
++        return !std::getenv("LURKER_CRYFS_SOURCE_FD")
++            && !std::getenv("LURKER_CRYFS_MOUNT_FD")
++            && !std::getenv("LURKER_CRYFS_STATE_FD");
++    }
++    if (std::strcmp(protocol, "1")) return false;
++    const int source = nativeDirectory("LURKER_CRYFS_SOURCE_FD");
++    const int mountpoint = nativeDirectory("LURKER_CRYFS_MOUNT_FD");
++    const int state = nativeDirectory("LURKER_CRYFS_STATE_FD");
++    if (source < 0 || mountpoint < 0 || state < 0
++        || source == mountpoint || source == state || mountpoint == state) return false;
++    // Apply inside the executed engine: unveil is not retained across exec.
++    // Directory rules bind the held vnodes, never a replacement pathname.
++    for (const int fd : {source, mountpoint, state}) {
++        if (fchdir(fd) || unveil(".", "rwc")) return false;
++    }
++    for (const char *path : {"/usr/lib", "/usr/local/lib", "/var/run/ld.so.hints",
++                             "/dev/urandom", "/etc/localtime", "/etc/pwd.db"}) {
++        if (unveil(path, "r")) return false;
++    }
++    if (unveil("/dev/fuse0", "rw") || unveil("/dev/null", "rw")
++        || fchdir(source) || unveil(nullptr, nullptr)) return false;
++    close(source); close(mountpoint); close(state);
++    unsetenv("LURKER_CRYFS_SOURCE_FD");
++    unsetenv("LURKER_CRYFS_MOUNT_FD");
++    unsetenv("LURKER_CRYFS_STATE_FD");
++    return true;
++}
++}
+ #endif
+ 
+ using namespace cryfs_cli;
+@@ -19,6 +76,12 @@
+ using std::cerr;
+ 
+ int main(int argc, const char *argv[]) {
++#if defined(__OpenBSD__)
++    if (!nativeConfinement()) {
++        std::cerr << "Native OpenBSD directory confinement failed." << std::endl;
++        return 64;
++    }
++#endif
+ #if defined(_MSC_VER)
+     if (!IsWindows7SP1OrGreater()) {
+        std::cerr << "CryFS is currently only supported on Windows 7 SP1 (or later)." << std::endl;
