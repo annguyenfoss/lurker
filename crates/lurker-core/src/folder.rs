@@ -22,6 +22,8 @@ mod supervisor;
 mod fence;
 #[cfg(target_os = "netbsd")]
 mod netbsd_process;
+#[cfg(target_os = "openbsd")]
+mod openbsd_process;
 #[cfg(target_os = "netbsd")]
 mod netbsd;
 #[cfg(target_os = "macos")]
@@ -462,6 +464,8 @@ fn linux_stat_process_absent(error: &std::io::Error) -> bool {
 // Distinguish a confirmed exit from an inspection/permission failure. An
 // unreadable process must never authorize recovery of an unreadable mount.
 fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
+    #[cfg(target_os = "openbsd")]
+    return openbsd_process::snapshot(pid);
     #[cfg(target_os = "netbsd")]
     return netbsd_process::snapshot(pid);
     #[cfg(target_os = "linux")]
@@ -592,7 +596,7 @@ fn process_snapshot(pid: u32) -> AppResult<Option<Process>> {
         }
         unreachable!("bounded process query always returns on its final attempt")
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd", target_os = "netbsd")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd")))]
     {
         let _ = pid;
         Err(AppError::new(
@@ -605,12 +609,12 @@ fn process_query_absent(result: i32, size: usize, error: Option<i32>) -> bool {
     (result == 0 && size == 0) || (result != 0 && error == Some(libc::ESRCH))
 }
 
-#[cfg(not(target_os = "netbsd"))]
+#[cfg(not(any(target_os = "netbsd", target_os = "openbsd")))]
 fn process_identity(pid: u32) -> Option<Process> {
     process_snapshot(pid).ok().flatten()
 }
 
-#[cfg(target_os = "netbsd")]
+#[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
 fn owned_process_identity(child: &Child) -> Option<Process> {
     // These callers still own an unreaped spawn, so its PID cannot be reused.
     // NetBSD can briefly omit its user area even after exec has completed.
@@ -1142,9 +1146,9 @@ fn mount_inner(
     let mut child = command
         .spawn()
         .map_err(|e| AppError::io("Cannot start directory backend", e))?;
-    #[cfg(target_os = "netbsd")]
+    #[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
     { session.supervisor = owned_process_identity(&child); }
-    #[cfg(not(target_os = "netbsd"))]
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd")))]
     { session.supervisor = process_identity(child.id()); }
     save(&dir, &session)?;
     send(&mut child, &secret)?;

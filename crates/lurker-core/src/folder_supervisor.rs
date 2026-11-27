@@ -188,9 +188,9 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool, descriptor: Option
             return Err(AppError::io("Cannot start monitored backend", error));
         }
     };
-    #[cfg(target_os = "netbsd")]
+    #[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
     let identity = owned_process_identity(&child);
-    #[cfg(not(target_os = "netbsd"))]
+    #[cfg(not(any(target_os = "netbsd", target_os = "openbsd")))]
     let identity = process_identity(child.id());
     if let Some(process) = identity {
         write_record(&dir, "backend-process.json", &process)?;
