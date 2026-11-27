@@ -1,266 +1,199 @@
-# Debian fresh native qualification — in progress
+# Debian fresh native qualification — complete within the recorded host scope
 
-This is the new 2026-11-27 round, not a carry-forward of earlier passes.
-Private evidence is under `target/goal-validation/native-fresh-20261127/hosts/debian/`.
-The atomic checkpoint there identifies the live job and next work.
+The new 2026-11-27 round completes **60/60 container cells and 60/60 scratch
+cells** across ten filesystems and six applicable Linux encryption methods.
+Scratch cells comprise three direct disk-encryption methods and three directory
+engines on an actually formatted native block backing. Directory engines do not
+format or encrypt a whole block source; their direct block-source cells are not
+applicable. Seven OS-specific encryption methods are not applicable on Linux,
+with explicit reasons for all 70 method/filesystem rows per phase.
 
-## Fresh host and build observations
+The configured-host result uses two official Debian kernel cohorts. UFS1's
+12 runtime cells are supplemental evidence on an existing non-stock write-enabled
+module; stock cloud-kernel UFS support is not claimed. No custom kernel or new
+UFS write-module experiment was performed.
 
-- Debian 13.8, running security kernel `6.12.118+deb13-cloud-amd64`, initial boot
-  `76968973-6ed7-4502-a634-a65e0905e301`. APT index refresh and supported full
-  upgrade completed successfully: zero packages upgraded and no held packages.
-  ACL/attribute tools and available distribution directory-engine packages were
-  installed; product tests use separately verified private pinned engines.
-- Official backports kernel `7.3.4+deb13-cloud-amd64` and matching headers were
-  already installed. GRUB currently selects 6.12.118. Kernel cohorts matter:
-  current HAMMER2 requires 7.3, while current stable OpenZFS documents support
-  through 7.2. No custom kernel was built for this round.
-- Fresh exact source `8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d` passed remote
-  `cargo check --workspace`, `cargo test --workspace --no-fail-fast` and
-  `cargo build --workspace`, with one worker. Runner:
-  `20261126T203501Z-01a21f5f`; test summary 147 passed, zero failed, 13 ignored.
-- CLI SHA-256:
-  `04200941d7744221ace7bb52f79945a3fa72b3ee364b6438373f4be22f377d0c`.
-  Helper SHA-256:
-  `d5a7617c89ad64905afd5076792efb323cdbea23a5a8dc76c5f085adfb3feb7f`.
-  Binaries are copied into the new administrator-controlled private prefix
-  `/usr/local/lib/lurker-native-fresh-20261127-debian`; these are staged-binary
-  results, not installed-package qualification.
-- CryFS 1.0.3 with both current durability patches, gocryptfs 2.7.0 and the
-  VeraCrypt creator passed current-source input/provenance checks. Cryptomator
-  with current Linux patches was copied read-only from Arch's verified cache
-  and independently verified against the same source on Debian. No earlier
-  runtime receipt counts as a new pass.
+All execution evidence is fresh in this round. Under the approved follow-up
+policy in `LINUX_FOLLOWUP.md`, the matrix retains 108 named `576505d` executions
+for unchanged branches and uses 12 new `67894f6` UFS2 executions after correcting
+its host driver. These older current-round receipts are not relabeled as runs of
+the final package. Additional final-artifact CLI, helper, desktop and ordinary
+reboot gates pass independently. No earlier-round runtime pass counts here.
 
-## Initial batch findings
+## Final artifact and host identities
 
-The initial ten-filesystem × three disk-encryption sweep used fresh
-independent fixtures. Operationally completed cases mounted a real filesystem, wrote
-the three downloaded PDFs and text, closes normally, reopens with Auto, verifies,
-appends and creates a second file, then closes/reopens and verifies again.
-Receipts retain hashes, mount identities, permissions/ACL/reflink probes and logs.
+Rust CLI/core/helper/desktop source:
+`67894f68525c55d5cbb48c743e1a98a308bd970f`.
+Remote exact-archive workspace run `20261127T000845Z-7a8d559b` passed
+`cargo check --workspace`, `cargo test --workspace --no-fail-fast` and
+`cargo build --workspace`: **168 passed, zero failed, 15 ignored**, one worker.
+Managed Rust/Cargo 1.100.0 and uv-managed Python 3.15.2 were used.
 
-Native APFS revealed a shared product defect before storage mutation:
-canonicalizing the `modinfo` and `modprobe` symlinks to `kmod` loses their
-multicall invocation name. Native `modinfo apfs` and `modprobe apfs` succeed.
-The shared repair is committed; final-candidate validation remains pending.
-An inherited writable directory mode in the newly copied private prefix caused
-the first ext4/VeraCrypt attempt to fail its trust check. The owned prefix mode
-was corrected; that failed attempt also remains for a separate retest.
+The independently versioned host-FUSE producer is
+`7d8f9a4275f24fc1c303afe52c33d862e190e2db`; the named Linux stager consumer is
+`fa063ac5292a8b47ebfae2dafa083b9700c249ef`. Debian passed 17 producer tests and
+53 tests of that exact committed consumer, then staged, built and installed
+`lurker 0.1.0+fresh20261127.67894f6`. Native-only creator packaging is qualified;
+the optional LKL/userspace filesystem route is excluded.
 
-A second shared defect invalidates the selected-ext4 baseline qualification:
-canonical `mkfs.ext4` becomes `mke2fs`, whose default creates ext2. Both initial
-LUKS/ext4 mount receipts report `ext2`, despite completing their byte lifecycle.
-The ext4 directory cases in this Debian-specific initial recipe also used those
-LUKS-created ext2 backings. These are wrong-filesystem failures, not ext4 passes.
-The Linux owner is batching explicit ext4 format selection with the kmod repair.
-The Debian driver now rejects an unexpected native mount type before payload
-access; its rejection and positive ext4 checks ran on the remote host. The
-shared raw-backing harness invokes `mkfs.ext4` directly and is a separate route.
+| Artifact | SHA-256 |
+| --- | --- |
+| CLI | `a7201b54f69af28d8e15d269cd70d75f6a91b197ef91c40fd9e55b59c3427227` |
+| Internal helper | `0c6f1f5bfced7c29d7a61a07c27d0a2fdf7c4ada3f296fd7f79a484f6659c6ed` |
+| Desktop | `2cc96470a47202fb300508f508a216a6267a2eac998559db50c2082d11e8f1cb` |
+| Named-stager archive | `bf7546838002c12ba16022da3ad3e81a7cbf2c851e4b6e098010f0f5addb94e4` |
+| Installed Debian package | `14b481c4f4f8cd8ca351027f1f4cd440a27b40380c11597b82e1a23b96a7f145` |
 
-The initial 30 disk-container operations finished: 22 completed their lifecycle
-and eight failed operations. After filesystem-identity review, only 20 qualify
-for their requested filesystem; two completed on the wrong filesystem. The
-initial directory sweep also finished with 22 operational completions and eight
-operation failures; two completions used the wrong ext4 backing. Cryptomator has
-passed Btrfs; its initial ext4 attempt failed because my raw image copy retained
-private Java-library modes after root ownership. The owned staged copy has been
-normalized to ordinary staged executable/data permissions. The failure is retained
-for a fresh retest and is not attributed to the product or upstream engine.
+Debian 13.8 uses glibc 2.41. APT refresh and supported full upgrade completed
+with zero upgrades and no held packages; required ACL, tracing and filesystem
+utilities were installed. Final/default kernel is official
+`6.12.118+deb13-cloud-amd64`; current HAMMER2 is qualified on official
+`7.3.4+deb13-cloud-amd64`. APFS, UFS1 and ZFS use the 6.12 cohort. GRUB's existing
+6.12 default is preserved, with no pending one-shot selection.
 
-UFS1 succeeds through the existing matching upstream module compiled with
-`CONFIG_UFS_FS_WRITE`. This is an explicit configuration prerequisite, not a
-stock Debian capability. LUKS2/UFS1 is blocked by the fixed default logical-sector
-profile; no profile has been weakened. UFS2 uses separately installed native
-FUSE `fuse-ufs` 0.6.0. Its upstream describes experimental writes and no ACLs;
-successful small lifecycle results do not remove that upstream limitation.
+## Filesystem coverage and prerequisites
 
-## Native prerequisites and portable CryFS donor
+Each cell performs actual native mounting, downloaded Bitcoin/Ethereum/Transformer
+PDF and web-text writes, normal close, Auto reopen, byte/hash verification,
+append plus a second file, normal close, another reopen and all five final hashes.
+Mount identities and writable-superblock checks prevent underlay/wrong-filesystem
+passes. Permission, ACL, reflink and journal observations are retained per case;
+these describe the tested profiles, not universal filesystem capabilities.
 
-Fresh source builds installed APFS v0.3.22 for official 6.12 and HAMMER2 for
-official 7.3, preserving original driver bytes. No kernel source or configuration
-was changed. The host now runs `7.3.4+deb13-cloud-amd64`. Its native `ntfs`
-read/write driver and explicit native HAMMER2 mounting passed fresh raw
-three-PDF/text write/close/reopen/append/verify controls. Native ntfs3 supports
-exclusive rename, while NTFS-3G rejects it. exFAT supports exclusive rename but
-not hardlinks. These are native controls, separately identified from product passes.
+| Filesystem | Container cells | Scratch cells | Scope |
+| --- | ---: | ---: | --- |
+| ext4 | 6/6 | 6/6 | Native |
+| Btrfs | 6/6 | 6/6 | Native |
+| XFS | 6/6 | 6/6 | Native |
+| APFS | 6/6 | 6/6 | Separately installed native kernel driver |
+| UFS1 | 6/6 | 6/6 | Supplemental existing write-enabled module |
+| UFS2 | 6/6 | 6/6 | Final artifact and corrected host FUSE driver |
+| HAMMER2 | 6/6 | 6/6 | Official 7.3 kernel plus current external module |
+| NTFS | 6/6 | 6/6 | Native ntfs3 / positively identified modern writable ntfs |
+| exFAT | 6/6 | 6/6 | Native |
+| ZFS | 6/6 | 6/6 | Distribution OpenZFS 2.3.9 on 6.12 |
 
-The optional fuse-ufs prerequisite was rebuilt from upstream
-`ee5c4a447da98220a11edb69a225d51379afc4fb` with the recorded namespace and barrier
-patches. Debian passed 28 rufs tests, seven native rename/collision controls,
-full raw payload reopens, forwarded file/directory fsync traces, and injected
-file/directory EIO with successful retries. Driver SHA-256:
-`b8518fe1e4f4b664929232bfca6aa7c39cfdd8ff458e39e335f592960fef1a49`.
-Cryptomator and new CryFS product payloads subsequently passed on UFS2; CryFS
-passed again through the mapped backing after the barrier repair. This is a
-patched experimental host prerequisite, not a bundled filesystem or stock
-Debian capability.
+The six methods are LUKS1, LUKS2, native privileged VeraCrypt, gocryptfs, CryFS
+and Cryptomator. The seven excluded methods are Apple images, native encrypted
+APFS, GELI, PEFS, softraid CRYPTO, RAID1C and CGD. Encryption profiles and KDF
+strength were not weakened. Representative AES/Serpent/Twofish, binary-keyfile,
+wrong-credential, no-overwrite, alias, duplicate-session, busy-close and fsync
+cases are explicit; a full option Cartesian product is not claimed.
 
-Debian built the shared Linux CryFS donor as login user, one worker, from exact
-Lurker inputs `195b56be87b38361aaa45a085954e794338ba09a`, stable upstream 1.0.3
-and the three inventoried Linux patches. The copied Conan cache passed integrity
-checks. Current stager, all 16 license/notice files, ELF and provider checks
-passed, with no RPATH/RUNPATH. Fresh exFAT and patched-UFS2 product payloads passed.
+Fresh APFS source is v0.3.22 commit
+`80f5db04ecd3b240fee4c67829a5b5465f11f63f`; HAMMER2 source is
+`09c130bf8bac021b0bb6a8ed9c9685a5bd9bbbd0`. UFS2 source is
+`ee5c4a447da98220a11edb69a225d51379afc4fb` plus the qualified no-replace,
+barrier and pagination prerequisite patches. These drivers are separately
+administrator-installed host facilities, never bundled in Lurker.
 
-- Binary SHA-256: `2ec7b6f5bd7b999b81750fec75ffb3ca13174f4643d2326ba250143e9f444a14`.
-- Shared closure: `target/goal-validation/native-fresh-20261127/hosts/debian/build/cryfs-linux-debian-195b56b.tar.gz`.
-- Archive SHA-256: `fa5e8f14e008b0df5bb5faff6247bbac0810af4e04c32dc1d074a5f9e5744db2`.
-- Built on glibc 2.41; required symbols GLIBC 2.38 / GLIBCXX 3.4.32.
-  Manifest, library-provider audit and runtime receipts accompany the archive;
-  all five other Linux owners received the handoff for independent validation.
+The existing UFS1 module SHA-256 is
+`74ded149aabb284025263a784928ef69cb14474fc78a4ca87c12565848792fe6`.
+Its recovered original build script, log and compiler commands match the cached
+artifact; all 15 material source/build files and original Git blob identities
+match Linux stable 6.12.118 commit `b869a5313cbfe7102873d3de318ddb68675146d0`.
+It explicitly enables non-stock `CONFIG_UFS_FS_WRITE`; the stock cloud config
+has UFS disabled. No new module rebuild or configuration change was made.
 
-Three Btrfs-backed directory vaults were verified and intentionally left mounted
-before the orderly boot from `76968973-6ed7-4502-a634-a65e0905e301` to
-`c70701ba-a2bf-49f1-bb3c-82dd225b5f3c`. After mounting the identified fixture
-storage, all three reopened, matched all five hashes and closed normally.
-This is baseline-artifact reboot evidence; candidate validation remains pending.
-The preexisting default 6.12 boot choice was preserved.
+## Final-artifact gates
 
-## Owned storage and remaining work
+- Normal-user CLI password and binary-keyfile full payload lifecycles:
+  **6/6**, all three disk methods, normal close and terminal survival.
+- Installed normal-user helper full payloads: three file and three block-source
+  methods, **45 strict full-stdout JSON responses** (21 file, 24 device), including
+  the physical fixture's ordinary reboot reopen and close.
+- Default Slint create/mount/write/reopen/unmount callbacks: **6/6 backend
+  families**, exact workspace test artifact and actual installed helper as UID
+  1300. The test artifact is identified separately from the installed desktop.
+- Actual authenticated X11/winit software-rendered native window and installed
+  desktop-launcher window: **2/2**, UID 1300, captured native frames, owned display
+  resources closed. The installed CLI launcher passes its supported `--help`.
+- Ordinary reboot: six Btrfs file-backed fixtures, including all three folder
+  engines on native encrypted backings, plus the physical LUKS2/Btrfs fixture
+  preserve all five hashes and close normally. Boot changed from
+  `e50f1be3-d2b1-43b3-a3f2-e352e434cc66` to
+  `2d04b4f6-9e21-46e2-935d-70fb97b5457b`, retaining official 6.12 and exact binaries.
+- Final manifest audit: **1,083 files/symlinks**, exact hashes, administrator
+  ownership and expected modes; empty `dpkg -V`. No bundled FUSE runtime or
+  filesystem driver, no owned backend processes, mappings, loops or test mounts.
 
-The system disk and old work are preserved. New fixture storage is
-`/srv/build/lurker-native-fresh-20261127/debian/fixture-storage.qcow2`, attached
-to domain `debian-core-01`. Guest identity was checked as a new 32 GiB disk with
-observed virtio serial `lurker-fresh-debian-` before formatting. This owned disk
-was subsequently grown online to 64 GiB and then 128 GiB, with serial, source, size and mount
-checked before resizing its ext4 filesystem. It is mounted at
-`/var/tmp/lurker-native-fresh-20261127-debian-storage`. Closed current-round
-fixtures are retained there with their original evidence paths preserved.
-The later destructive device matrix will use a separately identified scratch disk.
+Named current-round `576505d` evidence also retains nine native cipher suites
+(**108 checks**), three folder suites (**36 checks**), three binary-keyfile
+negative suites (**36 checks**), three cold HAMMER2 Auto reopens after actual
+module unloading, and ordinary cross-kernel persistence. These are unchanged
+functional coverage, not a compliant final-package installation claim.
 
-The first Linux candidate was `ca7d2137fca741008648360e98acc06ce559de3d`.
-Remote workspace job `20261126T221438Z-c632c5b9` passed check, tests and build:
-156 tests passed, zero failed, 15 ignored. Final CLI/helper/desktop SHA-256s are
-`1e5e454037a195fc2042ca1315cf25e186d8b2932a2862ce4ae5146e33eea125`,
-`36180396cd9671e133096d6f946a3462b8acc71d907052e1f7ac3aac42624a3a`,
-and `e2bd595384fa78ba9a9c848bd746a1a52c3ee3a6d719e780774c1bc418c33496`.
+## Findings, fixes and retained failures
 
-The independent `7c48a25` stager validated the native VeraCrypt creator, current
-gocryptfs/Cryptomator and the qualified new CryFS donor against frozen inputs.
-A Cargo JSON log records actual dependency notices. Stage archive SHA-256 is
-`ceeac4577f21df60ac0e51ecf88256ceb96d3b85feba502cdd96965f1e3e07af`.
-The native-only Linux packager now accepts either verified VeraCrypt artifact
-route and tests only the routes included. Debian passed 17 package/archive/policy
-tests and built/installed the new `0.1.0+fresh20261127` package; package SHA-256
-is `997c548efecc0f03cc0aede18b1371c625ada78ccb76c0cc59ac87bd9ba3fc9e`.
-Installed binary hashes match the workspace artifacts. This is a prepared-host
-installation; clean-host dependency absence is not claimed.
+The new round found and repaired canonical kmod applet-name loss, accidental
+ext2 formatting through canonical `mke2fs`, native NTFS selection, cold HAMMER2
+Auto loading, UFS1 logical-sector geometry and the writable-VFS/read-only-superblock
+classification. Initial wrong-filesystem receipts do not count as ext4 passes.
+Invocation, private-prefix mode and concurrent test-lock failures remain retained
+and separately classified; later repaired candidates use independent fixtures.
 
-That seven-filesystem batch completed 21 disk-container passes and 19 folder
-passes. Two HAMMER2 folder creates and the installed Cryptomator conformance
-close collided with my concurrently scheduled directory tests; the product's
-operation lock rejected them. Failed receipts/backing images remain retained.
-The Cryptomator mount closed normally after serialization. These are test
-scheduling failures, not filesystem-support failures. The installed native cipher
-suite passed all nine backend/cipher suites (108 checks), keyfile-negative suites
-passed all three methods, and normal-user helper full payloads passed all 21
-strict JSON responses. The initial candidate is superseded below.
+Debian built the qualified portable Linux CryFS 1.0.3 donor from the pinned
+source and complete Linux patch set registered by `195b56be87b38361aaa45a085954e794338ba09a`.
+Binary SHA-256 is `2ec7b6f5bd7b999b81750fec75ffb3ca13174f4643d2326ba250143e9f444a14`.
+Source, patches, compiler/cache, libraries and license provenance were verified;
+native exFAT and patched-UFS2 payload controls passed before handoff. Exclusive
+publication uses native no-replace rename and barriers. Unchanged gocryptfs and
+Linux-patched Cryptomator inputs pass current-source staging checks.
 
-The follow-up candidate is `576505d554d798422840a06322dfa93b899365bc`, including
-the desktop changes and the read-only-superblock correction. Debian's owned
-mount guard independently passed writable ext4 and rejected an actual
-VFS-rw/superblock-ro ext4 bind view. Exact workspace run
-`20261126T223904Z-f54a075f` passed check/test/build: 159 passed, zero failed,
-15 ignored. Current-source staging revalidated all native private engines and
-Rust notices; the new package installed with exact workspace hashes.
-
-- CLI: `6211f7e19af9920b2dd4c94c86c92cc3da230247db26bf97d835ad693f0d0a47`.
-- Helper: `d90f43bc97bc334a0eeb44288354c909777fc17e3ba408dd91a4d1cc647e20ab`.
-- Desktop: `f057ea2dd770be1be20c60d77c9d5067d15796fe4867930158a87a65b41f94ca`.
-- Stage archive: `c7272303c7927453f196b81a7d37a89f5051ed2c7d2787510f587144ca7d43d7`.
-- Installed Debian package `0.1.0+fresh20261127.576505d`:
-  `24da9205fe18dae81caea5f75d5a2d855e3b65ae179689b72088a9ff85d0cc51`.
-
-The follow-up desktop rendered as UID 1300 in an authenticated private X11
-session and cleaned up its owned resources. All six backend families subsequently
-passed the bound Slint create/mount/write/reopen/unmount callback test, using the
-exact workspace test artifact and installed helper as the login user. Native
-cipher conformance passed 108 checks, folder conformance passed 36 checks, and
-all three binary-keyfile negative suites passed. All three HAMMER2 methods also
-passed Auto reopen after explicit module unloading. The first cold-test launch
-used a relative executable with execv and was retained as an invocation failure;
-the absolute launcher retry passed without a product change.
-
-Six Btrfs fixtures (three disk methods and three folder engines on native file
-backings) passed ordinary reboot persistence from official 7.3 to the preserved
-default 6.12.118. All five payload hashes and exact binaries matched; all nine
-intentionally mounted layers closed normally after verification. New boot ID:
-`ed3b4968-c43a-420b-9571-4833ab868577`.
-
-Read-only auditing recovered the original UFS module build script/log/compiler
-commands and source receipt from its prior cache. Installed module SHA-256
-`74ded149aabb284025263a784928ef69cb14474fc78a4ca87c12565848792fe6` matches
-that cached artifact. All 15 material source/build files and original Git blob
-IDs independently match Linux stable 6.12.118 commit
-`b869a5313cbfe7102873d3de318ddb68675146d0`. This is explicitly an existing
-non-stock `CONFIG_UFS_FS_WRITE=1` prerequisite, evaluated as supplemental
-configuration-dependent evidence; the stock cloud kernel has `CONFIG_UFS_FS`
-disabled. No new module/kernel build or configuration change was made.
-All three final UFS1 disk methods passed, and the LUKS2 header independently
-confirms the repaired 512-byte logical sector geometry. No encryption profile
-was weakened.
-
-The `576505d` configured-host matrix completed all 60 container cells and all
-30 direct scratch disk cells. The native physical-folder-backing matrix completed
-29 of 30; CryFS/UFS2 failed on reopen. All other filesystem rows have fresh
-matching mount receipts and full five-hash reopen/append/reopen checks. Directory
-engines encrypt folders on the formatted scratch backing; they do not encrypt
-or format the whole block device. Direct block-source folder-engine cells remain
-not applicable.
-
-The new 1 GiB scratch disk is exclusively identified as
-`/dev/disk/by-id/virtio-lurker-fresh-debian`, observed virtio serial
-`lurker-fresh-debian`. This differs from the trailing-hyphen evidence disk serial.
-Every destructive invocation checks exact serial, size, resolved by-id identity,
-child mounts and holders. Initial by-id invocations hit the product's deliberate
-symlink target rejection before mutation; the guarded runner now passes the
-resolved node. Native VeraCrypt Quick Format required one bounded confirmation;
-the shared harness defaults remain unchanged and opt-in is fenced to the
-verified forced scratch create. Failed receipts and snapshots remain separate.
-
-Installed normal-user physical helper samples passed all three methods with
-binary keyfiles and strict full-stdout JSON. The last LUKS2/Btrfs sample survived
-an ordinary 6.12-to-7.3 reboot with matching five payload hashes, then closed
-normally. The later return to default 6.12 produced boot ID
-`e50f1be3-d2b1-43b3-a3f2-e352e434cc66`; GRUB's default remains the official
-6.12 cloud kernel. The installed `576505d` manifest audit verified 1,118 files,
-symlinks, hashes, administrator ownership and modes, with an empty `dpkg -V`.
-These are named historical functional results; final package compliance is
-qualified separately below.
-
-## UFS2 prerequisite correction and final follow-up
-
-The failed physical UFS2 image is retained in full with SHA-256
+The physical CryFS/UFS2 reopen exposed a separate host-driver bug. The full failed
+1 GiB device image remains immutable with SHA-256
 `eb8f0d15505ae08adbfe40741cb83dc7c48a32b03c1aa70c5ddd5872cda49195`.
-A separate writable clone reproduced the failure without CryFS: native create,
-write, fsync and stat succeeded, but directory enumeration omitted the new name.
-Pinned FUSE-UFS source returned EOF whenever readdir's continuation offset was
-nonzero. CryFS's base-directory readability check correctly detected this.
-
-The host-only prerequisite now applies the minimal pagination patch `9e27dcc`
-after the existing no-replace and barrier patches on upstream
-`ee5c4a447da98220a11edb69a225d51379afc4fb`. New driver SHA-256 is
+A writable clone reproduced successful create/fsync/stat but omitted the new
+name during native enumeration, without CryFS. FUSE-UFS prematurely returned EOF
+for every nonzero readdir continuation offset. The minimal `9e27dcc` pagination
+patch after the no-replace/barrier prerequisites fixes this. New driver SHA-256:
 `afcb489fdd1e441d418883c71d5abfe45d89d1f9548a1b2fe94479375641c30d`.
-All 28 rufs unit tests pass. A native 512-name control truncates to 25 with the
-old driver; the new driver enumerates all 512 and all 513 after creating and
-fsyncing one more file. The preserved failed-image clone now enumerates 186,
-then 187 including its new entry, with equal repeated scans. Seven native
-rename/collision operations and three forwarded fsync/EIO/retry controls also
-pass. All control mounts closed normally. Original driver bytes, image bytes,
-backend diagnostics, sources, patch/build hashes and logs remain retained.
-The filesystem driver is separately administrator-installed and is not bundled.
+All 28 rufs tests pass. Old/new native 512-name controls show truncation to 25
+versus complete 512 then 513 names; the failure clone now enumerates 186 then
+187 including its newly created entry. Repeated scans agree. Seven namespace
+controls and three forwarded fsync/EIO/retry controls pass. All 12 affected UFS2
+runtime cells were rerun successfully with the final package; original receipts,
+image, backend diagnostics and driver bytes remain retained. Upstream's
+experimental-write/no-ACL limitation remains explicit.
 
-Final Linux follow-up source is `67894f68525c55d5cbb48c743e1a98a308bd970f`.
-Exact workspace run `20261127T000845Z-7a8d559b` passed check/test/build:
-168 passed, zero failed, 15 ignored. The first package stage exposed an older
-VeraCrypt producer/consumer mismatch: its private closure contains FUSE while
-the final packaging policy requires host FUSE. The assigned producer and stager
-owners are correcting that contract; no compliance pass is claimed for the
-older package. Remaining work is the corrected native package, final artifact
-login-user/helper/desktop/reboot gates, all 12 affected UFS2 cells using the
-corrected prerequisite, and final evidence reconciliation and cleanup.
+Final packaging also corrected the older Linux creator's bundled FUSE closure.
+That older package was functionally exercised but fails this round's host-only
+FUSE policy. The verified creator bytes remain exactly
+`7975cc4724d558fd10bafcc670627c56959a1c76d721f7f83dce855eb0052769`;
+the new licensed private closure contains zlib only and records the native
+administrator-controlled FUSE ABI. Actual GNU loader resolution and creator
+execution pass. FUSE SONAME 4 resolves to Debian's `libfuse3-4 3.17.2-3` provider.
+No fake provider alias or old-envelope identity was used.
 
-Current upstream evidence is retained with fetch times and hashes. Primary routes:
+A final auxiliary `--version` launcher probe was unsupported and stopped only
+reboot preparation. Its failed receipt is retained; the supported `--help`
+probe passed and preparation resumed without a product change. Native windows
+were already successful and were not repeated for that invocation correction.
+
+## Evidence and retained storage
+
+Private evidence root:
+`target/goal-validation/native-fresh-20261127/hosts/debian/`.
+`final-ledger.json` records all 130 method/filesystem rows, separate source kinds,
+artifact identities, native receipts and exclusions. `gate-manifest.json` records
+the additional final-artifact gates. Sources, build/check/test logs, installed
+manifest, qualified prerequisites, feature probes, failed receipts and native
+frames are retained with hashes. VM evidence persists under
+`/var/tmp/lurker-native-fresh-20261127-debian-storage`; closed fixture paths and
+failed snapshots remain available. No unrelated storage or work was removed.
+
+Owned domain: `debian-core-01`, UUID `27ab88f9-d2e2-49fe-b03f-8364a418d891`.
+The dedicated 128 GiB evidence disk has observed virtio serial
+`lurker-fresh-debian-` and UUID `1f49c989-f748-4493-af93-0f0c58037595`; its online
+grows preserved identity and data. The separate new 1 GiB qcow2 scratch has no
+backing file and observed serial `lurker-fresh-debian`, reached through its exact
+by-id alias. Every destructive create checks serial, size, alias resolution,
+children and holders before passing the guarded canonical node. One optional
+VeraCrypt Quick Format confirmation is fenced to forced, verified scratch create;
+the shared harness default remains unchanged. The evidence disk stays mounted;
+the scratch and encrypted fixtures are closed and retained.
+
+Primary upstreams checked during the round:
 
 https://github.com/linux-apfs/linux-apfs-rw
 
