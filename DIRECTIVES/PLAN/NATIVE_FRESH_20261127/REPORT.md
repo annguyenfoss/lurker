@@ -321,10 +321,17 @@ clarification about that architecture.
   list/read/write denial, including the full CryFS payload lifecycle. It changes
   access-mode ABI translation, cached attributes and ReFUSE owner admission;
   no kernel or cache flags are changed. The pinned external prerequisite recipe
-  is committed at `a90fcfd`. A further ext4 control found foreign mkdir still
-  admitted under its existing driver options. Host installation remains pending
-  corrected parent-operation authorization and explicit native permission
-  options. Capability guards and fresh installed-artifact tests remain required.
+  starts at `a90fcfd`; `091bd71` adds parent-operation authorization for the
+  ext4 foreign-mkdir failure and versions the ReFUSE contract at 2. The corrected
+  libraries are installed separately with backups. Root checked their native
+  ELF/SONAME/marker identities, actual mapped providers, three filesystem
+  caller/foreign-user controls, full CryFS payload/normal-close/privacy receipts
+  and seven unchanged-target stock-provider negatives. The private audit is
+  `hosts/netbsd/validation/root-installed-fuse-v2-control-audit.json`.
+  Guard `8e09ac8` checks trusted provider and symbol ownership; its native
+  workspace passed 131 tests. Fresh installed-product matrix qualification is
+  still pending. `ee5fc3f` documents the host prerequisites; no FUSE library
+  enters the Lurker package.
 - FreeBSD's new real-user gate ultimately passed all 33 fixture access checks
   with UID 1300 write/read and unrelated-user denial through searchable
   plaintext ancestors. PEFS/HAMMER2 failed with a target on ZFS but passed at
@@ -336,6 +343,15 @@ clarification about that architecture.
   also reports swap exhaustion. Transport/shutdown ordering is an investigation
   hypothesis; memory contribution is unproven. No reboot pass, forced recovery
   or custom shutdown hook is credited.
+- FreeBSD's failed shutdown state is now preserved in a root-private native
+  RAM save and all four original qcow2 files. Offline copies matched all four
+  original hashes before a separate cold recovery boot. Root independently
+  checked the live domain UUID and that every disk source points to a verified
+  copy, plus the saved memory's owner/mode/size and comparison receipt. The
+  private audit is `hosts/freebsd/validation/root-shutdown-recovery-identity-audit.json`.
+  Recovery does not establish an ordinary-reboot pass. The first ext4 recovery
+  row refused writable mounting; read-only native diagnostics found an unclean
+  filesystem and bitmap/count inconsistencies. No repair is credited.
 - OpenBSD's stable CryFS source port has passed the full native payload
   lifecycle. Post-exec engine confinement and pathname-replacement negatives
   passed; an earlier pre-exec confinement claim was explicitly retracted after
@@ -347,6 +363,17 @@ clarification about that architecture.
   has a root-only native payload control, but
   ordinary-user memory locking and FUSE mounting remain concrete privilege
   barriers; a root diagnostic does not establish product support.
+- OpenBSD product startup exposed a native record-publication race: captured
+  session records had the expected regular-file type, root owner and 0600 mode,
+  but transiently reported two links during atomic replacement. A native
+  rename/fstat probe reproduced that state. Shared correction `c3dd43b` retries
+  metadata on the same held descriptor for a bounded interval while preserving
+  immediate type/owner/mode checks and persistent-hardlink rejection. Its native
+  overlay regression passed; exact-commit Linux workspace checks are running
+  and the new OpenBSD product lifecycle remains a separate gate. NetBSD's
+  comparable native FFS(log) probe completed 10,000 renames without observing
+  an extra link, so its installed `8e09ac8` candidate proceeds with that scope
+  decision and retained probe, rather than rebuilding solely for the source hash.
 
 Host owners are performing current update inventories, builds, applicable
 container combinations, native controls and device preparation. Initial product
