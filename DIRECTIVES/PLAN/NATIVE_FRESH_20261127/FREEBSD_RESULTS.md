@@ -2,8 +2,9 @@
 
 This is an ordinary-route checkpoint, not a final complete host pass. Final
 installed container/device matrices have finished. An ordinary shutdown
-with 33 qualified mounted fixtures stalled; reboot persistence and final cleanup
-have not passed. Product integration, desktop callbacks and
+with 33 qualified mounted fixtures stalled. A later explicitly enabled small-cohort
+service reboot passes; broader ordinary-route integration and final package
+qualification remain open. Product integration, desktop callbacks and
 canonical package installation have completed the gates recorded below. Old reports are not counted as fresh passes.
 Private receipts are under `target/goal-validation/native-fresh-20261127/hosts/freebsd/`;
 remote logs and preserved fixtures are under `/srv/lurker-fresh-20261127/`.
@@ -381,8 +382,8 @@ after an explicitly recorded native `kldload fusefs`. The approved persistent
 ordinary setup now adds fusefs to `kld_list` and sets `vfs.usermount=1` in
 `/etc/sysctl.conf`, with private before-config backups. Native `/dev/fuse` is
 root:operator mode 0666 and actual UID 1300 has read/write access; no devfs rule
-was changed. Persistent availability at the next ordinary boot remains
-unproven. Runtime user-mount authorization 1 is now intentional host setup,
+was changed. Its later automatic boot availability is verified by the explicit
+service reboot below. Runtime user-mount authorization 1 is now intentional host setup,
 separate from the earlier temporary batches that restored zero.
 
 One private retest controller reused early terminal-log basenames; its v2 JSON
@@ -462,8 +463,37 @@ for the active cohort; already-closed/unowned targets cause normal refusal, not
 automatic registry enumeration or error-string-based skipping. That operator
 contract is documented separately from a general idempotent shutdown manager.
 
-Actual ordinary reboot with explicit service activation is still pending; no
-manual test or optional-service result replaces the failed stock shutdown.
+The explicitly activated ordinary reboot subsequently **passes** for one fresh,
+measured cohort: a 1 GiB VeraCrypt/ZFS file plus one inner gocryptfs vault. Four
+crypto/supervisor processes total 109876 KiB RSS; 28 processes, no builds and the
+full 1 GiB swap were free before shutdown. Installed script/config/list and
+native rc order are recorded. Serial capture proves the user directory closes,
+then the outer native container closes, before syslogd/global termination and
+normal buffers-synced/Rebooting output. Boot identity changes from
+1795742372 (01:19:32UTC) to 1795745832 (02:17:12UTC).
+
+Before any postboot mount or manual prerequisite restoration, fusefs.ko is loaded,
+`/dev/fuse` is native root:operator 0666, and `vfs.usermount=1`. Both layers reopen
+normally for read/write; all five append/final hashes match. The persisted caller
+nonce, a fresh postboot UID 1300 write/fsync/read, and unrelated UID 65534 denials
+all pass. Registered-service normal close succeeds. Activated rc.d/rc.conf.d/list
+files are archived and removed by exact hash; intentional persistent FUSE setup
+remains. No forced power action, repair, import or error-string skipping occurred.
+
+The local serial log is `validation/service-reboot-console.log`, SHA-256
+`1a4b92f864d3ba43c825b4475ef2ff8eb373277677bd1cf46c7ea7ac52c40490`.
+`validation/freebsd-shutdown-service-reboot-result.json` retains full observations;
+`validation/service-reboot-evidence-index.json` correlates recipe/helpers/list/
+config bytes. The activation archive had a basename collision: the rc.conf.d
+copy overwrote the rc.d script copy. The unchanged executed recipe/state remain;
+the separately protected prototype is collected as an explicitly labeled
+byte-equivalent script, matching hashes asserted before and after reboot. That
+archival limit is not hidden. The coordinator independently verifies the complete
+milestone in `validation/root-shutdown-service-reboot-audit.json`.
+
+This qualifies the explicit small-cohort administrator setup. It does not replace
+the failed stock shutdown, the 29/33 clone recovery, or all-method final-package
+and ordinary reboot qualification.
 
 Measured filesystem features below describe the created native profiles, not
 all capabilities available under other mount/format options. Both backend rows
@@ -505,9 +535,14 @@ normal. Controls are `native-lkl-directio-v2-1795733146` and
 statically embedding Linux Kernel Library code with host threads, file I/O and
 host FUSE; it has no VM or network layer. Upstream is active, with inspected
 commit `d0f76a77e8c2ca68bd7d96190b8da09040eab072` dated 2026-09-28. Product
-mount/geometry changes remain held pending the user's explicit eligibility
-preference for this separately installed host route. No positive native control
-has been relabeled as a product pass, and no name-based impossibility is claimed.
+mount/geometry changes were initially held for eligibility clarification. The
+coordinator now accepts this official separately installed native host route:
+the exclusion concerns VM/microVM/WSL/network workarounds, none of which this
+driver uses. Btrfs/XFS product integration is required ordinary work, using
+`direct_io`, native formatters and selected 512-byte GELI geometry while preserving
+AES-XTS-256/PBKDF2-600000. Both inner sources and directory backings still need
+actual product and caller-access qualification. Native controls remain separate
+from product passes; no name-based impossibility is claimed.
 
 ### Cryptomator ordinary native source assessment
 
