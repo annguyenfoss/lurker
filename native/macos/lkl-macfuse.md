@@ -61,6 +61,14 @@ first control compilation omitted the existing POSIX host parameter and failed;
 the corrected harness and all source-fetch failures remain in the same evidence
 packet. The published ICMP host-header warning is retained without a port repair.
 
+The external-driver builder now selects that released pin and stages seven exact
+guardian headers. For an archived source tree without `.git`, supply both
+`--source-provenance` and `--source-provenance-sha256`; the explicit record binds
+the release commit/tree, unchanged profile, library, headers and reviewed host/link
+inputs. This verifies input consistency, not administrator trust. The first
+real-worker source composition and its build-only/refusal checks are described in
+`guardian-service.md`; no public guarded route or runtime acceptance follows.
+
 ## Historical c4 source and build
 
 - xlinuxfs: `f9da28e8cfdf6a4574a31e8baa9ba1811ef4c2e4` (2026-10-30), GPL-2.0.

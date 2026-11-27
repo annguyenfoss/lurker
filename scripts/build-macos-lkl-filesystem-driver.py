@@ -13,12 +13,18 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import stat
 import subprocess
 import sys
 import time
 
-LKL_COMMIT = "c4d0895ead9badb52f7bbffe3d529c61c8fc9485"
+LKL_COMMIT = "2cdd0e976095d14a63bbb1e9462b0e20cda9ea5b"
+LKL_TREE = "10b8a68c688ff76ea76537f2fca965b718f3c349"
+RELEASE_BASES = {
+    "tools/lkl/lib/virtio_blk.c": "7f8cd122383ebca3ba5f497c6eddfcf302a35c6ed108be56b7823f2528dd370a",
+    "tools/lkl/darwin/build.py": "1be623b2eeceeea13c40653cb2f37ad068d71dd7f9f82085215644d1c6f8ec0e",
+}
 KERNEL_EXPORTS = {
     "_lkl_cleanup", "_lkl_cpu_change_owner", "_lkl_cpu_get", "_lkl_cpu_init",
     "_lkl_cpu_put", "_lkl_cpu_shutdown", "_lkl_cpu_try_run_irq", "_lkl_cpu_wait_shutdown",
@@ -57,12 +63,45 @@ def kernel_exports(symbols: str) -> set[str]:
     return result
 
 
+def release_provenance(source: Path, library: Path, include: Path,
+                       path: Path, expected_sha256: str) -> dict:
+    """Bind an archive-source build to explicit reviewed release inputs.
+
+    This is input consistency, not administrator trust or runtime admission.
+    Hash actual directories instead of following paths supplied by the JSON.
+    """
+    if sha256(path) != expected_sha256:
+        raise ValueError("Source provenance differs from the explicitly reviewed hash")
+    value = json.loads(path.read_text())
+    if (value.get("lkl_commit") != LKL_COMMIT or
+            value.get("verified_git_tree") != LKL_TREE or
+            value.get("unchanged_profile") is not True or
+            value.get("library_sha256") != sha256(library) or
+            value.get("pre_patch_sha256") != RELEASE_BASES):
+        raise ValueError("Expected the published release profile and reviewed library")
+    actual = {str(p.relative_to(include)): sha256(p)
+              for p in sorted(include.rglob("*")) if p.is_file()}
+    if value.get("headers") != actual:
+        raise ValueError("Exported headers differ from the reviewed library inputs")
+    profile = source / "tools/lkl/darwin/profile"
+    actual = {str(p.relative_to(profile)): sha256(p)
+              for p in sorted(profile.rglob("*")) if p.is_file()}
+    if not actual or value.get("profile") != actual:
+        raise ValueError("Released source profile differs from its frozen inputs")
+    actual = {name: sha256(source / name) for name in RELEASE_BASES}
+    if value.get("post_patch_sha256") != actual:
+        raise ValueError("Reviewed host/link build sources changed after the library build")
+    return value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lkl-source", type=Path, required=True)
     parser.add_argument("--library", type=Path, required=True)
     parser.add_argument("--library-sha256", required=True)
     parser.add_argument("--include-dir", type=Path, required=True)
+    parser.add_argument("--source-provenance", type=Path)
+    parser.add_argument("--source-provenance-sha256")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     if platform.system() != "Darwin" or platform.machine() != "arm64":
@@ -76,11 +115,20 @@ def main() -> int:
         parser.error("The LKL archive differs from the explicitly reviewed input hash")
     if not (include / "lkl.h").is_file() or not (include / "lkl_host.h").is_file():
         parser.error("Expected matching exported LKL headers")
-    revision = subprocess.check_output(
-        ["/usr/bin/git", "-C", str(source), "rev-parse", "HEAD"], text=True
-    ).strip()
-    if revision != LKL_COMMIT:
-        parser.error(f"Expected pinned companion LKL {LKL_COMMIT}")
+    if bool(args.source_provenance) != bool(args.source_provenance_sha256):
+        parser.error("Provide both source provenance path and its reviewed SHA256")
+    provenance = None
+    if args.source_provenance:
+        provenance = release_provenance(source, library, include,
+                                        args.source_provenance,
+                                        args.source_provenance_sha256)
+        revision = provenance["lkl_commit"]
+    else:
+        revision = subprocess.check_output(
+            ["/usr/bin/git", "-C", str(source), "rev-parse", "HEAD"], text=True
+        ).strip()
+        if revision != LKL_COMMIT:
+            parser.error(f"Expected pinned companion LKL {LKL_COMMIT}")
     checked_host_dependency(MACFUSE_LIBRARY)
     root = Path(__file__).resolve().parents[1]
     patch = root / "native/macos/lklfuse-darwin.patch"
@@ -100,6 +148,7 @@ def main() -> int:
         "gid": os.getgid(),
         "lkl_source": str(source),
         "lkl_commit": revision,
+        "source_provenance_sha256": args.source_provenance_sha256,
         "archive": {"path": str(library), "sha256": sha256(library)},
         "patches": {str(p): sha256(p) for p in (patch, flush_patch, symbols_patch)},
         "macfuse_headers_sha256": {
@@ -153,6 +202,24 @@ def main() -> int:
             raise ValueError("The adapter patch must add only tools/lkl/lklfuse-darwin.c")
         run(["/usr/bin/git", "apply", "--check", str(patch)], "patch-check")
         run(["/usr/bin/git", "apply", str(patch)], "patch-apply")
+        if provenance:
+            shutil.copy2(args.source_provenance, output / "source-provenance.json")
+        guardian_headers = {
+            name: root / directory / name for directory, names in (
+                ("native/lkl", ("guardian-protocol.h", "guardian-runtime.h")),
+                ("native/macos", ("lkl-guardian.h", "guardian-service.h",
+                                  "lkl-guardian-native.h", "lkl-guardian-worker.h",
+                                  "lkl-guardian-launch.h")),
+            ) for name in names
+        }
+        header_dir = work / "tools/lkl"
+        if not header_dir.is_dir() or header_dir.is_symlink():
+            raise ValueError("Expected the adapter patch to create its source directory")
+        manifest["guardian_headers_sha256"] = {}
+        for name, original in guardian_headers.items():
+            shutil.copy2(original, header_dir / name)
+            manifest["guardian_headers_sha256"][name] = sha256(header_dir / name)
+        save()
         driver_source = work / "tools/lkl/lklfuse-darwin.c"
         manifest["driver_source_sha256"] = sha256(driver_source)
         binary = output / "lklfuse-macfuse"

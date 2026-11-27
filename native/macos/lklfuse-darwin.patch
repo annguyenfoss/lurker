@@ -2,7 +2,7 @@ diff --git a/tools/lkl/lklfuse-darwin.c b/tools/lkl/lklfuse-darwin.c
 new file mode 100644
 --- /dev/null
 +++ b/tools/lkl/lklfuse-darwin.c
-@@ -0,0 +1,1639 @@
+@@ -0,0 +1,1649 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/* Native Darwin adapter derived from tools/lkl/lklfuse.c (LKL project).
 + * macFUSE 3 official vanilla callback ABI; no callback casts or bundled driver.
@@ -17,6 +17,7 @@ new file mode 100644
 +#include <fuse3/fuse_lowlevel.h>
 +#include <lkl.h>
 +#include <lkl_host.h>
++#include "lkl-guardian-launch.h"
 +#include <stdbool.h>
 +#include <stddef.h>
 +#include <stdint.h>
@@ -1138,13 +1139,17 @@ new file mode 100644
 +    for (int i = 0; inner_device[0] && i < 2000; i++) {
 +      long fd = lkl_sys_open(inner_device, LKL_O_RDONLY | LKL_O_EXCL, 0);
 +      if (fd >= 0) {
-+        lkl_sys_close(fd);
++        long closed = lkl_sys_close(fd);
++        if (closed < 0)
++          return (int)closed;
 +        released = 1;
 +        break;
 +      }
 +      if (fd != -LKL_EBUSY)
 +        return (int)fd;
-+      lkl_sys_nanosleep(&pause, NULL);
++      long paused = lkl_sys_nanosleep(&pause, NULL);
++      if (paused < 0 && paused != -LKL_EINTR)
++        return (int)paused;
 +    }
 +    if (inner_device[0] && !released)
 +      return -LKL_EBUSY;
@@ -1164,15 +1169,26 @@ new file mode 100644
 +static void retain_until_normal_drain(void) {
 +  unsigned tries = 0;
 +  for (;;) {
-+    pthread_mutex_lock(&request_lock);
++    int locked = pthread_mutex_lock(&request_lock);
++    if (locked) {
++      lgw_fail(locked);
++      sleep(1);
++      continue;
++    }
 +    int raw = normal_drain();
-+    pthread_mutex_unlock(&request_lock);
++    int unlocked = pthread_mutex_unlock(&request_lock);
++    if (unlocked)
++      lgw_fail(unlocked);
 +    if (!raw) {
++      lgw_complete(LFG_C_FILESYSTEM_SYNC | LFG_C_INNER_UNMOUNT |
++                   LFG_C_BACKEND_RELEASE_OK);
 +      fprintf(
 +          stderr,
 +          "NORMAL_DRAIN completed; backing still open until checked cleanup\n");
 +      return;
 +    }
++    if (raw != -LKL_EBUSY)
++      lgw_fail(host_errno(-raw)); /* raw Linux errno translated once */
 +    if (tries++ == 0 || tries % 30 == 0)
 +      fprintf(stderr,
 +              "DRAIN_FAILED raw=%d host=%d retained_pid=%d backing_fd=%d "
@@ -1192,9 +1208,11 @@ new file mode 100644
 +    if (raw == 0) {
 +      fprintf(stderr, "LKL_HALT raw=0 prior_failure=%d\n",
 +              sticky_shutdown_error);
++      lgw_complete(LFG_C_HALT);
 +      return;
 +    }
 +    sticky_shutdown_error = 1;
++    lgw_fail(raw < 0 ? host_errno((int)-raw) : EIO);
 +    if (tries++ == 0 || tries % 30 == 0)
 +      fprintf(stderr,
 +              "LKL_HALT_FAILED raw=%ld retained_pid=%d backing_fd=%d "
@@ -1282,113 +1300,42 @@ new file mode 100644
 +/* Snapshot the native mount table without triggering filesystem requests. INIT
 + * must be served on the main thread before asynchronous mount completion. The
 + * observer makes no LKL calls and joins within one 10ms polling interval. */
-+struct native_mount_watch {
-+  const char *point;
-+  char source[64];
-+  struct stat underlay;
-+  struct statfs captured;
-+  int captured_ok, error, done;
-+};
-+static int native_mounts(struct statfs **out) {
-+  int n = getfsstat(NULL, 0, MNT_NOWAIT);
-+  if (n < 0)
-+    return -errno;
-+  if (n > 8192)
-+    return -EOVERFLOW;
-+  int cap = n + 16;
-+  struct statfs *v = calloc((size_t)cap, sizeof *v);
-+  if (!v)
-+    return -ENOMEM;
-+  n = getfsstat(v, cap * (int)sizeof *v, MNT_NOWAIT);
-+  if (n < 0) {
-+    int e = errno;
-+    free(v);
-+    return -e;
-+  }
-+  if (n >= cap) {
-+    free(v);
-+    return -EAGAIN;
-+  }
-+  *out = v;
-+  return n;
-+}
-+static int native_capture(struct native_mount_watch *w) {
-+  struct statfs *v = NULL;
-+  int n = native_mounts(&v);
-+  if (n < 0)
-+    return n;
-+  int rc = 0;
-+  for (int i = 0; i < n; i++)
-+    if (!strcmp(v[i].f_mntonname, w->point)) {
-+      if (strcmp(v[i].f_fstypename, "macfuse") ||
-+          strcmp(v[i].f_mntfromname, w->source)) {
-+        rc = -ESTALE;
-+        break;
-+      }
-+      if (!v[i].f_fsid.val[0] && !v[i].f_fsid.val[1]) {
-+        rc = -ESTALE;
-+        break;
-+      }
-+      w->captured = v[i];
-+      w->captured_ok = 1;
-+      fprintf(stderr, "NATIVE_MOUNT_ID fsid=%d:%d type=%s source=%s point=%s\n",
-+              v[i].f_fsid.val[0], v[i].f_fsid.val[1], v[i].f_fstypename,
-+              v[i].f_mntfromname, v[i].f_mntonname);
-+      break;
-+    }
-+  free(v);
-+  return rc;
-+}
++#include "lkl-guardian-native.h"
 +static void *native_observer(void *arg) {
 +  struct native_mount_watch *w = arg;
 +  while (!__atomic_load_n(&w->done, __ATOMIC_ACQUIRE)) {
-+    if (__atomic_load_n(&native_initialized, __ATOMIC_ACQUIRE)) {
++    if (__atomic_load_n(&native_initialized, __ATOMIC_ACQUIRE) &&
++        !w->captured_ok) {
 +      int rc = native_capture(w);
 +      if (rc) {
 +        w->error = rc;
++        lgw_fail(-rc); /* native errno already, never Linux-map it */
 +        break;
 +      }
-+      if (w->captured_ok)
++      if (w->captured_ok) {
++        if (!guarded_worker.active)
++          break;
++        if (lgw_ready((uint32_t)w->captured.f_fsid.val[0],
++                      (uint32_t)w->captured.f_fsid.val[1]))
++          lgw_fail(EIO);
++      }
++    }
++    if (guarded_worker.active) {
++      /* Snapshot request latches, release the credential lock before IPC. */
++      int e = pthread_mutex_lock(&request_lock);
++      if (e) {
++        lgw_fail(e);
 +        break;
++      }
++      int request_error = sticky_io_error || credential_poison;
++      e = pthread_mutex_unlock(&request_lock);
++      if (e || request_error || native_signal ||
++          __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE))
++        lgw_fail(e ? e : EIO);
 +    }
 +    usleep(10000);
 +  }
 +  return NULL;
-+}
-+static int native_mount_gone(const struct native_mount_watch *w) {
-+  if (w->error || !w->captured_ok)
-+    return w->error ? w->error : -ESTALE;
-+  struct statfs *v = NULL;
-+  int n = native_mounts(&v);
-+  if (n < 0)
-+    return n;
-+  int rc = 0;
-+  for (int i = 0; i < n; i++) {
-+    if (!memcmp(&v[i].f_fsid, &w->captured.f_fsid, sizeof(fsid_t))) {
-+      rc = -EBUSY;
-+      break;
-+    }
-+    if (!strcmp(v[i].f_mntonname, w->point)) {
-+      rc = -ESTALE;
-+      break;
-+    }
-+  }
-+  free(v);
-+  if (rc)
-+    return rc;
-+  int fd = open(w->point, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-+  if (fd < 0)
-+    return -errno;
-+  struct stat st;
-+  rc = fstat(fd, &st);
-+  int e = errno;
-+  close(fd);
-+  if (rc)
-+    return -e;
-+  if (st.st_dev != w->underlay.st_dev || st.st_ino != w->underlay.st_ino ||
-+      st.st_uid != w->underlay.st_uid || (st.st_mode & 0022))
-+    return -ESTALE;
-+  return 0;
 +}
 +static void native_signal_handler(int signal) { native_signal = signal; }
 +static sigset_t original_signal_mask;
@@ -1399,9 +1346,13 @@ new file mode 100644
 +  action.sa_handler = native_signal_handler;
 +  sigemptyset(&action.sa_mask);
 +  action.sa_flags = SA_RESTART;
-+  if (!install && original_signal_mask_ready &&
-+      pthread_sigmask(SIG_SETMASK, &original_signal_mask, NULL))
-+    return -1;
++  if (!install && original_signal_mask_ready) {
++    int error = pthread_sigmask(SIG_SETMASK, &original_signal_mask, NULL);
++    if (error) {
++      errno = error;
++      return -1;
++    }
++  }
 +  for (int i = 0; i < 4; i++)
 +    if (sigaction(signals[i], install ? &action : &saved[i],
 +                  install ? &saved[i] : NULL) < 0) {
@@ -1437,15 +1388,24 @@ new file mode 100644
 +  sigemptyset(&set);
 +  for (int i = 0; i < 4; i++)
 +    sigaddset(&set, signals[i]);
-+  if (pthread_sigmask(SIG_UNBLOCK, &set, NULL))
++  int error = pthread_sigmask(SIG_UNBLOCK, &set, NULL);
++  if (error) {
++    errno = error;
 +    return -1;
++  }
 +  fprintf(stderr, "NATIVE_SIGNAL_HANDLERS own=1 after_channel_init=1\n");
 +  return 0;
 +}
 +int main(int argc, char **argv) {
++  int worker_v2 = argc > 1 && !strcmp(argv[1], "--worker-v2");
++  /* Private spawn-self entry only, never a source-path fallback. */
++  if (worker_v2 && (argc != 4 || lgw_bind(argv[3], argv[2]))) {
++    fprintf(stderr, "GUARDED_WORKER_BIND refused errno=%d\n", errno);
++    return 77;
++  }
 +  int readonly = 0, allow_other = 0;
 +  int first = 1;
-+  for (; first < argc && argv[first][0] == '-'; first++) {
++  for (; !worker_v2 && first < argc && argv[first][0] == '-'; first++) {
 +    if (!strcmp(argv[first], "--read-only"))
 +      readonly = 1;
 +    else if (!strcmp(argv[first], "--allow-other"))
@@ -1461,9 +1421,13 @@ new file mode 100644
 +      return 64;
 +    }
 +  }
-+  if (argc - first != 3 ||
-+      (strcmp(argv[first + 2], "ext4") && strcmp(argv[first + 2], "xfs") &&
-+       strcmp(argv[first + 2], "btrfs")))
++  const char *source = worker_v2 ? NULL : (first < argc ? argv[first] : NULL);
++  const char *point = worker_v2 ? argv[2] :
++                        (first + 1 < argc ? argv[first + 1] : NULL);
++  const char *type = worker_v2 ? argv[3] :
++                       (first + 2 < argc ? argv[first + 2] : NULL);
++  if ((!worker_v2 && argc - first != 3) || !point || !type ||
++      (strcmp(type, "ext4") && strcmp(type, "xfs") && strcmp(type, "btrfs")))
 +    return 64;
 +  if (!getuid() || geteuid() != getuid() || getegid() != getgid()) {
 +    fprintf(stderr,
@@ -1485,28 +1449,34 @@ new file mode 100644
 +  mount_identity.ngroups = ng;
 +  for (int i = 0; i < ng; i++)
 +    mount_identity.groups[i] = groups[i];
-+  const char *source = argv[first], *point = argv[first + 1],
-+             *type = argv[first + 2];
 +  struct stat before, after;
-+  if (lstat(source, &before) || !S_ISREG(before.st_mode) ||
-+      before.st_uid != getuid() || before.st_nlink != 1 ||
-+      (before.st_mode & 0022)) {
-+    fprintf(
-+        stderr,
-+        "refuse non-owned, linked, writable-shared or nonregular backing\n");
-+    return 77;
-+  }
-+  backing_fd =
-+      open(source, (readonly ? O_RDONLY : O_RDWR) | O_NOFOLLOW | O_CLOEXEC);
-+  if (backing_fd < 0 || fstat(backing_fd, &after) ||
-+      before.st_dev != after.st_dev || before.st_ino != after.st_ino) {
-+    perror("backing identity");
-+    return 1;
-+  }
-+  if (flock(backing_fd, LOCK_EX | LOCK_NB)) {
-+    perror("exclusive backing claim");
-+    close(backing_fd);
-+    return 1;
++  if (worker_v2) {
++    backing_fd = 4; /* already exact-identity checked; never reopen the source */
++    if (fstat(backing_fd, &after) ||
++        lg_check_source(NULL, backing_fd, &guarded_worker.identity)) {
++      lgw_fail(errno);
++      return 1;
++    }
++  } else {
++    if (lstat(source, &before) || !S_ISREG(before.st_mode) ||
++        before.st_uid != getuid() || before.st_nlink != 1 ||
++        (before.st_mode & 0022)) {
++      fprintf(stderr,
++              "refuse non-owned, linked, writable-shared or nonregular backing\n");
++      return 77;
++    }
++    backing_fd = open(source, (readonly ? O_RDONLY : O_RDWR) |
++                              O_NOFOLLOW | O_CLOEXEC);
++    if (backing_fd < 0 || fstat(backing_fd, &after) ||
++        before.st_dev != after.st_dev || before.st_ino != after.st_ino) {
++      perror("backing identity");
++      return 1;
++    }
++    if (flock(backing_fd, LOCK_EX | LOCK_NB)) {
++      perror("exclusive backing claim");
++      close(backing_fd);
++      return 1;
++    }
 +  }
 +  char canonical_point[PATH_MAX];
 +  if (!realpath(point, canonical_point)) {
@@ -1520,7 +1490,8 @@ new file mode 100644
 +    close(backing_fd);
 +    return 1;
 +  }
-+  struct native_mount_watch watch = {.point = point};
++  struct native_mount_watch watch = {.point = point,
++                                     .require_writable = worker_v2};
 +  if (lstat(point, &watch.underlay)) {
 +    close(backing_fd);
 +    return 1;
@@ -1529,6 +1500,7 @@ new file mode 100644
 +  memcpy(watch.source + 11, type, strlen(type) + 1);
 +  int rc = setup_mount(type, readonly);
 +  if (rc < 0) {
++    lgw_fail(host_errno(-rc));
 +    fprintf(stderr, "native LKL setup failed raw=%d host=%d\n", rc,
 +            host_errno(-rc));
 +    if (kernel_started) {
@@ -1586,7 +1558,13 @@ new file mode 100644
 +finish:
 +  if (observer_ready) {
 +    __atomic_store_n(&watch.done, 1, __ATOMIC_RELEASE);
-+    pthread_join(observer, NULL);
++    int joined = pthread_join(observer, NULL);
++    if (joined) {
++      lgw_fail(joined);
++      fprintf(stderr, "OBSERVER_JOIN_FAILED native=%d cleanup=retained\n", joined);
++      for (;;)
++        sleep(1); /* no cleanup while observer termination is unproven */
++    }
 +  }
 +  /* No fuse_unmount: this macFUSE library can force an exited session. Prove
 +   * the exact observed native mount is gone and the original directory remains
@@ -1597,6 +1575,8 @@ new file mode 100644
 +      int e = native_mount_gone(&watch);
 +      if (!e)
 +        break;
++      if (e != -EBUSY)
++        lgw_fail(-e);
 +      if (tries++ == 0 || tries % 300 == 0)
 +        fprintf(stderr,
 +                "NATIVE_CLOSE_RETAIN raw=%d pid=%d captured=%d "
@@ -1612,6 +1592,8 @@ new file mode 100644
 +            native_signal);
 +    if (!__atomic_load_n(&native_protocol_destroy, __ATOMIC_ACQUIRE))
 +      rc = -1;
++    else
++      lgw_complete(LFG_C_NATIVE_ABSENT);
 +  }
 +  /* fuse_destroy may unlink libfuse hidden files through our callbacks, so it
 +   * runs with the LKL filesystem alive, after the native mount identity gate.
@@ -1622,11 +1604,29 @@ new file mode 100644
 +  }
 +  fuse_opt_free_args(&fa);
 +  retain_until_normal_drain();
-+  if (original_root >= 0)
-+    lkl_sys_close(original_root);
++  if (original_root >= 0) {
++    long root_closed = lkl_sys_close(original_root);
++    original_root = -1; /* actual close attempted; do not retry an uncertain FD */
++    if (root_closed < 0) {
++      lgw_fail(host_errno((int)-root_closed));
++      rc = -1;
++    }
++  }
 +  retain_until_checked_halt();
 +  lkl_cleanup();
++  if (worker_v2) {
++    if (lg_barrier(backing_fd)) {
++      lgw_fail(errno); /* native fsync/F_FULLFSYNC error, no Linux remapping */
++      rc = -1;
++    } else
++      lgw_complete(LFG_C_BACKING_FLUSH);
++  }
 +  int closed = close(backing_fd);
++  backing_fd = -1;
++  if (!closed)
++    lgw_complete(LFG_C_WORKER_BACKING_CLOSED);
++  else
++    lgw_fail(errno);
 +  fprintf(stderr,
 +          "BACKING_RELEASE checked_normal_drain=1 close=%d sticky_io_error=%d "
 +          "host_flush_calls=%lu signal=%d host_io_error=%d halt_error=%d\n",
@@ -1634,11 +1634,21 @@ new file mode 100644
 +          __atomic_load_n(&host_flush_calls, __ATOMIC_RELAXED), native_signal,
 +          __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE),
 +          sticky_shutdown_error);
-+  if (signal_ready)
-+    native_signals(saved_signals, 0);
-+  return rc < 0 || closed < 0 || sticky_io_error || native_signal ||
-+                 __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE) ||
-+                 sticky_shutdown_error
-+             ? 1
-+             : 0;
++  if (signal_ready && native_signals(saved_signals, 0)) {
++    lgw_fail(errno);
++    rc = -1;
++  }
++  if (!credential_poison)
++    lgw_complete(LFG_C_CREDENTIALS_RESTORED);
++  if (!sticky_io_error &&
++      !__atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE))
++    lgw_complete(LFG_C_NO_IO_ERROR);
++  if (!native_signal)
++    lgw_complete(LFG_C_SIGNAL_POLICY_OK); /* Mac's permanent signal-error policy */
++  int exit_code = rc != 0 || closed < 0 || sticky_io_error || native_signal ||
++                  credential_poison ||
++                  __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE) ||
++                  sticky_shutdown_error ? 1 : 0;
++  return lgw_finish(exit_code);
++
 +}

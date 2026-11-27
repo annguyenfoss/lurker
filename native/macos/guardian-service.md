@@ -70,3 +70,32 @@ Coordinator review: `root-service-control-audit.json` independently verifies all
 receipt/log, committed service/common-runtime bytes and terminal process inventory.
 It confirms 477 assertion executions, four normal completions and six retained
 failures with separate fixture recovery. It adds no storage or admission claim.
+
+## First real-worker composition (build/refusal checks only)
+
+`lkl-guardian-launch.h` composes the existing service/runtime with an owned
+regular source, guardian-exclusive status, spawn-self worker3/4 and source/session
+BIND. `lkl-guardian-native.h` shares the real getfsstat identity/absence callbacks.
+The external adapter's private `--worker-v2 POINT TYPE` validates that inheritance
+before setup; it accepts no source/status pathname and cannot fall back after an
+invalid BIND. Its observer/final drain now provide checked READY/ERROR/DRAINED,
+including permanent I/O, credential, signal, IPC and cleanup failures. Shared
+codec/runtime/service transitions are unchanged. No public guardian entry or
+capability, core dispatch, provider or installed route is added.
+
+Native gate evidence: `build/guardian-driver-integration-1/`. Eleven pure input
+controls, real candidate compile/link, strict header syntax and version/invalid/
+missing-FD refusals passed against released library `393adeda…7314cd`. No valid
+worker BIND, LKL initialization or FUSE/storage/mount operation ran. Source review
+caught repeated header staging before dispatch; it now occurs once after patch
+application. First native dispatch passed the eleven tests, then stopped before
+compilation because its envelope omitted unchanged provenance patch files. The
+corrected envelope passed; all earlier source envelopes/logs remain separate.
+
+Final standalone service exit/RETIRE acknowledgement remains unresolved. RETIRED
+stays live/replayable; no implicit exit, kill/143 cleanup or wire change is added.
+Partial launch resources remain explicitly owned, and a known launch/status error
+withholds BIND before writable setup. Production startup/drain deadlines,
+administrator-owned execution, actual mounted callbacks, provider lifecycle and
+Create ownership still require qualification. Input consistency checks do not
+establish administrator trust or product admission.
