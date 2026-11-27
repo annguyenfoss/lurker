@@ -996,6 +996,12 @@ must remain distinct from ordinary shutdown and product qualification.
 - Scope/cleanup: operational recovery only, never an ordinary shutdown/product
   pass. No manual repair, force import, RAM restore or custom kernel change;
   original artifacts remain preserved. No old job was restarted.
+- Coordinator audit: `root-postboot-recovery-audit.json` verifies all 84 retained
+  receipt references by SHA-256, the five approved/live disk paths and domain
+  UUID, and raw post-boot results for boot identity, six absent old processes,
+  empty mdconfig, automatic FUSE prerequisites and both ONLINE pools. It does
+  not rehash active qcows or independently establish the seven artifact hashes
+  against their pre-boot records; prior offline custody evidence remains separate.
 
 
 ### Cryptomator no-force candidate1: memory-only gate
