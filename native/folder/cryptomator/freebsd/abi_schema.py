@@ -10,6 +10,9 @@ STRUCTS = {
              ('st_atim', 'timespec'), ('st_mtim', 'timespec'),
              ('st_ctim', 'timespec'), ('st_birthtim', 'timespec')],
     'timespec': [('tv_sec', 'long'), ('tv_nsec', 'long')],
+    'statfs': [('fsid0', 'int'), ('fsid1', 'int'), ('f_flags', 'long'),
+               ('f_owner', 'int'), ('f_fstypename', 'bytes'),
+               ('f_mntfromname', 'bytes'), ('f_mntonname', 'bytes')],
     'statvfs': [(n, 'long') for n in ['f_bsize', 'f_frsize', 'f_blocks',
                                     'f_bfree', 'f_bavail', 'f_namemax']],
     'fuse_file_info': [('flags', 'int'), ('fh', 'long'), ('lock_owner', 'long')],
@@ -27,6 +30,11 @@ STRUCTS = {
         'debug', 'nodefault_subtype', 'show_version', 'show_help', 'clone_fd',
         'max_idle_threads', 'max_threads']] + [('mountpoint', 'address')],
 }
+
+# Java identifiers for the public nested FreeBSD fsid_t fields. These are C
+# member expressions, not guessed ABI offsets; the native compiler resolves them.
+C_MEMBERS = {('statfs', 'fsid0'): 'f_fsid.val[0]',
+             ('statfs', 'fsid1'): 'f_fsid.val[1]'}
 
 # C signatures are independently type-checked against the installed fuse.h.
 # P=pointer, I=int, U=unsigned int, M=mode_t, Z=size_t, O=off_t, V=void.
@@ -56,4 +64,5 @@ CONSTANTS = {
                 'ENOMEM', 'ENOSYS', 'ENOTDIR', 'ENOTEMPTY', 'ENOTSUP',
                 'ERANGE', 'EROFS'],
     'stat_h': ['UTIME_NOW', 'UTIME_OMIT'],
+    'mount_h': ['MNT_NOWAIT', 'MNT_RDONLY'],
 }

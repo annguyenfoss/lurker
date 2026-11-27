@@ -6,7 +6,7 @@ target. Upstream jFUSE wrappers are prepared separately from verified sources.
 from __future__ import annotations
 import json
 from pathlib import Path
-from abi_schema import STRUCTS, CALLBACKS, CONSTANTS
+from abi_schema import STRUCTS, CALLBACKS, CONSTANTS, C_MEMBERS
 
 PACKAGE = 'org.cryptomator.jfuse.freebsd.amd64'
 BASE = Path(*PACKAGE.split('.'))
@@ -59,7 +59,8 @@ def write_c_include(path: Path) -> None:
     for i, (name, members) in enumerate(structs.items()):
         out += [f'printf("{"," if i else ""}\\\"{name}\\\":{{\\\"size\\\":%zu,\\\"align\\\":%zu,\\\"fields\\\":{{", sizeof(struct {name}), _Alignof(struct {name}));']
         for j, (member, kind) in enumerate(members):
-            out += [f'printf("{"," if j else ""}\\\"{member}\\\":{{\\\"offset\\\":%zu,\\\"size\\\":%zu,\\\"api\\\":\\\"{kind}\\\"}}", offsetof(struct {name}, {member}), sizeof(((struct {name} *)0)->{member}));']
+            c_member = C_MEMBERS.get((name, member), member)
+            out += [f'printf("{"," if j else ""}\\\"{member}\\\":{{\\\"offset\\\":%zu,\\\"size\\\":%zu,\\\"api\\\":\\\"{kind}\\\"}}", offsetof(struct {name}, {c_member}), sizeof(((struct {name} *)0)->{c_member}));']
             fields.append((name, member, kind))
         out += ['printf("}}");']
     out += ['printf("},");', '}', 'static void print_constants(void) {',
@@ -72,7 +73,7 @@ def write_c_include(path: Path) -> None:
     out += ['printf("}");', '}',
             'uint64_t jfuse_offset(int id) { switch (id) {']
     for i, (name, member, _) in enumerate(fields):
-        out += [f'case {i}: return offsetof(struct {name}, {member});']
+        out += [f'case {i}: return offsetof(struct {name}, {C_MEMBERS.get((name, member), member)});']
     out += ['default: return UINT64_MAX; }}',
             'uint64_t jfuse_dimension(int id, int alignment) { switch (id) {']
     for i, name in enumerate(structs):
@@ -87,8 +88,11 @@ def write_c_include(path: Path) -> None:
     for i, (name, member, kind) in enumerate(fields):
         if kind == 'timespec':
             continue
-        value = f'((struct {name} *)memory)->{member}'
-        if kind == 'address':
+        value = f'((struct {name} *)memory)->{C_MEMBERS.get((name, member), member)}'
+        if kind == 'bytes':
+            out += [f'case {i}: if (writing) memset({value}, (unsigned char)bits, sizeof({value})); '
+                    f'return (unsigned char){value}[0];']
+        elif kind == 'address':
             out += [f'case {i}: if (writing) {value} = (__typeof__({value}))(uintptr_t)bits; '
                     f'return (uint64_t)(uintptr_t){value};']
         elif kind == 'double':
@@ -139,7 +143,7 @@ def validate_profile(profile: dict) -> None:
             if (value['api'] != kind or value['offset'] < 0 or value['size'] <= 0
                     or value['offset'] + value['size'] > record['size']):
                 raise ValueError('Native field lies outside its structure')
-            if kind not in ('timespec',) and value['size'] not in (1, 2, 4, 8):
+            if kind not in ('timespec', 'bytes') and value['size'] not in (1, 2, 4, 8):
                 raise ValueError('Unsupported native scalar width')
     if set(profile['constants']) != set(CONSTANTS):
         raise ValueError('Native constant groups differ')
@@ -171,7 +175,7 @@ def generate_struct(name: str, record: dict) -> str:
     for field, value in record['fields'].items():
         offset, width, api = value['offset'], value['size'], value['api']
         text += f'public static long {field}$offset() {{ return {offset}L; }}\n'
-        if api == 'timespec':
+        if api in ('timespec', 'bytes'):
             text += f'public static MemorySegment {field}(MemorySegment m) {{ return m.reinterpret(sizeof()).asSlice({offset},{width}); }}\n'
             continue
         native = 'ADDRESS' if api == 'address' else 'JAVA_DOUBLE' if api == 'double' else {1:'JAVA_BYTE', 2:'JAVA_SHORT', 4:'JAVA_INT', 8:'JAVA_LONG'}[width]
@@ -221,7 +225,7 @@ def write_bindings(profile: dict, destination: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
     for group, constants in profile['constants'].items():
-        folder = {'fcntl_h':'fcntl', 'errno_h':'errno', 'stat_h':'stat'}[group]
+        folder = {'fcntl_h':'fcntl', 'errno_h':'errno', 'stat_h':'stat', 'mount_h':'mount'}[group]
         text = java_header(PACKAGE + '.extr.' + folder) + f'public final class {group} {{\n'
         for name, value in constants.items():
             text += f'public static int {name}() {{ return {value}; }}\n'
@@ -263,7 +267,11 @@ public static void main(String[] args) throws Throwable {
             api, width = value['api'], value['size']
             text += f'check({name}.{member}$offset()=={value["offset"]}L);\n'
             text += f'check((long)offset.invokeExact({field_id})=={name}.{member}$offset());\n'
-            if api == 'timespec':
+            if api == 'bytes':
+                text += f'long ignored_{field_id}=(long)field.invokeExact({field_id},m_{name},1,0x43L); check({name}.{member}(m_{name}).toArray(ValueLayout.JAVA_BYTE).length=={width}); '
+                text += f'for(byte b:{name}.{member}(m_{name}).toArray(ValueLayout.JAVA_BYTE)) check(b==0x43); '
+                text += f'{name}.{member}(m_{name}).fill((byte)0x56); check((long)field.invokeExact({field_id},m_{name},0,0L)==0x56L); fields++;\n'
+            elif api == 'timespec':
                 text += f'check({name}.{member}(m_{name}).address()==m_{name}.address()+{value["offset"]}L);\n'
             elif api == 'address':
                 text += f'long ignored_{field_id}=(long)field.invokeExact({field_id},m_{name},1,0x4320L); check({name}.{member}(m_{name}).address()==0x4320); '
@@ -280,7 +288,7 @@ public static void main(String[] args) throws Throwable {
             field_id += 1
     constant_id = 0
     for group, constants in profile['constants'].items():
-        package = dict(fcntl_h='fcntl', errno_h='errno', stat_h='stat')[group]
+        package = dict(fcntl_h='fcntl', errno_h='errno', stat_h='stat', mount_h='mount')[group]
         for constant_name in constants:
             text += f'check((long)constant.invokeExact({constant_id})==(long){PACKAGE}.extr.{package}.{group}.{constant_name}());\n'
             constant_id += 1
