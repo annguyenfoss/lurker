@@ -302,6 +302,13 @@ clarification about that architecture.
   manifest. Private audits are `hosts/macos/validation/root-package-conformance-audit-025f558.json`
   and `hosts/macos/validation/root-renewed025-thirty-cells-audit.json`. These
   positive-case audits do not validate every blocked/unavailable assessment.
+- The macOS frontend/API follow-up is independently checked in
+  `hosts/macos/validation/root-renewed025-helper-desktop-partition-audit.json`:
+  six actual native Slint callbacks, 39 expected helper JSON responses with
+  four payload opens per foreign Apple filesystem, and the CLI/desktop virtual
+  VeraCrypt partition gates. Production helper identities, actual callback
+  execution, expected refusal outcomes, persistence hashes and normal closes
+  matched; the separate test-layout app did not replace the production app.
 - macOS's three renewed ZFS directory cases passed their payload lifecycles but
   initially failed cleanup because Spotlight retained mappings. Scoped forced
   detach recovered only those identified fixtures; it is recovery evidence.
@@ -376,6 +383,19 @@ clarification about that architecture.
   comparable native FFS(log) probe completed 10,000 renames without observing
   an extra link, so its installed `8e09ac8` candidate proceeds with that scope
   decision and retained probe, rather than rebuilding solely for the source hash.
+- OpenBSD's preview desktop suite now passes 43 tests with no failures. Root
+  checked the native source-format equivalence and 100%/120% create/manage
+  frames; the new test now renders the initial lazy form before changing its
+  format. The actual CryFS desktop callback is still required before the
+  coherent core/model/UI feature commit.
+- New NetBSD installed-product containers pass seven CGD and six CryFS backing
+  rows as the actual caller. CryFS on exFAT fails with a captured native
+  `publish new encrypted block: Function not implemented` diagnostic, matching
+  native hardlink ENOSYS. The OpenBSD preview also exposed an exFAT failure and
+  lost backing-daemon access; its exact cause/cleanup remains under diagnosis.
+  Failed receipts and incomplete vaults are retained; neither is a pass or an
+  inapplicable backend. Artifact/log publication now uses host filesystems so
+  backing-driver failures cannot erase the product diagnostic.
 
 Host owners are performing current update inventories, builds, applicable
 container combinations, native controls and device preparation. Initial product
