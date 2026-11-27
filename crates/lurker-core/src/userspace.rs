@@ -18,7 +18,8 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const HELPER_VERSION: &str = "lurker-userspace-4";
+const CRYPTO_HELPER_VERSION: &str = "lurker-userspace-4";
+const FILESYSTEM_HELPER_VERSION: &str = "lurker-userspace-5";
 const READY_TIMEOUT: Duration = Duration::from_secs(45);
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -349,8 +350,13 @@ mod split_helper_tests {
         ] {
             fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
             fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
-            assert_eq!(probe_helper(&path).is_ok(), valid);
+            assert_eq!(probe_helper(&path, CRYPTO_HELPER_VERSION).is_ok(), valid);
         }
+        fs::write(&path, "#!/bin/sh\nprintf 'lurker-userspace-4\\n'\n").unwrap();
+        assert!(probe_helper(&path, FILESYSTEM_HELPER_VERSION).is_err());
+        fs::write(&path, "#!/bin/sh\nprintf 'lurker-userspace-5\\n'\n").unwrap();
+        assert!(probe_helper(&path, FILESYSTEM_HELPER_VERSION).is_ok());
+        assert!(probe_helper(&path, CRYPTO_HELPER_VERSION).is_err());
         fs::remove_file(path).unwrap();
     }
 
@@ -380,6 +386,96 @@ mod split_helper_tests {
             .unwrap_err()
             .message
             .contains("crypto helper"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn only_absent_shutdown_acknowledgement_can_trigger_crash_recovery() {
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-shutdown-state-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        fs::write(directory.join("ready"), b"ready\n").unwrap();
+        assert_eq!(shutdown_state(&directory).unwrap(), ShutdownState::Unacknowledged);
+        assert!(needs_recovery(&directory).unwrap());
+        for (bytes, expected) in [
+            (b"stopped\n".as_slice(), ShutdownState::Clean),
+            (b"io-error\n".as_slice(), ShutdownState::IoError),
+            (b"failed\n".as_slice(), ShutdownState::Failed),
+            (b"stop".as_slice(), ShutdownState::Failed),
+            (b"".as_slice(), ShutdownState::Failed),
+        ] {
+            fs::write(directory.join("stopped"), bytes).unwrap();
+            fs::set_permissions(directory.join("stopped"), fs::Permissions::from_mode(0o600)).unwrap();
+            assert_eq!(shutdown_state(&directory).unwrap(), expected);
+            assert!(!needs_recovery(&directory).unwrap());
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn shutdown_acknowledgement_rejects_links_unsafe_modes_and_oversized_records() {
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-shutdown-identity-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let stopped = directory.join("stopped");
+        fs::write(&stopped, b"stopped\n").unwrap();
+        fs::set_permissions(&stopped, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(shutdown_state(&directory).is_err());
+        fs::set_permissions(&stopped, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::hard_link(&stopped, directory.join("alias")).unwrap();
+        assert!(shutdown_state(&directory).is_err());
+        fs::remove_file(directory.join("alias")).unwrap();
+        fs::write(&stopped, [b'x'; 33]).unwrap();
+        assert!(shutdown_state(&directory).is_err());
+        fs::remove_file(&stopped).unwrap();
+        std::os::unix::fs::symlink(directory.join("missing"), &stopped).unwrap();
+        assert!(shutdown_state(&directory).is_err());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn known_filesystem_failure_preserves_session_and_source_without_cleanup() {
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-shutdown-failure-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let source = directory.join("vault");
+        fs::write(&source, b"encrypted fixture bytes").unwrap();
+        let session = Session {
+            version: 1,
+            source: source.clone(),
+            source_device: 0,
+            source_inode: 0,
+            mountpoint: directory.join("unmounted"),
+            created_mountpoint: false,
+            raw_mount_id: None,
+            filesystem_mount_id: None,
+            filesystem: Some("xfs".into()),
+            readonly: false,
+            process: None,
+        };
+        save_session(&directory, &session).unwrap();
+        let original_record = fs::read(directory.join("session.json")).unwrap();
+        let tools = Tools {
+            crypto: directory.join("must-not-run-crypto"),
+            filesystem: directory.join("must-not-run-filesystem"),
+            fusermount: directory.join("must-not-run-fusermount"),
+        };
+        for acknowledgement in [b"io-error\n".as_slice(), b"failed\n".as_slice()] {
+            fs::write(directory.join("stopped"), acknowledgement).unwrap();
+            fs::set_permissions(directory.join("stopped"), fs::Permissions::from_mode(0o600)).unwrap();
+            let error = close_session(&tools, &directory, &session).unwrap_err();
+            assert!(error.message.contains("automatic journal recovery was not attempted"));
+            assert!(!needs_recovery(&directory).unwrap());
+            assert_eq!(fs::read(&source).unwrap(), b"encrypted fixture bytes");
+            assert_eq!(fs::read(directory.join("session.json")).unwrap(), original_record);
+            assert_eq!(fs::read(directory.join("stopped")).unwrap(), acknowledgement);
+        }
         fs::remove_dir_all(directory).unwrap();
     }
 }
@@ -426,7 +522,7 @@ fn helper_paths(
     Ok((crypto, filesystem))
 }
 
-fn probe_helper(program: &Path) -> AppResult<()> {
+fn probe_helper(program: &Path, version: &str) -> AppResult<()> {
     let mut child = Command::new(program)
         .arg("--lurker-userspace-version")
         .stdin(Stdio::null())
@@ -453,7 +549,7 @@ fn probe_helper(program: &Path) -> AppResult<()> {
         match stdout.read(&mut buffer) {
             Ok(0) => match child.try_wait() {
                 Ok(Some(status)) => {
-                    break status.success() && bytes == format!("{HELPER_VERSION}\n").as_bytes()
+                    break status.success() && bytes == format!("{version}\n").as_bytes()
                 }
                 Ok(None) => {}
                 Err(_) => break false,
@@ -475,7 +571,7 @@ fn probe_helper(program: &Path) -> AppResult<()> {
     if !valid {
         let _ = child.kill();
         let _ = child.wait();
-        return Err(AppError::new(format!("Incompatible or unresponsive userspace helper: {}. Install matching protocol-4 crypto and host filesystem components.", program.display())));
+        return Err(AppError::new(format!("Incompatible or unresponsive userspace helper: {}. Expected {version}; install protocol-4 crypto and protocol-5 host filesystem components.", program.display())));
     }
     Ok(())
 }
@@ -524,9 +620,8 @@ impl Tools {
             filesystem,
             fusermount,
         };
-        for program in [&tools.crypto, &tools.filesystem] {
-            probe_helper(program)?;
-        }
+        probe_helper(&tools.crypto, CRYPTO_HELPER_VERSION)?;
+        probe_helper(&tools.filesystem, FILESYSTEM_HELPER_VERSION)?;
         Ok(tools)
     }
 }
@@ -817,9 +912,55 @@ fn process_alive(identity: &ProcessIdentity) -> bool {
     process_identity(identity.pid).is_some_and(|p| p.start_time == identity.start_time)
 }
 
-fn needs_recovery(dir: &Path) -> bool {
-    (dir.join("ready").exists() || dir.join("recovering").exists())
-        && fs::read(dir.join("stopped")).ok().as_deref() != Some(b"stopped\n")
+#[derive(Debug, PartialEq, Eq)]
+enum ShutdownState {
+    Unacknowledged,
+    Clean,
+    IoError,
+    Failed,
+}
+
+fn shutdown_state(dir: &Path) -> AppResult<ShutdownState> {
+    let file = match OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(dir.join("stopped"))
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(ShutdownState::Unacknowledged);
+        }
+        Err(error) => {
+            return Err(AppError::io("Cannot inspect filesystem shutdown acknowledgement; encrypted image retained", error));
+        }
+    };
+    let metadata = file.metadata().map_err(|error| {
+        AppError::io("Cannot identify filesystem shutdown acknowledgement", error)
+    })?;
+    if !metadata.is_file()
+        || metadata.uid() != crate::effective_uid()
+        || metadata.nlink() != 1
+        || metadata.mode() & 0o077 != 0
+        || metadata.len() > 32
+    {
+        return Err(AppError::new("Invalid filesystem shutdown acknowledgement; the encrypted image remains open."));
+    }
+    let mut bytes = Vec::new();
+    file.take(33)
+        .read_to_end(&mut bytes)
+        .map_err(|error| AppError::io("Cannot read filesystem shutdown acknowledgement", error))?;
+    Ok(match bytes.as_slice() {
+        b"stopped\n" => ShutdownState::Clean,
+        b"io-error\n" => ShutdownState::IoError,
+        // A present partial, unknown or explicit failed record is not proof of
+        // a crash. Never erase it and hide a known failure by replaying a journal.
+        _ => ShutdownState::Failed,
+    })
+}
+
+fn needs_recovery(dir: &Path) -> AppResult<bool> {
+    Ok(shutdown_state(dir)? == ShutdownState::Unacknowledged
+        && (dir.join("ready").exists() || dir.join("recovering").exists()))
 }
 
 fn close_session(tools: &Tools, dir: &Path, session: &Session) -> AppResult<()> {
@@ -851,7 +992,16 @@ fn close_session(tools: &Tools, dir: &Path, session: &Session) -> AppResult<()> 
             libc::waitpid(process.pid as i32, std::ptr::null_mut(), libc::WNOHANG);
         }
     }
-    if needs_recovery(dir) {
+    match shutdown_state(dir)? {
+        ShutdownState::IoError => {
+            return Err(AppError::new("The filesystem reported a backing I/O or flush failure. Its encrypted image and session remain open; automatic journal recovery was not attempted. Inspect filesystem.log before recovery."));
+        }
+        ShutdownState::Failed => {
+            return Err(AppError::new("The filesystem reported a shutdown failure or an invalid acknowledgement. Its encrypted image and session remain open; automatic journal recovery was not attempted. Inspect filesystem.log before recovery."));
+        }
+        _ => {}
+    }
+    if needs_recovery(dir)? {
         return Err(AppError::new("The filesystem did not confirm a clean shutdown. Its encrypted image remains open for recovery; inspect the session filesystem.log before retrying."));
     }
     let raw = raw_path(dir);
@@ -1036,7 +1186,7 @@ fn unmount(
         // journal through a new normal-user driver, then require a clean close.
         // Keep both the raw mount and recovery marker on any failure.
         let raw_mount = mount_at(raw_path(dir).parent().unwrap())?;
-        if !needs_recovery(dir)
+        if !needs_recovery(dir)?
             || mount_at(&session.mountpoint)?.is_some()
             || session.process.as_ref().is_some_and(process_alive)
             || raw_mount.as_ref().map(|m| m.mount_id) != session.raw_mount_id

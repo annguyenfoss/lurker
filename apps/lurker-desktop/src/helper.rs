@@ -184,9 +184,14 @@ fn run_helper_checked(
         if unprivileged && capabilities["unprivileged_veracrypt"] != true {
             return Err("Installed lurker-helper does not support unprivileged operation. Update it together with the desktop app.".into());
         }
+        let userspace_protocol = capabilities["userspace_backend_protocol"].as_u64();
+        let userspace_protocol_supported = if check_userspace_ready {
+            userspace_protocol == Some(5)
+        } else {
+            matches!(userspace_protocol, Some(4 | 5))
+        };
         if unprivileged
-            && (capabilities["protocol_version"] != 3
-                || capabilities["userspace_backend_protocol"] != 4)
+            && (capabilities["protocol_version"] != 3 || !userspace_protocol_supported)
         {
             return Err("Installed lurker-helper does not support the durable userspace backend protocol. Update the helper and native components together.".into());
         }
@@ -800,7 +805,7 @@ fi
         fs::write(&helper, r#"#!/bin/sh
 if [ "$1" = capabilities ]; then
   if [ "${2-}" = --userspace-readiness ]; then : > "${0}.readiness"; fi
-  printf '%s\n' '{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":4,"userspace_backend_ready":false,"userspace_backend_error":"Install the host filesystem driver."}'
+  printf '%s\n' '{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":5,"userspace_backend_ready":false,"userspace_backend_error":"Install the host filesystem driver."}'
 else
   cat > "${0}.request"
   printf '%s\n' '{"ok":true,"logs":[],"error":null}'
@@ -837,7 +842,7 @@ fi
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn userspace_ready_and_legacy_protocol_four_helpers_receive_requests() {
+    fn userspace_protocol_five_helpers_accept_optional_readiness_fields() {
         let _guard = HELPER_TEST_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -848,8 +853,8 @@ fi
         fs::create_dir(&directory).unwrap();
         let helper = directory.join("helper");
         for capabilities in [
-            r#"{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":4,"userspace_backend_ready":true}"#,
-            r#"{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":4}"#,
+            r#"{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":5,"userspace_backend_ready":true}"#,
+            r#"{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":5}"#,
         ] {
             let script = r#"#!/bin/sh
 if [ "$1" = capabilities ]; then
@@ -879,6 +884,54 @@ fi
                 .unwrap().contains("fixture password"));
             fs::remove_file(directory.join("helper.request")).unwrap();
         }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn protocol_four_helper_can_close_but_cannot_receive_new_mount_secrets() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-userspace-legacy-close-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(&helper, r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  printf '%s\n' '{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":4}'
+else
+  cat > "${0}.request"
+  printf '%s\n' '{"ok":true,"logs":[],"error":null}'
+fi
+"#).unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let mount = CommandAction::Mount(lurker_core::MountCommand {
+            privilege_mode: PrivilegeMode::Unprivileged,
+            source: directory.join("vault"),
+            peer_sources: Vec::new(),
+            allow_degraded: false,
+            mountpoint: directory.join("mount"),
+            tag: None,
+            volume_type: VolumeType::Veracrypt,
+            passphrase: Some("must not be transmitted".into()),
+            keyfile: None,
+            readonly: false,
+        });
+        assert!(run_helper(&helper, mount).unwrap_err()
+            .contains("durable userspace backend protocol"));
+        assert!(!directory.join("helper.request").exists());
+        let close = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Unprivileged,
+            target: directory.join("mount"),
+            tag: None,
+            volume_type: VolumeType::Veracrypt,
+        });
+        assert!(run_helper(&helper, close).unwrap().ok);
+        assert!(!fs::read_to_string(directory.join("helper.request")).unwrap()
+            .contains("must not be transmitted"));
         fs::remove_dir_all(directory).unwrap();
     }
 
