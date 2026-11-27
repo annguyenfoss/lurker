@@ -18,8 +18,9 @@ extended capability. The native kernel source explicitly ignores the extension
 fields. Earlier kernel negotiations retain the upstream reply behavior.
 
 The native `tests/kernel-wire.c` probe measures the exact stock kernel source
-header. The FUSE2 package does not install its private wire header; its qualified
-source header is measured by `tests/init-wire.c`. Both agree on shared field
+header. The installed `/usr/local/include/fuse/fuse_kernel.h`, byte-identical to both
+qualified global-provider and scoped-library source headers, is measured by
+`tests/init-wire.c`. Both agree on shared field
 offsets and the native64-byte layout. The latter also checks preservation of the
 7.19 prefix/flags and every zero extension byte. Native library compilation
 passes; actual linked-driver INIT and mounted payload proof remain required.
