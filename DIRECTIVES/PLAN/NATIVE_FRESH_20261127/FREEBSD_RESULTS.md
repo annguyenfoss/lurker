@@ -1040,3 +1040,11 @@ must remain distinct from ordinary shutdown and product qualification.
   error preserves a positive child PID, with actual owned-child wait retained.
 - Limit/cleanup: no root credential transition, LKL/FUSE/mount/device execution
   or completion authority. Both children reaped; private regular fixtures kept.
+
+
+Spawn v3 (`build/guardian-platform-spawn-v3/`) aligns explicit results with the
+Mac binding: started (0), retained child (1), no child (-1). Native 29 identity
+and 41 spawn checks pass, adding executable metadata recheck and retained failure.
+Actual-close/reported-EIO and changed-metadata controls both retain the owned
+child; real ENOENT publishes none. All three dummy children are reaped. Earlier
+v1/v2 receipts retain their old source/API scope; no storage test is repeated.

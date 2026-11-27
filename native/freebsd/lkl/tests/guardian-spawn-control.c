@@ -5,7 +5,9 @@
 #include "../../../lkl/guardian-protocol.h"
 #include <unistd.h>
 #include <errno.h>
+#include <sys/stat.h>
 static int fail_one_close;
+static int alter_exec_after;
 static int controlled_close(int fd) {
     int rc = close(fd);
     if (!rc && fail_one_close) {
@@ -14,6 +16,12 @@ static int controlled_close(int fd) {
     return rc;
 }
 #define LFBG_CLOSE_INTERNAL controlled_close
+static int controlled_exec_stat(const char *path,struct stat *st) {
+    int rc=stat(path,st);
+    if (!rc && alter_exec_after && !--alter_exec_after) ++st->st_ino;
+    return rc;
+}
+#define LFBG_EXEC_STAT controlled_exec_stat
 #include "../guardian-platform.h"
 #include <stdio.h>
 #include <pthread.h>
@@ -105,9 +113,13 @@ int main(int argc,char **argv) {
     finish_child(child,pair[0]);
     CHECK(!sigprocmask(SIG_SETMASK,&previous,NULL));
     fail_one_close=1;
-    CHECK(lfbg_spawn_worker(&in,&child)<0 && child>0 && errno==EIO);
+    CHECK(lfbg_spawn_worker(&in,&child)==LFBG_SPAWN_RETAINED && child>0 && errno==EIO);
     finish_child(child,pair[0]);
     CHECK(!fail_one_close && fcntl(status,F_GETFD)>=0 && fcntl(source,F_GETFD)>=0);
+    alter_exec_after=2;
+    CHECK(lfbg_spawn_worker(&in,&child)==LFBG_SPAWN_RETAINED && child>0 && errno==ESTALE);
+    finish_child(child,pair[0]);
+    CHECK(!alter_exec_after);
     CHECK(pwrite(status,"guardian-only",13,0)==13);
     CHECK(!close(source) && !close(status) && !close(log));
     CHECK(!close(pair[0]) && !close(pair[1]) && !close(100));

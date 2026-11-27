@@ -155,6 +155,12 @@ struct lfbg_spawn_inputs {
 #ifndef LFBG_CLOSE_INTERNAL
 #define LFBG_CLOSE_INTERNAL close
 #endif
+#ifndef LFBG_EXEC_STAT
+#define LFBG_EXEC_STAT stat
+#endif
+enum lfbg_spawn_outcome {
+    LFBG_SPAWN_FAILED = -1, LFBG_SPAWN_STARTED = 0, LFBG_SPAWN_RETAINED = 1
+};
 static inline int lfbg_connected_stream(int fd) {
     int type;
     socklen_t length = sizeof(type);
@@ -197,8 +203,9 @@ static inline int lfbg_root_executable(const char *path) {
         if (slash == parent) return 0;
     }
 }
-/* On post-spawn cleanup failure, return -1 BUT leave *child positive: the
- * caller still owns that child and must retain session/source custody. Never
+/* Return -1 only without a published child, 0 when started, or 1 for an owned
+ * child retained after setup/cleanup failure (with errno and *child valid).
+ * The caller must retain that child and session/source custody. Never
  * retry an uncertain close or treat a cleanup error as "nothing spawned".
  */
 static inline int lfbg_spawn_worker(const struct lfbg_spawn_inputs *in,
@@ -206,7 +213,8 @@ static inline int lfbg_spawn_worker(const struct lfbg_spawn_inputs *in,
     struct kinfo_proc process;
     size_t process_length = sizeof(process);
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
-    struct stat source, status, log;
+    struct stat source, status, log, executable_before, executable_after;
+    int have_executable;
     int copies[4] = {-1, -1, -1, -1}, null_fd = -1;
     int actions_live = 0, attr_live = 0, error = 0, rc;
     posix_spawn_file_actions_t actions;
@@ -226,6 +234,7 @@ static inline int lfbg_spawn_worker(const struct lfbg_spawn_inputs *in,
         errno = EBUSY; return -1;
     }
     if (!geteuid() && lfbg_root_executable(in->executable) < 0) return -1;
+    have_executable = !LFBG_EXEC_STAT(in->executable, &executable_before);
     if (lfbg_connected_stream(in->channel_fd) < 0 ||
         lfbg_private_regular(in->status_fd, &status) < 0 ||
         lfbg_private_regular(in->log_fd, &log) < 0 ||
@@ -274,6 +283,18 @@ static inline int lfbg_spawn_worker(const struct lfbg_spawn_inputs *in,
     LFBG_SPAWN_STEP(posix_spawn(&spawned, in->executable, &actions, &attr,
                                in->argv, in->environment));
     *child = spawned;
+    if (!have_executable) error = ESTALE;
+    else if (LFBG_EXEC_STAT(in->executable, &executable_after) < 0) error = errno;
+    else if (executable_before.st_dev != executable_after.st_dev ||
+        executable_before.st_ino != executable_after.st_ino ||
+        executable_before.st_size != executable_after.st_size ||
+        executable_before.st_mtim.tv_sec != executable_after.st_mtim.tv_sec ||
+        executable_before.st_mtim.tv_nsec != executable_after.st_mtim.tv_nsec ||
+        executable_before.st_ctim.tv_sec != executable_after.st_ctim.tv_sec ||
+        executable_before.st_ctim.tv_nsec != executable_after.st_ctim.tv_nsec ||
+        executable_before.st_uid != executable_after.st_uid ||
+        executable_before.st_gid != executable_after.st_gid ||
+        executable_before.st_mode != executable_after.st_mode) error = ESTALE;
 #undef LFBG_SPAWN_STEP
 done:
     if (attr_live && (rc = posix_spawnattr_destroy(&attr)) && !error) error = rc;
@@ -281,8 +302,11 @@ done:
     for (unsigned i = 0; i < 4; ++i)
         if (copies[i] >= 0 && LFBG_CLOSE_INTERNAL(copies[i]) < 0 && !error) error = errno;
     if (null_fd >= 0 && LFBG_CLOSE_INTERNAL(null_fd) < 0 && !error) error = errno;
-    if (error) { errno = error; return -1; }
-    return 0;
+    if (error) {
+        errno = error;
+        return *child > 0 ? LFBG_SPAWN_RETAINED : LFBG_SPAWN_FAILED;
+    }
+    return LFBG_SPAWN_STARTED;
 }
 /* First worker action, before any library/helper startup. A later exec must
  * never carry either the private channel or held provider into another image.

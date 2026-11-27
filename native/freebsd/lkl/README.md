@@ -227,3 +227,12 @@ The preceding v1 gate passed 35 parent checks. V2 publishes the output PID only
 after actual spawn success and adds a real executable-not-found control; an
 ENOENT result leaves no published child, while a later duplicate-close error
 retains the positive owned child. Both source/log sets remain preserved.
+
+V3 aligns production spawn results with the Mac binding: `0` started, `1`
+retained owned child after setup failure, `-1` no published child. Retained
+results carry a positive PID and errno; the caller must latch the failure and
+retain custody, not proceed as ready. Executable dev/inode/size/timestamps/mode/
+owner are compared across spawn. Native v3 passes 41 parent checks plus dummy
+worker assertions, including a reported metadata change and actual-close then
+reported EIO. Earlier v1/v2 scopes remain historical; only v3 uses this return
+contract. No root credential transition or driver integration is enabled.
