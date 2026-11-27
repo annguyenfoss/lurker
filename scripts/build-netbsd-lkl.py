@@ -14,6 +14,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tarfile
 import time
 import urllib.request
@@ -23,7 +24,7 @@ SOURCE_SHA256 = "ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e16
 SOURCE_URL = f"https://codeload.github.com/lkl/linux/tar.gz/{REVISION}"
 ROOT = Path(__file__).resolve().parent.parent
 HOST_PATCH = "native/netbsd/lkl/host.patch"
-HOST_PATCH_SHA256 = "b48ad6d0d393976c3b083203eb09bf197d07c8e5871b0f4507e06864dbf2e4e3"
+HOST_PATCH_SHA256 = "9523d3917b394d1ea9a1425b7d5b0c1813baf258fe0e5188e2cc6e7fdcf1f0a5"
 FLUSH_PATCH = "native/macos/lkl-darwin-flush.patch"
 FLUSH_PATCH_SHA256 = "0dd2c89942ede5a2c373191601054dcd9b2e4e17c4e1b1c568d02a2bfc8fcf8b"
 ELF_HEADER_URL = "https://raw.githubusercontent.com/bminor/glibc/glibc-2.42/elf/elf.h"
@@ -179,6 +180,7 @@ def native_overlay(work):
         else:
             path.symlink_to(target)
     (overlay / "byteswap.h").write_text("#include <sys/bswap.h>\n#define bswap_16 bswap16\n#define bswap_32 bswap32\n#define bswap_64 bswap64\n")
+    (overlay / "endian.h").write_text("#include <sys/endian.h>\n")
     # modpost parses several target architectures even for a native x86 build.
     # This unmodified portable ELF file-format header has only a stdint.h
     # dependency; it supplies no libc implementation or runtime ABI.
@@ -242,10 +244,36 @@ def main():
             environment.update(PATH="/usr/pkg/bin:/usr/bin:/bin:/usr/sbin:/sbin", LC_ALL="C")
             if args.adapted:
                 overlay = native_overlay(work)
-                environment["CFLAGS"] = f"-I{overlay} -D_NETBSD_SOURCE"
+                native_bin = work / "netbsd-bin"
+                native_bin.mkdir(exist_ok=True)
+                interpreter = str(Path(sys.executable).resolve(strict=True))
+                for name, target in {"python3": interpreter, "sed": "/usr/pkg/bin/gsed",
+                                     "stat": "/usr/pkg/bin/gstat"}.items():
+                    alias = native_bin / name
+                    if alias.exists() or alias.is_symlink():
+                        if not alias.is_symlink() or os.readlink(alias) != target:
+                            raise RuntimeError("Unexpected private native build alias")
+                    else:
+                        alias.symlink_to(target)
+                environment["PATH"] = str(native_bin) + ":" + environment["PATH"]
+                receipt["python_interpreter"] = {"path": interpreter, "sha256": digest(interpreter)}
+                receipt["private_tools"] = {path.name: {"path": os.readlink(path), "sha256": digest(path)}
+                                            for path in native_bin.iterdir()}
+                # lkl.h hides __unused while importing its UAPI structures;
+                # preload native endian inlines while the native macro exists.
+                environment["CFLAGS"] = f"-I{overlay} -D_NETBSD_SOURCE -include sys/endian.h"
                 environment["HOSTCFLAGS"] = f"-O2 -I{overlay}"
                 receipt["overlay_inputs"] = {str(path.relative_to(overlay)): digest(path)
                                               for path in overlay.rglob("*") if path.is_file()}
+                headers = [Path("/usr/include") / name for name in
+                           ("sys/bswap.h", "sys/endian.h", "sys/mman.h", "sys/sysctl.h", "sys/proc.h")]
+                headers.extend(Path("/usr/include/refuse").glob("*.h"))
+                receipt["native_sdk_inputs"] = {str(path): digest(path) for path in headers}
+                receipt["toolchain"] = {name: subprocess.check_output(command, text=True)
+                                        for name, command in
+                                        (("compiler", ["/usr/bin/gcc", "--version"]),
+                                         ("target", ["/usr/bin/gcc", "-dumpmachine"]),
+                                         ("linker", ["/usr/bin/ld", "--version"]))}
                 # The unmodified build creates this empty generated placeholder.
                 stat_alias = source / "tools/lkl/bin/stat"
                 if stat_alias.is_file() and not stat_alias.is_symlink() and stat_alias.stat().st_size == 0:

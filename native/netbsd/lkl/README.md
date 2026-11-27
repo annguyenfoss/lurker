@@ -39,6 +39,13 @@ That header retains its LGPL 2.1-or-later notice and uses only `stdint.h`;
 no glibc implementation or runtime library is used. It supplies the
 cross-architecture relocation constants missing from NetBSD's native `elf.h`.
 The exact native SDK/header hashes are recorded with each adapted build.
+Upstream's header export uses private aliases to the interpreter running this
+builder and to GNU sed/stat; their native paths and hashes are recorded. No
+system executable or global alias is replaced. The overlay also maps the
+Linux-style `endian.h` include to native `sys/endian.h`.
+Native endian inlines are preloaded before LKL temporarily hides `__unused`
+while parsing its UAPI; header discovery uses the same include-overlay flags
+as host compilation. All compatibility files stay inside the build directory.
 
 The mmap helper never passes `MAP_FIXED`. It accepts only the exact requested
 address and releases only an alternate mapping returned by its own syscall.

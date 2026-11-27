@@ -1,5 +1,14 @@
 --- a/tools/lkl/Makefile.autoconf
 +++ b/tools/lkl/Makefile.autoconf
+@@ -14,7 +14,7 @@
+ endef
+ 
+ define find_include
+-  $(eval include_paths=$(shell $(CC) $(SYSROOT_FLAGS) -E -Wp,-v -xc /dev/null 2>&1 | grep '^ '))
++  $(eval include_paths=$(shell $(CC) $(CFLAGS) $(SYSROOT_FLAGS) -E -Wp,-v -xc /dev/null 2>&1 | grep '^ '))
+   $(foreach f,$(include_paths),$(wildcard $(f)/$(1)))
+ endef
+ 
 @@ -70,14 +70,18 @@
  
  define posix_host
