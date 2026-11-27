@@ -5,7 +5,7 @@
  */
 #ifndef LURKER_MACOS_LKL_GUARDIAN_H
 #define LURKER_MACOS_LKL_GUARDIAN_H
-#include "guardian-protocol.h"
+#include "guardian-runtime.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -41,12 +41,6 @@ struct lg_process {
   pid_t pid;
   uid_t uid;
   uint64_t sec, usec;
-};
-struct lg_guardian {
-  struct lfg_message identity, current;
-  pid_t child;
-  int custody_fd, status_fd, wait_valid, wait_status;
-  int sticky_error, error_stage, drained, ready, released;
 };
 /* Reject disappeared, exiting and zombie peers; compare the native process
  * snapshot around credential collection. No account-directory membership. */
@@ -165,171 +159,74 @@ static inline int lg_write_status(int held_fd, const struct lfg_message *m) {
   errno = saved;
   return rc;
 }
-static inline void lg_fail(struct lg_guardian *g, int e, int stage) {
-  if (!g->sticky_error) {
-    g->sticky_error = e > 0 ? e : EIO;
-    g->error_stage = stage;
+/* Mac binding only: shared state/reaping/release/reply lives in
+ * guardian-runtime.h. Mount callbacks are mandatory and native-only; neither
+ * callback may invoke emulated kernel calls from the supervisor. */
+struct lg_native_binding {
+  void *context;
+  int (*validate_ready)(void *, const struct lfg_message *,
+                        const struct lfg_message *);
+  int (*native_absent)(void *, const struct lfg_message *);
+};
+static inline int lg_check_source(void *v, int fd,
+                                  const struct lfg_message *m) {
+  (void)v;
+  if (m->source_kind != LFG_SOURCE_REGULAR || m->source_rdev ||
+      m->source_logical_sector || m->source_physical_sector) {
+    errno = EINVAL;
+    return -1;
   }
-  g->current.kind = LFG_REPLY;
-  g->current.state = LFG_RETAINED;
-  g->current.error = g->current.latched_error = (uint32_t)g->sticky_error;
-  g->current.error_stage = (uint32_t)g->error_stage;
-  ++g->current.sequence;
+  return lg_regular_fd(fd, (uid_t)m->uid, m->source_dev, m->source_ino,
+                       m->source_size, 1);
 }
-/* Owned-child waitpid is the only source for wait facts. No kill(pid,0),
- * process disappearance, foreign wait status or file content can substitute. */
-static inline int lg_reap(struct lg_guardian *g, int nonblock) {
-  int status;
-  pid_t got;
-  if (g->wait_valid)
-    return 1;
-  if (g->child <= 0 || (uint64_t)g->child != g->identity.worker_pid) {
-    lg_fail(g, ECHILD, 1);
-    errno = ECHILD;
-    return -1;
-  }
-  do {
-    got = waitpid(g->child, &status, nonblock ? WNOHANG : 0);
-  } while (got < 0 && errno == EINTR);
-  if (!got)
-    return 0;
-  if (got != g->child) {
-    lg_fail(g, errno ? errno : ECHILD, 1);
-    return -1;
-  }
-  g->wait_valid = 1;
-  g->wait_status = status;
-  if (WIFEXITED(status)) {
-    g->current.wait_kind = LFG_WAIT_EXITED;
-    g->current.wait_value = (uint32_t)WEXITSTATUS(status);
-    g->current.flags |= LFG_F_WORKER_EXITED;
-    if (!WEXITSTATUS(status))
-      g->current.flags |= LFG_F_WORKER_EXIT_ZERO;
-    else
-      lg_fail(g, EIO, 2);
-  } else {
-    g->current.wait_kind = LFG_WAIT_SIGNALED;
-    g->current.wait_value =
-        WIFSIGNALED(status) ? (uint32_t)WTERMSIG(status) : 127;
-    lg_fail(g, EINTR, 2);
-  }
-  return 1;
+static inline int lg_check_status(void *v, int fd,
+                                  const struct lfg_message *m) {
+  (void)v;
+  return lg_regular_fd(fd, (uid_t)m->uid, m->status_dev, m->status_ino, 0, 0);
 }
-static inline int lg_worker_record(struct lg_guardian *g,
-                                   const struct lfg_message *m) {
-  if (lfg_validate(m) != LFG_OK || !lfg_same_binding(&g->identity, m) ||
-      (g->ready &&
-       memcmp(g->identity.native_id, m->native_id, sizeof(m->native_id)))) {
-    lg_fail(g, ESTALE, 3);
-    return -1;
-  }
-  if (m->kind == LFG_ERROR) {
-    lg_fail(g, m->latched_error ? (int)m->latched_error : (int)m->error, 4);
-    return -1;
-  }
-  if (m->kind == LFG_READY && !g->ready && !g->drained && !g->wait_valid) {
-    memcpy(g->identity.native_id, m->native_id, sizeof(m->native_id));
-    memcpy(g->current.native_id, m->native_id, sizeof(m->native_id));
-    g->ready = 1;
-    g->current.state = LFG_RUNNING;
-    return 0;
-  }
-  if (m->kind == LFG_DRAINED && g->ready && !g->drained) {
-    g->drained = 1;
-    g->current.completed_checks = m->completed_checks;
-    g->current.flags |= LFG_F_WORKER_DRAINED | LFG_F_NATIVE_CLOSED;
-    if (!g->sticky_error)
-      g->current.state = LFG_WORKER_DRAINED;
-    return 0;
-  }
-  lg_fail(g, EPROTO, 3);
-  return -1;
+static inline int lg_validate_ready(void *v, const struct lfg_message *expected,
+                                    const struct lfg_message *ready) {
+  struct lg_native_binding *binding = v;
+  return binding->validate_ready(binding->context, expected, ready);
 }
-/* OS binding independently confirms captured native mount absence immediately
- * before this function. Passing 0/error is failure, never "not applicable". */
-static inline int lg_release(struct lg_guardian *g, int native_closed) {
-  if (g->released)
-    return g->sticky_error ? -1 : 0;
-  if (g->sticky_error)
-    return -1;
-  if (native_closed < 0) {
-    lg_fail(g, -native_closed, 9);
-    errno = -native_closed;
-    return -1;
-  }
-  if (!g->wait_valid || !WIFEXITED(g->wait_status) ||
-      WEXITSTATUS(g->wait_status) || !g->drained || !g->ready ||
-      native_closed != 1 || g->current.completed_checks != LFG_C_ALL ||
-      g->custody_fd < 0) {
-    errno = EBUSY;
-    return -1;
-  }
-  if ((g->identity.source_dev == g->identity.status_dev &&
-       g->identity.source_ino == g->identity.status_ino) ||
-      lg_regular_fd(g->status_fd, (uid_t)g->identity.uid,
-                    g->identity.status_dev, g->identity.status_ino, 0, 0)) {
-    lg_fail(g, ESTALE, 5);
-    errno = ESTALE;
-    return -1;
-  }
-  if (lg_regular_fd(g->custody_fd, (uid_t)g->identity.uid,
-                    g->identity.source_dev, g->identity.source_ino,
-                    g->identity.source_size, 1)) {
-    lg_fail(g, errno, 5);
-    return -1;
-  }
-  if (lg_barrier(g->custody_fd)) {
-    lg_fail(g, errno, 6);
-    return -1;
-  }
-  g->current.flags |= LFG_F_CUSTODY_FLUSHED;
-  int fd = g->custody_fd;
-  g->custody_fd = -1;
-  if (LG_CLOSE(fd)) {
-    lg_fail(g, errno, 7);
-    return -1;
-  }
-  g->current.flags |= LFG_F_CUSTODY_CLOSED;
-  g->current.kind = LFG_REPLY;
-  g->current.state = LFG_RELEASED_CLEAN;
-  g->current.flags |= LFG_F_STATUS_SYNCED;
-  ++g->current.sequence;
-  if (lg_write_status(g->status_fd, &g->current)) {
-    lg_fail(g, errno, 8); /* leave file untouched: it is never authority */
-    return -1;
-  }
-  g->released = 1;
-  return 0;
+static inline int lg_native_absent(void *v, const struct lfg_message *m) {
+  struct lg_native_binding *binding = v;
+  return binding->native_absent(binding->context, m);
 }
-/* Native authenticated RPC peer and socket inode/session-directory custody
- * are prerequisites. Fresh nonce is echoed; lost replies can retry. */
-static inline int lg_reply(struct lg_guardian *g,
-                           const struct lfg_message *request,
-                           struct lfg_message *reply) {
-  if (lfg_validate(request) != LFG_OK || !lfg_is_request(request->kind) ||
-      !lfg_same_binding(&g->identity, request) ||
-      memcmp(g->identity.native_id, request->native_id,
-             sizeof(request->native_id))) {
-    errno = ESTALE;
+static inline int lg_flush_source(void *v, int fd,
+                                  const struct lfg_message *m) {
+  if (lg_check_source(v, fd, m))
+    return -1;
+  return lg_barrier(fd);
+}
+static inline int lg_close_source(void *v, int *fd,
+                                  const struct lfg_message *m) {
+  if (lg_check_source(v, *fd, m))
+    return -1;
+  int closing = *fd;
+  *fd = -1;
+  return LG_CLOSE(closing);
+}
+static inline int lg_persist_status(void *v, int fd,
+                                    const struct lfg_message *m) {
+  if (lg_check_status(v, fd, m))
+    return -1;
+  if (lg_write_status(fd, m))
+    return -1;
+  return lg_check_status(v, fd, m);
+}
+static const struct lfgr_ops lg_runtime_ops = {
+    lg_check_source, lg_check_status, lg_validate_ready, lg_native_absent,
+    lg_flush_source, lg_close_source, lg_persist_status};
+static inline int lg_runtime_init(struct lfgr_guardian *g,
+                                  const struct lfg_message *m, pid_t child,
+                                  int source_fd, int status_fd,
+                                  struct lg_native_binding *binding) {
+  if (!binding || !binding->validate_ready || !binding->native_absent) {
+    errno = EINVAL;
     return -1;
   }
-  *reply = g->current;
-  reply->kind = LFG_REPLY;
-  memcpy(reply->request_nonce, request->request_nonce,
-         sizeof(reply->request_nonce));
-  if (g->sticky_error) {
-    reply->state = LFG_RETAINED;
-    reply->error = reply->latched_error = (uint32_t)g->sticky_error;
-    reply->error_stage = (uint32_t)g->error_stage;
-  }
-  if (request->kind == LFG_RETIRE) {
-    if (!g->released || g->sticky_error) {
-      errno = EBUSY;
-      return -1;
-    }
-    reply->state = LFG_RETIRED;
-  }
-  return lfg_validate(reply) == LFG_OK ? 0 : (errno = EPROTO, -1);
+  return lfgr_init(g, m, child, source_fd, status_fd, &lg_runtime_ops, binding);
 }
 /* Native bounded public stream RPC. The request context comes from the owned
  * session; a status file can discover it but cannot make this exchange succeed

@@ -67,3 +67,77 @@ may establish release through its documented checked inner unmount, halt 0 and
 source-close path, combined with actual child exit 0 and guardian final barrier
 and close. Record that exact native proof; never synthesize an unexecuted API
 result merely to fill a common bit.
+
+## Shared POSIX runtime
+
+`guardian-runtime.h` owns the common state machine, exact owned-child `waitpid`,
+worker-message sequencing, permanent failures, checked release and live reply
+construction. It performs no transport, pathname lookup, native mount action,
+geometry query, credential change, FUSE or emulated-kernel operation. Native
+bindings provide `lfgr_ops`; all callbacks are mandatory. The API is serialized
+and non-reentrant. Callbacks must not send public replies. A provisional clean
+state during status persistence cannot be returned by `lfgr_reply`, even through
+an accidental re-entrant call.
+
+| Callback | Native binding obligation |
+| --- | --- |
+| `check_source` | Check the held source identity, access policy and actual geometry against the immutable session. |
+| `check_status` | Check the held status inode, owner, mode and single link. |
+| `validate_ready` | Bind the real observed native mount to the source/session and captured context. |
+| `native_absent` | Repeat the captured mount's global absence and original-underlay identity checks. |
+| `flush_source` | Perform the checked native backing barrier and propagate its error. |
+| `close_source` | Check close and retire the descriptor number after an actual close attempt; never retry an uncertain close or reopen a pathname. |
+| `persist_status` | Check the status identity around writing, final native barriers and writer-reference close, retaining the separate session lock. |
+
+Callbacks return 0 on success and -1 with native errno on error. Only
+`native_absent` may also return 1 for retryable busy. Positive returns from other
+callbacks fail closed. Raw Linux errno translation belongs to the external
+worker's outward native boundary; this runtime receives native errors and never
+translates them again.
+
+`lfgr_init` accepts a full BIND context after the caller has spawned and owns the
+exact child, captured its native birth/boot and component identities, checked all
+inherited FDs and kept it blocked awaiting BIND. Failure transfers no resource
+ownership. The internal status-record nonce must be nonzero; each live public
+request still supplies a fresh request nonce and native peer authentication.
+Available private worker messages must be drained before reaping; a READY first
+received after reap is conservatively refused. `lfgr_channel_closed` reports
+private-channel EOF and permanently refuses a missing DRAINED record.
+
+`lfgr_release` returns 0 for checked release, 1 for retryable busy, or -1 for a
+permanent failure. It requires READY, strictly increasing private-worker sequence,
+DRAINED with all required outcome bits and actual child exit 0. It then performs
+native absence, source/status checks, source barrier/close, status persistence and
+a second native-absence check. A changed final observation, including late busy,
+is a permanent error; valid-looking persisted bytes never authorize success.
+Any earlier error stays permanent after a later successful retry or disarmed
+fault. A source-close failure may leave descriptor state uncertain; outer storage
+still cannot be detached as clean. Same-OFD flock custody never replaces waitpid.
+
+`lfgr_reply` builds replies only for a natively authenticated, fully bound public
+QUERY/CLOSE/RETIRE request. The native service owns socket-inode/session custody,
+framing, deadlines and peer verification. Released-clean is replayable after a
+lost response without reading the status file. The consumer may send RETIRE only
+after confirmed outer-storage detach. RETIRED is also replayable while the native
+service remains live; this header does not terminate a service or close its status
+lock. Protocol-1 file-only drivers do not satisfy the new contract.
+
+Platform signal policies and backend-release algorithms remain native. The
+common runtime checks reported outcomes and actual exit; it neither installs a
+uniform signal handler nor adds a kernel shutdown interface. macOS uses the
+shared runtime through its regular-file-only callbacks and native RPC wrapper.
+FreeBSD source/peer/provider bindings remain separate; no CHAR device use follows
+from a successful regular-file or pure runtime control.
+
+`tests/guardian-runtime-control.c` spawns the native control executable with an
+inherited source OFD, verifies actual wait and FD exclusion, and exercises normal,
+busy, invalid READY, replay/missing progress, actual signal/nonzero exit,
+source/status I/O or close errors and late native-check failures. Native mount
+outcomes and birth values are explicit control inputs, not real mount proof.
+The test links native system libraries only; it executes no embedded kernel,
+FUSE, filesystem mount or device operation. Run in a new owned 0700 directory:
+
+```
+cc -std=c11 -Wall -Wextra -Werror -O2 native/lkl/tests/guardian-runtime-control.c -o /private/owned/runtime-control
+/private/owned/runtime-control /private/owned/new-runtime-fixtures
+```

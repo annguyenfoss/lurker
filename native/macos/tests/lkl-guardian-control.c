@@ -97,11 +97,13 @@ static int worker(const char *mode) {
   CHECK(!lg_regular_fd(4, getuid(), m.source_dev, m.source_ino, m.source_size,
                        1));
   CHECK(!lg_regular_fd(5, getuid(), m.status_dev, m.status_ino, 0, 0));
+  ++m.sequence;
   m.kind = LFG_READY;
   m.state = LFG_RUNNING;
   m.native_id[0] = 42;
   m.native_id[1] = 43;
   send_record(3, &m);
+  ++m.sequence;
   m.kind = LFG_DRAINED;
   m.state = LFG_WORKER_DRAINED;
   m.completed_checks = LFG_C_ALL;
@@ -167,7 +169,7 @@ static int rpc_client(const char *path, int good) {
   return 0;
 }
 static void rpc_controls(const char *self, const char *path,
-                         struct lg_guardian *g, int good) {
+                         struct lfgr_guardian *g, int good) {
   struct sockaddr_un address = {.sun_family = AF_UNIX};
   CHECK(strlen(path) < sizeof address.sun_path);
   strcpy(address.sun_path, path);
@@ -215,7 +217,7 @@ static void rpc_controls(const char *self, const char *path,
     CHECK(!lg_peer(fd, &peer));
     CHECK(lg_same_process(&peer, expected.pid, expected.sec, expected.usec));
     CHECK(!lg_receive(fd, &request, lg_milliseconds() + 3000));
-    CHECK(!lg_reply(g, &request, &reply));
+    CHECK(!lfgr_reply(g, &request, &reply));
     if (i == 2) {
       CHECK(!close(listener));
       listener = -1;
@@ -229,6 +231,28 @@ static void rpc_controls(const char *self, const char *path,
   int status;
   CHECK(waitpid(child, &status, 0) == child);
   CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+struct native_control {
+  int result;
+};
+static int controlled_ready(void *v, const struct lfg_message *expected,
+                            const struct lfg_message *ready) {
+  (void)v;
+  (void)expected;
+  if (ready->native_id[0] != 42 || ready->native_id[1] != 43) {
+    errno = ESTALE;
+    return -1;
+  }
+  return 0; /* explicit native identity outcome, no real filesystem mount */
+}
+static int controlled_absent(void *v, const struct lfg_message *m) {
+  struct native_control *control = v;
+  (void)m;
+  if (control->result < 0) {
+    errno = ESTALE;
+    return -1;
+  }
+  return control->result;
 }
 static void run_case(const char *self, const char *root, const char *mode) {
   char dir[1024], source[1100], status[1100];
@@ -276,30 +300,31 @@ static void run_case(const char *self, const char *root, const char *mode) {
   for (int i = 0; i < 3; i++)
     CHECK(!close(src[i]));
   CHECK(!close(pair[1]));
-  struct lg_guardian g = {0};
-  g.identity = identity(sourcefd, statusfd);
-  g.child = child;
-  g.custody_fd = sourcefd;
-  g.status_fd = statusfd;
+  struct lfgr_guardian g;
+  struct lfg_message context = identity(sourcefd, statusfd);
   struct lg_process p;
   CHECK(!lg_process_snapshot(child, &p));
-  g.identity.worker_pid = child;
-  g.identity.worker_birth_sec = p.sec;
-  g.identity.worker_birth_usec = p.usec;
-  g.current = g.identity;
-  g.current.kind = LFG_REPLY;
+  context.worker_pid = child;
+  context.worker_birth_sec = p.sec;
+  context.worker_birth_usec = p.usec;
+  struct native_control control = {0};
+  struct lg_native_binding binding = {&control, controlled_ready,
+                                      controlled_absent};
+  CHECK(!lg_runtime_init(&g, &context, child, sourcefd, statusfd, &binding));
   send_record(pair[0], &g.identity);
   struct lfg_message m;
   recv_record(pair[0], &m);
-  CHECK(!lg_worker_record(&g, &m));
+  CHECK(!lfgr_worker_record(&g, &m));
   recv_record(pair[0], &m);
-  CHECK(!lg_worker_record(&g, &m));
-  CHECK(lg_release(&g, 1) < 0); /* no wait: must not release */
+  CHECK(!lfgr_worker_record(&g, &m));
+  CHECK(lfgr_release(&g) == LFGR_BUSY); /* no wait: must not release */
   CHECK(g.custody_fd >= 0 && !g.released);
-  CHECK(lg_reap(&g, 0) == 1);
+  CHECK(lfgr_reap(&g, 0) == 1);
   CHECK(g.wait_valid);
   if (!g.sticky_error) {
-    CHECK(lg_release(&g, 0) < 0);
+    control.result = LFGR_BUSY;
+    CHECK(lfgr_release(&g) == LFGR_BUSY);
+    control.result = 0;
     CHECK(!g.sticky_error && !g.released);
   }
   if (!strcmp(mode, "status-sync-error"))
@@ -311,14 +336,16 @@ static void run_case(const char *self, const char *root, const char *mode) {
   if (!strcmp(mode, "status-close-error"))
     injected_status_close = 1;
   int good = !strcmp(mode, "normal");
-  int rc = lg_release(&g, !strcmp(mode, "native-check-error") ? -ESTALE : 1);
+  if (!strcmp(mode, "native-check-error"))
+    control.result = -1;
+  int rc = lfgr_release(&g);
   CHECK(good ? rc == 0 : rc < 0);
   CHECK(good ? g.released : !g.released);
   struct lfg_message request = g.identity, reply;
   request.kind = LFG_QUERY;
   request.state = LFG_REQUEST;
   request.sequence = 0;
-  CHECK(!lg_reply(&g, &request, &reply));
+  CHECK(!lfgr_reply(&g, &request, &reply));
   CHECK(lfg_clean_candidate(&reply) == good);
   if (!strcmp(mode, "visible-clean-exit1") ||
       !strcmp(mode, "status-sync-error") ||
@@ -335,14 +362,14 @@ static void run_case(const char *self, const char *root, const char *mode) {
   if (good) {
     /* Lost first response: no file re-read, fresh nonce replays live state. */
     request.request_nonce[0]++;
-    CHECK(!lg_reply(&g, &request, &reply));
+    CHECK(!lfgr_reply(&g, &request, &reply));
     CHECK(lfg_clean_candidate(&reply));
     CHECK(reply.request_nonce[0] == request.request_nonce[0]);
     request.native_id[0]++;
-    CHECK(lg_reply(&g, &request, &reply) < 0);
+    CHECK(lfgr_reply(&g, &request, &reply) < 0);
     request.native_id[0]--;
     request.kind = LFG_RETIRE;
-    CHECK(!lg_reply(&g, &request, &reply));
+    CHECK(!lfgr_reply(&g, &request, &reply));
     CHECK(reply.state == LFG_RETIRED);
   }
   injected_status_sync = injected_source_sync = injected_status_write =

@@ -1,7 +1,10 @@
 # Native macOS guardian primitives
 
 `lkl-guardian.h` implements host-only process, custody, status and live socket
-primitives using the common `native/lkl/guardian-protocol.h`. It contains no
+bindings using common `native/lkl/guardian-protocol.h` and
+`native/lkl/guardian-runtime.h`. Shared state, owned-child reaping, release and
+reply construction live in the common runtime; this file retains native process,
+regular-file, barrier and socket callbacks. It contains no
 embedded kernel or filesystem code. It is not yet integrated into the external
 FUSE driver or Lurker. No driver installation, product dispatch or mapped-device
 support follows from these controls.
@@ -17,8 +20,9 @@ failure state remains authoritative and permanently prevents positive replies.
 A failed final source close has an uncertain descriptor outcome; it still never
 authorizes outer-storage detach or recovery as clean.
 
-The native binding supplies a fresh captured-mount-absence result after ordinary
-OS unmount. Busy is retryable; a negative identity/check error is latched. Release
+The native binding supplies mandatory captured-mount READY/absence callbacks.
+The shared runtime invokes absence after ordinary OS unmount and again after
+status persistence. Busy is retryable; a negative identity/check error is latched. Release
 also requires READY, DRAINED, all checks, actual child exit 0 and successful parent
 source/status barriers and closes. The kernel peer PID/UID and process birth are
 verified before public RPC. The response echoes a fresh request nonce and exact
@@ -31,7 +35,8 @@ already confirmed outer-storage detach.
 
 The isolated `tests/lkl-guardian-control.c` native control spawns the same test
 executable with explicit inherited descriptors before any worker threads. It
-verifies actual wait, shared-source flock, exclusion of a deliberately non-CLOEXEC
+now exercises the extracted common runtime and verifies actual wait,
+shared-source flock, exclusion of a deliberately non-CLOEXEC
 sentinel FD, lost live reply/retry, wrong nonce, absent guardian and seven normal
 or injected failure outcomes. It links only native system libraries, with no LKL,
 FUSE, filesystem mount or device operation. The visible-clean/exit-1 case writes a
