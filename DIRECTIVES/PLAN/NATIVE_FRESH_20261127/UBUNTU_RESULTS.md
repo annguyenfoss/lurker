@@ -286,3 +286,27 @@ failure or forced recovery. The ordinary kernel remains 7.3.0-11-generic; the
 persistent storage disk is remounted only after domain/serial/size/UUID checks.
 XFS and the remaining eligible filesystem cohorts are in progress. Scratch-device
 testing remains pending after these persistence gates.
+
+The installed 678 candidate has completed **all 54 eligible container/backing
+fixtures across nine ordinary OS reboots**, including NTFS, exFAT and ZFS.
+Every fixture passed normal Auto reopen, all five payload hashes and normal
+closure. No forced recovery or profile changes were used. The applicability
+ledger now points all 54 positive cells to those exact installed 678 receipts;
+older 576 and baseline receipts remain separately identified. Cold APFS and
+HAMMER2 module loading passed, with loaded/installed source versions and module
+hashes recorded. Fresh UFS2 source and actual process-executable hashes bind the
+installed three-patch driver to its exclusive VERSION=2 gate.
+
+A new 1 GiB qcow2 scratch disk is now attached at target vdc, serial
+`lurker-fresh-ubuntu`, source
+`/srv/build/lurker-native-fresh-20261127/ubuntu-scratch-20261127.qcow2`.
+Domain UUID, source, serial, size, empty signatures and guest by-id identity were
+verified before destructive operations. All three normal-user physical-partition
+helper samples passed 21 strict JSON actions, full downloaded payloads and binary
+keyfiles; original block-node ownership and modes remained unchanged. The first
+four filesystem groups passed all three native disk methods. All three stock
+UFS1 attempts correctly rejected read-only new filesystems, closed their mappers
+and retained complete failed encrypted disk snapshots. The loaded UFS module has
+source version `201E180B8E6BE4EDF81A513` and empty taint. Remaining physical native,
+cipher/credential, actual raw filesystem folder-backing and representative
+physical-reboot gates are in progress.
