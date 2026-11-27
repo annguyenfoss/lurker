@@ -17,11 +17,13 @@ active. Whole-round completion is unproven.
 
 Nine host owners now provide private `completion-evidence-index.json` files
 mapping the acceptance requirements to exact receipts and limitations. Root's
-`audits/evidence-index-integrity.json` independently checks 4,196 indexed file
+`audits/evidence-index-integrity.json` independently checks 4,515 indexed file
 and archive-member references against frozen index snapshots, with no hash/size mismatch
 in that audit. This establishes evidence identity, not requirement coverage or
 the truth of every availability claim. The requirement-by-requirement review
-continues. FreeBSD and OpenBSD indexes await their active input batches.
+continues. This refresh includes Fedora's metadata-only PEFS backing-role
+correction and the expanded frozen indices. FreeBSD and OpenBSD indexes await
+their active input batches.
 
 The index review exposes retention and scope limits that remain reportable:
 Arch lost 24 physical folder console logs while retaining structured receipts;
