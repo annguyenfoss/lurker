@@ -17,8 +17,8 @@ active. Whole-round completion is unproven.
 
 Nine host owners now provide private `completion-evidence-index.json` files
 mapping the acceptance requirements to exact receipts and limitations. Root's
-`audits/evidence-index-integrity.json` independently checks 4,196 indexed files
-and archive members against frozen index snapshots, with no hash/size mismatch
+`audits/evidence-index-integrity.json` independently checks 4,196 indexed file
+and archive-member references against frozen index snapshots, with no hash/size mismatch
 in that audit. This establishes evidence identity, not requirement coverage or
 the truth of every availability claim. The requirement-by-requirement review
 continues. FreeBSD and OpenBSD indexes await their active input batches.
@@ -102,8 +102,9 @@ cases passed. The first installed CryFS batch failed on all four backings
 before initialization: runtime lookup expects an extra `cryfs/` directory,
 while the stager installs the provenance file at
 `share/lurker/provenance/cryfs.json`. The adjacent SDK layout had masked this
-packaged-layout bug. A narrow runtime correction and native path regressions
-are approved; corrected-package CryFS/device/reboot validation is still required.
+packaged-layout bug. Correction `8c6f2b6` removes that extra directory and passed
+four native checks, including actual installed engine/provenance/host-loader
+validation. Corrected-package CryFS/device/reboot validation is still required.
 
 CryFS exFAT failures on OpenBSD and NetBSD are now matched to native hardlink
 `ENOSYS`, while ordinary file create/write/fsync/read/rename/unlink work. This
