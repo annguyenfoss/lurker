@@ -198,15 +198,67 @@ configuration-dependent evidence; the stock cloud kernel has `CONFIG_UFS_FS`
 disabled. No new module/kernel build or configuration change was made.
 All three final UFS1 disk methods passed, and the LUKS2 header independently
 confirms the repaired 512-byte logical sector geometry. No encryption profile
-was weakened. The remaining native APFS/ZFS cohort is finishing before scratch
-writes begin.
- Final storage and disk-only
-conformance/helper batches are running independently; directory gates are
-serialized. All final container and physical cases will use this follow-up.
-Remaining: complete repaired candidate containers in both kernel cohorts; cipher and credential/conformance
-cases; candidate reboot persistence; new scratch-device cases; final validation
-and cleanup
-and reconciliation of all 130 applicability cells. No complete-host pass is claimed.
+was weakened.
+
+The `576505d` configured-host matrix completed all 60 container cells and all
+30 direct scratch disk cells. The native physical-folder-backing matrix completed
+29 of 30; CryFS/UFS2 failed on reopen. All other filesystem rows have fresh
+matching mount receipts and full five-hash reopen/append/reopen checks. Directory
+engines encrypt folders on the formatted scratch backing; they do not encrypt
+or format the whole block device. Direct block-source folder-engine cells remain
+not applicable.
+
+The new 1 GiB scratch disk is exclusively identified as
+`/dev/disk/by-id/virtio-lurker-fresh-debian`, observed virtio serial
+`lurker-fresh-debian`. This differs from the trailing-hyphen evidence disk serial.
+Every destructive invocation checks exact serial, size, resolved by-id identity,
+child mounts and holders. Initial by-id invocations hit the product's deliberate
+symlink target rejection before mutation; the guarded runner now passes the
+resolved node. Native VeraCrypt Quick Format required one bounded confirmation;
+the shared harness defaults remain unchanged and opt-in is fenced to the
+verified forced scratch create. Failed receipts and snapshots remain separate.
+
+Installed normal-user physical helper samples passed all three methods with
+binary keyfiles and strict full-stdout JSON. The last LUKS2/Btrfs sample survived
+an ordinary 6.12-to-7.3 reboot with matching five payload hashes, then closed
+normally. The later return to default 6.12 produced boot ID
+`e50f1be3-d2b1-43b3-a3f2-e352e434cc66`; GRUB's default remains the official
+6.12 cloud kernel. The installed `576505d` manifest audit verified 1,118 files,
+symlinks, hashes, administrator ownership and modes, with an empty `dpkg -V`.
+These are named historical functional results; final package compliance is
+qualified separately below.
+
+## UFS2 prerequisite correction and final follow-up
+
+The failed physical UFS2 image is retained in full with SHA-256
+`eb8f0d15505ae08adbfe40741cb83dc7c48a32b03c1aa70c5ddd5872cda49195`.
+A separate writable clone reproduced the failure without CryFS: native create,
+write, fsync and stat succeeded, but directory enumeration omitted the new name.
+Pinned FUSE-UFS source returned EOF whenever readdir's continuation offset was
+nonzero. CryFS's base-directory readability check correctly detected this.
+
+The host-only prerequisite now applies the minimal pagination patch `9e27dcc`
+after the existing no-replace and barrier patches on upstream
+`ee5c4a447da98220a11edb69a225d51379afc4fb`. New driver SHA-256 is
+`afcb489fdd1e441d418883c71d5abfe45d89d1f9548a1b2fe94479375641c30d`.
+All 28 rufs unit tests pass. A native 512-name control truncates to 25 with the
+old driver; the new driver enumerates all 512 and all 513 after creating and
+fsyncing one more file. The preserved failed-image clone now enumerates 186,
+then 187 including its new entry, with equal repeated scans. Seven native
+rename/collision operations and three forwarded fsync/EIO/retry controls also
+pass. All control mounts closed normally. Original driver bytes, image bytes,
+backend diagnostics, sources, patch/build hashes and logs remain retained.
+The filesystem driver is separately administrator-installed and is not bundled.
+
+Final Linux follow-up source is `67894f68525c55d5cbb48c743e1a98a308bd970f`.
+Exact workspace run `20261127T000845Z-7a8d559b` passed check/test/build:
+168 passed, zero failed, 15 ignored. The first package stage exposed an older
+VeraCrypt producer/consumer mismatch: its private closure contains FUSE while
+the final packaging policy requires host FUSE. The assigned producer and stager
+owners are correcting that contract; no compliance pass is claimed for the
+older package. Remaining work is the corrected native package, final artifact
+login-user/helper/desktop/reboot gates, all 12 affected UFS2 cells using the
+corrected prerequisite, and final evidence reconciliation and cleanup.
 
 Current upstream evidence is retained with fetch times and hashes. Primary routes:
 
