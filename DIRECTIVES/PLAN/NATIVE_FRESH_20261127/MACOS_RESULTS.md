@@ -446,5 +446,5 @@ remain unchanged. No host-visible LKL filesystem mount, replacement driver
 installation, new USB write or XFS guard removal occurred. Mounted macFUSE
 integration still needs native errno/credential handling, permission and busy
 controls, and a qualified native formatter. `native/macos/lkl-macfuse.md` records
-the exact source and remaining gates. Private receipts, hashes and the reviewed
+the exact source and remaining gates. Private receipts, hashes and the proposed
 adapter design are under `validation/native-lkl/` in the Mac evidence root.
