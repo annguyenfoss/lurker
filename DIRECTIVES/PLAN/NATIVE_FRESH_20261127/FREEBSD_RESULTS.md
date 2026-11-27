@@ -996,3 +996,19 @@ must remain distinct from ordinary shutdown and product qualification.
 - Scope/cleanup: operational recovery only, never an ordinary shutdown/product
   pass. No manual repair, force import, RAM restore or custom kernel change;
   original artifacts remain preserved. No old job was restarted.
+
+
+### Cryptomator no-force candidate1: memory-only gate
+
+- Purpose/input: compile and exercise the proposed userspace lifecycle policy;
+  frozen32-file archive `add00ba9...`, base `db54eb0`, UID/EUID1300, one worker.
+- Command/log: `native-no-force-1/dispatch.json`, `build-result.json` and full
+  output archive `6def7445...` under `build/cryptomator-port-source/`.
+- Outcome: all13 build stages pass;99 FFM fields,30 callbacks,3 native strings;
+  13 fake-backend lifecycle controls and13 focused Python tests pass. Manifest
+  `aba0c156...`;18 raw build/ABI logs and full gzip CRC independently verified.
+- Collection-only failure: an initial archive collector expected a wrong status
+  literal and stopped before archiving; corrected without rerunning any test.
+- Limit/cleanup: zero native mount/channel operations. Upstream FileStore
+  factory, native absence/unmount races and shared Main retention remain open.
+  Jobs are terminal, fixtures/images retained, no mount or old job restarted.
