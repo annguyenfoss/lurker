@@ -70,3 +70,16 @@ native flush drain=-EIO, using the actual driver's start/stop functions through
 `tests/drain.c`. Copy that test into `tools/lkl/tests/dragonfly-drain.c` and link
 with the patched native library and FUSE2 using the driver's large-file and
 no-strict-aliasing compiler flags. Host FUSE lifecycle proof remains separate.
+
+`dragonfly-credentials.h` supplies a native credential primitive: two complete
+bounded kinfo_proc snapshots must agree on PID, birth, live state, effective
+UID/GID and the full group vector. Invalid, PID-zero, mismatched, exited or
+reaped identities deny access. Applying a request first clears inherited groups;
+all exits restore namespace UID/GID zero and an empty supplementary group list.
+The native `tests/credentials.c` control proves actual LKL UID/GID/group changes,
+restoration after a failed syscall and the denial cases. Its native waitid
+WNOWAIT proof also covers exited/unreaped children even when KERN_PROC_PID omits
+them. This primitive is not yet wired into FUSE callbacks. DragonFly sends real
+cached WRITE operations with PID zero, so integration additionally requires a
+registry of opaque handles with validated opener credentials, distinct from
+pathname authentication. Native kernel default_permissions remains mandatory.

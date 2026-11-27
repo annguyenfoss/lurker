@@ -85,6 +85,11 @@
       "path": "dragonfly-errno.h",
       "target": "tools/lkl/dragonfly-errno.h",
       "sha256": "7d99f890b9bcea5c5e356c48e84e8fdff8e921bf34acc8ab2f068e2ecd26144a"
+    },
+    {
+      "path": "dragonfly-credentials.h",
+      "target": "tools/lkl/dragonfly-credentials.h",
+      "sha256": "523c00d521b4ab90b30b571579682c50b4f11eca659832d7bd184d25f509ac28"
     }
   ],
   "host_features": {
