@@ -45,7 +45,13 @@ FreeBSD Cryptomator's no-force provider (`a4663c0`), shared managed Java caller
 and fake-resource interoperability controls. Shared Java checks also passed on
 Linux and macOS. These are not mounted-vault passes. A separately verified pilot
 image is prepared (`1a70f4a`); the reviewed real-controller source is at its
-compile-only gate, with no mounted pilot yet. Core admission remains disabled.
+compile-only gate, with no mounted pilot yet. The native compile/list gate has
+now passed and the opt-in controller is committed (`60871d5`); no real test was
+executed. Root independently checked all 606 archived source files, five current
+code files, both command logs, test executable and archive CRC. Its initial
+root-space refusal is retained; temporary build writes moved to the build pool,
+but runtime admission still awaits adequate root-filesystem headroom.
+Core admission remains disabled.
 The old blocked state
 is preserved in saved RAM and five original disks. Operational cold recovery
 on verified copies completed (`c2bd194`, `96088d8`); root verified 84 recovery
@@ -58,7 +64,11 @@ The released macOS companion LKL source `2cdd0e9` has now produced a distinct
 universal library (`393adeda…7314cd`), matching headers and native pure ABI/libc
 controls (`f8b916a`). The published source tree was recovered exactly, without
 inventing kernel code. Guardian/worker integration is the next userspace batch;
-no storage or product pass is credited to this new library. NetBSD's documented
+an independent audit checks all 2,570 packet references, the 87,124-path released
+tree, two native slices, 128 headers and pure ABI logs. No storage or product
+pass is credited to this new library. The first worker-integration source is
+under compile-only qualification; review caught and corrected repeated header
+staging before native dispatch. NetBSD's documented
 shutdown-hook configuration passed a standalone ZFS graceful reboot (`48abbef`);
 encrypted CGD/ZFS reboot qualification remains separate.
 
@@ -66,9 +76,13 @@ DragonFly subsequently stopped in a HAMMER2 I/O/assertion kernel panic while the
 gocryptfs ABI/source batch was being frozen. The native C probe finished; its
 new Go build, tests and mount adoption never started. Hypervisor block status
 reports no current error and host capacity is available, but cause is not
-established. RAM, firmware and all three disk images are being preserved before
-operational recovery. Earlier five-filesystem results retain their original
-identities; neither host health nor a product recovery pass follows from them.
+established. RAM (3,690,330,434 bytes), firmware and all three disk images are
+preserved. Each disk copy matches its original SHA-256 and passes offline qcow2
+checks. Only the three disk paths and firmware path changed for a cold boot on
+verified copies; saved RAM and originals were not restored or booted. SSH
+confirms new boot `1795770750.781828980`; read-only postboot verification remains.
+Earlier five-filesystem results retain their original identities. This is
+operational recovery, not product reboot qualification or a kernel repair.
 
 Current reporting uses `FILESYSTEM_QUALIFICATION.md`'s separate completion and
 filesystem-support scores. A finished unavailable-route assessment is not an
