@@ -73,3 +73,55 @@ Successful native images, all credentials, failures and original kernel bytes
 remain retained. Physical, frontend/helper and appropriate reboot follow-up
 results will be recorded separately; no repeat of unrelated nine-filesystem
 qualification is planned.
+
+## Completion — 2026-11-27
+
+The physical batch is now terminal: six passed. LUKS2, LUKS1 and VeraCrypt each
+completed seven strict-helper JSON actions on separate new partitions, including
+all three payload phases. The three folder engines each completed seven CLI
+actions on the fourth native UFS1 partition. Every payload phase recorded actual
+UID1300, UFS1 superblock/module identity and private root metadata. Raw device
+node ownership/modes remained unchanged. The common CLI harness resolves its
+supplied public launcher before execution; direct helper calls are separate.
+
+| Follow-up | Inputs / command-log reference | Outcome / cleanup |
+| --- | --- | --- |
+| Installed desktop | `prepare-desktop.py`, `start-window.py`, `desktop-close-observe.py`; `desktop-ready.json`, `desktop-result.json`, native XWD snapshots | Actual UID1300 installed window displayed read/write UFS on the owned physical LUKS1 volume and closed it normally through “Unmount & lock.” Metadata observer captured the default installed normal helper and elevated `--as-root` helper; no test overlay. Idle desktop/Xvfb subsequently closed. |
+| Initial reboot recipe | `reboot-cohort.py`; `reboot-containers-prepare-supervisor.log` | Syntax refusal before any fixture work. Corrected recipe received native `py_compile`, was separately hashed, and supplied both successful cohorts. |
+| Container reboot cohort | `reboot-cohort-v2.py prepare/verify containers`; `reboot/containers/manifest.json` | Six mounted fixtures, five payload hashes plus fresh fsynced marker each; ordinary reboot; all six Auto reopens verified and closed. Minimum available RAM2,442,870,784B. |
+| First SSH monitor | `ordinary-reboot.py`, `postboot-resume-containers.json` | First10s readiness probe timed out during startup. Fresh TCP probe found the new boot; identity-fenced storage restoration resumed without issuing another reboot. Original failure retained. |
+| Physical reboot cohort | `reboot-cohort-v2.py prepare/verify physical`; `ordinary-reboot-v2.py`; `reboot/physical/manifest.json` | Same six-method mounted cohort on new partitions; all payloads/markers verified after a second ordinary reboot, then closed. Minimum available RAM2,543,341,568B. |
+| Permission denial | `final-audit.py`; `final-audit.json` | Owner UID1300 read passed; UID/GID65534 with groups cleared was denied. `/tmp` and the empty mount underlay were traversable0755, while the actual UFS1 root was0700 and file0640. Native mount closed and empty underlay removed. |
+| Final integrity/cleanup | `final-audit.py`; `final-audit.json` | All1,085 installed package entries and dpkg verification passed; original stock module/config/headers unchanged; signature policy unchanged. Zero active Lurker processes, UFS/FUSE fixture mounts, loops or mappers. Root5,240,143,872B/work14,747,504,640B free. |
+
+Ordinary boot IDs, in order:
+`e4d75e19-6027-47ff-9b33-6f4add5a81f3` →
+`81ee2627-c962-49c1-9730-2fba85b7b4fb` →
+`83796410-96aa-48a2-a37c-1d161b3e6848`.
+Both boots retained the same default `7.3.0-11-generic` kernel. The configured
+module was initially absent and autoloaded through the normal native mount path;
+its build identity matched on every verified phase. Each six-fixture cohort was
+admitted against available RAM before startup, with LUKS2 opened first, live
+memory/disk checks and no compiler/PBKDF overlap.
+
+The unsigned/out-of-tree module uses the host's pre-existing permissive signature
+policy; no enforcement was weakened. A future kernel upgrade requires another
+matching build. Kernel mount diagnostics report the UFS1 timestamp limit as
+2038-01-19; raw diagnostics are retained. No journal/CoW or deep crash-safety
+claim follows from these bounded payload, normal-close and ordinary-reboot tests.
+
+The final private `completion-evidence-index.json` has SHA256
+`085c23964f136747d89d3b2a02669118545c4df2d07e8a9b699492645af334c5`.
+It indexes387 retained files and two append-only130-cell source-kind ledgers:
+60 qualified cells (including these six configuration-qualified UFS1 cells) and
+70 not-applicable per ledger. The original54 passes and their source identities
+are carried unchanged; original stock-UFS1 failures remain explicitly preserved.
+The final archive SHA256 is
+`46d81f22089fcc39cb38036d29ce878cad9e68eec7455749c0c7fffbfa664c7d`.
+
+All required Ubuntu UFS1 work is complete; there is no remaining agent blocker,
+required deliverable or external dependency. Evidence/source/cache disks remain
+mounted intentionally; the new2GiB scratch remains attached with four closed
+partitions and its final raw SHA256 recorded. Images, credentials, failures,
+source/config inputs and the bootable original are retained. No unrelated
+nine-filesystem test was rerun, and no product binary was rebuilt.
