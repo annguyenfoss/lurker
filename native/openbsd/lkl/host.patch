@@ -1,0 +1,274 @@
+--- a/tools/lkl/Makefile.autoconf
++++ b/tools/lkl/Makefile.autoconf
+@@ -14,7 +14,7 @@
+ endef
+ 
+ define find_include
+-  $(eval include_paths=$(shell $(CC) $(SYSROOT_FLAGS) -E -Wp,-v -xc /dev/null 2>&1 | grep '^ '))
++  $(eval include_paths=$(shell $(CC) $(CFLAGS) $(SYSROOT_FLAGS) -E -Wp,-v -xc /dev/null 2>&1 | grep '^ '))
+   $(foreach f,$(include_paths),$(wildcard $(f)/$(1)))
+ endef
+ 
+@@ -70,14 +70,18 @@
+ 
+ define posix_host
+   $(call set_autoconf_var,POSIX,y)
+-  $(call set_autoconf_var,VIRTIO_NET,y)
+-  $(call set_autoconf_var,VIRTIO_NET_FD,y)
++  $(if $(call is_defined,__OpenBSD__),,$(call set_autoconf_var,VIRTIO_NET,y))
++  $(if $(call is_defined,__OpenBSD__),,$(call set_autoconf_var,VIRTIO_NET_FD,y))
+   $(if $(strip $(call find_include,linux/vfio.h)),$(call set_autoconf_var,VFIO_PCI,y))
+   LDFLAGS += -pie -z noexecstack
+   CFLAGS += -fPIC -pthread
+   SOSUF := .so
+-  $(if $(call is_defined,__ANDROID__),$(call android_host),LDLIBS += -lrt -lpthread)
++  $(if $(call is_defined,__OpenBSD__),LDLIBS += -lpthread,$(if $(call is_defined,__ANDROID__),$(call android_host),LDLIBS += -lrt -lpthread))
+   $(if $(filter $(1),elf64-x86-64-freebsd),$(call bsd_host))
++  $(if $(call is_defined,__OpenBSD__),$(call bsd_host))
++  $(if $(call is_defined,__OpenBSD__),$(call set_autoconf_var,OPENBSD,y))
++  $(if $(call is_defined,__OpenBSD__),$(call set_kernel_config,MMU,n))
++  $(if $(call is_defined,__OpenBSD__),$(call set_kernel_config,KASAN,n))
+   $(if $(filter $(1),elf32-littlearm),$(call arm_host))
+   $(if $(filter $(1),elf64-littleaarch64),$(call aarch64_host))
+   $(if $(filter $(1),elf64-littleriscv),$(call riscv64_host))
+@@ -134,7 +138,8 @@
+   export AR := $(CROSS_COMPILE)ar
+   $(eval LD := $(CROSS_COMPILE)ld)
+   $(eval CC := $(CROSS_COMPILE)gcc)
+-  $(eval LD_FMT := $(shell $(LD) -r -print-output-format))
++  $(if $(call is_defined,__OpenBSD__),$(if $(LD_FMT),,$(error Provide the observed native LD_FMT)),
++    $(eval LD_FMT := $(shell $(LD) -r -print-output-format)))
+ endef
+ 
+ define llvm_target_to_ld_fmt
+--- a/tools/lkl/Makefile
++++ b/tools/lkl/Makefile
+@@ -59,7 +59,10 @@
+ 
+ # this workaround is for FreeBSD
+ bin/stat:
+-ifeq ($(LKL_HOST_CONFIG_BSD),y)
++ifeq ($(LKL_HOST_CONFIG_OPENBSD),y)
++	$(Q)ln -sf /usr/local/bin/gstat bin/stat
++	$(Q)ln -sf /usr/local/bin/gsed bin/sed
++else ifeq ($(LKL_HOST_CONFIG_BSD),y)
+ 	$(Q)ln -sf `which gnustat` bin/stat
+ 	$(Q)ln -sf `which gsed` bin/sed
+ else
+--- a/tools/lkl/lib/posix-host.c
++++ b/tools/lkl/lib/posix-host.c
+@@ -25,6 +25,9 @@
+ #include <pthread_np.h>
+ #endif
+ #include <lkl_host.h>
++#if defined(__OpenBSD__)
++#include "openbsd-memory.h"
++#endif
+ #include "iomem.h"
+ #include "jmp_buf.h"
+ 
+@@ -262,6 +265,9 @@
+ 
+ void *thread_stack(unsigned long *size)
+ {
++#if defined(__OpenBSD__)
++	return ob_lkl_thread_stack(size);
++#else
+ 	pthread_attr_t thread_attr;
+ 	size_t stack_size;
+ 	void *thread_stack;
+@@ -278,6 +284,7 @@
+ 		*size = stack_size;
+ 
+ 	return thread_stack;
++#endif
+ }
+ 
+ static struct lkl_tls_key *tsd_alloc(void (*destructor)(void *))
+@@ -400,6 +407,21 @@
+ 	return 1e9*ts.tv_sec + ts.tv_nsec;
+ }
+ 
++#if defined(__OpenBSD__)
++#include "openbsd-timer.h"
++static void *timer_alloc(void (*fn)(void))
++{
++	return ob_lkl_timer_alloc(fn);
++}
++static int timer_set_oneshot(void *timer, unsigned long ns)
++{
++	return ob_lkl_timer_set_oneshot(timer, ns);
++}
++static void timer_free(void *timer)
++{
++	ob_lkl_timer_free(timer);
++}
++#else
+ static void lkl_timer_callback(union sigval sv)
+ {
+ 	void (*fn)(void) = sv.sival_ptr;
+@@ -445,6 +467,7 @@
+ 
+ 	timer_delete(timer);
+ }
++#endif
+ 
+ static void panic(void)
+ {
+@@ -484,7 +507,9 @@
+ }
+ 
+ 
+-#if defined(__FreeBSD__)
++#if defined(__OpenBSD__)
++#define MAP_FIXED_NOREPLACE 0 /* Exact-address hints never replace mappings. */
++#elif defined(__FreeBSD__)
+ #define MAP_FIXED_NOREPLACE (MAP_FIXED | MAP_EXCL)
+ #ifndef MAP_NORESERVE
+ #define MAP_NORESERVE 0
+@@ -497,9 +522,15 @@
+ 
+ static void *lkl_mmap(void *addr, unsigned long size, enum lkl_prot prot)
+ {
++#if !defined(__OpenBSD__)
+ 	void *ret;
++#endif
+ 	int fl = MAP_ANON | MAP_PRIVATE | MAP_FIXED_NOREPLACE | MAP_NORESERVE;
+ 
++
++#if defined(__OpenBSD__)
++	return ob_lkl_mmap_exact(addr, size, get_prot(prot), fl, -1, 0);
++#else
+ 	ret = mmap(addr, size, get_prot(prot), fl, -1, 0);
+ 	if (ret != addr) {
+ 		if (ret != NULL)
+@@ -508,6 +539,7 @@
+ 	}
+ 
+ 	return ret;
++#endif
+ }
+ 
+ static int lkl_munmap(void *addr, unsigned long size)
+@@ -540,11 +572,16 @@
+ {
+ 	int prot = get_prot(mem_prot_flags);
+ 	int flags = MAP_SHARED | MAP_FIXED_NOREPLACE;
++
++#if defined(__OpenBSD__)
++	return ob_lkl_mmap_exact(addr, size, prot, flags, shared_mem_fd, pg_off);
++#else
+ 	void *ret = mmap(addr, size, prot, flags, shared_mem_fd, pg_off);
+ 
+ 	if (ret == MAP_FAILED)
+ 		return NULL;
+ 	return ret;
++#endif
+ }
+ #endif // LKL_HOST_CONFIG_MMU
+ 
+@@ -593,6 +630,9 @@
+ 	.timer_alloc = timer_alloc,
+ 	.timer_set_oneshot = timer_set_oneshot,
+ 	.timer_free = timer_free,
++#if defined(__OpenBSD__)
++	.timer_quiesce = ob_lkl_timers_quiesce,
++#endif
+ 	.print = print,
+ 	.mem_alloc = posix_malloc,
+ 	.mem_free = free,
+--- a/arch/lkl/include/uapi/asm/host_ops.h
++++ b/arch/lkl/include/uapi/asm/host_ops.h
+@@ -182,6 +182,9 @@
+ 	int (*timer_set_oneshot)(void *timer, unsigned long delta);
+ 	void (*timer_free)(void *timer);
+ 
++	/* Optional: drain callbacks after CPU/tick shutdown, before free_mem. */
++	void (*timer_quiesce)(void);
++
+ 	void* (*ioremap)(long addr, int size);
+ 	int (*iomem_access)(const volatile void *addr, void *val, int size,
+ 			    int write);
+--- a/arch/lkl/kernel/setup.c
++++ b/arch/lkl/kernel/setup.c
+@@ -160,6 +160,8 @@
+ 	threads_cleanup();
+ 	/* Shutdown the clockevents source. */
+ 	tick_suspend_local();
++	if (lkl_ops->timer_quiesce)
++		lkl_ops->timer_quiesce();
+ 	free_mem();
+ 	lkl_ops->thread_join(current_thread_info()->tid);
+ 
+--- a/tools/lkl/include/lkl.h
++++ b/tools/lkl/include/lkl.h
+@@ -20,7 +20,69 @@
+ #pragma push_macro("__unused")
+ #undef __unused
+ 
++#if defined(__OpenBSD__)
++#pragma push_macro("sa_handler")
++#undef sa_handler
++#pragma push_macro("sa_sigaction")
++#undef sa_sigaction
++#pragma push_macro("si_addr")
++#undef si_addr
++#pragma push_macro("si_band")
++#undef si_band
++#pragma push_macro("si_faddr")
++#undef si_faddr
++#pragma push_macro("si_fault")
++#undef si_fault
++#pragma push_macro("si_fd")
++#undef si_fd
++#pragma push_macro("si_mstate")
++#undef si_mstate
++#pragma push_macro("si_nsysarg")
++#undef si_nsysarg
++#pragma push_macro("si_pid")
++#undef si_pid
++#pragma push_macro("si_status")
++#undef si_status
++#pragma push_macro("si_stime")
++#undef si_stime
++#pragma push_macro("si_sysarg")
++#undef si_sysarg
++#pragma push_macro("si_syscall")
++#undef si_syscall
++#pragma push_macro("si_trapno")
++#undef si_trapno
++#pragma push_macro("si_tstamp")
++#undef si_tstamp
++#pragma push_macro("si_uid")
++#undef si_uid
++#pragma push_macro("si_utime")
++#undef si_utime
++#pragma push_macro("si_value")
++#undef si_value
++#endif
+ #include <lkl/asm/syscalls.h>
++#if defined(__OpenBSD__)
++#pragma pop_macro("si_value")
++#pragma pop_macro("si_utime")
++#pragma pop_macro("si_uid")
++#pragma pop_macro("si_tstamp")
++#pragma pop_macro("si_trapno")
++#pragma pop_macro("si_syscall")
++#pragma pop_macro("si_sysarg")
++#pragma pop_macro("si_stime")
++#pragma pop_macro("si_status")
++#pragma pop_macro("si_pid")
++#pragma pop_macro("si_nsysarg")
++#pragma pop_macro("si_mstate")
++#pragma pop_macro("si_fd")
++#pragma pop_macro("si_fault")
++#pragma pop_macro("si_faddr")
++#pragma pop_macro("si_band")
++#pragma pop_macro("si_addr")
++#pragma pop_macro("sa_sigaction")
++#pragma pop_macro("sa_handler")
++#endif
++
+ 
+ #pragma pop_macro("__unused")
+ 

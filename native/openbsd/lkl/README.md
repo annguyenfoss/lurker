@@ -54,3 +54,21 @@ mquery checks that cleanup; the mapping implementation never uses query-then-map
 or MAP_FIXED. Failed mmap, unaligned/overflow requests, anonymous reuse and an
 actual shared-file mapping are covered. This primitive is not yet wired into
 LKL, and MMU remains outside the initial boot profile.
+
+`--adapted --gnu-tools` applies the reviewed OpenBSD host-only patch and copies
+its separately hash-pinned timer/memory components into a fresh uncompiled
+source tree. Existing configured trees are refused before the additive host_ops
+field is introduced. Exported kernel/host headers and all objects are built
+together. The adapter preserves native signal macros around Linux UAPI imports,
+requires no MMU/KASAN, and disables native network backends/Linux hijack targets.
+The inherited emulated CONFIG_NET=y remains recorded; it supplies no host or
+network-filesystem transport.
+
+The host compiler overlay consists only of a native endian alias header and
+unchanged glibc2.42 ELF file-format declarations (SHA-256
+`fd6e7f3e3c74ee9d64b9f92ce3cc31b34413ca2622a167320ea053ce9a68110f`).
+The latter retains its LGPL2.1-or-later notice and imports only stdint.h;
+no glibc runtime or FUSE library is copied. The first two unmodified diagnostics
+remain separate: base linker/Clang configuration, then missing byteswap.h in
+actual native GCC16 modpost compilation. No filesystem-driver runtime credit
+follows from these diagnostics or the native primitive checks.

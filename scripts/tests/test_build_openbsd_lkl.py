@@ -107,6 +107,90 @@ class NativeTools(unittest.TestCase):
             self.assertIn("GCC", identity["compiler_version"])
 
 
+class AdapterInputs(unittest.TestCase):
+    def test_adapter_refuses_existing_generated_abi_inputs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            build.require_fresh_adapter_source(root)
+            (root / ".config").write_text("old ABI configuration")
+            with self.assertRaisesRegex(RuntimeError, "fresh uncompiled source tree"):
+                build.require_fresh_adapter_source(root)
+            self.assertEqual((root / ".config").read_text(), "old ABI configuration")
+
+    def fixture(self, root, name="tools/lkl/Makefile", before="original", count="1"):
+        archive = root / "source.tar"
+        with tarfile.open(archive, "w") as tar:
+            item = tarfile.TarInfo("linux-test/tools/lkl/Makefile")
+            item.size = len(b"original\n")
+            tar.addfile(item, io.BytesIO(b"original\n"))
+        path = root / "host.patch"
+        path.write_text(f"--- a/{name}\n+++ b/{name}\n@@ -1,{count} +1,1 @@\n-{before}\n+native\n")
+        return archive, path, build.digest(path)
+
+    def test_exact_patch_renders_only_approved_source(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(build, "REVISION", "test"):
+            archive, path, expected = self.fixture(Path(temp))
+            self.assertEqual(build.patched_inputs(archive, path, expected), {"tools/lkl/Makefile": b"native\n"})
+            self.assertTrue(archive.exists())
+
+    def test_changed_patch_refused_before_any_source_write(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(build, "REVISION", "test"):
+            archive, path, expected = self.fixture(Path(temp))
+            path.write_text(path.read_text() + "tampered")
+            with self.assertRaisesRegex(RuntimeError, "patch hash mismatch"):
+                build.patched_inputs(archive, path, expected)
+            self.assertTrue(path.read_text().endswith("tampered"))
+
+    def test_wrong_context_cannot_apply_with_fuzz(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(build, "REVISION", "test"):
+            archive, path, expected = self.fixture(Path(temp), before="different")
+            with self.assertRaisesRegex(RuntimeError, "context mismatch"):
+                build.patched_inputs(archive, path, expected)
+
+    def test_hunk_counts_are_validated(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(build, "REVISION", "test"):
+            archive, path, expected = self.fixture(Path(temp), count="2")
+            with self.assertRaisesRegex(RuntimeError, "hunk count mismatch"):
+                build.patched_inputs(archive, path, expected)
+
+    def test_outside_patch_target_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(build, "REVISION", "test"):
+            archive, path, expected = self.fixture(Path(temp), name="../outside")
+            with self.assertRaisesRegex(RuntimeError, "Unapproved host patch target"):
+                build.patched_inputs(archive, path, expected)
+
+    @unittest.skipUnless(os.environ.get("LURKER_OPENBSD_LKL_ARCHIVE"), "requires native pinned archive")
+    def test_real_pinned_patch_context_and_shutdown_boundary(self):
+        archive = Path(os.environ["LURKER_OPENBSD_LKL_ARCHIVE"])
+        self.assertEqual(build.digest(archive), build.SOURCE_SHA256)
+        rendered = build.patched_inputs(archive, ROOT / build.HOST_PATCH, build.HOST_PATCH_SHA256)
+        self.assertEqual(set(rendered), build.PATCH_TARGETS)
+        setup = rendered["arch/lkl/kernel/setup.c"].decode()
+        self.assertLess(setup.index("tick_suspend_local();"), setup.index("lkl_ops->timer_quiesce();"))
+        self.assertLess(setup.index("lkl_ops->timer_quiesce();"), setup.index("free_mem();", setup.index("lkl_ops->timer_quiesce();")))
+
+    @unittest.skipUnless(os.environ.get("LURKER_OPENBSD_LKL_ELF_HEADER"), "requires verified ELF input cache")
+    def test_native_endian_and_unchanged_elf_file_format_header(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            cached = Path(os.environ["LURKER_OPENBSD_LKL_ELF_HEADER"])
+            self.assertEqual(build.digest(cached), build.ELF_HEADER_SHA256)
+            (root / "glibc-2.42-elf.h").write_bytes(cached.read_bytes())
+            overlay = build.native_overlay(root)
+            source = root / "headers.c"
+            source.write_text('#include <assert.h>\n#include <byteswap.h>\n#include <elf.h>\n'
+                              '_Static_assert(sizeof(Elf64_Ehdr)==64,"ELF header layout");\n'
+                              '_Static_assert(R_AARCH64_ABS64==257,"non-native relocation vocabulary");\n'
+                              'int main(void){unsigned x=0x1233;assert(bswap_16(++x)==0x3412);assert(x==0x1234);'
+                              'assert(bswap_32(0x12345678U)==0x78563412U);'
+                              'assert(bswap_64(0x0123456789abcdefULL)==0xefcdab8967452301ULL);return 0;}\n')
+            binary = root / "headers"
+            subprocess.run(["/usr/bin/cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            "-I" + str(overlay), str(source), "-o", str(binary)],
+                           check=True, capture_output=True, timeout=30)
+            subprocess.run([str(binary)], check=True, capture_output=True, timeout=10)
+
+
 class NativeMemory(unittest.TestCase):
     def test_real_stack_bounds_and_collision_preserving_mmap(self):
         with tempfile.TemporaryDirectory() as temp:
