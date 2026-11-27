@@ -284,9 +284,13 @@ clarification about that architecture.
 - macOS's three renewed ZFS directory cases passed their payload lifecycles but
   initially failed cleanup because Spotlight retained mappings. Scoped forced
   detach recovered only those identified fixtures; it is recovery evidence.
-  The owner reports fresh no-index/non-browsable reruns passed with normal
-  unmount/export. Root is reconciling the replacement receipts and final
-  attachment inventory. The earlier cleanup failures remain recorded.
+  Root independently checked the three fresh no-index/non-browsable reruns:
+  original inputs, both final reopens, all 27 CLI operations, matching standalone
+  and embedded receipts, normal backing unmount/export and no remaining owned
+  mounts, images, sessions or workers. The final audit verifies 240 installed
+  files and the app signature. The private receipt is
+  `hosts/macos/validation/root-renewed025-zfs-cleanup-audit.json`; other macOS
+  cells remain a separate audit. The earlier cleanup failures remain recorded.
 - NetBSD's earlier fourteen CGD matrix payloads used UID 0; `SUDO_UID=1300`
   selected ownership, not the writer's credentials. Actual ordinary-user helper
   coverage was narrower. New owner/foreign-user controls exposed real native
