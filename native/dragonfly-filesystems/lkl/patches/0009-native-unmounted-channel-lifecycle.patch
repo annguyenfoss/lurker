@@ -1,14 +1,15 @@
 --- tools/lkl/lklfuse.c
 +++ tools/lkl/lklfuse.c
-@@ -7,6 +7,7 @@
+@@ -7,6 +7,8 @@
  #include <string.h>
  #include <errno.h>
  #include <unistd.h>
 +#include <sys/mount.h>
++#include <sys/file.h>
  #include <sys/user.h>
  #include <sys/sysctl.h>
  #define FUSE_USE_VERSION 26
-@@ -29,8 +30,13 @@
+@@ -29,8 +31,13 @@
  	int part;
  	int ro;
  	int mb;
@@ -23,7 +24,7 @@
  };
  
  #define LKLFUSE_OPT(t, p, v) { t, offsetof(struct lklfuse, p), v }
-@@ -42,6 +48,10 @@
+@@ -42,6 +49,10 @@
  
  static struct fuse_opt lklfuse_opts[] = {
  	LKLFUSE_OPT("log=%s", log, 0),
@@ -34,7 +35,7 @@
  	LKLFUSE_OPT("type=%s", type, 0),
  	LKLFUSE_OPT("mb=%d", mb, 0),
  	LKLFUSE_OPT("opts=%s", opts, 0),
-@@ -77,8 +87,8 @@
+@@ -77,8 +88,8 @@
  {
  	switch (key) {
  	case FUSE_OPT_KEY_OPT:
@@ -45,7 +46,7 @@
  		return 1;
  
  	case FUSE_OPT_KEY_NONOPT:
-@@ -89,16 +99,12 @@
+@@ -89,16 +100,12 @@
  		return 1;
  
  	case KEY_HELP:
@@ -66,7 +67,7 @@
  
  	default:
  		fprintf(stderr, "internal error\n");
-@@ -479,6 +485,8 @@
+@@ -479,6 +486,8 @@
  }
  
  #include "dragonfly-handles.h"
@@ -75,7 +76,7 @@
  
  static struct fuse *active_fuse;
  static int orderly_destroy;
-@@ -486,6 +494,7 @@
+@@ -486,6 +495,7 @@
  static void dragonfly_destroy(void *private_data)
  {
      (void)private_data;
@@ -83,7 +84,7 @@
      orderly_destroy = 1;
      if (active_fuse)
          fuse_exit(active_fuse);
-@@ -654,109 +663,114 @@
+@@ -654,109 +664,118 @@
  
  int main(int argc, char **argv)
  {
@@ -237,6 +238,9 @@
 +    lklfuse.disk.fd = open(lklfuse.file,
 +        (lklfuse.ro ? O_RDONLY : O_RDWR) | O_NOFOLLOW | O_CLOEXEC);
 +    if (lklfuse.disk.fd < 0) { perror("lklfuse: open disk"); goto finish; }
++    if (flock(lklfuse.disk.fd, LOCK_EX | LOCK_NB)) {
++        perror("lklfuse: exclusive backing claim"); goto finish;
++    }
 +    lklfuse.disk.read_only = lklfuse.ro;
 +    lklfuse.disk_id = lkl_disk_add(&lklfuse.disk);
 +    if (lklfuse.disk_id < 0) goto finish;
@@ -285,7 +289,8 @@
 +        fprintf(stderr, "lklfuse: retaining native channel/source pending global FSID absence\n");
 +        usleep(50000);
 +    }
-+    if (!orderly_destroy || lifecycle_error || df_native_uncertain || df_handles ||
++    if (!orderly_destroy || lifecycle_error || df_signal_seen ||
++        df_native_uncertain || df_handles ||
 +        df_transport_error || !df_init_sent) {
 +        fprintf(stderr, "lklfuse: incomplete native lifecycle or registered handles\n");
 +        result = -1;

@@ -53,8 +53,12 @@ calls fuse_mount, fuse_unmount or their force-capable BSD helpers. It requires a
 foreground single-threaded controller, protected administrator-owned mountpoint
 and alias ancestry, an inherited exact /dev/fuse vnode and a readiness pipe. LKL
 and the FUSE session are prepared before the controller publishes the mount.
-Captured native FSID/source/target must be globally absent before drain and
-channel/session disposal. Signals keep service alive; moved/replaced/uncertain
+The backing FD takes LOCK_EX|LOCK_NB before block-device registration and
+retains that claim until final drain/close. Same-file and hardlink claims conflict;
+symlinks are refused by O_NOFOLLOW. Native character-node flock is unsupported,
+so mapped/raw devices remain a separately reviewed lease gate. Captured native
+FSID/source/target must be globally absent before drain and channel/session
+disposal. Signals keep service alive and latch an unsuccessful final result; moved/replaced/uncertain
 mounts retain the source/channel. Ordinary user-chosen mountpath admission needs
 a separately reviewed supervisor/FD-bound target contract.
 
