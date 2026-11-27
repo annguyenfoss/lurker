@@ -1,0 +1,12 @@
+diff --git a/src/cpp-utils/system/get_total_memory.cpp b/src/cpp-utils/system/get_total_memory.cpp
+--- a/src/cpp-utils/system/get_total_memory.cpp
++++ b/src/cpp-utils/system/get_total_memory.cpp
+@@ -21,7 +21,7 @@ namespace cpputils {
+ 	}
+ }
+ 
+-#elif defined(__linux__) || defined(__FreeBSD__)
++#elif defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__)
+ 
+ #include <unistd.h>
+ 

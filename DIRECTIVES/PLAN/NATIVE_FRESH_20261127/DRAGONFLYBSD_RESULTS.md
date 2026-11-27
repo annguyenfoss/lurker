@@ -3,7 +3,7 @@
 Host: `adjutant@dragonflybsd-core-01`. Baseline:
 `8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d`. These are fresh observations;
 prior artifacts and reports are not fresh passes. Final candidate qualification,
-additional credentials/ciphers, scratch devices and ordinary reboot persistence
+additional credentials/ciphers, final scratch-device checks and ordinary reboot persistence
 remain pending.
 
 ## Host and artifacts
@@ -272,3 +272,55 @@ conformance variations, ordinary mounted-vault reboot persistence, helper/Slint
 frontend/package qualification, final 130-cell receipts and cleanup remain
 pending. Initial assessment and native controls do not substitute for those
 final product passes.
+
+
+## Stable CryFS native source and privilege assessment
+
+Stable CryFS 1.0.3 pin `5d0cc36785d93e12250696a3ffc928042f2e8d61`
+completed all 367 native build steps with one worker. The DragonFly platform
+patch only enables its existing `sysconf` physical-memory implementation;
+AES-256-GCM, 16384-byte blocks, scrypt and the common durability patch remain
+unchanged. Engine SHA-256:
+`94ec8564d2fc9157f61983c9afff48d7b08ffba735e9885296242d4db715bf60`.
+
+The first uid-1300 runtime control failed before mount: native `mlock` returned
+EPERM. Independent one-page controls confirmed uid 1300 fails and root succeeds,
+with unlimited memory-lock limits. Stock `sys_mlock` requires restricted-root
+privilege on this native architecture. A separate inherited-device-fd
+`mount_fusefs` control also returned EPERM for uid 1300 despite
+`vfs.usermount=1`. Native FUSE checks its root mount capability explicitly.
+Chroot/jails disable the restricted-root capability used by `mlock`; they do not
+provide a simple safe root-engine exception. No memory-lock bypass, changed
+crypto profile, custom kernel or product admission was added.
+
+A protected root-only diagnostic then exposed an installed FUSE-library bug.
+Its background mount child called `exit`, invoking inherited C++ static thread
+destructors and aborting. A native fork control reproduced SIGABRT with `exit`
+and a clean child with `_exit`; inherited syscall traces identified the actual
+helper exec/mount. A local host package `fusefs-libs-2.9.9_3` uses the verified
+upstream release archive, pinned DPorts base/DragonFly patches and a narrow fix:
+four child exits use `_exit`, and the sysctl length has native `size_t` type.
+The original package is retained and hash verified. Source:
+https://github.com/libfuse/libfuse/releases/tag/fuse-2.9.9
+and https://github.com/DragonFlyBSD/DPorts/tree/40ee064a7f3a03b897130a8193a16feb67684934/filesystems/fusefs-libs
+
+The installed host package SHA-256 is
+`c532dc2a1da9e347c924a5a89de8a59e9540bcf12a91652666e53be4bce4a5d8`;
+libfuse SHA-256 is
+`3e792a8ccbc99e7722b79a98fd9076b8745cccb4d544ca496ba8d0a562a84eb5`.
+With this ordinary installed library and no loader overrides, the root-only
+CryFS control passed full downloaded-PDF/text writes, append/new-file persistence
+and both normal reopens on HAMMER2 backing. Each native mount was `fuse.cryfs`
+from `/dev/fuse`, owner 0, with an exact target/fsid and precise PID/birth identity.
+All three backend exits were 0, and every mount and process closed. Protected
+root-owned ciphertext ancestry was used. These are native root-only controls,
+not Lurker or login-user engine passes. The user-engine privilege/confinement
+integration remains blocked, separately from native engine capability; the five
+CryFS product cells remain pending rather than receiving native-control credit.
+
+Receipts are in `build/cryfs-native-controls/`, with provenance in
+`build/cryfs-native-context.json` and `build/fusefs-libs-package.json`.
+The installed library's six ext4/NTFS/exFAT block-product regressions are running.
+An isolated native Rust adapter probe also passed its actual live, unreaped
+zombie and reaped-child test using only primitive reads from the verified
+1048-byte buffer. Shared directory-backend code remains unchanged by this host.
