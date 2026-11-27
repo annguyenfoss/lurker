@@ -20,3 +20,18 @@ mandatory CRC self-test. It does not claim the entire utility suite builds:
 symbol is supplied. Configure succeeds after patch 0001; the first compiler
 attempt then diagnoses the missing DragonFly platform adapter. No native XFS
 format/mount/payload or product support is established by these checks.
+
+Patch 0002 adds a distinct DragonFly platform header and implementation, using
+native BSD UUID/file APIs without defining another operating system's macros.
+Character-device geometry requires a validated `DIOCGPART` result; the returned
+size uses libxfs's 512-byte basic-block units. Native fsync errors are fatal,
+and unsupported discard returns EOPNOTSUPP. The inherited BSD mounted/writable
+checks are corrected in this DragonFly implementation.
+
+The native formatter and required CRC self-test now build. A new 512 MiB regular
+image formatted with `-m crc=1 -K` has native XFS superblock magic, 4096-byte
+blocks, 512-byte sectors and the expected total size. `tests/platform.c` verifies
+regular-file geometry and that a bad-FD native fsync failure exits unsuccessfully.
+Compile it against `libxfs/dragonfly.o`, with upstream headers as system includes
+and the native intl library; run it as UID/EUID 1300 with a new image pathname.
+Native character-device geometry and mounted payload remain separate gates.

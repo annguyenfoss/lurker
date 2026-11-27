@@ -1,5 +1,5 @@
 {
-  "status": "native formatter construction in progress; no runtime credit",
+  "status": "native mkfs build and fresh CRC XFS regular-image construction passed; mounted runtime unproven",
   "source_archive_sha256": "dde65ead82d3cbfa9b4ded9796b6d22095d7d759a22d41ae6f1a4ec458bb0465",
   "archive_bytes": 1482424,
   "DPorts_revision": "91731d0e53e99b4ed0ab75677c9325d741a85123",
@@ -184,6 +184,7 @@
   "jobs": 1,
   "build_target": "mkfs",
   "DragonFly_patches": [
-    "patches/0001-use-native-aio-probe.patch"
+    "patches/0001-use-native-aio-probe.patch",
+    "patches/0002-dragonfly-native-platform.patch"
   ]
 }
