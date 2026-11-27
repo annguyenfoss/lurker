@@ -51,8 +51,20 @@ The Linux package audit found a separate existing-feature gap: installed
 crypto helper and a separately installed host filesystem helper. Earlier
 privileged successes do not establish unprivileged operation. Resolver/readiness
 correction `18692a5` separates those paths and passed 97 native Arch core tests.
-Crypto-only packaging and external-driver provisioning are being implemented;
-helper/desktop readiness and actual unprivileged package lifecycles remain gates.
+Crypto-only packaging `e4c2468` and separate host-driver provisioning `6fbd474`
+are committed. Host-driver correction `3f60421` makes newly formatted roots
+private without changing permissions when reopening an existing filesystem.
+Helper/desktop correction `b2f58d4` separates compile-time protocol support from
+login-user prerequisite readiness and refuses explicit missing prerequisites
+before sending create/mount secrets. Closing an owned session does not require
+those backend executables to remain installed. The exact frozen native Debian
+workspace check/test and helper build passed 182 tests, with 15 ignored. Root
+verified the three source overlays, build/log/archive hashes, eight strict JSON
+capability responses and two argument refusals. All six root/`--as-root` queries
+leave readiness unchecked; they do not execute configured probes. The receipt
+is `hosts/debian/build/userspace-readiness-preview/root-readiness-audit.json`.
+This is source/unit/capability evidence, not installed storage qualification.
+Actual unprivileged package and desktop lifecycles remain the next gate.
 
 Ubuntu's final report is `e68bb47`: both 130-cell source-kind ledgers contain
 54 passed, six stock-UFS1 unavailable and 70 platform-inapplicable cells. The
