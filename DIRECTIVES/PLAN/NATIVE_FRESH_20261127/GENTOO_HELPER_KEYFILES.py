@@ -20,12 +20,12 @@ def main():
     device_identity=scratch_guard()
     a.root.mkdir(mode=0o700,parents=True,exist_ok=False)
     spec=importlib.util.spec_from_file_location('h',a.harness);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
-    j={'commit':a.commit,'host':os.uname().nodename,'kernel':os.uname().release,'uid':os.geteuid(),'helper':str(helper),'helper_sha256':h.file_hash(helper),'harness_sha256':h.file_hash(a.harness),'pid':os.getpid(),'started':time.time(),'status':'running','device_identity':device_identity,'cases':[]}
+    j={'commit':a.commit,'host':os.uname().nodename,'kernel':os.uname().release,'uid':os.geteuid(),'helper':str(helper),'helper_sha256':h.file_hash(helper),'harness_sha256':h.file_hash(a.harness),'controller_sha256':h.file_hash(Path(__file__)),'pid':os.getpid(),'started':time.time(),'status':'running','device_identity':device_identity,'cases':[]}
     def save():h.atomic_json(a.root/'result.json',j)
     save()
     for backend in ['luks','luks1','veracrypt']:
-        d=a.root/backend;d.mkdir(mode=0o700);key=d/'binary key Việt Nam.bin';key.write_bytes(b'\0\xff\n\r'+secrets.token_bytes(252));key.chmod(0o600);source=a.device if a.device else d/'vault.img';m=d/'mount';m.mkdir(mode=0o700)
-        row={'backend':backend,'filesystem':'btrfs','filesystem_role':'inner','source_kind':'block' if a.device else 'container','source':str(source),'keyfile_sha256':h.file_hash(key),'operations':[],'status':'running'};j['cases'].append(row);save()
+        d=a.root/backend;d.mkdir(mode=0o700);key=d/'binary key Việt Nam.bin';key.write_bytes(b'\0\xff\n\r'+secrets.token_bytes(252));key.chmod(0o600);source=a.device.resolve(strict=True) if a.device else d/'vault.img';m=d/'mount';m.mkdir(mode=0o700)
+        row={'backend':backend,'filesystem':'btrfs','filesystem_role':'inner','source_kind':'block' if a.device else 'container','source':str(source),'identified_device_alias':str(a.device) if a.device else None,'keyfile_sha256':h.file_hash(key),'operations':[],'status':'running'};j['cases'].append(row);save()
         def action(request):
             c=subprocess.run(['sudo','-n',str(helper),'run'],input=json.dumps(request).encode(),capture_output=True,timeout=300)
             name=str(len(row['operations']))+'-'+request['action'];(d/(name+'.stdout')).write_bytes(c.stdout);(d/(name+'.stderr')).write_bytes(c.stderr)
@@ -34,7 +34,8 @@ def main():
             if c.returncode or not response.get('ok'):raise RuntimeError('Helper action failed: '+name)
         def close():action(dict(action='unmount',target=str(m),volume_type='auto',tag=None))
         try:
-            scratch_guard()
+            checked=scratch_guard()
+            if a.device and str(source)!=checked['path']:raise RuntimeError('Identified device changed before create')
             action(dict(action='create',target=str(source),size_gb=None if a.device else '0.25',force=bool(a.device),source_kind='block' if a.device else 'file',volume_type=backend,cipher='aes',filesystem='btrfs',passphrase=None,keyfile=str(key)))
             if not a.device:assert source.stat().st_uid==1300 and source.stat().st_mode&0o777==0o600
             expected=h.load_payload(a.payload)
@@ -61,6 +62,7 @@ def main():
                 except Exception as e:row['cleanup_error']=str(e)
             row['mount_remaining']=os.path.ismount(m);save()
             if row['mount_remaining'] or row.get('payload_worker',{}).get('remaining'):raise RuntimeError('Retain live helper fixture and worker')
-            if a.device and row['status']!='passed':raise RuntimeError('Retain failed scratch state; stop before another destructive case')
+            if a.device and row['status']!='passed':
+                j.update(status='failed',finished=time.time());save();raise RuntimeError('Retain failed scratch state; stop before another destructive case')
     j.update(status='passed' if all(r['status']=='passed' for r in j['cases']) else 'failed',finished=time.time());save();print(json.dumps({'status':j['status'],'receipt':str(a.root/'result.json')}));return int(j['status']!='passed')
 if __name__=='__main__':raise SystemExit(main())
