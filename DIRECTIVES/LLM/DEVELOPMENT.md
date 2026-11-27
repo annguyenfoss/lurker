@@ -5,7 +5,7 @@ OS/filesystem pair. There is one mount/unmount workflow. Read-only-only access
 is a reported capability shortcoming, not a feature or a separate required test
 mode. Follow `CODEBASE.md` for this contract across all platforms and frontends.
 Use [FILESYSTEM_QUALIFICATION.md](FILESYSTEM_QUALIFICATION.md) as the reusable
-functional benchmark, availability-label and remaining-work ranking contract
+functional benchmark, availability labels and two-axis completion/support contract
 for every testing round. The procedures below supply its execution details.
 
 ## Development cycle
