@@ -204,6 +204,18 @@ PIPE dispositions and signal masks are owned explicitly after channel INIT;
 signals keep service available for ordinary OS unmount and produce failure after
 close. Failed drain retains its worker/backing instead of forcing release.
 
+The checked-halt correction also inspects the signed `lkl_sys_halt` result at
+both cleanup sites. In the exact Darwin source, a negative reboot syscall result
+returns before CPU/thread shutdown. Such a failure retains the backing and
+prevents `lkl_cleanup` or close until a later halt returns zero; its error latch
+still forces final failure after a successful retry. The API's zero-result path
+waits for CPU shutdown and performs its cleanup. Upstream ignores its final
+native thread-join callback return, so this is an API-success boundary, not an
+independently checked pthread-join claim. A native control injects one negative
+return then executes the real halt, verifying cleanup/close ordering and the
+production main's nonzero exit. The original installed v13 bytes and results
+remain separate from this later source correction.
+
 The final private arm64 candidate passed three read/write mounted opens on
 ext4, Btrfs and XFS with common payload write/append/verify, permission/refusal
 controls, busy close and normal teardown. A fourth read-only open was an

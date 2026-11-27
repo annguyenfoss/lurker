@@ -2,7 +2,7 @@ diff --git a/tools/lkl/lklfuse-darwin.c b/tools/lkl/lklfuse-darwin.c
 new file mode 100644
 --- /dev/null
 +++ b/tools/lkl/lklfuse-darwin.c
-@@ -0,0 +1,1615 @@
+@@ -0,0 +1,1639 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/* Native Darwin adapter derived from tools/lkl/lklfuse.c (LKL project).
 + * macFUSE 3 official vanilla callback ABI; no callback casts or bundled driver.
@@ -1059,6 +1059,7 @@ new file mode 100644
 +static struct lkl_disk backing;
 +static unsigned long host_flush_calls;
 +static int host_io_error;
++static int sticky_shutdown_error;
 +static int observed_capacity(struct lkl_disk disk, unsigned long long *size) {
 +  return lkl_dev_blk_ops.get_capacity(disk, size);
 +}
@@ -1178,6 +1179,27 @@ new file mode 100644
 +              "handles=%s\n",
 +              raw, host_errno(-raw), getpid(), backing_fd,
 +              handles ? "yes" : "no");
++    sleep(1);
++  }
++}
++/* A negative halt returns before CPU/thread shutdown in the pinned LKL API.
++ * Keep the backing/claim and avoid lkl_cleanup until the API reports zero.
++ * A later successful retry never erases the original failure. */
++static void retain_until_checked_halt(void) {
++  unsigned tries = 0;
++  for (;;) {
++    long raw = lkl_sys_halt();
++    if (raw == 0) {
++      fprintf(stderr, "LKL_HALT raw=0 prior_failure=%d\n",
++              sticky_shutdown_error);
++      return;
++    }
++    sticky_shutdown_error = 1;
++    if (tries++ == 0 || tries % 30 == 0)
++      fprintf(stderr,
++              "LKL_HALT_FAILED raw=%ld retained_pid=%d backing_fd=%d "
++              "cleanup_deferred=1\n",
++              raw, getpid(), backing_fd);
 +    sleep(1);
 +  }
 +}
@@ -1511,7 +1533,7 @@ new file mode 100644
 +            host_errno(-rc));
 +    if (kernel_started) {
 +      retain_until_normal_drain();
-+      lkl_sys_halt();
++      retain_until_checked_halt();
 +      lkl_cleanup();
 +    }
 +    close(backing_fd);
@@ -1602,19 +1624,21 @@ new file mode 100644
 +  retain_until_normal_drain();
 +  if (original_root >= 0)
 +    lkl_sys_close(original_root);
-+  lkl_sys_halt();
++  retain_until_checked_halt();
 +  lkl_cleanup();
 +  int closed = close(backing_fd);
 +  fprintf(stderr,
 +          "BACKING_RELEASE checked_normal_drain=1 close=%d sticky_io_error=%d "
-+          "host_flush_calls=%lu signal=%d host_io_error=%d\n",
++          "host_flush_calls=%lu signal=%d host_io_error=%d halt_error=%d\n",
 +          closed, sticky_io_error,
 +          __atomic_load_n(&host_flush_calls, __ATOMIC_RELAXED), native_signal,
-+          __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE));
++          __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE),
++          sticky_shutdown_error);
 +  if (signal_ready)
 +    native_signals(saved_signals, 0);
 +  return rc < 0 || closed < 0 || sticky_io_error || native_signal ||
-+                 __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE)
++                 __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE) ||
++                 sticky_shutdown_error
 +             ? 1
 +             : 0;
 +}
