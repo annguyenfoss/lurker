@@ -83,3 +83,11 @@ them. This primitive is not yet wired into FUSE callbacks. DragonFly sends real
 cached WRITE operations with PID zero, so integration additionally requires a
 registry of opaque handles with validated opener credentials, distinct from
 pathname authentication. Native kernel default_permissions remains mandatory.
+
+Patch 0007 ends the single-threaded FUSE loop from the explicit DESTROY callback.
+The stock native kernel sends DESTROY before marking the channel dead and then
+returns ENOTCONN on further reads. Unexpected loop termination remains a failure;
+no transport error is normalized to success. A real native mount/unmount control
+now records unmount=0, driver exit=0, checked internal drain and absent mount and
+process. It retains the observed UID-zero child ownership failure. The separate
+FUSE2 INIT response-size mismatch remains unqualified at this point.

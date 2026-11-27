@@ -1,0 +1,41 @@
+--- tools/lkl/lklfuse.c
++++ tools/lkl/lklfuse.c
+@@ -459,7 +459,19 @@
+ 	return df_lkl_result(lkl_sys_fallocate(fi->fh, mode, offset, len), 0);
+ }
+ 
++static struct fuse *active_fuse;
++static int orderly_destroy;
++
++static void dragonfly_destroy(void *private_data)
++{
++    (void)private_data;
++    orderly_destroy = 1;
++    if (active_fuse)
++        fuse_exit(active_fuse);
++}
++
+ const struct fuse_operations lklfuse_ops = {
++    .destroy = dragonfly_destroy,
+ 	.flag_nullpath_ok = 1,
+ 	.flag_nopath = 1,
+ 	.flag_utime_omit_ok = 1,
+@@ -674,6 +686,7 @@
+ 		goto out_fuse_unmount;
+ 	}
+ 
++	active_fuse = fuse;
+ 	fuse_opt_free_args(&args);
+ 
+ 	if (fuse_daemonize(fg) ||
+@@ -692,6 +705,10 @@
+ 		fprintf(stderr, "warning: multithreaded mode not supported\n");
+ 
+ 	ret = fuse_loop(fuse);
++    if (!orderly_destroy) {
++        fprintf(stderr, "lklfuse: FUSE loop ended without an orderly DESTROY\n");
++        ret = -1;
++    }
+ 
+ 	if (stop_lkl() < 0)
+ 		ret = -1;
