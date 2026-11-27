@@ -77,7 +77,7 @@ def main():
     fstab_backup.chmod(0o600)
     addition = ('\n# Lurker native-fresh-20261127 Fedora owned fixture storage\n'
                 f'UUID={UUID} {STORE} ext4 defaults,nodev,nosuid 0 2\n'
-                f'{target} {ROUND} none bind,x-systemd.requires-mounts-for={STORE} 0 0\n')
+                f'{target} {ROUND} none bind,rprivate,x-systemd.requires-mounts-for={STORE} 0 0\n')
     with fstab.open('a') as stream:
         stream.write(addition)
         stream.flush()
@@ -86,7 +86,7 @@ def main():
     ROUND.mkdir(mode=0o700)
     os.chown(ROUND, 1300, 1300)
     subprocess.run(['mount', '--bind', str(target), str(ROUND)], check=True)
-    subprocess.run(['mount', '--make-private', str(ROUND)], check=True)
+    subprocess.run(['mount', '--make-rprivate', str(ROUND)], check=True)
     if inventory(ROUND) != before:
         raise RuntimeError('Bound path differs; keep original backup')
     receipt = dict(status='passed', source=str(backup), target=str(target), bind=str(ROUND),
