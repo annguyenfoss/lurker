@@ -188,3 +188,14 @@ found. The detailed audit is in the round's FreeBSD evidence directory under
 `validation/kernel-domain-audit/`. Local changes are not being presented as
 already published/tested mainstream patches. Independent userspace guardian,
 codec and Cryptomator ABI/FFM work does not link or run LKL.
+
+
+The independent `guardian-platform.h` currently supplies native PID/birth/boot
+and held-source identity helpers, regular-file/GEOM barrier selection and
+checked close semantics. It includes no LKL code, mount operation or completion
+authorization and is not wired into the held LKL build. Its strict native C11
+control passes 29 checks for process identity, missing/reaped processes,
+regular-file identity/resize/replacement rejection, flush and close behavior.
+The character-provider branch is compiled but is not credited as a runtime
+provider/guardian acceptance result. Native stream peer-credential probes are
+separate evidence; a live guardian/state-machine integration remains pending.

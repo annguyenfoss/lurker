@@ -846,3 +846,16 @@ Btrfs/XFS filesystem, kernel/ or mm/ C changes were made, and `.config` came
 from pinned upstream defconfig, but these facts do not override the scope hold.
 Product write guards remain unchanged. Standalone userspace guardian/codec and
 Cryptomator native header/FFM controls are independent of LKL execution.
+
+
+Independent userspace guardian preparation continues without linking or running
+LKL. Shared codec `9269641` passes 2340 native checks with exact regular/CHAR
+golden frames. The native identity/held-source platform header passes 29 strict
+C11 controls for PID/birth/boot, reaped/missing processes, regular source
+identity/resize rejection and checked flush/close. Its CHAR ioctl branch is
+compiled but not runtime-qualified here, and no completion authority is enabled.
+Evidence is `validation/guardian-codec-v2/` and
+`validation/guardian-platform-identity/`. Native stream credential probes also
+show SCM_CREDS2 on each write, not each partial read; a wrapper must retain and
+recheck the authenticated writer over a bounded frame. No embedded kernel
+change or mount test is part of these standalone userspace controls.
