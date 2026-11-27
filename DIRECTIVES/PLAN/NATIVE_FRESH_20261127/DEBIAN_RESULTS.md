@@ -117,6 +117,17 @@ has UFS disabled. No new module rebuild or configuration change was made.
   ownership and expected modes; empty `dpkg -V`. No bundled FUSE runtime or
   filesystem driver, no owned backend processes, mappings, loops or test mounts.
 
+The six-fixture reopener does not record a controller UID or EUID field. Its
+identity is supported by the original unprivileged `adjutant` SSH launch chain,
+the prepare wrapper's real-UID guard, the physical-helper/final-audit real-UID
+guards around the verify shell's ordinary Python child calls, and retained
+systemd/sudo user-session records. The actual physical-helper runner also guards
+`getuid() == 1300`, not `geteuid()`. Bounded I/O workers use ordinary `fork`
+credential inheritance without changing UID; successful worker results have no
+UID/EUID fields. Thus effective identity is inferred from that launch chain,
+not independently sampled in each controller/worker receipt. The read-only UID
+audit addendum preserves this limit; crypto was not rerun for it.
+
 Named current-round `576505d` evidence also retains nine native cipher suites
 (**108 checks**), three folder suites (**36 checks**), three binary-keyfile
 negative suites (**36 checks**), three cold HAMMER2 Auto reopens after actual
