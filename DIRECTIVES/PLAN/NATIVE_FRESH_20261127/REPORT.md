@@ -67,6 +67,21 @@ is `hosts/debian/build/userspace-readiness-preview/root-readiness-audit.json`.
 This is source/unit/capability evidence, not installed storage qualification.
 Actual unprivileged package and desktop lifecycles remain the next gate.
 
+Arch's `61602cb` installed package subsequently passed all six default-filesystem
+unprivileged cipher/credential flows, its native desktop callback flow, and
+CLI/helper/actual-window row close while backend executables were unavailable.
+Those successes retain their original identity. A later injected XFS backing
+flush failure exposed a core bug: the application received `EIO`, but unmount
+treated the driver's refusal as a crash, replayed its journal, returned success
+and detached crypto. Root checked the response/logs and retained encrypted image
+in `hosts/archlinux/build/unprivileged-pilot/root-sticky-xfs-product616-finding-audit.json`.
+The native XFS driver itself refused its drain; automatic recovery hid that
+refusal. This blocks cross-distribution rollout. The pending correction pairs
+unchanged private crypto protocol 4 with host filesystem protocol 5, preserving
+explicit I/O/shutdown failures and permitting automatic crash recovery only
+when no acknowledgement exists. Fresh native source and installed fault
+regressions are required before this correction is qualified.
+
 Ubuntu's final report is `e68bb47`: both 130-cell source-kind ledgers contain
 54 passed, six stock-UFS1 unavailable and 70 platform-inapplicable cells. The
 owner reports ten ordinary reboots covering 54 file/backing fixtures and three
