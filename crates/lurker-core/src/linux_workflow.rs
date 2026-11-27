@@ -1925,6 +1925,14 @@ fn format_filesystem(
             // mount so supported distribution tools still produce mode 0700.
             initialize_native_root(ctx, device_path.as_os_str(), "ext4", None, owner)?
         }
+        CreateFilesystem::Ntfs => {
+            // Mount masks govern newly created entries, but mkntfs can leave
+            // the existing root world-accessible. Initialize only this freshly
+            // formatted root; ordinary unlock preserves existing metadata.
+            let driver = crate::system::linux_ntfs_mount_driver();
+            let options = format!("uid={},gid={},umask=0077", owner.uid, owner.gid);
+            initialize_native_root(ctx, device_path.as_os_str(), driver, Some(&options), owner)?
+        }
         _ => {}
     }
     Ok(())
@@ -2274,7 +2282,7 @@ fn initialize_native_root(
     } else {
         let mount = crate::trusted_system_executable("mount")?;
         let mut args: Vec<OsString> = vec!["-t".into(), filesystem.into()];
-        if filesystem == "apfs" {
+        if matches!(filesystem, "apfs" | "ntfs3" | "ntfs") {
             args.insert(0, "-i".into());
         }
         if let Some(options) = options {
@@ -2333,6 +2341,22 @@ fn initialize_native_root(
                 false,
                 "Protect new filesystem root",
             )?;
+        }
+        if matches!(filesystem, "ntfs" | "ntfs3" | "ntfs-3g") {
+            let protected = directory
+                .metadata()
+                .map_err(|e| AppError::io("Verify new NTFS root permissions", e))?;
+            if protected.uid() != owner.uid
+                || protected.gid() != owner.gid
+                || protected.mode() & 0o777 != 0o700
+            {
+                return Err(AppError::new(
+                    "The NTFS driver did not protect the new filesystem root; creation cannot finish.",
+                ));
+            }
+            directory
+                .sync_all()
+                .map_err(|e| AppError::io("Sync new NTFS root permissions", e))?;
         }
         Ok(())
     })();
