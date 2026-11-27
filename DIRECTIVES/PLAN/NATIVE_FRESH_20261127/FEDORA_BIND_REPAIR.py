@@ -71,7 +71,8 @@ def main():
     native(['restorecon', '/etc/fstab']); native(['systemctl', 'daemon-reload'])
     unit = native(['systemd-escape', '--path', '--suffix=mount', R])
     generated = (Path('/run/systemd/generator') / unit).read_text()
-    assert 'Options=bind,rprivate,' in generated
+    assert any(line.startswith('Options=') and {'bind', 'rprivate'} <= set(line.split('=', 1)[1].split(','))
+               for line in generated.splitlines())
     native(['mount', '--make-rprivate', R])
     assert native(['findmnt', '-rn', '-M', R, '-o', 'PROPAGATION']) == 'private'
     out.update(fstab_backup=str(backup), fstab_sha256=h.file_hash(fstab), generated_mount_unit=generated)
