@@ -2,8 +2,9 @@
 
 Current checkpoint: exact follow-up source
 `67894f68525c55d5cbb48c743e1a98a308bd970f` passed workspace check, tests and build;
-all 408 archived source files retain their hashes. The corrected six-backend
-stage passes; native RPM creation and installed-artifact gates are running. The earlier
+all 408 archived source files retain their hashes. The corrected native RPM is
+verified in its administrator-controlled test prefix; installed-artifact gates
+are running. The earlier
 `576505d` package completed 60 container cells, 75 physical cases, six direct
 helper samples and 204 conformance subcases. Those results retain their original
 artifact identity; the older private-FUSE closure does not satisfy the final
@@ -394,3 +395,33 @@ The corrected manifest SHA256 is
 `d64461c6084e0df799ab9c5fa47b149045d43e2a733c647f83212762bc46d38b`.
 No FUSE runtime or filesystem driver belongs in the new package. Final package
 inventory, actual loader resolution and runtime tests remain separate gates.
+
+The new RPM SHA256 is
+`4e9ab64ae6219ad05bb398de5a1e96f333b3f32bb9c67b5b6f595ec29e4e1742`;
+its staged archive SHA256 is
+`3d31b8b1e04d17587a037181fba6e728ac72984ee2f61d67459c03e093512a58`.
+All 1083 manifest entries, including exact declared Java license symlinks and
+their containment, pass extraction and administrator-copy verification. The
+first verifier stopped on those symlink records before any runtime fixture was
+admitted; the corrected verification and original failure are retained.
+The extracted native RPM runs from
+`/usr/local/lib/lurker-native-fresh-20261127-fedora-package-67894f6` on the prepared
+host; the system installation remains untouched. Its inventory contains zero
+private FUSE runtime or filesystem-driver files, and the creator's actual loader
+resolves the measured host ABI 4 provider.
+
+| Component | SHA256 |
+| --- | --- |
+| CLI | `4be8699d321f4e4babbe40d290d5395700aaffd19fd09733de8dfa17e16c95a5` |
+| Helper | `e96950f0a61f78614618e63f31df89e11f344b1528c4b127597bd094a82d4ff0` |
+| Desktop | `5246e5ab9a9fdbaccf71a4726e25bb6f3db5512ff0d5beb9e94edc0f168e6004` |
+
+All six normal-user password/binary-keyfile CLI file lifecycles pass, covering
+LUKS2, LUKS1 and VeraCrypt with Auto reopen, full downloaded payload hashes,
+normal close and terminal-session survival. Three normal-user direct-helper
+binary-keyfile file lifecycles pass strict whole-stdout JSON and the same payload
+cycle. CLI/helper password frontend checks and a real native desktop window pass.
+Visual inspection of the captured 1280×860 Create view at 100% confirms visible
+default controls and the reachable bottom action. Native default-filesystem
+desktop storage callbacks, twelve UFS2 reruns, helper device samples and reboot
+persistence remain in progress.
