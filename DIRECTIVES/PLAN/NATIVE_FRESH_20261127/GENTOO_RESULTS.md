@@ -4,6 +4,12 @@ Completed within the authorized integration scope. The latest product is `e927e4
 
 Every pass below comes from fresh round fixtures. Historical reports and cached artifacts were discovery/provenance inputs, never pass evidence. Per `LINUX_FOLLOWUP.md`, unchanged broad coverage retains its actual `576505d554d798422840a06322dfa93b899365bc` execution identity; the twelve corrected-UFS2 rows and final frontend/helper/reboot gates identify the new 678 artifact explicitly.
 
+## Mounted namespace supplement
+
+The targeted `0071bd8` harness passed **36 scopes / 396 actions** with installed unchanged e927 products: nine native filesystems distributed across LUKS2, LUKS1 and VeraCrypt, then gocryptfs/CryFS/Cryptomator on each of those actual native backings. Retained closed reboot fixtures were reused with their original keyfiles; no fresh format, build, reboot or broad payload rerun occurred. The mounted tests explicitly verify file/directory rename, cross-parent move, unlink, directory removal and synchronization under UID 1300 with exact mount ID/source/type. Every worker exited normally with zero status; protected old file bytes/ownership/modes and held native-root identity matched. All 1,085 installed entries and qualified providers were verified; cleanup found no owned mounts, loops, engines or imported pools.
+
+The four NTFS3 scopes remain **held** for the separately coordinated permissions fix; these are not counted as namespace passes. `GENTOO_NAMESPACE.md` records every run, raw evidence references, retained ciphertext/factors and the private completion index. Historical retention limits and Linux GUI's fixed create default remain unchanged.
+
 ## Current-default UFS1 configuration follow-up
 
 `GENTOO_UFS1_CURRENT.md` records exact upstream/Gentoo source hashes, the existing `CONFIG_UFS_FS_WRITE` selection and reproducible normal-user external-module build. Configured module SHA-256 is `56347fbf63e0ae5d02251fa6cd1801767284ff11831f57d82e48ebd84300a369`; normal post-reboot autoload and live build ID matched. No forced vermagic/signature bypass, global policy weakening or boot-image changes occurred.
@@ -122,4 +128,4 @@ Private evidence root: `target/goal-validation/native-fresh-20261127/hosts/gento
 | 576 conditional existing-module UFS1 | 188 | `095009d479fdeb70b21376c53607f8c8168643471163ec0e01ac585830373015` |
 | 678 final package/prerequisite/frontend/reboot | 404 | `334a27821eaf818b3ba3e9802322216df931d0f21a7df7b3983a3b8c8c928ff7` |
 
-No further authorized Gentoo test work remains. The vendor UFS1 module's write limitation remains explicit; the authorized existing-configuration module follow-up is complete. Original e927 report bytes are retained privately at `build/ufs1-current/GENTOO_RESULTS-at-af002c4.md` and in commit `af002c4`, preserving the earlier index's report identity.
+The original qualification and authorized existing-configuration UFS1 follow-up are complete. The new namespace supplement has four NTFS3 scopes held pending the separately coordinated fix. The vendor UFS1 module's write limitation remains explicit. Original e927 report bytes are retained privately at `build/ufs1-current/GENTOO_RESULTS-at-af002c4.md` and in commit `af002c4`, preserving the earlier index's report identity.
