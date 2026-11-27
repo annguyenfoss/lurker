@@ -137,7 +137,27 @@ while the stager installs the provenance file at
 `share/lurker/provenance/cryfs.json`. The adjacent SDK layout had masked this
 packaged-layout bug. Correction `8c6f2b6` removes that extra directory and passed
 four native checks, including actual installed engine/provenance/host-loader
-validation. Corrected-package CryFS/device/reboot validation is still required.
+validation. Corrected package
+`6d4aa5f73eb22e286c911c3d2c8ec6674b66a06c5defe8487ac4a9188d8c98d5`
+is now installed. Root compared all 433 archived source files with `8c6f2b6`,
+checked the native 156-pass/23-ignored workspace log, and verified the package's
+865 manifest-listed payload files. Twelve physical block cases passed their
+120 CLI actions, including expected refusals, actual UID/GID 1300 payload
+write/append/verify, independent filesystem signatures and normal final closes.
+The corrected CryFS containers pass on UFS1, UFS2 and NTFS; exFAT still fails
+publication with `ENOSYS`. Its image and failed journal are retained, and its
+recorded exact-mount native recovery completed normally. Four actual Slint
+create/mount/reopen/row-close callback flows passed through the installed helper;
+temporary authorization was restored and an unrelated command remained denied.
+The private audit is
+`hosts/openbsd/validation/root-installed8c-block-cryfs-gui-audit.json`.
+It records a harness provenance-field bug: eleven physical rows contain the
+preceding filesystem proof where the shared initial disk reverification belongs.
+The first row and GUI receipt retain that full proof, and all rows retain their
+original sentinel-bound disk identities. Original receipt preservation and an
+explicit metadata correction are pending. CryFS physical backings, credential
+conformance and ordinary reboot qualification remain active; these milestones
+do not establish whole-round completion.
 
 CryFS exFAT failures on OpenBSD and NetBSD are now matched to native hardlink
 `ENOSYS`, while ordinary file create/write/fsync/read/rename/unlink work. This
