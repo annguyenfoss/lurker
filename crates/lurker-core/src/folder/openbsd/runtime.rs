@@ -24,7 +24,7 @@ fn manifest_path(executable: &Path) -> AppResult<PathBuf> {
         .and_then(Path::parent)
         .and_then(Path::parent)
         .ok_or_else(invalid)?;
-    Ok(prefix.join("share/lurker/provenance/cryfs/cryfs.json"))
+    Ok(prefix.join("share/lurker/provenance/cryfs.json"))
 }
 
 fn tags(text: &str, tag: &str) -> Vec<String> {
@@ -138,6 +138,39 @@ fn contract(value: &Value, bytes: &[u8]) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn packaged_layout_uses_the_stagers_flat_provenance() {
+        let root = tempfile::tempdir().unwrap();
+        let executable = root.path().join("libexec/lurker/backends/cryfs");
+        fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        let manifest = root.path().join("share/lurker/provenance/cryfs.json");
+        fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        fs::write(&manifest, b"{}").unwrap();
+        let selected = manifest_path(&executable).unwrap();
+        assert_eq!(selected, manifest);
+        assert!(selected.is_file());
+    }
+
+    #[test]
+    fn sdk_layout_keeps_its_adjacent_provenance() {
+        let root = tempfile::tempdir().unwrap();
+        let executable = root.path().join("cryfs");
+        let manifest = root.path().join("cryfs.json");
+        fs::write(&manifest, b"{}").unwrap();
+        assert_eq!(manifest_path(&executable).unwrap(), manifest);
+    }
+
+    #[test]
+    #[ignore = "requires the explicitly configured administrator-owned native package"]
+    fn native_installed_layout_validates_the_actual_engine_and_host_loader() {
+        assert_eq!(
+            std::env::var("LURKER_NATIVE_CRYFS_INSTALLED_TEST").as_deref(),
+            Ok("1")
+        );
+        let executable = Path::new("/usr/local/libexec/lurker/backends/cryfs");
+        assert_eq!(validate(executable).unwrap(), executable);
+    }
+
     #[test]
     fn privileged_contract_binds_native_port_protocol_and_engine_bytes() {
         let bytes = b"\x7fELFtest";
