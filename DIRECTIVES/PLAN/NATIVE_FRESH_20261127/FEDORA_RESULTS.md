@@ -305,3 +305,25 @@ UFS version evidence. All nine binary-keyfile device variations also pass,
 covering AES, Serpent and Twofish for all three native methods. Additional
 password-cipher variants and physical filesystem backing/directory-engine
 cases are still running; reboot and final conformance gates remain pending.
+
+## Complete physical matrix and helper milestone
+
+The final device gate completes **75/75** passes on the actual `576505d` RPM:
+30 inner-filesystem cases, nine binary-keyfile variants, six additional
+password/cipher variants, and 30 directory-engine cases on native physical
+filesystem backings. The latter use the identified scratch disk's single fresh
+partition, record native mounts/superblocks/drivers, and test all three directory
+engines on each of the ten filesystems. No failed device fixture was hidden or
+converted into a pass. Complete compact evidence is retained privately as
+`device/final-576505d-75cases-evidence.tar.gz`.
+
+The normal login user directly exercised the packaged internal helper with native
+elevation, strict whole-stdout JSON parsing and bounded real payloads. All three
+methods pass binary-keyfile/Btrfs lifecycles as file containers and on the fenced
+scratch partition: **6/6**. The helper's noninteractive VeraCrypt path needs no
+terminal Quick Format confirmation. The interactive CLI/helper password frontend
+suite also passes, including negative responses and terminal-session persistence.
+The last physical VeraCrypt/keyfile/Btrfs sample remains for ordinary reboot
+verification. The committed `FEDORA_HELPER_REBOOT.py` checks its identity and
+payload without formatting it. Packaged lifecycle conformance and ordinary
+reboot verification remain in progress.
