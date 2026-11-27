@@ -1959,7 +1959,7 @@ fn sync_directory(path: &Path) -> AppResult<()> {
         .map_err(|e| AppError::io("Sync directory", e))
 }
 
-#[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
+#[cfg(any(target_os = "netbsd", target_os = "openbsd", target_os = "freebsd"))]
 pub(crate) fn folder_mount_identity(path: &Path) -> AppResult<Option<String>> {
     let mut matches = mounts()?.into_iter().filter(|entry| entry.target == path);
     let Some(mount) = matches.next() else {
@@ -1970,8 +1970,9 @@ pub(crate) fn folder_mount_identity(path: &Path) -> AppResult<Option<String>> {
             "Multiple native mounts occupy the folder mountpoint; preserve the session.",
         ));
     }
-    // Native puffs names may be truncated. The kernel fsid and exact target
-    // identify the mount independently of display text or command argv.
+    // Native names may be truncated. The kernel fsid and exact target identify
+    // a visible mount independently of display text or command argv. FreeBSD
+    // NOWAIT may skip busy entries: None is NOT authority to release resources.
     serde_json::to_string(&serde_json::json!({
         "fsid": mount.fsid, "source": mount.source,
         "target": mount.target, "filesystem": mount.filesystem,

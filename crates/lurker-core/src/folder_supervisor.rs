@@ -172,6 +172,11 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool, descriptor: Option
         session.readonly,
     )?;
     if held_fence.is_some() { args.push("--fenced-mountpoint".into()); }
+    #[cfg(target_os = "freebsd")]
+    if session.managed.is_some() {
+        args.push("--managed-close".into());
+        args.push(dir.clone().into_os_string());
+    }
     if initializing && session.backend == VolumeType::Cryfs {
         args.splice(
             0..0,
@@ -214,7 +219,19 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool, descriptor: Option
     let ready = (session.backend == VolumeType::Cryptomator).then(|| dir.clone());
     let out = std::thread::spawn(move || collect(stdout, ready));
     let err = std::thread::spawn(move || collect(stderr, None));
+    #[cfg(not(target_os = "freebsd"))]
     let send_result = send(&mut child, secret);
+    #[cfg(target_os = "freebsd")]
+    let send_result = if let Some(lease) = &session.managed {
+        (|| {
+            lease.validate()?;
+            let mut pipe = child.stdin.take().ok_or_else(|| AppError::new("Missing managed credential pipe."))?;
+            pipe.write_all(secret.as_bytes()).and_then(|_| pipe.write_all(b"\n"))
+                .and_then(|_| pipe.write_all(lease.bootstrap_token().as_bytes()))
+                .and_then(|_| pipe.write_all(b"\n"))
+                .map_err(|e| AppError::io("Cannot send managed backend credentials", e))
+        })()
+    } else { send(&mut child, secret) };
     let status = child
         .wait()
         .map_err(|e| AppError::io("Cannot wait for backend exit", e))?;
@@ -227,6 +244,12 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool, descriptor: Option
     let closed_ack = acknowledged(&stdout, "closed");
     // Redact each stream before joining: either bounded capture may end
     // halfway through a password, independently of the other stream.
+    #[cfg(target_os = "freebsd")]
+    let (stdout, stderr) = if let Some(lease) = &session.managed {
+        // Redact bootstrap credentials independently before password redaction.
+        (diagnostic(stdout, lease.bootstrap_token().as_bytes()).into_bytes(),
+         diagnostic(stderr, lease.bootstrap_token().as_bytes()).into_bytes())
+    } else { (stdout, stderr) };
     let combined = format!(
         "{}\n{}",
         diagnostic(stdout, &password),
@@ -266,6 +289,22 @@ pub(super) fn check_close(dir: &Path, backend: VolumeType) -> AppResult<()> {
     )))
 }
 
+#[cfg(target_os = "freebsd")]
+pub(super) fn check_managed_close(dir: &Path) -> AppResult<()> {
+    let result = read_record::<BackendResult>(dir, "backend-result.json")?
+        .ok_or_else(|| AppError::new("Managed backend exit result unavailable; session retained."))?;
+    if managed_exit_accepted(&result) {
+        Ok(())
+    } else {
+        Err(AppError::new("Managed backend requires natural exit zero and its close acknowledgment; session retained."))
+    }
+}
+
+#[cfg(target_os = "freebsd")]
+fn managed_exit_accepted(result: &BackendResult) -> bool {
+    result.code == Some(0) && result.signal.is_none() && result.closed_ack
+}
+
 pub(super) fn dispatch() -> Option<i32> {
     let args: Vec<_> = std::env::args_os().collect();
     if args.get(1).and_then(|v| v.to_str()) != Some("--lurker-folder-supervisor") {
@@ -296,6 +335,21 @@ pub(super) fn dispatch() -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "freebsd")]
+    #[test]
+    fn managed_close_requires_natural_zero_exit_and_independent_stdout_ack() {
+        for (code, signal, closed_ack, accepted) in [
+            (Some(0), None, true, true),
+            (Some(0), None, false, false),
+            (Some(143), None, true, false),
+            (None, Some(libc::SIGTERM), true, false),
+            (Some(1), None, true, false),
+            (None, None, true, false),
+        ] {
+            let result = BackendResult { code, signal, closed_ack, diagnostic: String::new() };
+            assert_eq!(managed_exit_accepted(&result), accepted);
+        }
+    }
     #[test]
     fn mounted_ack_is_published_before_stdout_closes_and_only_after_a_complete_message() {
         let dir = std::env::temp_dir().join(format!("lurker-supervisor-ready-{}", nonce()));
@@ -350,6 +404,10 @@ mod tests {
             process: None,
             supervisor: None,
             fence: None,
+            #[cfg(target_os = "freebsd")]
+            managed: None,
+            #[cfg(target_os = "freebsd")]
+            managed_underlay: None,
         };
         write_record(&dir, "session.json", &session).unwrap();
         let canonical = fs::canonicalize(&dir).unwrap();

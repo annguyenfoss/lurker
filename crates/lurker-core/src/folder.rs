@@ -18,6 +18,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[path = "folder_supervisor.rs"]
 mod supervisor;
+#[cfg(any(target_os = "freebsd", test))]
+#[path = "folder/managed.rs"]
+mod managed;
 #[path = "folder/fence.rs"]
 mod fence;
 #[cfg(target_os = "netbsd")]
@@ -40,6 +43,8 @@ pub(crate) fn run_supervisor_if_requested() -> Option<i32> {
 
 const WAIT: Duration = Duration::from_secs(60);
 const SCHEMA: u32 = 1;
+#[cfg(target_os = "freebsd")]
+const MANAGED_SCHEMA: u32 = 2;
 
 pub(crate) fn is_folder(kind: VolumeType) -> bool {
     matches!(
@@ -235,6 +240,12 @@ struct Session {
     supervisor: Option<Process>,
     #[serde(default)]
     fence: Option<fence::Journal>,
+    #[cfg(target_os = "freebsd")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    managed: Option<managed::Lease>,
+    #[cfg(target_os = "freebsd")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    managed_underlay: Option<Identity>,
 }
 
 fn secure_dir(path: &Path) -> AppResult<()> {
@@ -351,7 +362,24 @@ fn session_snapshot(path: &Path) -> AppResult<Vec<(PathBuf, Session)>> {
         let session: Session = serde_json::from_slice(&bytes).map_err(|_| {
             AppError::new("Malformed folder session; preserve it for manual recovery.")
         })?;
-        if session.schema != SCHEMA {
+        #[cfg(not(target_os = "freebsd"))]
+        let expected_schema = SCHEMA;
+        #[cfg(target_os = "freebsd")]
+        let expected_schema = {
+            if let Some(lease) = &session.managed {
+                lease.validate()?;
+                if session.backend != VolumeType::Cryptomator || session.managed_underlay.is_none() {
+                    return Err(AppError::new("Invalid managed directory session; preserve it."));
+                }
+                MANAGED_SCHEMA
+            } else {
+                if session.backend == VolumeType::Cryptomator || session.managed_underlay.is_some() {
+                    return Err(AppError::new("FreeBSD Cryptomator session lacks managed ownership; preserve it."));
+                }
+                SCHEMA
+            }
+        };
+        if session.schema != expected_schema {
             return Err(AppError::new("Unsupported folder session schema."));
         }
         result.push((directory, session));
@@ -728,6 +756,16 @@ fn mount_identity(path: &Path) -> AppResult<Option<String>> {
     }
 }
 
+fn session_mount_observation(session: &Session) -> AppResult<Option<String>> {
+    #[cfg(target_os = "freebsd")]
+    if session.managed.is_some() {
+        // Positive readiness/listing observation only. NOWAIT can omit busy
+        // entries; managed close never treats its absence as release authority.
+        return crate::bsd::folder_mount_identity(&session.mountpoint);
+    }
+    mount_identity(&session.mountpoint)
+}
+
 fn password(value: Option<String>, create: bool) -> AppResult<String> {
     let value = match value {
         Some(v) => v,
@@ -1083,6 +1121,15 @@ fn mount_inner(
             .ok().and_then(|v| v.get("fenced_mountpoint_protocol").and_then(|n| n.as_u64())) == Some(1);
         if !supported { return Err(AppError::new("The private Cryptomator backend must support mountpoint fencing protocol 1; update it before unlocking.")); }
     }
+    #[cfg(target_os = "freebsd")]
+    if c.volume_type == VolumeType::Cryptomator {
+        let capabilities = backend_command(c.volume_type, &executable).arg("--capabilities")
+            .stdout(Stdio::piped()).output()
+            .map_err(|e| AppError::io("Cannot inspect managed-close capability", e))?;
+        let supported = capabilities.status.success() && serde_json::from_slice::<serde_json::Value>(&capabilities.stdout)
+            .ok().and_then(|v| v.get("managed_close_protocol").and_then(|n| n.as_u64())) == Some(1);
+        if !supported { return Err(AppError::new("FreeBSD Cryptomator requires managed close protocol 1; update the private backend.")); }
+    }
     let secret = password(c.passphrase, false)?;
     let source = fs::canonicalize(&c.source)
         .map_err(|e| AppError::io("Cannot resolve encrypted directory", e))?;
@@ -1145,6 +1192,10 @@ fn mount_inner(
         .join(format!("session-{}-{}", std::process::id(), nonce()));
     secure_dir(&dir)?;
     let held_fence = if fence::required(c.volume_type) { Some(fence::prepare(&mountpoint)?) } else { None };
+    #[cfg(target_os = "freebsd")]
+    let managed = if c.volume_type == VolumeType::Cryptomator { Some(managed::Lease::new()?) } else { None };
+    #[cfg(target_os = "freebsd")]
+    let managed_underlay = if managed.is_some() { Some(Identity::read(&mountpoint)?) } else { None };
     let mut session = Session {
         schema: SCHEMA,
         backend: c.volume_type,
@@ -1161,7 +1212,13 @@ fn mount_inner(
         process: None,
         supervisor: None,
         fence: held_fence.as_ref().map(|(journal, _)| journal.clone()),
+        #[cfg(target_os = "freebsd")]
+        managed,
+        #[cfg(target_os = "freebsd")]
+        managed_underlay,
     };
+    #[cfg(target_os = "freebsd")]
+    if session.managed.is_some() { session.schema = MANAGED_SCHEMA; }
     save(&dir, &session)?;
     if let Some((_, file)) = held_fence.as_ref() {
         fence::arm(&session.mountpoint, file, session.fence.as_mut().unwrap())?;
@@ -1210,7 +1267,14 @@ fn mount_inner(
                 save(&dir, &session)?;
             }
         }
-        if let Some(identity) = mount_identity(&session.mountpoint)? {
+        #[cfg(target_os = "freebsd")]
+        if let (Some(lease), Some(process)) = (&session.managed, &session.process) {
+            if fs::symlink_metadata(dir.join("control.sock")).is_ok()
+                && managed::request(&dir, lease, process, managed::Command::Status)? == managed::State::Retained {
+                return Err(AppError::new("Cryptomator startup retained its resources; explicitly close this source before retrying."));
+            }
+        }
+        if let Some(identity) = session_mount_observation(&session)? {
             if session.process.is_none() {
                 return Err(AppError::new("Mounted backend identity unavailable; session retained."));
             }
@@ -1355,6 +1419,10 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
             archive.display()
         )));
     }
+    #[cfg(target_os = "freebsd")]
+    if session.managed.is_some() {
+        return unmount_managed(&dir, &session, output);
+    }
     let mut retry_available = cfg!(target_os = "macos");
     loop {
         if Identity::read(&session.source)? != session.source_identity {
@@ -1450,6 +1518,56 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
     Ok(())
 }
 
+/// Provider-owned FSID unmount precedes CryptoFS disposal. This branch never
+/// invokes the generic native unmount helper or signals the JVM. Its admission
+/// remains gated by supported(): FreeBSD Cryptomator is not enabled yet.
+#[cfg(target_os = "freebsd")]
+fn unmount_managed(dir: &Path, session: &Session, output: Output) -> AppResult<()> {
+    if Identity::read(&session.source)? != session.source_identity {
+        return Err(AppError::new("Encrypted directory was replaced; managed session retained."));
+    }
+    let lease = session.managed.as_ref().ok_or_else(|| AppError::new("Managed lease missing."))?;
+    let recovered_process;
+    let process = if let Some(process) = session.process.as_ref() {
+        process
+    } else {
+        recovered_process = supervisor::read_record::<Process>(dir, "backend-process.json")?
+            .ok_or_else(|| AppError::new("Managed backend identity unavailable; session retained."))?;
+        &recovered_process
+    };
+    let mut state = managed::request(dir, lease, process, managed::Command::Close)?;
+    let started = Instant::now();
+    while state == managed::State::Closing && started.elapsed() < WAIT {
+        std::thread::sleep(Duration::from_millis(50));
+        state = managed::request(dir, lease, process, managed::Command::Status)?;
+    }
+    if state != managed::State::Closed {
+        return Err(AppError::new("Managed close was not confirmed; backend, CryptoFS and session retained. Close consumers and retry."));
+    }
+    // The authenticated CLOSED reply requires the provider's successful owned
+    // normal-unmount receipt and natural loop0. Underlay identity additionally
+    // rejects a replacement at the mountpoint without a global MNT_WAIT scan.
+    let underlay = session.managed_underlay.as_ref()
+        .ok_or_else(|| AppError::new("Original managed underlay identity unavailable; session retained."))?;
+    if &Identity::read(&session.mountpoint)? != underlay
+        || Identity::read(&session.source)? != session.source_identity {
+        return Err(AppError::new("Managed source or mountpoint changed after close; session retained."));
+    }
+    let monitor = session.supervisor.as_ref()
+        .ok_or_else(|| AppError::new("Managed supervisor identity unavailable; session retained."))?;
+    let started = Instant::now();
+    while alive(process)? || alive(monitor)? {
+        if started.elapsed() > Duration::from_secs(15) {
+            return Err(AppError::new("Managed close replied but natural process exit is unconfirmed; session retained."));
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    supervisor::check_managed_close(dir)?;
+    fs::remove_dir_all(dir).map_err(|e| AppError::io("Cannot remove closed managed session", e))?;
+    output.success("Directory vault closed.");
+    Ok(())
+}
+
 pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
     if (crate::effective_uid() == 0 && !cfg!(target_os = "openbsd"))
         || (cfg!(target_os = "openbsd") && crate::effective_uid() != 0) {
@@ -1461,13 +1579,17 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
         if from_previous_freebsd_boot(&s)? {
             continue;
         }
-        let mounted = mount_identity(&s.mountpoint)?
+        let mounted = session_mount_observation(&s)?
             .is_some_and(|identity| s.mount_identity.as_ref() == Some(&identity));
         let running = match s.process.as_ref() {
             Some(process) => alive(process)?,
             None => false,
         };
-        if mounted || running || s.fence.as_ref().is_some_and(|journal| journal.armed) {
+        #[cfg(target_os = "freebsd")]
+        let managed_retained = s.managed.is_some();
+        #[cfg(not(target_os = "freebsd"))]
+        let managed_retained = false;
+        if mounted || running || managed_retained || s.fence.as_ref().is_some_and(|journal| journal.armed) {
             result.push(ActiveVolume {
                 privilege_mode: if cfg!(target_os = "openbsd") { PrivilegeMode::Privileged } else { PrivilegeMode::Unprivileged },
                 source_path: Some(s.source),
@@ -1618,7 +1740,38 @@ mod tests {
             process: None,
             supervisor: None,
             fence: None,
+            #[cfg(target_os = "freebsd")]
+            managed: None,
+            #[cfg(target_os = "freebsd")]
+            managed_underlay: None,
         }
+    }
+    #[cfg(target_os = "freebsd")]
+    #[test]
+    fn managed_sessions_require_new_schema_and_bound_cryptomator_underlay() {
+        let root = std::env::temp_dir().join(format!("lurker-managed-schema-{}", nonce()));
+        secure_dir(&root).unwrap();
+        let directory = root.join("session-test");
+        secure_dir(&directory).unwrap();
+        let mut session = snapshot_record();
+        session.backend = VolumeType::Cryptomator;
+        save(&directory, &session).unwrap();
+        assert!(session_snapshot(&root).is_err(), "No legacy unmount/signal fallback");
+        session.managed = Some(managed::Lease::new().unwrap());
+        session.schema = MANAGED_SCHEMA;
+        save(&directory, &session).unwrap();
+        assert!(session_snapshot(&root).is_err(), "An underlying mountpoint identity is mandatory");
+        session.managed_underlay = Some(Identity { device: 7, inode: 8 });
+        save(&directory, &session).unwrap();
+        assert_eq!(session_snapshot(&root).unwrap().len(), 1);
+        session.schema = SCHEMA;
+        save(&directory, &session).unwrap();
+        assert!(session_snapshot(&root).is_err(), "Old helpers must reject the new ownership protocol");
+        session.schema = MANAGED_SCHEMA;
+        session.backend = VolumeType::Gocryptfs;
+        save(&directory, &session).unwrap();
+        assert!(session_snapshot(&root).is_err(), "Managed protocol is confined to its selected backend");
+        fs::remove_dir_all(root).unwrap();
     }
     #[cfg(target_os = "freebsd")]
     #[test]
@@ -1779,6 +1932,10 @@ mod tests {
             process: None,
             supervisor: None,
             fence: None,
+            #[cfg(target_os = "freebsd")]
+            managed: None,
+            #[cfg(target_os = "freebsd")]
+            managed_underlay: None,
         };
         assert!(confirmed_mount_directory(&session, "confirmed mount").is_ok());
         assert!(confirmed_mount_directory(&session, "replacement mount").is_err());
