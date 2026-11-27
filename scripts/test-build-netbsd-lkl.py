@@ -20,6 +20,36 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD", "native isolated mount observer")
+    def test_native_mount_observer_protocol_and_bounded_cancellation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = BUILDER.ROOT / "native/netbsd/lkl"
+            helper = Path(os.environ["LURKER_NETBSD_MOUNT_OBSERVER"]) if os.environ.get("LURKER_NETBSD_MOUNT_OBSERVER") else Path(tmp) / "observer"
+            control = Path(tmp) / "control"
+            sources = [("observer-control.c", control)]
+            if not os.environ.get("LURKER_NETBSD_MOUNT_OBSERVER"):
+                sources.append(("mount-observer.c", helper))
+            for source, binary in sources:
+                subprocess.run(["/usr/bin/cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror",
+                                str(root / source), "-o", str(binary)], check=True, timeout=30)
+            result = subprocess.run([str(control), str(helper), str(control)],
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            print("native observer tested binary SHA-256=" + BUILDER.digest(helper))
+            print(result.stdout, end="")
+
+    def test_observer_input_tampering_cannot_create_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inputs = root / "native/netbsd/lkl"
+            inputs.mkdir(parents=True)
+            for name in BUILDER.OBSERVER_INPUTS:
+                (inputs / name).write_text("unreviewed input")
+            with mock.patch.object(BUILDER, "ROOT", root):
+                with self.assertRaisesRegex(RuntimeError, "Observer source checksum differs"):
+                    BUILDER.build_mount_observer(root / "output", 10)
+            self.assertFalse((root / "output").exists())
+
     @unittest.skipUnless(platform.system() == "NetBSD", "native global mount inventory")
     def test_global_mount_identity_survives_path_replacement(self):
         with tempfile.TemporaryDirectory() as tmp:

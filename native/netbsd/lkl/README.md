@@ -207,6 +207,29 @@ query synchronously. A separately bounded native-only observer must query while
 the main thread keeps serving, and capture only after a real callback was served.
 That observer/cancellation boundary is still a required frontend gate.
 
+`mount-observer.c` and `netbsd-observer.h` provide a separate read-only native
+inventory process and a nonblocking parent-side poller. The observer has no LKL
+or FUSE linkage. Its bounded protocol checks the native record size and count;
+partial, malformed or failed snapshots cannot establish absence. Its private
+process group receives TERM, then unconditional KILL before the leader is reaped.
+A worker that still cannot be reaped remains owned and blocks another launch;
+no thread detaches and no query timeout authorizes storage release. The native
+control checks the actual four-mount inventory, malformed replies, a ready
+TERM-ignoring worker and clock failure cancellation.
+
+```sh
+python3.14 scripts/build-netbsd-lkl.py --work-dir /path/to/lkl-work \
+  --receipt /path/to/lkl-work/observer-build.json --timeout 60 \
+  --observer-output /path/to/lkl-work/observer-isolated
+```
+
+The build pins and copies its three source inputs, emits a separate native PIE
+executable and records its source/SDK/ELF hashes. It never installs. Set
+`LURKER_NETBSD_MOUNT_OBSERVER` to that exact executable while running the focused
+tests to exercise its actual bytes. The frontend must make all source/channel
+FDs close-on-exec and poll it while serving; that final wiring and actual mounted
+lifecycle remain unqualified.
+
 https://github.com/NetBSD/src/blob/4299530ca04c23eff6e740a3d97d29bca16c22fe/sys/kern/vfs_mount.c
 
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072

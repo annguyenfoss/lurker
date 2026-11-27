@@ -12,7 +12,7 @@
 struct netbsd_mounts { struct statvfs *items; size_t count; };
 struct netbsd_mount_identity { struct statvfs mount; bool captured; };
 
-static void netbsd_mounts_free(struct netbsd_mounts *list)
+static inline void netbsd_mounts_free(struct netbsd_mounts *list)
 {
     free(list->items);
     *list=(struct netbsd_mounts){0};
@@ -21,7 +21,7 @@ static void netbsd_mounts_free(struct netbsd_mounts *list)
 /* Native host inventory, outside a host chroot. MNT_NOWAIT avoids stat RPCs,
  * but the kernel iterator may still wait for mount transactions. Run this in
  * a bounded native-only worker, never on the thread serving PUFFS callbacks. */
-static int netbsd_mounts_get(struct netbsd_mounts *list)
+static inline int netbsd_mounts_get(struct netbsd_mounts *list)
 {
     for (int attempt=0;attempt<3;attempt++) {
         int count=getvfsstat(NULL,0,MNT_NOWAIT);
@@ -41,7 +41,7 @@ static int netbsd_mounts_get(struct netbsd_mounts *list)
     return EAGAIN;
 }
 
-static bool netbsd_mount_strings(const struct statvfs *mount)
+static inline bool netbsd_mount_strings(const struct statvfs *mount)
 {
     return memchr(mount->f_fstypename,0,sizeof(mount->f_fstypename)) &&
            memchr(mount->f_mntfromname,0,sizeof(mount->f_mntfromname)) &&
@@ -51,7 +51,7 @@ static bool netbsd_mount_strings(const struct statvfs *mount)
 /* Observe only after a real callback was served, never merely from fuse init.
  * The frontend supplies a fresh short nonce in the exact puffs|type name.
  * This operates on a worker's completed snapshot; it makes no kernel query. */
-static int netbsd_mount_capture(struct netbsd_mount_identity *identity,
+static inline int netbsd_mount_capture(struct netbsd_mount_identity *identity,
     const struct netbsd_mounts *before,const struct netbsd_mounts *current,
     const char *target,const char *type,uid_t owner)
 {
@@ -78,7 +78,7 @@ static int netbsd_mount_capture(struct netbsd_mount_identity *identity,
 
 /* 0: absent globally; 1: same mount still present, including at another path;
  * -errno: inconsistent/unknown. A replacement path never supplies identity. */
-static int netbsd_mount_present(const struct netbsd_mount_identity *identity,
+static inline int netbsd_mount_present(const struct netbsd_mount_identity *identity,
                                 const struct netbsd_mounts *current)
 {
     int found=0;
