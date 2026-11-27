@@ -114,15 +114,15 @@ reopened and verified all six hashes, then closed. The cohort records 92 complet
 strict-JSON responses. HAMMER2 was initially unloaded after boot and loaded
 through normal Auto reopen; it was not manually preloaded.
 
-The physical factor's original payload is private UID0 data, while the filesystem
-root belongs to UID1300 at mode 0700. The initial actual-user verifier correctly
+The physical factor's original payload is private UID 0 data, while the filesystem
+root belongs to UID 1300 at mode 0700. The initial actual-user verifier correctly
 received EACCES on that root-private tree; its failed receipt and full raw image
-are retained. A separate UID1300 payload tree was written/fsynced/read and
+are retained. A separate UID 1300 payload tree was written/fsynced/read and
 verified across normal close/reopen and reboot, without chowning the old data.
-Explicit UID0 verification covers the root-written tree. Both trees passed
+Explicit UID 0 verification covers the root-written tree. Both trees passed
 post-reboot append/new-file and close/reopen hashes. A private test's additional
 mode assertion on public paper files was corrected to record their actual modes;
-those files remain UID1300/0644 under a private 0700 directory. Its receipt and
+those files remain UID 1300/0644 under a private 0700 directory. Its receipt and
 raw snapshot are retained, with no product/source change inferred.
 
 The baseline additionally passed 18 Btrfs cipher/authentication/Auto variations,
@@ -203,7 +203,7 @@ source `e927e40bb235815343302677531d48f1afa4f939`. Its native workspace gates
 passed 186 Rust tests, zero failures and 15 ignored, plus 101 Python checks.
 The real pacman package `lurker 0.1.0.native20261127.e927e40-1` remains installed;
 package verification reported zero altered files. All six AES/Serpent/Twofish
-password/keyfile CLI lifecycles passed as UID1300 using Auto discovery and the
+password/keyfile CLI lifecycles passed as UID 1300 using Auto discovery and the
 downloaded payload, including XFS, ext4 and Btrfs. Each completed write,
 close/reopen, append/new-file, close/reopen and five-hash verification.
 
@@ -233,3 +233,36 @@ supersedes earlier pending-eligibility wording without changing frozen indexes
 or runtime identities. The historical 24 missing physical console logs and lost
 early synthetic credentials remain missing evidence; this follow-up does not
 reconstruct them or claim a new full matrix or reboot run.
+
+
+## Authorized UFS1 configured-module follow-up completed
+
+The later explicit UFS1 task is complete; Arch is idle with no deferred work.
+The current/default `7.3.6-arch1-1` kernel now has a separately installed matching
+UFS module built from exact official Arch source, selecting only the existing
+`CONFIG_UFS_FS_WRITE` option. Source C/headers/Makefile and installed global
+headers/config remain unchanged. The original signed stock module is preserved;
+normal depmod/autoload works across ordinary reboot. No force loading, signature
+bypass or global policy weakening was used. This configured writer is distinct
+from the original stock-writer negatives and retains upstream's experimental
+status.
+
+Installed e927 products passed all six affected container cells and all six new
+physical cells, plus native permission persistence/foreign denial, 25 strict
+helper actions across three ordinary-reboot cohorts, and actual installed GUI
+row close/reopen/write/close. Physical inner case payload I/O was UID 0; container,
+folder, helper and actual GUI caller evidence explicitly identifies UID 1300.
+The generic GUI fixture failed because native FUSE rejects a plaintext mountpoint
+on UFS; that fixture and factor were preserved. The ordinary UI flow passed with
+ciphertext on physical UFS1 and a permitted ext4 plaintext mountpoint, without
+changing FUSE policy.
+
+All run notes, controller failures, exact official source/configuration/build
+steps, private archive/hash references and cleanup are in
+`ARCHLINUX_UFS1.md`. The private index is
+`build/ufs1-config-20261127/completion-evidence-index.json` under this host's
+evidence root. Both new task disks were normally closed and detached from live
+and persistent VM configuration by 2026-11-27 07:19:50 UTC; original disk inventory
+is unchanged. This append-only follow-up completes UFS1's applicable cells while
+preserving all older source identities and missing-evidence limitations. It does
+not claim a newly rerun full matrix, all-filesystem reboot or power-loss proof.
