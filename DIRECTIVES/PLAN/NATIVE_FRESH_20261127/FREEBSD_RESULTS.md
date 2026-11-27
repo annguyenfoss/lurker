@@ -298,22 +298,78 @@ After all 33 qualified mounts and access gates were observed, the authorized
 ordinary `shutdown -r now` was issued. It **did not complete**. The console
 reached buffers-synced output, detached helper GELI mappings, then reported an
 unrecoverable I/O failure and suspension of the final physical VeraCrypt/ZFS
-pool `lurker_96445_1795736711956201591_5`. SSH refuses connections; the same live
-VM remains running with an unchanged console. No force reset, detach, hidden
+pool `lurker_96445_1795736711956201591_5`. At that point SSH refused connections
+and the same live VM remained running with an unchanged console; preserved-state
+recovery below is separate. No force reset, detach, hidden
 reconciliation or shutdown hook has been introduced. Local
 `validation/shutdown-observation-20261127T010848Z/` retains console SHA-256
 `8f6105d19cc6c318c99d6b8e8e9e87c85ae858e476ee58f75bb8e71b03ca0f46`,
 domain XML, QMP state, block backing paths and resource observations. The full
-cohort/access receipts remain on the preserved build disk awaiting collection.
+cohort/access receipts were subsequently collected from the verified
+recovery copy. An offline audit confirms all 33 access pairs, searchable
+ancestors and prepared hash sets; the external-target failure remains retained.
 
 Primary FreeBSD 15.1 shutdown sources and VeraCrypt's signal/mount-discovery
 sources support a transport-ordering hypothesis: user processes terminate
 before kernel filesystem shutdown, while ZFS's pool-name mount does not match
 VeraCrypt's literal md-device discovery. The exact transport death sequence is
 not proven without guest diagnostics. Console swap-pager exhaustion warnings
-are retained; their contribution is also unproven because no immediate
-pre-shutdown VM/RSS snapshot was captured. No reboot or final clean-resource
+are retained. Persistent syslog places
+them at 01:06:26UTC, 39 seconds before the 01:07:05 shutdown request. No matching
+process-killed record was found. Pressure preceded shutdown, but its contribution
+and an engine OOM death remain unproven; no immediate pre-shutdown guest VM/RSS
+snapshot was captured. No reboot or final clean-resource
 pass is credited. All qcow backing files are preserved.
+
+### Preserved-state recovery and ordinary host prerequisites
+
+The coordinator approved a reversible recovery of this dedicated VM. Native
+libvirt saved the failed RAM/device state with `save --paused`; the domain was
+verified shut off. The root-owned 0600 memory image is 2415777921 bytes.
+All four standalone qcows were copied offline, and each original/copy SHA-256
+pair matched before boot. Original RAM, XML and disks remain unchanged under
+their retained paths. Recovery root is
+`/srv/build/lurker-native-fresh-20261127/freebsd/shutdown-recovery-20261127T011325Z/`;
+local receipts under the matching `validation/` directory retain all four
+hashes, XML, commands and actual block-source checks.
+
+The same domain UUID, MAC, disk serials and normal libvirt labeling were
+preserved; only the four source paths changed to verified copies. The guest
+cold-started on those copies at 01:19:32UTC, with healthy root/build pools.
+No saved RAM was restored concurrently, filesystem repaired, pool force-imported
+or shutdown hook added. This is recovery after a failed shutdown, not an
+ordinary reboot pass.
+
+Small-group recovery with one directory engine at a time verifies **29 of 33
+unique fixtures**: 13 direct rows, two helper fixtures and 14 directory backings.
+Canonical hashes, persisted caller nonce reads, unrelated-user denials and
+normal closes pass, including physical VeraCrypt/ZFS. GELI/ext4 refuses a normal
+read/write mount; read-only dumpe2fs reports an unclean filesystem and
+`e2fsck -n` returns 4 with inode-bitmap/free-inode-count inconsistencies. Every
+repair prompt was declined. A native read-only GELI/ext4 diagnostic recovers all
+five canonical hashes and the caller nonce, then unmounts/detaches normally.
+It is not a product read-only feature or a Create+Read/Write pass. Its three
+directory backings remain blocked by the failed write mount.
+
+The first cold-recovery user-FUSE attempts also exposed an ordinary host setup
+gap: fusefs had been manually loaded before shutdown, but no boot configuration
+loaded it. With no `/dev/fuse`, those attempts failed and their JSON exit/argv
+receipts and unique backend diagnostics remain retained. Affected routes pass
+after an explicitly recorded native `kldload fusefs`. The approved persistent
+ordinary setup now adds fusefs to `kld_list` and sets `vfs.usermount=1` in
+`/etc/sysctl.conf`, with private before-config backups. Native `/dev/fuse` is
+root:operator mode 0666 and actual UID 1300 has read/write access; no devfs rule
+was changed. Persistent availability at the next ordinary boot remains
+unproven. Runtime user-mount authorization 1 is now intentional host setup,
+separate from the earlier temporary batches that restored zero.
+
+One private retest controller reused early terminal-log basenames; its v2 JSON
+receipts and unique failed-session backend diagnostics are preserved, and the
+log snapshot explicitly identifies that mixed-phase limitation. Future phases
+use distinct prefixes. No earlier failed prerequisite receipt was relabeled.
+After Java/font installation and recovery, the unchanged installed desktop
+again passes a real UID 1300 X11/software window probe, with children reaped,
+no loader overrides and a visually inspected fresh frame.
 
 Measured filesystem features below describe the created native profiles, not
 all capabilities available under other mount/format options. Both backend rows
@@ -385,7 +441,7 @@ Genuine FreeBSD structure/errno bindings, provider registration and helper
 selection remain integration work. No OS masquerade, copied crypto logic,
 shared core enablement or custom kernel change was used. New Java packages also
 installed fonts; the prior installed native desktop-window result remains
-identified, and a post-install window repeat is pending guest recovery.
+identified, and the post-install/recovery window repeat above also passes.
 
 ## Primary ordinary-route sources inspected this round
 
