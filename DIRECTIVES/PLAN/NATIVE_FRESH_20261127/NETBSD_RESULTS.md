@@ -1,6 +1,6 @@
 # NetBSD fresh qualification — 2026-11-27
 
-Status: final candidate `cca3c17079b32d7739d7fe30f5f78c7229056db1` is frozen for native workspace, package and CryFS backing-filesystem qualification. Prior-round receipts are not fresh passes.
+Status: final candidate `8e09ac8779bfd022bff05a8753d351db5611a552` is frozen for native workspace, refreshed package and actual-user CGD/CryFS backing-filesystem qualification. Prior-round receipts are not fresh passes.
 
 The assigned host is `adjutant@netbsd-core-01`, running NetBSD 11.1 amd64,
 GENERIC dated 2026-11-02. The current formal release and release-specific
@@ -288,18 +288,47 @@ and legacy access bits, keeps cached attributes current, and enforces standard
 FUSE admission across credential-bearing operations with access/permission
 fallbacks. No kernel, PUFFS cache flags, flush behavior or crypto profile changed.
 
-The final isolated library variant passed actual UID/EUID 1300 list, read,
-create, synced write, append and read on both native NTFS and exFAT. Actual
-UID/EUID 32767 was denied listing, reading and writing. The unchanged official
-CryFS engine then passed all common PDF phases and metadata persistence while
-the unrelated user was denied all three actions through a deliberately
-traversable test parent; all closes and engine exits were normal. Process maps
-verified the exact administrator-owned preview libraries. Capability version
-functions return 1. Host settings and device permissions returned to baseline.
-These libraries remain external host prerequisites; system replacement and
-product preflight detection are still pending review. Existing system libraries
-remain unchanged and lack those capabilities. No final installed backing-matrix
-pass is claimed from the isolated controls.
+The isolated library variants passed actual UID/EUID 1300 list, read, create,
+synced write, append and read on native NTFS and exFAT. Actual UID/EUID 32767
+was denied listing, reading and writing. Ext4 exposed an additional foreign-user
+creation gap in the driver's default access callback. The final correction also
+checks parent search/write access when standard `default_permissions` is
+requested; the Lurker ext4 adapter now explicitly requests that option. Native
+ext4 caller access and unrelated-user denial then passed.
+
+The reproducible host-only builder and pinned four-file patch are committed at
+`a90fcfd` and `091bd71`. Exact source notices remain in its output. Public builder
+output manifest SHA-256 is
+`97e17b6ef1332ded64d7b3328f80c7e7d723654803a9f4ce5af8cbc02828f680`.
+With all FUSE daemons exited, mounts closed and CGD/vnd inventories empty, the
+administrator preserved all three original versioned native libraries and
+symlink/metadata/hash receipts in a root-private backup. The reviewed output was
+then installed atomically at the existing native versioned targets. No libraries
+were included in Lurker's private engine directory or package. Fresh processes
+verified puffs/perfuse capability version 1 and ReFUSE policy version 2; native
+ELF64/x86-64 headers, exact SONAMEs and driver/engine dependencies were recorded.
+
+Fresh controls using the actual installed providers, without a library-path
+override, passed caller access and unrelated-user listing/read/write denial on
+NTFS, exFAT and ext4. Process maps confirmed the versioned `/usr/lib` providers.
+The unchanged official CryFS engine then passed all common PDF phases and
+metadata persistence while the unrelated user was denied all three actions
+through deliberately traversable test ancestors. All closes and engine exits
+were normal. Native mount owner was 1300; actual ReFUSE/puffs provider paths were
+verified. Host user-mount policy and device permissions returned to baseline.
+
+Lurker capability guards are committed at `8e09ac8`. They inspect root-controlled
+native ELF paths and ancestry, use the native loader to enforce architecture,
+verify the exact versioned capability, and require `dladdr` to identify that
+same canonical library as the symbol provider. A dependency symbol cannot
+qualify an unrelated library. Native core checks passed 60 tests with four
+ignored. Before the host installation, fresh stock-provider negatives passed
+three container and three physical creation cases without new files, parameter
+sidecars, partition-byte changes or inventory changes. An actual UID 1300 CryFS
+helper creation also rejected before vault mutation. The draft chmod refresh
+remains removed. A newly built and installed package and complete actual-user
+backing matrix remain pending; isolated or earlier root-writer receipts do not
+supply those passes.
 
 An accidentally overlapping helper probe caused five fail-closed global-folder
 lock rejections in the initial backing dispatch. The original failures are
