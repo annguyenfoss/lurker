@@ -1000,8 +1000,10 @@ must remain distinct from ordinary shutdown and product qualification.
   receipt references by SHA-256, the five approved/live disk paths and domain
   UUID, and raw post-boot results for boot identity, six absent old processes,
   empty mdconfig, automatic FUSE prerequisites and both ONLINE pools. It does
-  not rehash active qcows or independently establish the seven artifact hashes
-  against their pre-boot records; prior offline custody evidence remains separate.
+  not rehash active qcows; prior offline custody evidence remains separate.
+  The follow-on `root-postboot-recovery-artifact-audit.json` matches all seven
+  artifact hashes to retained pre-boot package, install, build and source-kit
+  records, preserving their original qualification scopes.
 
 
 ### Cryptomator no-force candidate1: memory-only gate
