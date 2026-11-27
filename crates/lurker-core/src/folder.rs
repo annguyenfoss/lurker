@@ -323,18 +323,7 @@ fn session_snapshot(path: &Path) -> AppResult<Vec<(PathBuf, Session)>> {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => return Err(AppError::io("Cannot read folder session", error)),
         };
-        let metadata = file
-            .metadata()
-            .map_err(|error| AppError::io("Cannot inspect open folder session", error))?;
-        if !metadata.is_file()
-            || metadata.uid() != crate::effective_uid()
-            || metadata.mode() & 0o077 != 0
-            || metadata.nlink() > 1
-        {
-            return Err(AppError::new(
-                "Folder session record must be a private regular file owned by the login user.",
-            ));
-        }
+        let metadata = private_record_metadata(&file)?;
         if metadata.len() > 65536 {
             return Err(AppError::new(
                 "Folder session exceeds the 64 KiB record limit.",
@@ -358,6 +347,30 @@ fn session_snapshot(path: &Path) -> AppResult<Vec<(PathBuf, Session)>> {
         result.push((directory, session));
     }
     Ok(result)
+}
+
+fn private_record_metadata(file: &File) -> AppResult<fs::Metadata> {
+    private_record_metadata_with_wait(file, || std::thread::sleep(Duration::from_millis(1)))
+}
+
+fn private_record_metadata_with_wait(
+    file: &File,
+    mut wait: impl FnMut(),
+) -> AppResult<fs::Metadata> {
+    for attempt in 0..32 {
+        let metadata = file.metadata()
+            .map_err(|error| AppError::io("Cannot inspect open folder session", error))?;
+        if !metadata.is_file() || metadata.uid() != crate::effective_uid()
+            || metadata.mode() & 0o077 != 0 {
+            return Err(AppError::new("Folder session record must be a private regular file owned by the login user."));
+        }
+        if metadata.nlink() <= 1 { return Ok(metadata); }
+        // Native UFS rename can briefly expose two links while atomically
+        // replacing session.json. Re-stat this same already-open inode only;
+        // a persistent hardlink remains invalid after the bounded wait.
+        if attempt < 31 { wait(); }
+    }
+    Err(AppError::new("Folder session record has persistent extra hardlinks; preserve it."))
 }
 
 #[cfg(target_os = "freebsd")]
@@ -1742,6 +1755,36 @@ mod tests {
                 .any(|a| matches!(a.to_str(), Some("-ro" | "ro" | "--readonly"))));
         }
     }
+    #[test]
+    fn atomic_record_replacement_preserves_held_snapshot_and_rejects_persistent_links() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("session-test");
+        secure_dir(&directory).unwrap();
+        let old_session = snapshot_record();
+        save(&directory, &old_session).unwrap();
+        let mut held = OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW)
+            .open(directory.join("session.json")).unwrap();
+        let old_inode = held.metadata().unwrap().ino();
+        let mut replacement = old_session.clone();
+        replacement.backend = VolumeType::Cryfs;
+        save(&directory, &replacement).unwrap();
+        assert_eq!(private_record_metadata(&held).unwrap().nlink(), 0);
+        let mut bytes = Vec::new(); held.read_to_end(&mut bytes).unwrap();
+        assert_eq!(serde_json::from_slice::<Session>(&bytes).unwrap().backend, old_session.backend);
+        let current = File::open(directory.join("session.json")).unwrap();
+        assert_ne!(private_record_metadata(&current).unwrap().ino(), old_inode);
+        let alias = directory.join("temporary-rename-link");
+        fs::hard_link(directory.join("session.json"), &alias).unwrap();
+        assert_eq!(current.metadata().unwrap().nlink(), 2);
+        let mut retries = 0;
+        let metadata = private_record_metadata_with_wait(&current, || {
+            retries += 1; fs::remove_file(&alias).unwrap();
+        }).unwrap();
+        assert_eq!(retries, 1); assert_eq!(metadata.nlink(), 1);
+        fs::hard_link(directory.join("session.json"), &alias).unwrap();
+        assert!(private_record_metadata_with_wait(&current, || {}).is_err());
+    }
+
     #[test]
     fn conflicting_vault_markers_are_rejected() {
         let dir = std::env::temp_dir().join(format!("lurker-folder-markers-{}", nonce()));
