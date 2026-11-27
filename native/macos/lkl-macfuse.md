@@ -116,6 +116,17 @@ including snprintf/vsnprintf, which could capture native host calls. A native
 adapter review candidate crashed in that kernel formatting implementation before
 kernel initialization. Avoiding one call site is insufficient.
 
+The scope review must judge the link change's actual effect: it adjusts Mach-O
+external/private symbol visibility and retains the existing LKL API and boot-glue
+references. It does not change compiled kernel source, syscall behavior, calling
+conventions, API signatures or structures. Apple's established export-list
+procedure is relevant provenance; local authorship or a kernel-object target
+alone does not establish experimental kernel development. The dependent route
+remains held for coordinated review rather than automatically restarting.
+
+https://developer.apple.com/library/archive/documentation/Performance/Conceptual/CodeFootprint/Articles/ReducingExports.html
+https://github.com/apple-oss-distributions/ld64/blob/main/doc/man/man1/ld-classic.1
+
 The corrected partial link exports exactly 17 `_lkl_*` API/bridge names and four
 references required by the pinned `boot_glue.S`: `___vmalloc_noprof`,
 `_blake2s_compress_generic`, `_init_thread_info`, and `_jiffies_64`. All other
