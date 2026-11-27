@@ -224,3 +224,27 @@ normal closure. The temporary nightly formatter was removed afterward.
 The six affected UFS2 container rows and remaining final-user/desktop gates are
 queued sequentially as PID 305007; desktop gate coordinator PID 314208 waits.
 Ordinary OS reboot and the new destructive scratch disk remain pending.
+
+The final 678 follow-up user queue completed **nine groups passed, zero failed**:
+six normal-user password/keyfile full-payload CLI lifecycles, the unchanged
+terminal-survival suite, strict password helper samples, and the corrected-UFS2
+six-case container sweep. The latter passed all three disk methods and all three
+directory engines with the completed host prerequisite. The six corresponding
+applicability cells now point to those exact 678 receipts; the other unchanged
+cells retain their 576 identities. A real 678 desktop window and gocryptfs/LUKS
+GUI-to-helper callbacks also passed. Native Ubuntu Python tests of the committed
+producer, consumer and Debian package builder passed **73/73**.
+
+The committed-input staging archive SHA-256 is
+`c431fac8feaa390ac756c43c0e23019881d914f2a58c760a17e219a72ed39830`.
+All 1,088 installed private-prefix payload files match that archive's bytes and
+modes. The separate preview archive remains identified independently. There is
+no pre-existing system Lurker package or `/usr/lib/lurker` payload, so the new
+native `.deb` will be installed through dpkg and its installed runtime qualified
+before reboot preparation. Native package build PID 322132 and installer/runtime
+coordinator PID 326213 are live; resource pilot PID 327361 waits for their gates.
+The complete final build evidence has moved from tmpfs to persistent storage,
+with 497 entries checked before removal of the duplicate and a compatibility
+symlink retained. Only obsolete ca7/576 product executable copies were reclaimed:
+all six matched preserved complete archives and had no running users, releasing
+1,055,459,976 bytes. Their historical package archives and metadata remain intact.
