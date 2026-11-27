@@ -19,8 +19,13 @@ def main():
     passed = [c for c in original['cases'] if c['status'] == 'passed']
     assert original['status'] == 'terminal' and len(passed) == 63 and len(failed) == 3
     assert all(c['filesystem'] == 'zfs' and c['route'] == 'privileged' for c in failed)
-    assert not original.get('backing_errors') and not original.get('cleanup_errors')
+    assert not original.get('backing_errors')
     creation = json.loads((R / 'reboot-cohort-678/matrix.json').read_text())
+    backing = next(b for b in creation['backing_records'] if b['filesystem'] == 'zfs')
+    cleanup = original.get('cleanup_errors', [])
+    assert len(cleanup) == 1 and "cannot unmount '" + backing['mountpoint'] + "'" in cleanup[0]
+    directory_rows = [c for c in creation['cases'] if c['filesystem'] == 'zfs' and c['route'] == 'directory-on-filesystem']
+    assert len(directory_rows) == 3
     rows = {c['backend']: c for c in creation['cases'] if c['filesystem'] == 'zfs' and c['route'] == 'privileged'}
     reference = next(c for c in passed if c['route'] == 'privileged')
     wanted = reference['after_reopen_hashes']
@@ -31,7 +36,8 @@ def main():
             if line.split(' - ')[0].split()[4].startswith(str(R) + '/')} == expected_mounts
     out = dict(status='running', runtime_commit=original['runtime_commit'],
                failure_receipt=str(R / 'reboot-verify-678/reboot.json'),
-               first_boot_passes_retained=63, cases=[], native_operations=[])
+               first_boot_unaffected_passes_retained=60, backing_cleanup_failure=cleanup,
+               cases=[], native_operations=[])
     receipt = R / 'logs/fixture-bind-rprivate-repair.json'
     def save(): h.atomic_json(receipt, out)
     def native(argv):
@@ -39,8 +45,9 @@ def main():
         out['native_operations'].append(dict(argv=list(map(str, argv)), code=c.returncode, stdout=c.stdout, stderr=c.stderr)); save()
         if c.returncode: raise RuntimeError('Native repair command failed: ' + str(argv[0]))
         return c.stdout.strip()
-    def payload(mount, expected):
-        c = subprocess.run(['python3', str(Q / 'FEDORA_REBOOT_IO.py'), str(mount), json.dumps(expected), 'verify'], capture_output=True, text=True, timeout=90)
+    def payload(mount, expected, user=False):
+        c = subprocess.run((['sudo', '-n', '-u', 'adjutant', '--'] if user else []) +
+                           ['python3', str(Q / 'FEDORA_REBOOT_IO.py'), str(mount), json.dumps(expected), 'verify'], capture_output=True, text=True, timeout=90)
         value = json.loads(c.stdout)
         if c.returncode or not value['ok']: raise RuntimeError('Bounded repair payload verification failed: ' + c.stdout)
         return value['hashes']
@@ -76,29 +83,49 @@ def main():
     native(['mount', '--make-rprivate', R])
     assert native(['findmnt', '-rn', '-M', R, '-o', 'PROPAGATION']) == 'private'
     out.update(fstab_backup=str(backup), fstab_sha256=h.file_hash(fstab), generated_mount_unit=generated)
+    # Export the already-unmounted exact backing pool; the first native export
+    # had encountered the same propagated mount alias before returning failure.
+    native(['zpool', 'export', backing['pool']])
+    raw_backup = R / 'reboot-zfs-first-attempt-failures' / 'directory-backing.img'
+    raw_backup.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    native(['cp', '--sparse=always', '--', backing['image'], raw_backup]); raw_backup.chmod(0o600)
+    assert h.file_hash(raw_backup) == h.file_hash(Path(backing['image']))
+    out['closed_backing_failure_image'] = dict(path=str(raw_backup), sha256=h.file_hash(raw_backup))
     baseline_rows = []
-    for item in out['cases']:
-        row = rows[item['backend']]; old = row['receipt']; mount = Path(item['mountpoint'])
+    disk_items = list(out['cases'])
+    work = [(rows[item['backend']], item, False) for item in disk_items]
+    for row in directory_rows:
+        item = dict(backend=row['backend'], source=row['receipt']['source'],
+                    mountpoint=row['receipt']['mountpoint'], role='directory-on-filesystem')
+        out['cases'].append(item); work.append((row, item, True))
+    for row, item, user in work:
+        old = row['receipt']; mount = Path(item['mountpoint'])
+        if user and row is directory_rows[0]:
+            native(['zpool', 'import', '-d', Path(backing['image']).parent, backing['pool']])
         password = (Path(old['fixture']) / '.generated-test-credential').read_text()
         def cli(action):
             operands = [old['source'], str(mount)] if action == 'mount' else [str(mount)]
             log = R / ('logs/zfs-bind-repair-' + item['backend'] + '-' + str(len(item.get('operations', []))) + '-' + action + '.log')
-            value = h.terminal([str(P / 'bin/lurker'), action, '--type', 'auto', '--color=never', *operands], password, 180, log)
+            prefix = ['sudo', '-n', '-u', 'adjutant', '--'] if user else []
+            value = h.terminal([*prefix, str(P / 'bin/lurker'), action, '--type', 'auto', '--color=never', *operands], password, 180, log)
             item.setdefault('operations', []).append(dict(action=action, log=str(log), **value)); save()
             if value['exit_code'] or value['timed_out']: raise RuntimeError('Normal product repair lifecycle failed')
-        native(['umount', item['alias']])
-        assert h.linux_mount_record(Path('/proc/self/mountinfo').read_text(), mount)['mountpoint'] == str(mount)
-        cli('unmount')
-        assert not native(['losetup', '-j', old['source']])
-        backup_dir = R / 'reboot-zfs-first-attempt-failures' / item['backend']; backup_dir.mkdir(mode=0o700, parents=True)
-        image = backup_dir / 'vault.img'
-        source_hash = h.file_hash(Path(old['source']))
-        native(['cp', '--sparse=always', '--', old['source'], image]); image.chmod(0o600)
-        assert h.file_hash(image) == source_hash == h.file_hash(Path(old['source']))
-        shutil.copy2(Path(old['fixture']) / '.generated-test-credential', backup_dir / '.generated-test-credential')
-        item['closed_failure_image'] = dict(path=str(image), sha256=source_hash)
-        cli('mount'); payload(mount, wanted)
+        if not user:
+            native(['umount', '-i', item['alias']])
+            assert h.linux_mount_record(Path('/proc/self/mountinfo').read_text(), mount)['mountpoint'] == str(mount)
+            cli('unmount')
+            assert not native(['losetup', '-j', old['source']])
+            backup_dir = R / 'reboot-zfs-first-attempt-failures' / item['backend']; backup_dir.mkdir(mode=0o700, parents=True)
+            image = backup_dir / 'vault.img'
+            source_hash = h.file_hash(Path(old['source']))
+            native(['cp', '--sparse=always', '--', old['source'], image]); image.chmod(0o600)
+            assert h.file_hash(image) == source_hash == h.file_hash(Path(old['source']))
+            shutil.copy2(Path(old['fixture']) / '.generated-test-credential', backup_dir / '.generated-test-credential')
+            item['closed_failure_image'] = dict(path=str(image), sha256=source_hash)
+        cli('mount'); payload(mount, wanted, user)
         def retain_first_attempt_file():
+            if user:
+                os.setgroups([]); os.setgid(1300); os.setuid(1300)
             folder = mount / 'Lurker payload'; target = folder / 'reboot-first-attempt.txt'
             assert not target.exists(); (folder / 'reboot.txt').rename(target)
             fd = os.open(folder, os.O_RDONLY)
@@ -107,16 +134,17 @@ def main():
             return {'retained_first_attempt_file': str(target)}
         item.update(h.bounded_payload_call(retain_first_attempt_file, 60))
         baseline = {('reboot-first-attempt.txt' if name == 'reboot.txt' else name): value for name, value in wanted.items()}
-        item['targeted_reboot_baseline_hashes'] = payload(mount, baseline)
+        item['targeted_reboot_baseline_hashes'] = payload(mount, baseline, user)
         cli('unmount')
         updated = copy.deepcopy(row)
         updated['receipt']['original_creation_verify_sha256'] = old['verify_sha256']
         updated['receipt']['verify_sha256'] = baseline
         updated['receipt']['reboot_baseline_provenance'] = 'First failure image preserved closed; original generated reboot file retained by normal rename; expected hashes verified after normal product reopen.'
         baseline_rows.append(updated); item['status'] = 'passed'; save()
+    native(['zpool', 'export', backing['pool']])
     target = R / 'reboot-zfs-private-cohort-678'; target.mkdir(mode=0o700); os.chown(target, 1300, 1300)
     matrix = target / 'matrix.json'
-    matrix.write_text(json.dumps(dict(cases=baseline_rows, backing_records=[], runtime_commit=original['runtime_commit'],
+    matrix.write_text(json.dumps(dict(cases=baseline_rows, backing_records=[backing], runtime_commit=original['runtime_commit'],
                                       baseline_boot_id=original['after_boot_id'], repair_receipt=str(receipt)), indent=2) + '\n')
     matrix.chmod(0o600); os.chown(matrix, 1300, 1300)
     out.update(status='passed', targeted_cohort=str(matrix)); save()
