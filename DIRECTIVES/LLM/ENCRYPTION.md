@@ -15,7 +15,6 @@ Follow the support and acceptance rules in `CODEBASE.md`.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Apple Encrypted Disk Image | ✅ | — | — | — | — | — | — |
 | APFS Encrypted | 🟦 | — | — | — | — | — | — |
-| Startup-volume FileVault management | 🟦 | — | — | — | — | — | — |
 | LUKS2 | 🟦 | ✅ | 🟦 | 🟦 | — | 🟦 | 🟦 |
 | VeraCrypt | ✅ | ✅ | ✅ | 🟦 | 🟦 | 🟦 | ✅ |
 | CryFS stable 1.x | ✅ | ✅ | 🟦 | — | 🟦 | 🟦 | 🟦 |
@@ -56,7 +55,7 @@ Windows packaging and native qualification are planned. Use `cppcryptfs` for the
 
 - Support physical-device encryption setup where feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. Qualify each backend and device type on its native OS before advertising support.
 - Physical-device adapters cover Linux, FreeBSD GELI/VeraCrypt, NetBSD CGD, OpenBSD CRYPTO/RAID1C/VeraCrypt and DragonFly LUKS1/VeraCrypt. FreeBSD checks the complete GEOM topology, partition identity and disk serial before destructive operations; system disks, mounted or consumed providers, and whole disks carrying partitions are refused. NetBSD stores mandatory recovery parameters persistently by checked GPT partition UUID under `/var/db/lurker-cgd/`; wedge numbers are not stable identifiers. OpenBSD mirrored recovery descriptors remain under `/var/db/lurker-raid1c/`. DragonFly binds GPT storage UUID, offset/size and native device identity, checks whole-disk consumers, and requires a physical-capable private wrapper before VeraCrypt initialization. macOS APFS and VeraCrypt accept guarded external data partitions. Implemented adapters do not establish completed package or full filesystem-matrix qualification; fresh evidence and remaining gates are recorded in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/`.
-- The APFS Encrypted scope covers native data-volume setup and unlocking, mounting, and locking existing encrypted APFS volumes via `diskutil`. Apple Encrypted Disk Image uses the existing `hdiutil` backend. Startup-volume FileVault management uses `fdesetup` and native authorization.
+- The APFS Encrypted scope covers native data-volume setup and unlocking, mounting, and locking existing encrypted APFS volumes via `diskutil`. Apple Encrypted Disk Image uses the existing `hdiutil` backend. The earlier FileVault name referred to this APFS data-volume integration; startup-volume FileVault management is outside the planned scope.
 
 ## Create Profile Scope
 

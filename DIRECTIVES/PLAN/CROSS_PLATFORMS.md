@@ -42,7 +42,7 @@ See the [current scope and planned integration batches](../LLM/ENCRYPTION.md#pla
 
 Physical-device encryption setup is in scope wherever feasible on Linux, macOS, FreeBSD, DragonFly BSD, NetBSD and OpenBSD. The current product implements device creation on Linux. Qualify native device setup separately for each applicable backend and OS before exposing it.
 
-On macOS, the scope includes native APFS data-volume setup via `diskutil` and supported startup-volume FileVault management via `fdesetup` and native authorization. The existing `hdiutil` encrypted-image workflow remains a separate backend. See the current scope in `DIRECTIVES/LLM/ENCRYPTION.md`.
+On macOS, the scope includes native APFS data-volume setup via `diskutil`. The earlier FileVault name referred to this integration; separate startup-volume FileVault management is not planned. The existing `hdiutil` encrypted-image workflow remains a separate backend. See the current scope in `DIRECTIVES/LLM/ENCRYPTION.md`.
 
 ## 3. Baseline before this implementation
 
