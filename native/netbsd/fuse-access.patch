@@ -1,0 +1,201 @@
+--- a/lib/libpuffs/dispatcher.c
++++ b/lib/libpuffs/dispatcher.c
+@@ -450,0 +451 @@
++			mode_t wire, mode;
+@@ -457,0 +459,14 @@
++			/* NetBSD vnode accmode uses the owner permission-bit positions. */
++			wire = auxt->pvnr_mode;
++			mode = wire & (PUFFS_VREAD | PUFFS_VWRITE | PUFFS_VEXEC);
++			if (wire & ~(S_IRUSR | S_IWUSR | S_IXUSR |
++			    PUFFS_VREAD | PUFFS_VWRITE | PUFFS_VEXEC)) {
++				error = EACCES;
++				break;
++			}
++			if (wire & S_IRUSR)
++				mode |= PUFFS_VREAD;
++			if (wire & S_IWUSR)
++				mode |= PUFFS_VWRITE;
++			if (wire & S_IXUSR)
++				mode |= PUFFS_VEXEC;
+@@ -459 +474 @@
+-			    opcookie, auxt->pvnr_mode, pcr);
++			    opcookie, mode, pcr);
+@@ -1209,0 +1225,8 @@
++
++/* Version of the native userspace access compatibility contract. */
++unsigned int puffs_access_abi_version(void);
++unsigned int
++puffs_access_abi_version(void)
++{
++	return 1;
++}
+--- a/lib/libperfuse/ops.c
++++ b/lib/libperfuse/ops.c
+@@ -1629,0 +1630,3 @@
++	/* Access emulation must use the same attributes returned to the kernel. */
++	if (vap != puffs_pn_getvap(opc))
++		fuse_attr_to_vap(ps, puffs_pn_getvap(opc), &fao->attr);
+@@ -3682,0 +3686,8 @@
++
++/* Version of the native userspace access compatibility contract. */
++unsigned int perfuse_access_cache_version(void);
++unsigned int
++perfuse_access_cache_version(void)
++{
++	return 1;
++}
+--- a/lib/librefuse/refuse.c
++++ b/lib/librefuse/refuse.c
+@@ -59,0 +60,3 @@
++	int allow_other;
++	int allow_root;
++	int default_permissions;
+@@ -67,0 +71,3 @@
++	REFUSE_OPT("allow_other", allow_other, 1),
++	REFUSE_OPT("allow_root", allow_root, 1),
++	REFUSE_OPT("default_permissions", default_permissions, 1),
+@@ -218 +224 @@
+-static void
++static int
+@@ -221,0 +228 @@
++	struct fuse		*fuse;
+@@ -225,0 +233,5 @@
++	fuse = fusectx->fuse;
++	if (fuse != NULL && !puffs_cred_iskernel(cred) && !puffs_cred_isfs(cred) &&
++	    !puffs_cred_isuid(cred, fuse->mount_uid) && !fuse->allow_other &&
++	    !(fuse->allow_root && puffs_cred_isuid(cred, 0)))
++		return EACCES;
+@@ -231,0 +244 @@
++	return 0;
+@@ -439 +452,2 @@
+-	set_fuse_context_uid_gid(pcn->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
++		return EACCES;
+@@ -476 +490,2 @@
+-	set_fuse_context_uid_gid(pcr);
++	if (set_fuse_context_uid_gid(pcr) != 0)
++		return EACCES;
+@@ -478,0 +494,35 @@
++}
++
++/* Check native caller access, including filesystems without access(). */
++static int
++puffs_fuse_node_access(struct puffs_usermount *pu, void *opc, int mode,
++    const struct puffs_cred *cred)
++{
++	struct puffs_node *pn = opc;
++	struct fuse *fuse = puffs_getspecific(pu);
++	struct vattr va;
++	int error, mask = 0;
++
++	if (!puffs_cred_iskernel(cred) && !puffs_cred_isfs(cred) &&
++	    !puffs_cred_isuid(cred, fuse->mount_uid) && !fuse->allow_other &&
++	    !(fuse->allow_root && puffs_cred_isuid(cred, 0)))
++		return EACCES;
++	if (set_fuse_context_uid_gid(cred) != 0)
++		return EACCES;
++	set_fuse_context_pid(pu);
++	error = fuse_getattr(fuse, pn, PNPATH(pn), &va);
++	if (error)
++		return error;
++	if (mode & PUFFS_VREAD)
++		mask |= R_OK;
++	if (mode & PUFFS_VWRITE)
++		mask |= W_OK;
++	if (mode & PUFFS_VEXEC)
++		mask |= X_OK;
++	error = fuse_fs_access(fuse->fs, PNPATH(pn), mask);
++	if (error != 0 && error != -ENOSYS)
++		return -error;
++	if (error == 0 && !fuse->default_permissions)
++		return 0;
++	return puffs_access(va.va_type, va.va_mode, va.va_uid, va.va_gid,
++	    mode, cred);
+@@ -494 +544,2 @@
+-	set_fuse_context_uid_gid(cred);
++	if (set_fuse_context_uid_gid(cred) != 0)
++		return EACCES;
+@@ -524 +575,2 @@
+-	set_fuse_context_uid_gid(pcn->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
++		return EACCES;
+@@ -551 +603,2 @@
+-	set_fuse_context_uid_gid(pcn->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
++		return EACCES;
+@@ -585 +638,2 @@
+-	set_fuse_context_uid_gid(pcn->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
++		return EACCES;
+@@ -638 +692,2 @@
+-	set_fuse_context_uid_gid(pcn->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
++		return EACCES;
+@@ -659 +714,2 @@
+-	set_fuse_context_uid_gid(pcn->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
++		return EACCES;
+@@ -680 +736,2 @@
+-	set_fuse_context_uid_gid(pcn_src->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn_src->pcn_cred) != 0)
++		return EACCES;
+@@ -706 +763,2 @@
+-	set_fuse_context_uid_gid(pcn_targ->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn_targ->pcn_cred) != 0)
++		return EACCES;
+@@ -725 +783,2 @@
+-	set_fuse_context_uid_gid(pcn->pcn_cred);
++	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
++		return EACCES;
+@@ -749 +808,2 @@
+-	set_fuse_context_uid_gid(pcr);
++	if (set_fuse_context_uid_gid(pcr) != 0)
++		return EACCES;
+@@ -781 +841,2 @@
+-	set_fuse_context_uid_gid(cred);
++	if (set_fuse_context_uid_gid(cred) != 0)
++		return EACCES;
+@@ -822 +883,2 @@
+-	set_fuse_context_uid_gid(pcr);
++	if (set_fuse_context_uid_gid(pcr) != 0)
++		return EACCES;
+@@ -853 +915,2 @@
+-	set_fuse_context_uid_gid(pcr);
++	if (set_fuse_context_uid_gid(pcr) != 0)
++		return EACCES;
+@@ -889 +952,2 @@
+-	set_fuse_context_uid_gid(pcr);
++	if (set_fuse_context_uid_gid(pcr) != 0)
++		return EACCES;
+@@ -927 +991,2 @@
+-	set_fuse_context_uid_gid(pcr);
++	if (set_fuse_context_uid_gid(pcr) != 0)
++		return EACCES;
+@@ -998 +1063,2 @@
+-	set_fuse_context_uid_gid(cr);
++	if (set_fuse_context_uid_gid(cr) != 0)
++		return EACCES;
+@@ -1202,0 +1269,5 @@
++	fuse->mount_uid = geteuid();
++	fuse->allow_other = config.allow_other;
++	fuse->allow_root = config.allow_root;
++	fuse->default_permissions = config.default_permissions;
++
+@@ -1232,0 +1304 @@
++        PUFFSOP_SET(pops, puffs_fuse, node, access);
+@@ -1399,0 +1472,8 @@
++
++/* Version of the native userspace access compatibility contract. */
++unsigned int refuse_access_policy_version(void);
++unsigned int
++refuse_access_policy_version(void)
++{
++	return 1;
++}
+--- a/lib/librefuse/fuse_internal.h
++++ b/lib/librefuse/fuse_internal.h
+@@ -51,0 +52,4 @@
++	uid_t			mount_uid;
++	int			allow_other;
++	int			allow_root;
++	int			default_permissions;
