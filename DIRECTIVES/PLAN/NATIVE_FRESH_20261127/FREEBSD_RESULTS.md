@@ -1148,3 +1148,23 @@ is not included among these results.
   terminal inventory; private regular fixtures retained. No LKL/FUSE/provider
   ioctl, mount or encrypted transport operation. Service and common-state
   callback wiring remain pending, with product write guards unchanged.
+
+
+### Native public peer discovery primitive
+
+- Purpose/input: existing FreeBSD listener credential inheritance and bounded
+  first-frame authentication, production header `0991440e...`; native source
+  `bb03631fe3b7` retained by hash under `build/guardian-platform-public-source/`.
+- Command/log: strict C11 and real AF_LOCAL listener/accept dummy-child controls
+  in `build/guardian-platform-public-v1/` and `-v2/`.
+- Failure retained: v1's dead-peer assertion expected ESRCH, but native
+  getpeereid correctly refused the disconnected peer earlier with ENOTCONN57.
+  Only the test's refusal expectation changed; no production behavior changed.
+- Outcome: v2 passes 646 checks/six cases, including bytes queued before accept,
+  fragmented first frame, wrong UID, dead peer, late credential-option setting
+  and partial timeout. Original-header identity29/spawn41/stream663/status570
+  regressions passed in v1 and are carried under those original raw identities.
+- Cleanup/limits: all six v2 dummy children reaped, no guardian process remains;
+  source/log hashes verified, socket fixtures retained. Endpoint custody and
+  service/common-runtime callbacks remain pending. No LKL/FUSE/mount/device
+  operation or product support admission.

@@ -325,7 +325,7 @@ static inline int lfbg_worker_fds_prepare(void) {
 
 enum lfbg_peer_kind { LFBG_PUBLIC_LIVE = 1, LFBG_OWNED_PROGRESS = 2 };
 struct lfbg_stream {
-    int fd, authenticated, closed, error;
+    int fd, authenticated, closed, error, discovering;
     enum lfbg_peer_kind kind;
     struct lfbg_process expected;
 };
@@ -336,6 +336,18 @@ static inline int lfbg_enable_credentials(int fd) {
     int one = 1;
     if (lfbg_connected_stream(fd) < 0) return -1;
     return setsockopt(fd, SOL_LOCAL, LOCAL_CREDS_PERSISTENT, &one, sizeof(one));
+}
+/* Apply before listen/connect. FreeBSD unp_copy_peercred inherits the listener
+ * request on the nascent accepted socket before a client can write. */
+static inline int lfbg_enable_listener_credentials(int fd) {
+    int one=1,type;socklen_t length=sizeof(type);
+    struct sockaddr_un local;socklen_t local_length=sizeof(local);
+    if (getsockopt(fd,SOL_SOCKET,SO_TYPE,&type,&length)<0 ||
+        getsockname(fd,(struct sockaddr *)&local,&local_length)<0) return -1;
+    if (length!=sizeof(type) || type!=SOCK_STREAM || local.sun_family!=AF_LOCAL) {
+        errno=EINVAL;return -1;
+    }
+    return setsockopt(fd,SOL_LOCAL,LOCAL_CREDS_PERSISTENT,&one,sizeof(one));
 }
 static inline int lfbg_peer_current(const struct lfbg_process *expected,
                                     enum lfbg_peer_kind kind) {
@@ -409,7 +421,10 @@ static inline int lfbg_stream_poll(struct lfbg_stream *s, short events,
     for (;;) {
         int64_t now;
         if (s->error) { errno = s->error; return -1; }
-        if (lfbg_peer_current(&s->expected, s->kind) < 0)
+        if (s->discovering) {
+            if (s->kind!=LFBG_PUBLIC_LIVE || s->expected.pid || events!=POLLIN)
+                return lfbg_stream_fail(s,EPERM);
+        } else if (lfbg_peer_current(&s->expected, s->kind) < 0)
             return lfbg_stream_fail(s, errno);
         if (lfbg_now_ms(&now) < 0) return lfbg_stream_fail(s, errno);
         if (now >= deadline) return lfbg_stream_fail(s, ETIMEDOUT);
@@ -428,6 +443,7 @@ static inline int lfbg_stream_poll(struct lfbg_stream *s, short events,
  * rights before returning, including a truncated control message. */
 static inline int lfbg_credentials(struct lfbg_stream *s, struct msghdr *msg) {
     int bad = 0, seen = 0;
+    struct lfbg_process candidate=s->expected;
     for (struct cmsghdr *c=CMSG_FIRSTHDR(msg); c; c=CMSG_NXTHDR(msg,c)) {
         size_t remaining = msg->msg_controllen -
             (size_t)((char *)c - (char *)msg->msg_control);
@@ -450,16 +466,22 @@ static inline int lfbg_credentials(struct lfbg_stream *s, struct msghdr *msg) {
         if (cred->sc_version != 0 || cred->sc_ngroups < 0 || cred->sc_ngroups > 1024 ||
             c->cmsg_len != CMSG_LEN(offsetof(struct sockcred2,sc_groups) +
                                     sizeof(gid_t)*(size_t)cred->sc_ngroups) ||
-            cred->sc_pid != (pid_t)s->expected.pid ||
+            cred->sc_pid<=0 || (uint64_t)cred->sc_pid>LFG_MAX_PID ||
             cred->sc_uid != s->expected.real_uid ||
-            cred->sc_euid != s->expected.effective_uid) bad = EPERM;
+            cred->sc_euid != s->expected.effective_uid) {bad = EPERM;continue;}
+        if (s->discovering && !seen) {
+            if (lfbg_process_capture(cred->sc_pid,&candidate)<0) {bad=errno;continue;}
+            if (candidate.real_uid!=s->expected.real_uid ||
+                candidate.effective_uid!=s->expected.effective_uid) {bad=EPERM;continue;}
+        }
+        if (cred->sc_pid!=(pid_t)candidate.pid) bad=EPERM;
         else seen = 1;
     }
     if (msg->msg_flags & (MSG_TRUNC | MSG_CTRUNC)) bad = EPROTO;
     if (!bad && !s->authenticated && !seen) bad = EPERM;
     if (bad) return lfbg_stream_fail(s,bad);
-    if (lfbg_peer_current(&s->expected,s->kind) < 0) return lfbg_stream_fail(s,errno);
-    if (seen) s->authenticated = 1;
+    if (lfbg_peer_current(&candidate,s->kind) < 0) return lfbg_stream_fail(s,errno);
+    if (seen) {s->expected=candidate;s->authenticated=1;s->discovering=0;}
     return 0;
 }
 /* Return 1 only for a fully decoded frame, 0 for boundary EOF, -1 otherwise.
@@ -496,6 +518,22 @@ static inline int lfbg_receive_until(struct lfbg_stream *s,
     if (lfg_decode(&decoded,bytes,sizeof(bytes)) != LFG_OK)
         return lfbg_stream_fail(s,EPROTO);
     *out=decoded; return 1;
+}
+/* Server-side first frame, before its writer PID is known. The expected login
+ * UID comes from held session policy, never the decoded request. Both the
+ * connection's cached native UID and per-write real/effective UID must match.
+ * Listener credentials must already have been enabled before publication.
+ */
+static inline int lfbg_public_receive_first(struct lfbg_stream *out,int fd,uid_t uid,
+                                            struct lfg_message *message,int64_t deadline) {
+    int enabled=0;socklen_t length=sizeof(enabled);uid_t peer_uid;gid_t peer_gid;
+    if (!out || !message) {errno=EINVAL;return -1;}
+    if (lfbg_connected_stream(fd)<0 || getpeereid(fd,&peer_uid,&peer_gid)<0 ||
+        getsockopt(fd,SOL_LOCAL,LOCAL_CREDS_PERSISTENT,&enabled,&length)<0) return -1;
+    if (peer_uid!=uid || length!=sizeof(enabled) || enabled!=1) {errno=EPERM;return -1;}
+    *out=(struct lfbg_stream){.fd=fd,.kind=LFBG_PUBLIC_LIVE,.discovering=1,
+        .expected={.real_uid=uid,.effective_uid=uid}};
+    return lfbg_receive_until(out,message,deadline);
 }
 static inline int lfbg_send_until(struct lfbg_stream *s,
                                   const struct lfg_message *message,int64_t deadline) {

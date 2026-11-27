@@ -270,8 +270,8 @@ failed compilation at a codec argument-order mistake; its immutable failure is
 retained separately. Evidence is `build/guardian-platform-ipc-v1/` and `-v2/` in
 the round's FreeBSD bucket; all dummy children are reaped.
 
-These are transport primitives, not a complete service. Public accept-side peer
-discovery, socket directory/endpoint custody, service deadlines, native teardown
+These are transport primitives, not a complete service. Socket directory/endpoint
+custody, service deadlines, native teardown
 callbacks and driver integration remain
 unimplemented or unqualified. No LKL, FUSE, provider ioctl, mount or encryption
 operation runs in these controls; no production completion authority is enabled.
@@ -294,3 +294,27 @@ oversize and invalid message are also refused. All prior identity/spawn/stream
 controls pass on the same header. Evidence is `build/guardian-platform-status-v1/`.
 These writer results are not live completion authority; service/common-runtime
 callback wiring and native teardown remain separate work.
+
+### Accepted public peer discovery
+
+Enable listener credentials before publishing/listening. The pinned native
+`unp_copy_peercred` inherits the listener's credential request into the new
+accepted socket before an early client write:
+
+https://github.com/freebsd/freebsd-src/blob/bb03631fe3b7/sys/kern/uipc_usrreq.c
+
+`lfbg_public_receive_first` takes the expected UID from held session policy,
+checks native `getpeereid`, then captures the first write's actual SCM_CREDS2
+PID/real/effective UID and live birth/boot before decoding a full frame. Later
+fragments and requests use that same captured peer. The decoded request never
+chooses the authorized UID. Empty, partial, disconnected, dead or mismatched
+peers fail; this does not replace full session/native binding and nonce checks.
+
+Native public v2 passes 646 checks across six cases: client data queued before
+accept, fragmented first frame, wrong UID, dead peer, setting the option too late,
+and partial timeout. V1's dead-peer assertion expected ESRCH, while getpeereid
+correctly refused earlier with ENOTCONN; that failed test is preserved. Only the
+test expectation changed in v2, and passing identity/spawn/stream/status results
+from v1 retain their original identities. All six v2 dummy children are reaped;
+no guardian remains. Evidence is `build/guardian-platform-public-v1/` and `-v2/`.
+Socket endpoint custody and actual service/runtime integration remain pending.
