@@ -1,8 +1,16 @@
 # Gentoo fresh native qualification — 2026-11-27
 
-Completed within the authorized ordinary-route and existing-prerequisite scope. The latest affected follow-up, `e927e40bb235815343302677531d48f1afa4f939`, passed its native build, Portage package/install and listed userspace gates. Earlier broad filesystem coverage keeps its actual 576/678 artifact identities. The configured stock `7.3.6-gentoo-dist-bin` default is restored, boot `e97cdbcb-949c-4013-b1ec-78f0c0428648`, with no one-boot override. Nine filesystems qualify on that configuration. Stock UFS1 remains read-only; a separately identified existing write-enabled module passed fresh supplemental tests on its matching older kernel. No new custom kernel or UFS write module was built.
+Completed within the authorized integration scope. The latest product is `e927e40bb235815343302677531d48f1afa4f939`; earlier broad filesystem coverage keeps its actual 576/678 identities. The current/default `7.3.6-gentoo-dist-bin` kernel now also has a separately built matching UFS module with the existing upstream write configuration enabled. Its native and affected Lurker gates passed, including ordinary reboot to boot `fd026475-bfa6-4fec-91f5-c4ef187a4e0b`. The vendor UFS module remains read-only and preserved; the older 6.18.64 cohort remains separate. No Lurker-invented kernel code or full kernel build was used. All ten filesystem rows now have qualification on the current kernel with the recorded prerequisites; unchanged nine-filesystem rows were not repeated.
 
 Every pass below comes from fresh round fixtures. Historical reports and cached artifacts were discovery/provenance inputs, never pass evidence. Per `LINUX_FOLLOWUP.md`, unchanged broad coverage retains its actual `576505d554d798422840a06322dfa93b899365bc` execution identity; the twelve corrected-UFS2 rows and final frontend/helper/reboot gates identify the new 678 artifact explicitly.
+
+## Current-default UFS1 configuration follow-up
+
+`GENTOO_UFS1_CURRENT.md` records exact upstream/Gentoo source hashes, the existing `CONFIG_UFS_FS_WRITE` selection and reproducible normal-user external-module build. Configured module SHA-256 is `56347fbf63e0ae5d02251fa6cd1801767284ff11831f57d82e48ebd84300a369`; normal post-reboot autoload and live build ID matched. No forced vermagic/signature bypass, global policy weakening or boot-image changes occurred.
+
+Native UID-1300 UFS1 controls, six container/backing cells, six physical inner/backing cells, six strict helper keyfile flows (42 complete JSON actions), two additional Serpent/Twofish credential variations, supported native desktop Auto open/close/reopen and six ordinary-reboot fixtures all passed with independent kernel `ufs`/version-1 evidence and the downloaded payload. All thirty reboot hash comparisons matched. Installed e927 product bytes and all 1,085 manifest entries were reverified. Ownership/chmod passed; ACL/reflink were unsupported and journaling remains unknown. Linux GUI explicit UFS1 create selection is not implemented; this GUI gate used a separately helper-created UFS1 fixture and ordinary Auto callbacks.
+
+Per-run notes include all controller/GUI failures. The first unsupported GUI-selector experiment actually used default Btrfs; its original successful-test cleanup removed that ciphertext/password before external rejection. Logs, binary and overlay remain, no UFS1 pass is credited, and all later failed/qualified fixtures are retained. Final cleanup found no owned mounts, loops, task processes or scratch holders. The verified 532-file final archive SHA-256 is `24b3cae4912c31919a0a9ad31601b45cf36f4d800e4f7c8a591ff4abdf9fd26a`; the new private `ufs1-current-completion-evidence-index.json` supplies exact receipt paths/hashes and historical identity links.
 
 ## e927 affected userspace follow-up
 
@@ -58,7 +66,7 @@ On the new installed package:
 
 ## Filesystem and device coverage
 
-The reconciled private ledger contains **130 container cells and 130 physical/backing applicability cells**. Each ordinary dimension has 54 passed, 70 not applicable, three unavailable UFS1 disk cells and three blocked UFS1 folder-backing cells. The seven Linux exclusions are hdiutil, diskutil APFS encryption, GELI, PEFS, softraid CRYPTO, softraid RAID1C and CGD; their required facilities/platform adapters are absent on Linux. Every excluded cell retains its reason.
+The reconciled coverage contains **130 container cells and 130 physical/backing applicability cells**. Each dimension now has 60 passed and 70 not applicable: historical 54 passes retain their 576/678 identities, and six current-configured-UFS1 passes use e927. The historical ledger remains immutable; the new UFS1 completion index supplies its six-cell replacement in each dimension. The seven Linux exclusions are hdiutil, diskutil APFS encryption, GELI, PEFS, softraid CRYPTO, softraid RAID1C and CGD; their required facilities/platform adapters are absent on Linux. Every excluded cell retains its reason.
 
 “Disk” below means LUKS1, LUKS2 and native VeraCrypt. “Folder” means gocryptfs, stable CryFS and Cryptomator on the named native backing filesystem, not selectable inner formats.
 
@@ -68,7 +76,7 @@ The reconciled private ledger contains **130 container cells and 130 physical/ba
 | Btrfs | 3/3 | 3/3 | 3/3 | 3/3 |
 | XFS | 3/3 | 3/3 | 3/3 | 3/3 |
 | APFS | 3/3 | 3/3 | 3/3 | 3/3 |
-| UFS1, stock kernel | 3 unavailable | 3 blocked | 3 unavailable | 3 blocked |
+| UFS1, configured matching module | 3/3 | 3/3 | 3/3 | 3/3 |
 | UFS2 | 3/3 | 3/3 | 3/3 | 3/3 |
 | HAMMER2 | 3/3 | 3/3 | 3/3 | 3/3 |
 | NTFS, kernel NTFS3 | 3/3 | 3/3 | 3/3 | 3/3 |
@@ -96,7 +104,7 @@ Current optional prerequisites are host installations, separate from Lurker:
 
 Private engine inventories identify gocryptfs v2.7.0, stable CryFS 1.0.3 upstream `5d0cc36785d93e12250696a3ffc928042f2e8d61` with the three reviewed Linux durability/publication patches, and the pinned Cryptomator/Java closure. Refreshed CryFS binary SHA-256 is `2ec7b6f5bd7b999b81750fec75ffb3ca13174f4643d2326ba250143e9f444a14`. Compatible verified native engine artifacts were reused and newly executed; they are not claimed as new engine builds.
 
-Both tested updated stock configurations disable UFS writes. Separately authorized reuse of existing `/lib/modules/6.18.64-p1-gentoo-dist-bin/extra/ufs.ko` verified root-controlled ownership, exact matching vermagic, source/build-recipe provenance and SHA-256 `1e0cee7875b995925c3f9737c335245d08baa99cd6c1084e3a4fc3ea76a76bd5`. Normal `insmod` loaded those unchanged bytes on the matching existing kernel; no force-load, replacement module or custom-kernel build occurred. Fresh native UID-1300 UFS1 controls, all six container/backing cells, all six physical inner/backing cells and all six ordinary reboot fixtures passed with independent version-1 evidence. These 576-artifact results are conditional on that prerequisite. They do not establish writable UFS1 on the current default or a single kernel supporting all ten rows.
+Both tested updated stock configurations disable UFS writes. Separately authorized reuse of existing `/lib/modules/6.18.64-p1-gentoo-dist-bin/extra/ufs.ko` verified root-controlled ownership, exact matching vermagic, source/build-recipe provenance and SHA-256 `1e0cee7875b995925c3f9737c335245d08baa99cd6c1084e3a4fc3ea76a76bd5`. Normal `insmod` loaded those unchanged bytes on the matching existing kernel; no force-load, replacement module or custom-kernel build occurred. Fresh native UID-1300 UFS1 controls, all six container/backing cells, all six physical inner/backing cells and all six ordinary reboot fixtures passed with independent version-1 evidence. These 576-artifact results are conditional on that prerequisite. Those older results alone did not establish writable UFS1 on the current default. The separately identified current-module follow-up above now supplies that qualification; none of these older passes were relabeled.
 
 ## Storage, retained failures and final evidence
 
@@ -104,7 +112,7 @@ Only the newly attached 2 GiB scratch image `/srv/build/lurker-native-fresh-2026
 
 Initial wrong-ext4/ext2 identity, kmod/mount-readiness and CryFS publication findings were recorded and resolved through shared fixes/prerequisites. Three initial 8ad ext4 selections actually formatted ext2; the old harness treated them as passes and removed their ciphertext before semantic reclassification. Their logs/features remain, but those original images are unavailable. Other retained failed fixtures, earlier device prompt-gap attempts and the raw UFS2 publication-race snapshots remain preserved. The new helper controller's by-id symlink request was rejected safely before writing; original stdout/receipt and unchanged scratch snapshot SHA-256 `929629af6d7b75d8ec97f700b3a4ba9421ee76b7ff3b98884ee50ca8538eefec` are retained. The guarded canonical-path controller then passed all three fresh device samples. These failed attempts are never counted as successful executions.
 
-Final read-only validation passed after reboot: package/provider hashes match, no owned plaintext mounts, loop devices, imported pools or engine processes remain, the scratch disk has no children/holders/mounts, and the qualified default has no one-boot override. The build/evidence disk remains mounted. Its free space is about 18 GiB; root has about 2.1 GiB after removing only this task's temporary 590 MiB nightly formatter toolchain. The managed stable Rust default is unchanged. Unrelated work/storage and all retained failed fixtures remain intact.
+Historical 678 final read-only validation passed after reboot: package/provider hashes match, no owned plaintext mounts, loop devices, imported pools or engine processes remain, the scratch disk has no children/holders/mounts, and the qualified default has no one-boot override. The build/evidence disk remains mounted. Its free space is about 18 GiB; root has about 2.1 GiB after removing only this task's temporary 590 MiB nightly formatter toolchain. The managed stable Rust default is unchanged. Unrelated work/storage and all retained failed fixtures remain intact.
 
 Private evidence root: `target/goal-validation/native-fresh-20261127/hosts/gentoo/`. Key files are `checkpoint.json`, `cases/final-coverage-ledger.json`, `validation/lease-final-validation.json`, the complete package/manifest in `build/`, and:
 
@@ -114,4 +122,4 @@ Private evidence root: `target/goal-validation/native-fresh-20261127/hosts/gento
 | 576 conditional existing-module UFS1 | 188 | `095009d479fdeb70b21376c53607f8c8168643471163ec0e01ac585830373015` |
 | 678 final package/prerequisite/frontend/reboot | 404 | `334a27821eaf818b3ba3e9802322216df931d0f21a7df7b3983a3b8c8c928ff7` |
 
-No further authorized Gentoo test work remains. The ordinary stock-UFS1 write limitation remains explicit; no deferred custom-kernel experiment was started.
+No further authorized Gentoo test work remains. The vendor UFS1 module's write limitation remains explicit; the authorized existing-configuration module follow-up is complete. Original e927 report bytes are retained privately at `build/ufs1-current/GENTOO_RESULTS-at-af002c4.md` and in commit `af002c4`, preserving the earlier index's report identity.
