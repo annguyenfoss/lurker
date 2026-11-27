@@ -55,7 +55,7 @@ The creator is built separately from the same pinned upstream source as the root
 
 Before any root execution or block-device elevation, discovery canonicalizes the creator and requires the executable and every ancestor to be root-owned and not group/world writable. A developer build under a home directory or `/tmp` cannot be elevated. Install a trusted package first for a root desktop helper or physical-device create. Ordinary file creation from a normal-user CLI can execute its user-owned build without elevating the creator; the later cryptsetup/filesystem operations retain their existing privilege boundary.
 
-Build only the creator with `python scripts/build-linux-userspace.py --only-creator`; the full build produces all three helpers. `creator-source.json` records the source revision, pinned archive checksum, patch hash and output hash, with the VeraCrypt license beside it. Host dynamic library dependencies still require packaging qualification; this build does not claim a portable static executable.
+Build only the creator with `python scripts/build-linux-userspace.py --only-creator`; the default or `--crypto-only` build produces the private crypto helper and creator. Install the filesystem driver separately using `native/linux-userspace/HOST_FILESYSTEM.md`. `creator-source.json` records the source revision, pinned archive checksum, patch hash and output hash, with the VeraCrypt license beside it. Host dynamic library dependencies still require packaging qualification; this build does not claim a portable static executable.
 
 `python scripts/test-linux-bundled.py --cli /path/to/lurker --result /tmp/lurker-result.json` runs the native CLI matrix as root **inside a disposable test VM**. It uses private `/tmp/lurker-bundled-test-*` images, checks all three algorithms for LUKS2, LUKS1 and VeraCrypt, and tests persistence, SQLite WAL, rename, incorrect keys, duplicate mounts and no-clobber create. It does not invoke a separately installed VeraCrypt. Logs/results survive failure, and backing storage is retained when safe unmount fails. The runner also checks native mounts/loop attachments before removing fixtures and preserves uncertain state after an operation timeout. This is additional coverage; optional stock-VeraCrypt interoperability tests remain separate. `python scripts/test-linux-creator.py --creator /path/to/lurker-veracrypt-create` checks rejection of mount/service/formatter operations, option injection and unsupported crypto arguments without creating a volume. Adding `--cli /path/to/lurker` as root in the test VM also verifies a backend beneath writable `/tmp` is rejected before execution.
 
@@ -88,7 +88,16 @@ LUKS, physical-device operations and LUKS tags use Privileged mode. Keyfile auth
 `lurker-core/src/userspace.rs` orchestrates two external processes:
 
 1. `lurker-veracrypt` uses upstream VeraCrypt's userspace crypto and exposes the decrypted image through FUSE. Its narrow integration patch disables sudo/doas elevation, refuses execution as root, bypasses loop setup for file-only userspace opens, and adapts sub-sector writes without changing encryption algorithms or container format.
-2. `lurker-fs` uses the Linux Kernel Library (LKL) to run the filesystem implementation as an ordinary process. The host kernel sees FUSE rather than a loop/device-mapper block device. New filesystem initialization assigns the root directory to the caller. The LKL kernel uses that uid for normal filesystem access; its internal saved uid is used only to perform its own clean unmount, and grants no host privileges.
+2. The separately administrator-installed host prerequisite `lurker-fs` uses the Linux Kernel Library (LKL) to run the filesystem implementation as an ordinary process. The host kernel sees FUSE rather than a loop/device-mapper block device. New filesystem initialization assigns the root directory to the caller. The LKL kernel uses that uid for normal filesystem access; its internal saved uid is used only to perform its own clean unmount, and grants no host privileges.
+
+Application packages contain only the independent crypto engines, never LKL
+filesystem code or a FUSE library. The existing `veracrypt-userspace` artifact
+now declares `private-crypto-external-filesystem`; old combined SDKs are rejected
+by packaging. The resolver checks the private crypto helper independently of
+the administrator-controlled host driver. Explicit legacy SDK overrides remain
+available only for unprivileged development. See
+`native/linux-userspace/HOST_FILESYSTEM.md` for build, installation and protocol
+requirements. Historical results below retain their original package layouts.
 
 Normal user FUSE mounting uses the distribution's installed setuid `fusermount3` helper. There is no sudo, polkit dialog, administrator password, new setuid executable or system configuration change per operation. This is distinct from a claim that no system service/helper has any privileges. Systems which disable unprivileged FUSE cannot use this route.
 
@@ -103,7 +112,7 @@ The architectural advantage is a smaller initial privilege scope for some failur
 - **Memory protection needs separate verification.** Userspace crypto retains live keys in a user process, and LKL adds plaintext buffers in user-process memory. The wrapper does not add memory locking or a general dump/ptrace hardening policy. Swap, core dumps, same-uid debugger access, hibernation and complete key erasure have not been validated for the complete route. Both frontends handle passphrases in user memory, and applications can hold plaintext in either mode.
 - **A compromised account or administrator can still expose an unlocked vault.** Neither route protects plaintext that malware can read using that account’s access. Read-only mounts prevent writes through that mount; they do not authenticate container contents or stop another process with access to the backing file from modifying it. VeraCrypt’s format does not provide general encrypted-data authenticity/integrity guarantees.
 - **More integration code needs review.** Sector adaptation, process startup, journal draining and recovery are new code paths. The tests below establish exercised behavior, not an independent security audit. Narrower host privileges do not establish stronger overall confidentiality or data-loss resistance.
-- **Pinned dependencies need ongoing maintenance.** Host kernel updates do not update the filesystem code embedded in lurker-fs. Review upstream VeraCrypt/LKL security fixes and refresh/rebuild the bundled helpers when needed; pinning provides reproducibility, not an assurance that a revision has no vulnerabilities.
+- **Pinned dependencies need ongoing maintenance.** Host kernel updates do not update the filesystem code embedded in lurker-fs. Review upstream VeraCrypt/LKL security fixes and refresh/rebuild the private crypto helper and external host filesystem prerequisite when needed; pinning provides reproducibility, not an assurance that a revision has no vulnerabilities.
 
 Further work should verify memory/dump/debugger policies, assess a dedicated process sandbox, and extend fault injection to resource exhaustion and abrupt termination across startup/shutdown stages.
 
@@ -145,7 +154,7 @@ pairs and SQLite integrity. The signed-tree comparison, build and runtime
 logs are under `target/goal-validation/release-inputs-review/`.
 
 The integrated Arch build verified 87,060 source inputs before a cold
-compilation and again when reusing the resulting cache. Its packaged `lurker-fs`
+compilation and again when reusing the resulting cache. Its historical packaged `lurker-fs`
 SHA-256 is `34eccca4ab65712f4e14e80023f09b0b4bc42518a8046ece175968a8d99c0ebe`.
 The full `1e04b85` Arch archive passed all five login-user VeraCrypt AES
 recovery checks after an actual KVM power cut. See the packaged power-cut
@@ -194,7 +203,8 @@ Unmount first releases the filesystem, remounts its internal disk read-only to c
 ## Build and verification
 
 ```bash
-python scripts/build-linux-userspace.py
+python scripts/build-linux-userspace.py --crypto-only
+# Separately build/install the host prerequisite as documented above.
 cargo build --release --workspace --locked
 cargo check --workspace --locked
 cargo test --workspace --locked

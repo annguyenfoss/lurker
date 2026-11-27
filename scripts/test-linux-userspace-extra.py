@@ -23,9 +23,11 @@ binaries = args.binaries.resolve()
 tools = binaries / 'userspace'
 helper = binaries / 'lurker-helper'
 crypto = tools / 'lurker-veracrypt'
-filesystem_driver = tools / 'lurker-fs'
+legacy_driver = tools / 'lurker-fs'
+filesystem_driver = Path(os.environ.get('LURKER_FILESYSTEM_HELPER',
+    str(legacy_driver if legacy_driver.is_file() else Path('/usr/local/libexec/lurker-fs'))))
 env = os.environ.copy()
-env.update(LC_ALL='C.UTF-8', LURKER_USERSPACE_DIR=str(tools))
+env.update(LC_ALL='C.UTF-8', LURKER_USERSPACE_DIR=str(tools), LURKER_FILESYSTEM_HELPER=str(filesystem_driver))
 if args.formatters:
     formatters = args.formatters.resolve()
     env['PATH'] = str(formatters / 'usr/bin') + os.pathsep + env.get('PATH', '')
