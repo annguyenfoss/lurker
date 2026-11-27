@@ -139,7 +139,15 @@ the native driver's probe. The defaults below apply to other filesystems.
 - NetBSD CryFS uses host-provided base ReFUSE API 29/puffs as the login user.
   An administrator must enable native user mounts and grant scoped device
   access; Lurker checks these prerequisites before changing vault data and never
-  configures them automatically. Native fsid and process birth identities govern
+  configures them automatically. The host libraries also require the native
+  permission corrections documented in `native/netbsd/README.md`: puffs access
+  ABI version 1 and ReFUSE access policy version 2. The CGD NTFS adapter requires
+  puffs version 1 and perfuse access-cache version 1; exFAT/ext4 require the
+  ReFUSE contract, with explicit `default_permissions` for ext4. Core checks
+  administrator-controlled native providers and capability-symbol ownership
+  before the affected create/mount operation. These libraries remain host
+  prerequisites and are never packaged with Lurker.
+  Native fsid and process birth identities govern
   session ownership. Ordinary PDF persistence and credential/duplicate/busy
   controls pass, but base ReFUSE rejects shared writable mappings, so SQLite WAL
   remains unsupported. Do not weaken cache or durability behavior to hide that

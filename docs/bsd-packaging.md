@@ -34,6 +34,15 @@ sudo policy and any native FUSE device access. FreeBSD PEFS requires the
 the staged PEFS utility and matching module come from that package and adds
 it as a dependency.
 
+NetBSD CryFS and the CGD NTFS, exFAT and ext4 adapters require the separately
+installed native FUSE permission corrections in `native/netbsd/README.md`.
+That guide covers the pinned host-library build, administrator installation,
+backups and native caller-access checks. Lurker requires puffs access ABI 1,
+perfuse access-cache 1 for NTFS, and ReFUSE access policy 2 for CryFS/exFAT/ext4;
+the ext4 adapter requests `default_permissions`. Stock libraries lacking these
+capabilities are refused before the affected filesystem operation. FUSE runtime
+libraries and filesystem drivers stay on the host, outside the Lurker package.
+
 The BSD VeraCrypt build ships both the wxWidgets exception and its full
 Library GPL text from the pinned wxWidgets archive. The backend manifest
 records both SHA-256 digests, and Unix staging requires both entries.
