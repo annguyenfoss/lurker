@@ -27,7 +27,34 @@ functional observations and failed experiments under their original identities;
 source, build and test success do not by themselves establish scope eligibility.
 Plain native POSIX guardian and codec work contains no embedded kernel.
 
-## Exact source and build
+## Released source candidate
+
+The new source candidate is published xlinuxfs `v1.0.4`
+(`ff997049c715c141322e6060fc7fdf2fbe153563`) and its companion LKL pin
+`2cdd0e976095d14a63bbb1e9462b0e20cda9ea5b`. The current primary release,
+maintenance and user-report assessment supports selecting it as well maintained;
+independent Darwin arm64 RW/hash-persistence corroboration remains incomplete.
+This source decision does not admit a mounted driver or product route.
+
+https://github.com/HuanchuanTech/xlinuxfs/tree/v1.0.4
+https://github.com/HuanchuanTech/lkl/tree/2cdd0e976095d14a63bbb1e9462b0e20cda9ea5b
+
+Use the unchanged released 1,047-unit profile and matching headers, followed by
+only the reviewed host FLUSH and Apple symbol-export procedures below. No vendor
+kernel implementation, ABI or lifecycle hook changes are proposed. A new build
+must have new archive/header receipts; the historical `1902814d…` library must
+never be labeled as this older released profile.
+
+The fresh source-fetch attempts encountered GitHub HTTP 500/429 before compiling.
+Exact source recovery reversed the published immediate-child `c4d0895e…` patch in
+a new Git index and required the resulting tree to equal the release's published
+`10b8a68c688ff76ea76537f2fca965b718f3c349`. The complete path/mode manifest and
+upstream patch SHA256 `0a516cc322371fce9418495ec183419b3f8c8c49805e33f0f1d78be56222cd71`
+are retained under the private `build/release-lkl-2cdd-1/` round evidence. This is
+recovery of existing published bytes, not a new configuration or port. The
+separate bounded native library build is in progress; it has no runtime pass yet.
+
+## Historical c4 source and build
 
 - xlinuxfs: `f9da28e8cfdf6a4574a31e8baa9ba1811ef4c2e4` (2026-10-30), GPL-2.0.
   https://github.com/HuanchuanTech/xlinuxfs
