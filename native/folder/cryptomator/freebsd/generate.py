@@ -111,7 +111,9 @@ def write_c_include(path: Path) -> None:
         if ret == 'V': out += [call + ';']
         elif ret == 'P': out += [f'if ({call} != (void *)(uintptr_t)0x7000) return {i + 1};']
         else: out += [f'if ({call} != {i + 1}) return {i + 1};']
-    out += ['return 0;', '}']
+    out += ['return 0;', '}',
+            'const char *jfuse_native_string(void) { return "genuine FreeBSD native string"; }',
+            'int jfuse_string_callback(int (*callback)(const char *)) { return callback(jfuse_native_string()); }']
     path.write_text('\n'.join(out) + '\n')
 
 
@@ -159,6 +161,7 @@ def location(name: str) -> str:
 def generate_struct(name: str, record: dict) -> str:
     text = java_header(PACKAGE + '.extr.' + location(name))
     text += f'public final class {name} {{\n'
+    text += 'private static final AddressLayout POINTER=ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.sequenceLayout(Long.MAX_VALUE,ValueLayout.JAVA_BYTE));\n'
     text += f'public static long sizeof() {{ return {record["size"]}L; }}\n'
     text += f'public static long alignof() {{ return {record["align"]}L; }}\n'
     text += ('public static MemorySegment allocate(SegmentAllocator a) { '
@@ -172,21 +175,22 @@ def generate_struct(name: str, record: dict) -> str:
             text += f'public static MemorySegment {field}(MemorySegment m) {{ return m.reinterpret(sizeof()).asSlice({offset},{width}); }}\n'
             continue
         native = 'ADDRESS' if api == 'address' else 'JAVA_DOUBLE' if api == 'double' else {1:'JAVA_BYTE', 2:'JAVA_SHORT', 4:'JAVA_INT', 8:'JAVA_LONG'}[width]
+        layout = 'POINTER' if api == 'address' else 'ValueLayout.' + native
         carrier = {'int':'int', 'long':'long', 'double':'double', 'address':'MemorySegment'}[api]
         cast = {'JAVA_BYTE':'byte', 'JAVA_SHORT':'short', 'JAVA_INT':'int', 'JAVA_LONG':'long', 'JAVA_DOUBLE':'double', 'ADDRESS':'MemorySegment'}[native]
-        read = f'm.reinterpret(sizeof()).get(ValueLayout.{native},{offset})'
+        read = f'm.reinterpret(sizeof()).get({layout},{offset})'
         if api in ('int', 'long') and width < 4:
             read = ('Byte' if width == 1 else 'Short') + '.toUnsignedInt(' + read + ')'
         text += f'public static {carrier} {field}(MemorySegment m) {{ return {read}; }}\n'
         text += f'public static void {field}(MemorySegment m, {carrier} v) {{ '
         if api in ('int', 'long') and width < (4 if api == 'int' else 8):
             text += f'if (v < 0 || v > {(1 << (8*width))-1}L) throw new IllegalArgumentException("native {field} overflow"); '
-        text += f'm.reinterpret(sizeof()).set(ValueLayout.{native},{offset},({cast})v); }}\n'
+        text += f'm.reinterpret(sizeof()).set({layout},{offset},({cast})v); }}\n'
     return text + '}\n'
 
 
 def callback_class(name: str, result: str, args: str) -> str:
-    layouts = dict(P='ValueLayout.ADDRESS', I='ValueLayout.JAVA_INT',
+    layouts = dict(P='POINTER', I='ValueLayout.JAVA_INT',
                    U='ValueLayout.JAVA_INT', M='ValueLayout.JAVA_SHORT',
                    Z='ValueLayout.JAVA_LONG', O='ValueLayout.JAVA_LONG')
     carriers = dict(P='MemorySegment', I='int', U='int', M='short', Z='long', O='long', V='void')
@@ -293,8 +297,15 @@ public static void main(String[] args) throws Throwable {
         result = '' if ret == 'V' else 'return MemorySegment.ofAddress(0x7000);' if ret == 'P' else f'return {i+1};'
         text += f'fuse_operations.{name}(ops,fuse_operations.{name}.allocate(({variables})->{{ check({" && ".join(checks)}); callbacks++; {result} }},arena));\n'
     text += f'''check((int)call.invokeExact(ops)==0); check(callbacks=={len(CALLBACKS)});
+ var nativePointer=ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.sequenceLayout(Long.MAX_VALUE,ValueLayout.JAVA_BYTE));
+ var nativeString = Linker.nativeLinker().downcallHandle(lookup.find("jfuse_native_string").orElseThrow(),FunctionDescriptor.of(nativePointer));
+ var stringCallback = Linker.nativeLinker().downcallHandle(lookup.find("jfuse_string_callback").orElseThrow(),FunctionDescriptor.of(ValueLayout.JAVA_INT,ValueLayout.ADDRESS));
+ var pointer = (MemorySegment)nativeString.invokeExact(); check(pointer.getString(0).equals("genuine FreeBSD native string"));
+ fuse_cmdline_opts.mountpoint(m_fuse_cmdline_opts,pointer); check(fuse_cmdline_opts.mountpoint(m_fuse_cmdline_opts).getString(0).equals("genuine FreeBSD native string"));
+ var callback=fuse_operations.unlink.allocate(p->{{check(p.getString(0).equals("genuine FreeBSD native string"));return 420;}},arena);
+ check((int)stringCallback.invokeExact(callback)==420);
  }}
- System.out.println("{{\\\"fields\\\":"+fields+",\\\"callbacks\\\":"+callbacks+",\\\"failures\\\":"+failures+"}}");
+ System.out.println("{{\\\"fields\\\":"+fields+",\\\"callbacks\\\":"+callbacks+",\\\"native_strings\\\":3,\\\"failures\\\":"+failures+"}}");
  if (failures!=0) throw new AssertionError("native ABI round trip failed");
 }}
 }}
@@ -315,7 +326,7 @@ FUSE_FUNCTIONS = {
 def write_functions(destination: Path) -> None:
     package = PACKAGE + '.extr.fuse3'
     text = java_header(package) + '''public final class fuse_h {
-public static final AddressLayout C_POINTER=ValueLayout.ADDRESS;
+public static final AddressLayout C_POINTER=ValueLayout.ADDRESS.withTargetLayout(MemoryLayout.sequenceLayout(Long.MAX_VALUE,ValueLayout.JAVA_BYTE));
 public static final ValueLayout.OfLong C_LONG=ValueLayout.JAVA_LONG;
 private static MethodHandle function(String name,FunctionDescriptor descriptor) {
  return Linker.nativeLinker().downcallHandle(SymbolLookup.loaderLookup().find(name).orElseThrow(()->new UnsatisfiedLinkError(name)),descriptor);
