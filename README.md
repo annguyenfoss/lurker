@@ -28,6 +28,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <th scope="col" width="1%" nowrap><samp>OpenBSD</samp></th>
       <th scope="col" width="1%" nowrap><samp>NetBSD</samp></th>
       <th scope="col" width="1%" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>Windows</samp></th>
     </tr>
   </thead>
   <tbody align="center" valign="middle">
@@ -39,10 +40,12 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"> <sup>🛈</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
@@ -57,11 +60,13 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">A&#8203;P&#8203;F&#8203;S<br>E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d</td>
       <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
@@ -75,6 +80,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left" nowrap>softraid<br>CRYPTO&nbsp;/&nbsp;RAID1C</td>
@@ -82,6 +88,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
     </tr>
@@ -93,6 +100,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">BitLocker</td>
@@ -102,6 +110,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
@@ -111,6 +120,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td>WIP</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td>WIP</td>
     </tr>
   </tbody>
 </table>
@@ -127,6 +137,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <th scope="col" width="1%" nowrap><samp>OpenBSD</samp></th>
       <th scope="col" width="1%" nowrap><samp>NetBSD</samp></th>
       <th scope="col" width="1%" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>Windows</samp></th>
     </tr>
   </thead>
   <tbody align="center" valign="middle">
@@ -135,6 +146,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
@@ -147,6 +159,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">C&#8203;r&#8203;y&#8203;F&#8203;S</td>
@@ -156,6 +169,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r</td>
@@ -165,6 +179,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">securefs</td>
@@ -174,6 +189,17 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
+      <td>WIP</td>
+    </tr>
+    <tr height="60">
+      <td align="left">EFS</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td>WIP</td>
     </tr>
   </tbody>
 </table>
@@ -190,6 +216,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <th scope="col" width="1%" nowrap><samp>OpenBSD</samp></th>
       <th scope="col" width="1%" nowrap><samp>NetBSD</samp></th>
       <th scope="col" width="1%" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>Windows</samp></th>
     </tr>
   </thead>
   <tbody align="center" valign="middle">
@@ -201,6 +228,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">O&#8203;p&#8203;e&#8203;n&#8203;S&#8203;S&#8203;L<br>CMS</td>
@@ -210,6 +238,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">G&#8203;n&#8203;u&#8203;P&#8203;G<br>(OpenPGP)</td>
@@ -219,6 +248,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td>WIP</td>
     </tr>
   </tbody>
 </table>
