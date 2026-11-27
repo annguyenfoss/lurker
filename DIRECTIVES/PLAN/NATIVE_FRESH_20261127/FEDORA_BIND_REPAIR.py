@@ -106,7 +106,7 @@ def main():
         def cli(action):
             operands = [old['source'], str(mount)] if action == 'mount' else [str(mount)]
             log = R / ('logs/zfs-bind-repair-' + item['backend'] + '-' + str(len(item.get('operations', []))) + '-' + action + '.log')
-            prefix = ['sudo', '-n', '-u', 'adjutant', '--'] if user else []
+            prefix = ['/usr/bin/sudo', '-n', '-u', 'adjutant', '--'] if user else []
             value = h.terminal([*prefix, str(P / 'bin/lurker'), action, '--type', 'auto', '--color=never', *operands], password, 180, log)
             item.setdefault('operations', []).append(dict(action=action, log=str(log), **value)); save()
             if value['exit_code'] or value['timed_out']: raise RuntimeError('Normal product repair lifecycle failed')
