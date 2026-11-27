@@ -11,7 +11,12 @@ verified source/module caches and a new private workspace. It retains the prior
 pristine compiler failure and original source manifests, then compiles/runs
 `abi-probe.c`. Work/cache space may use the already identified work disk solely
 as storage; no archived LKL program or library is used. Initial measured new-data
-budget is 256 MiB, with 512 MiB work and 768 MiB root reserves.
+budget is 256 MiB, with 512 MiB work and 768 MiB root reserves. The freeze
+records free capacity for every output/cache filesystem, directs compiler
+temporary files into the new workspace, and disables Go downloads and telemetry.
+It fsyncs source copies, header snapshots, manifests, the probe and their
+directories before returning. Collect the complete evidence directory off-host
+immediately; a missing earlier receipt is never reconstructed as a prior pass.
 
 Native installed public headers supply dirent/stat/statfs, flags and syscall
 identities. The FUSE wire header is the published unmodified stock source
