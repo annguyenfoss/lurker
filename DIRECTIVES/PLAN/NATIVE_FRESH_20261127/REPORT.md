@@ -54,22 +54,43 @@ proof covers bounded immutable target-list snapshots, strict separators and
 duplicate aliases, twelve policy refusals, an atomic-list replacement race,
 the real user-folder branch, busy preservation and ordered normal closes.
 Root reviewed these inputs and authorized one fresh small-cohort VM reboot
-with explicit administrator activation. That test has no result yet; the
-failed stock shutdown and clone recovery remain separate evidence.
+with explicit administrator activation. That new gocryptfs-on-VeraCrypt/ZFS
+cohort passed: changed boot, all five persisted payload hashes, actual caller
+postboot writes and unrelated-user denials, automatic FUSE prerequisites and
+normal service close. Temporary activation was reverted. Root's receipt checks
+pass in `hosts/freebsd/validation/root-shutdown-service-reboot-audit.json`;
+serial-order and archived activation corroboration remain in progress. This
+does not turn the failed stock shutdown or clone recovery into ordinary passes.
 
 OpenBSD's exact `123d177` workspace passed 154 native tests, with 22 ignored,
 and all three products built. Native staging and package construction passed;
 the first wrapper attempt exhausted space and is retained separately from the
 successful unchanged-byte retry. Package SHA-256 is
 `ac36aa9fe987805bad70fe5cd5880ae962df671f75808cecdf6efd5f21f01b7a`.
-Installation and frozen container/device/reboot validation continue.
+Installed integrity matched all 866 entries, and all twelve block-container
+cases passed. The first installed CryFS batch failed on all four backings
+before initialization: runtime lookup expects an extra `cryfs/` directory,
+while the stager installs the provenance file at
+`share/lurker/provenance/cryfs.json`. The adjacent SDK layout had masked this
+packaged-layout bug. A narrow runtime correction and native path regressions
+are approved; corrected-package CryFS/device/reboot validation is still required.
 
 CryFS exFAT failures on OpenBSD and NetBSD are now matched to native hardlink
 `ENOSYS`, while ordinary file create/write/fsync/read/rename/unlink work. This
 is a bundled publication adaptation gap. The existing common patch is unchanged:
 a bare exclusive-create fallback can expose partial valid block names to
-unlocked readers and scans. Native locking semantics are under bounded
-investigation before any alternative is selected. FreeBSD NTFS/exFAT publication
+unlocked readers and scans. The bounded NetBSD native lock investigation does
+not justify a fallback: advisory locks release on creator death, exposing empty
+or partial files, and the kernel unlocks the vnode before acquiring the advisory
+lock. Its exFAT fixture additionally lost its native daemon during the partial
+write control; that failed image is preserved and normal detach completed.
+Source review also rejects header-last publication as an existing-format
+drop-in: current readers snapshot length before reading the header, zeroed old
+corruption is indistinguishable from a proposed pending state, and legacy scans
+have no compatibility gate. Exact reviews are retained under
+`hosts/netbsd/build/native-open-lock-review.txt` and
+`hosts/netbsd/build/cryfs-header-last-review.txt`. No engine patch, weakened
+integrity policy or format change was made. FreeBSD NTFS/exFAT publication
 and native Cryptomator ABI integration also remain open. The earlier optional
 LKL eligibility hold is resolved under the native-process boundary in BRIEF.md:
 the separately installed FreeBSD port uses local host I/O/FUSE without a VM or
