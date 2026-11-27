@@ -1,0 +1,47 @@
+diff --git a/fuse/main.c b/fuse/main.c
+index f7aacb4..7faac7a 100644
+--- a/fuse/main.c
++++ b/fuse/main.c
+@@ -326,6 +326,32 @@ static int fuse_exfat_rename(const char* old_path, const char* new_path
+ 	return exfat_rename(&ef, old_path, new_path);
+ }
+ 
++#if defined(__APPLE__) && FUSE_USE_VERSION < 30
++/* This driver always enters fuse_main with -s. All namespace changes and this
++   destination check run on that single dispatcher; retain EXCL semantics rather
++   than silently discarding flags. Unsupported swap/whiteout flags are refused. */
++static int fuse_exfat_renamex(const char* old_path, const char* new_path,
++        unsigned int flags)
++{
++    struct exfat_node* existing;
++    int rc;
++    if (flags & ~RENAME_EXCL)
++        return -ENOTSUP;
++    if (flags & RENAME_EXCL)
++    {
++        rc = exfat_lookup(&ef, &existing, new_path);
++        if (rc == 0)
++        {
++            exfat_put_node(&ef, existing);
++            return -EEXIST;
++        }
++        if (rc != -ENOENT)
++            return rc;
++    }
++    return exfat_rename(&ef, old_path, new_path);
++}
++#endif
++
+ static int fuse_exfat_utimens(const char* path, const struct timespec tv[2]
+ #if FUSE_USE_VERSION >= 30
+ 		, UNUSED struct fuse_file_info* fi
+@@ -450,6 +476,9 @@ static struct fuse_operations fuse_exfat_ops =
+ 	.mknod		= fuse_exfat_mknod,
+ 	.mkdir		= fuse_exfat_mkdir,
+ 	.rename		= fuse_exfat_rename,
++#if defined(__APPLE__) && FUSE_USE_VERSION < 30
++	.renamex	= fuse_exfat_renamex,
++#endif
+ 	.utimens	= fuse_exfat_utimens,
+ 	.chmod		= fuse_exfat_chmod,
+ 	.chown		= fuse_exfat_chown,

@@ -62,3 +62,9 @@ The earlier macFUSE builder is preserved in the source history at
 https://github.com/annguyenfoss/lurker/tree/8344905baab8e66397478db967815d9de6bb0ac6
 [Evaluation plan](../../DIRECTIVES/PLAN/MACOS_FOLDER_FUSE_T.md) ·
 [Package evidence](../../docs/macos-backends.md)
+
+## Separately installed backing filesystem alternatives
+
+The native directory-vault backing guides are `fuse-ext2-macfuse.md`,
+`fuse-ufs.md` and `exfat-macfuse.md`. These describe host prerequisites and their
+observed limits; filesystem drivers and FUSE are never bundled with Lurker.
