@@ -204,9 +204,10 @@ PIPE dispositions and signal masks are owned explicitly after channel INIT;
 signals keep service available for ordinary OS unmount and produce failure after
 close. Failed drain retains its worker/backing instead of forcing release.
 
-The final private arm64 candidate passed four mounted opens on ext4, Btrfs and
-XFS with common payload write/append/verify, permission/refusal controls, busy
-close and normal teardown. Exactly one native backing fsync EIO was injected
+The final private arm64 candidate passed three read/write mounted opens on
+ext4, Btrfs and XFS with common payload write/append/verify, permission/refusal
+controls, busy close and normal teardown. A fourth read-only open was an
+additional native diagnostic; it creates no product mode or acceptance requirement. Exactly one native backing fsync EIO was injected
 and disarmed before close on independent fixtures. ext4/Btrfs subsequently
 synced and unmounted successfully but exited with failure from the permanent
 host-error latch. XFS continued reporting EIO and retained its backing without
