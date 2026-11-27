@@ -235,7 +235,7 @@ the engine acquires the native mount as root; the first `Fuse::init` action
 permanently drops supplementary groups, GID and UID before filesystem setup.
 Initializers may remain UID0 only in private root staging. This preserves
 caller ownership for both initial publication and every later ciphertext/state
-file. No memory-lock requirement is weakened; an actual UID1300 mlock control
+file. No memory-lock requirement is weakened; an actual UID 1300 mlock control
 succeeded on this host.
 
 The updated port SHA-256 is
@@ -243,10 +243,10 @@ The updated port SHA-256 is
 its diagnostic native engine SHA-256 is
 `1936b528fa0970ca6401c6a7f3b44046ea751ee852c8bfea692b9ccd87aa623f`.
 Eight real-engine source/mountpoint replacement negatives passed, four as root
-and four with actual UID1300 filesystem I/O. A separate native control passed
-three complete mounted payload phases with actual UID1300 readers/writers;
-kernel snapshots confirmed UID/GID1300 and locked unveil on each normal open.
-All ciphertext and local-state nodes retained UID/GID1300 after write, append
+and four with actual UID 1300 filesystem I/O. A separate native control passed
+three complete mounted payload phases with actual UID 1300 readers/writers;
+kernel snapshots confirmed UID/GID 1300 and locked unveil on each normal open.
+All ciphertext and local-state nodes retained UID/GID 1300 after write, append
 and final reopen. An unrelated UID32767 could neither list, read nor write the
 plaintext mount through traversable test ancestors. All four mounts, including
 the private initializer, closed normally with engine exit0.
@@ -265,27 +265,27 @@ The final native factory completed from the committed caller-I/O patch
 `c8c36e0` and producer/stager registration `29d5d76`. Its clean engine SHA-256 is
 `15c4171b4a016c65172403df9801fa579b1e84ed34406238e2c029a8420704ee`.
 The factory SDK records the exact two patch hashes, native package closure and
-notices, root/directory/unveil-protocol1 runtime contract, and external base
+notices, root/directory/unveil protocol 1 runtime contract, and external base
 FUSE prerequisite. It contains no private FUSE library or RPATH. That exact
 factory engine passed all eight actual-engine confinement negatives and the
-complete three-cycle downloaded payload/append/new/hash lifecycle as UID1300.
+complete three-cycle downloaded payload/append/new/hash lifecycle as UID 1300.
 Kernel UID/GID and locked-unveil snapshots, ciphertext/state ownership,
 foreign-user list/read/write denials, and direct mount-window syscall audit all
 passed again. Evidence is `logs/cryfs-final-factory-native-proof.tar.gz`.
 
 The first actual product launch exposed a separate OpenBSD UFS session-record
-race: metadata on a held root-owned0600 regular descriptor briefly reported
-nlink2 during atomic rename. A native10,000-rename probe observed1,185,883 such
+race: metadata on a held root-owned 0600 regular descriptor briefly reported
+nlink 2 during atomic rename. A native 10,000-rename probe observed 1,185,883 such
 samples with all other metadata valid. Commit `c3dd43b` retries only that same
-held descriptor, bounded to32 one-millisecond attempts; persistent hardlinks
+held descriptor, bounded to 32 one-millisecond attempts; persistent hardlinks
 and wrong type/owner/mode remain refused. Native regressions cover the held old
-descriptor after replacement, transient2→1, and persistent2 rejection. Core
-tests passed79/0 with20ignored. The failed product records and private
+descriptor after replacement, transient 2→1, and persistent 2 rejection. Core
+tests passed 79/0 with 20 ignored. The failed product records and private
 diagnostics remain separate in `logs/cryfs-primary-helper-startup-failure.tar.gz`
 and `logs/cryfs-diagnostic-product-and-linkcount-failures.tar.gz`.
 
-Normal CLI and helper primary CryFS routes then passed14 operations each with
-the final factory SDK. Both used actual UID1300 payload I/O across three mounts,
+Normal CLI and helper primary CryFS routes then passed 14 operations each with
+the final factory SDK. Both used actual UID 1300 payload I/O across three mounts,
 all expected hashes, append/new-file writes, caller ownership for every new
 ciphertext node, foreign plaintext denial, credential/duplicate/busy guards and
 normal closes. Configured source close passed, with wrong source, foreign
@@ -297,9 +297,9 @@ and helper SHA-256
 their final receipts are `logs/cryfs-fixed-product-primary-proof.tar.gz`.
 
 The narrowed Auto-authorization policy preserves login-user routing for other
-directory engines. The corresponding native desktop suite passed43/0 with one
+directory engines. The corresponding native desktop suite passed 43/0 with one
 explicit native callback ignored, then that actual callback passed separately
-as UID1300 in43.66s through the trusted helper: create, mount,1MiB write, normal
+as UID 1300 in 43.66 s through the trusted helper: create, mount, 1 MiB write, normal
 close, reopen/hash comparison and normal close. The executed helper SHA-256 is
 `b07831aca77217719cafaa0eb7f239eb3a56b8c853b5eb6defa19bf83ffdde51`;
 CLI is `e5a10f1c932a7ad52adf62234923c68a75e760bfcc683d22c47a374dedb84013`.
@@ -316,14 +316,14 @@ This remains source-overlay evidence, not exact-commit installed qualification.
 Fresh CryFS directory-backing cases passed on independently identified UFS1,
 UFS2 and NTFS with the full actual-user payload lifecycle. The exFAT case failed
 its first plaintext mkdir: the hardened common new-block publisher requires
-`link()`, and native exFAT returns ENOSYS78. An isolated control on a verified
+`link()`, and native exFAT returns ENOSYS 78. An isolated control on a verified
 clone of the preserved failed mapped image reproduced that exact link error
 while actual-user create/write/fsync/read/rename/unlink all worked. This is a
 product publication adaptation gap, not an unavailable native filesystem.
 Both failed product mounts were normally unmounted after matching recorded and
 current kernel fsids; the exact engine/monitor exited naturally, the outer
 CRYPTO transport closed normally, and vnd0 was released. No forced cleanup was
-used. The original mapped image is133,914,624bytes, SHA-256
+used. The original mapped image is 133,914,624 bytes, SHA-256
 `584fbf2512bfaf4e11661fc7fb0ad4dbd65b689a7450eea1a008a798dde8d2b2`.
 Evidence is `logs/cryfs-backing-matrix-first-results.tar.gz` and
 `logs/cryfs-exfat-failure-and-native-cause.tar.gz`.
