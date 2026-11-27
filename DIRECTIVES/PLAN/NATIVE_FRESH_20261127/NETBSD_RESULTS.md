@@ -326,9 +326,28 @@ ignored. Before the host installation, fresh stock-provider negatives passed
 three container and three physical creation cases without new files, parameter
 sidecars, partition-byte changes or inventory changes. An actual UID 1300 CryFS
 helper creation also rejected before vault mutation. The draft chmod refresh
-remains removed. A newly built and installed package and complete actual-user
-backing matrix remain pending; isolated or earlier root-writer receipts do not
-supply those passes.
+remains removed. The exact frozen `8e09ac8` source passed native workspace check and 131 tests,
+with five ignored. Its refreshed native package contains 861 files, selects CGD
+and CryFS, and has SHA-256
+`b5b886763cdd8edcc44e20db0332963e6c9be3e3568a9899da6f3ef8cb8803c0`.
+The reviewed package replaced only the previous registered round-owned package
+through ordinary package tools. Installed CLI/helper/desktop hashes are
+`29c16368727ff1d776c9d32d133af85142ff8288cb83808ccc86327209ab1ba7`,
+`6b95679559a70cc9accab82adaa3db5c98e441a66331ac438e1f6fefd1f3d8f2`,
+and `6b9832cd907889d8c51e6c6cf313ed5c7eb6b87d19d3b6d517aa69a6edda12d4`.
+The official CryFS engine remains byte-identical `e1b3f3c...`. Installed manifest
+hashes and root ownership were verified, including absence of bundled native
+FUSE providers. The complete actual-user container/backing matrix is running;
+earlier or isolated receipts do not supply these final artifact passes.
+
+A subsequent shared folder snapshot fix `c3dd43bf` addresses transient extra
+links observed during OpenBSD UFS record replacement. The exact concurrent
+rename/fstat probe ran on this NetBSD FFS(log) host as UID 1300: 10,000 fsynced
+renames, 2,069,369 one-link observations, nine unlinked held-inode observations,
+and zero extra-link observations. Writer exit, file type, owner and private-mode
+checks passed. The coordinator explicitly approved continuing the installed
+`8e09ac8` qualification on this negative native applicability evidence; that
+probe does not claim the behavior impossible on every NetBSD configuration.
 
 An accidentally overlapping helper probe caused five fail-closed global-folder
 lock rejections in the initial backing dispatch. The original failures are
