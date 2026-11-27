@@ -478,7 +478,7 @@ normally for read/write; all five append/final hashes match. The persisted calle
 nonce, a fresh postboot UID 1300 write/fsync/read, and unrelated UID 65534 denials
 all pass. Registered-service normal close succeeds. Activated rc.d/rc.conf.d/list
 files are archived and removed by exact hash; intentional persistent FUSE setup
-remains. No forced power action, repair, import or error-string skipping occurred.
+remains. No forced power action, filesystem repair, force import or error-string skipping occurred.
 
 The local serial log is `validation/service-reboot-console.log`, SHA-256
 `1a4b92f864d3ba43c825b4475ef2ff8eb373277677bd1cf46c7ea7ac52c40490`.
