@@ -442,9 +442,87 @@ unchanged. The old native XFS formatter's invalid V4 seed and the earlier
 combined-lipo verification syntax failure remain retained failures.
 
 The frozen package's 30 passed cells and three earlier USB sample identities
-remain unchanged. No host-visible LKL filesystem mount, replacement driver
-installation, new USB write or XFS guard removal occurred. Mounted macFUSE
-integration still needs native errno/credential handling, permission and busy
-controls, and a qualified native formatter. `native/macos/lkl-macfuse.md` records
-the exact source and remaining gates. Private receipts, hashes and the proposed
-adapter design are under `validation/native-lkl/` in the Mac evidence root.
+remain unchanged. At this bridge-only checkpoint there was no host-visible LKL
+mount, replacement-driver installation, new USB write or XFS guard removal.
+The later host-driver and native-format controls below have separate identities.
+Private bridge receipts and source hashes remain under `validation/native-lkl/`.
+
+## Later host-driver and native-format controls
+
+Commit `536b80d` keeps kernel internals out of native libc calls before native
+host objects are linked. Both archive slices export exactly the 17 LKL symbols
+and four boot-glue dependencies; the archive hash is
+`1902814d17f275f72da97ff4c0fcbf75cc74fe7aebab6fb3f35f3a06ed5c02f0`.
+Native arm64 controls bind host formatting/string functions to Apple libraries
+before initialization, during execution and after cleanup. Three-filesystem
+bridge/payload/flush-error controls passed again against this exact archive.
+
+Commit `d32ca84` adds an external macFUSE 3 API 35 compatibility adapter and
+unprivileged builder. After private qualification, root review approved the
+exact v13 binary
+`5016528a956b43bc274bdf91cb94b105d593e38939a4f382000302639abe635b`
+for a new versioned host copy. The copied bytes were hashed while unpublished,
+then protected as root:wheel 0555. The driver was never executed as root. No
+stable alias, app-bundled filesystem code or product dispatch was added.
+Both non-Apple dynamic dependencies and their ancestors remained protected.
+
+The installed driver passed **three RW opens each on ext4, Btrfs and XFS**,
+with common payload write/append/verify, per-request permissions/foreign-user
+checks, setgid inheritance, directory cookies, exclusive-rename races, duplicate
+claims, busy close and normal OS/inner drain. These nine opens initially used
+native ext4 and imported Btrfs/XFS seeds. Signal and bounded startup/refusal
+controls also passed. Private v13 one-shot backing-fsync faults remain distinct:
+ext4/Btrfs subsequently drained but exited with a permanent error; XFS retained
+EIO and required scoped recovery, never a normal-cleanup pass.
+
+Two later, unencrypted **native file-generation** controls then passed:
+
+- Native Darwin `mkfs.xfs` 7.3.0 from `7222a6b`, binary `97029ffb…`, created an
+  absent 512 MiB regular file in a new private directory. There was no precreate,
+  force, configuration or prototype import. Cold reads verified ownership,
+  single link, exact size, V5/CRC/finobt/ftype, 4 KiB blocks, 512-byte sectors and
+  inodes, conservative feature bits and all four AG superblock CRC32Cs. A clone
+  passed three RW payload/reopen/normal-close opens through installed v13.
+- Native `mkntfs` `d2517b38…` generated a new owned 0600 2 GiB file with
+  512-byte sectors and 4096-byte clusters. Cold metadata verified nine 4096-byte
+  index observations, including an actual aligned root INDX record. The NTFS
+  baseline was frozen and cloned; native converter `43488e5c…` from `e83ccaf`
+  ran once with the exact clone identity, CRC32C/data checksums and no compression,
+  and exited zero. Both Btrfs superblock mirrors validated independently before
+  mounting. Its filesystem extent is 2147479552 bytes, derived from native NTFS
+  whole-cluster geometry; the backing remains 2147483648 bytes. A clone passed
+  three RW payload/reopen/normal-close opens through installed v13.
+
+The Btrfs controller's first two cold-validation failures are retained as
+harness failures: its first feature mask omitted BIG_METADATA, and it initially
+assumed filesystem extent equalled backing extent. The corrected read-only v3
+checks the exact source-supported `0x361` feature set and native NTFS cluster
+rounding. It did not rerun conversion or modify the converted seed. This
+converter control covers a newly generated, aligned NTFS profile, not arbitrary
+or hostile-image conversion.
+
+These **15 installed-driver RW opens** are host-tool results, not encrypted
+Lurker Create, device support or new package-matrix passes. Both new filesystem
+clones received fixture-only `/lfresh-user` ownership initialization; that is not
+product fresh-root ownership initialization. Existing filesystems must not be
+chowned on reopen. The new delta index is
+`validation/native-lkl-installed-v13/new-evidence-index.json`, with 177 archived
+files and exact executed controllers/raw logs; earlier 905-file v13 evidence
+stays frozen under `validation/native-lkl-adapter/`.
+
+A later source check found `lkl_sys_halt` can return negative before shutdown.
+Commit `121e1d9` adds a checked halt at both cleanup sites, retaining the backing
+until API zero and preserving the first failure. Private candidate `9f2178a1…`
+passed one normal payload/close per filesystem, setup-failure cleanup, and a
+negative-then-real-zero halt control proving deferred cleanup/close and final
+production exit 1. It has not replaced installed `5016528…`. Upstream ignores
+its final native thread-join callback return; the recorded boundary is LKL API
+success, not an independently checked pthread join.
+
+Product admission still needs a source/session/status-inode/nonce/process-bound
+checked drain result, narrow fresh-root ownership initialization, actual
+VeraCrypt crypto-view controls, and mapped-provider geometry/flush/identity
+where applicable. The XFS product guard remains. VM/network substitutes stay
+ineligible. No additional USB write, device test, app package revision or host
+reboot occurred; owned host-driver mounts/workers closed normally in these new
+controls, and Buran's boot identity remains `1795714904`.
