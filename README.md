@@ -13,8 +13,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - 🧅 Wraps an encryption tool on your system
 - 🥑 Encryption engine included with Lurker
 - 🛈 See note below
-- WIP — Integration in progress
-- TBA — To be announced
+- WIP — Work in progress
+- ○ — Planned, not started
 - — Unavailable
 
 ### Disk, volume, and container encryption
@@ -36,22 +36,22 @@ Protect disks, file containers and directories with the CLI or native desktop ap
     <tr height="60">
       <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;1</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>TBA</td>
-      <td>TBA</td>
-      <td>TBA</td>
-      <td>TBA</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"> <sup>🛈</sup></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>TBA</td>
-      <td>TBA</td>
-      <td>TBA</td>
-      <td>TBA</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
       <td>WIP</td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">Apple&nbsp;Encrypted<br>Disk&nbsp;Image</td>
@@ -105,13 +105,13 @@ Protect disks, file containers and directories with the CLI or native desktop ap
     </tr>
     <tr height="60">
       <td align="left">BitLocker</td>
-      <td>TBA</td>
-      <td>TBA</td>
-      <td>TBA</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
@@ -121,7 +121,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td>WIP</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
   </tbody>
 </table>
@@ -157,10 +157,10 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td>TBA</td>
-      <td>TBA</td>
+      <td>○</td>
+      <td>○</td>
       <td><sup>—</sup></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">C&#8203;r&#8203;y&#8203;F&#8203;S</td>
@@ -170,27 +170,27 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r</td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td>WIP</td>
-      <td>TBA</td>
-      <td>TBA</td>
+      <td>○</td>
+      <td>○</td>
       <td><sup>—</sup></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">securefs</td>
-      <td>TBA</td>
-      <td>TBA</td>
-      <td>TBA</td>
-      <td>TBA</td>
-      <td>TBA</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
       <td><sup>—</sup></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">EFS</td>
@@ -200,7 +200,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
   </tbody>
 </table>
@@ -229,7 +229,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">O&#8203;p&#8203;e&#8203;n&#8203;S&#8203;S&#8203;L<br>CMS</td>
@@ -239,7 +239,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
     <tr height="60">
       <td align="left">G&#8203;n&#8203;u&#8203;P&#8203;G<br>(OpenPGP)</td>
@@ -249,7 +249,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>TBA</td>
+      <td>○</td>
     </tr>
   </tbody>
 </table>
