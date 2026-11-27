@@ -281,6 +281,14 @@ clarification about that architecture.
   and remaining virtual-partition/helper gates remain separately identified.
   The earlier VeraCrypt callback failure came from placing the test executable
   outside the app bundle, not a demonstrated product discovery defect.
+- Root has now audited the `025f558` extracted-package receipts directly: all
+  fourteen conformance profiles and their 280 individual outcomes, plus all
+  thirty selected filesystem cells with four payload opens each. All expected
+  command exits, pinned original hashes, five-file persistence hashes and
+  normal final closes matched. The 1,166-file evidence collection matched its
+  manifest. Private audits are `hosts/macos/validation/root-package-conformance-audit-025f558.json`
+  and `hosts/macos/validation/root-renewed025-thirty-cells-audit.json`. These
+  positive-case audits do not validate every blocked/unavailable assessment.
 - macOS's three renewed ZFS directory cases passed their payload lifecycles but
   initially failed cleanup because Spotlight retained mappings. Scoped forced
   detach recovered only those identified fixtures; it is recovery evidence.
