@@ -29,9 +29,19 @@ ordinary upstream factory or mounting. Those remain separate native gates.
 FUSE3 is a separately installed native host prerequisite. No FUSE library or
 filesystem tool is copied into the candidate runtime. The initial profile is
 single threaded, uses actual login-user IDs, kernel permission checks and
-`fuse_config.direct_io=1`, and never requests allow-other, automatic/forced/lazy
-unmount, writeback cache or a Linux unmount helper. Ordinary native unmount must
-succeed before closing the FUSE loop and adapter.
+`fuse_config.direct_io=1`, and rejects allow-other, automatic unmount and
+writeback cache flags. It uses the ordinary native unmount command.
+
+**Mounted admission is blocked by a pre-mount source finding.** The current
+derived jFUSE close still invokes `fuse_unmount`. FreeBSD libfuse3 3.18.3's
+`fuse_kern_unmount` uses `MNT_FORCE`, including after a preceding normal unmount.
+No candidate vault has been mounted. Build, registration and FFM memory passes
+do not qualify this close lifecycle. A replacement must retain exact mount and
+channel ownership until normal unmount, independent captured-FSID/source absence
+and natural loop completion; then use the documented non-unmounting destruction
+API. Busy, moved, replacement and failed-close states must retain resources.
+The upstream jFUSE close also closes its arena in a finally block after timeout,
+so the FreeBSD binding needs a guard before entering that close path.
 
 FUSE-NIO registers file FSYNC and forwards it to the existing channel force
 operation. It does not register FSYNCDIR. The provider probe reports this upstream
