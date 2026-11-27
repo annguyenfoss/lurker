@@ -67,7 +67,7 @@ def verify_source(archive, source):
                 if digest(path) != expected:
                     raise RuntimeError(f"Modified upstream input: {relative}")
                 checked += 1
-            elif member.issym() and (not path.is_symlink() or os.readlink(path) != member.linkname):
+            elif member.issym() and (not path.is_symlink() or os.readlink(path) != os.path.normpath(member.linkname)):
                 raise RuntimeError(f"Modified upstream symlink: {relative}")
             elif member.isdir() and (path.is_symlink() or not path.is_dir()):
                 raise RuntimeError(f"Modified upstream directory: {relative}")

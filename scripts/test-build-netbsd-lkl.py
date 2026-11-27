@@ -80,6 +80,19 @@ class BuildInputs(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Modified upstream directory"):
                 BUILDER.verify_source(archive, work)
 
+    def test_safe_tar_symlink_normalization_is_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            (work / "subdir").mkdir()
+            (work / "subdir/link").symlink_to("../target")
+            archive = work / "input.tar"
+            with tarfile.open(archive, "w") as tar:
+                item = tarfile.TarInfo(f"linux-{BUILDER.REVISION}/subdir/link")
+                item.type = tarfile.SYMTYPE
+                item.linkname = ".././target"
+                tar.addfile(item)
+            self.assertEqual(BUILDER.verify_source(archive, work), 0)
+
     def test_timeout_terminates_owned_make_process_group(self):
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
