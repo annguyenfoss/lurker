@@ -23,7 +23,8 @@ class BackendTest {
     @Test void providerPolicyNeverFallsBackToMacFuse() throws Exception {
         assertEquals(".LinuxFuseMountProvider", Main.providerSuffix("Linux"));
         assertEquals(".FuseTMountProvider", Main.providerSuffix("Mac OS X"));
-        assertThrows(IOException.class, () -> Main.providerSuffix("FreeBSD"));
+        assertEquals(".FreeBsdFuseMountProvider", Main.providerSuffix("FreeBSD"));
+        assertThrows(IOException.class, () -> Main.providerSuffix("OpenBSD"));
     }
 
     @Test void fencedMountpointRequiresOwnedModeZeroAndDoesNotListTheProtectedPath() throws Exception {
@@ -83,6 +84,77 @@ class BackendTest {
                 assertThrows(IOException.class, Main::readPassword);
             }
         } finally { System.setIn(original); }
+    }
+
+    @Test void managedBootstrapUsesSecondPipeLineAndRequiresExactLowercaseToken() throws Exception {
+        var original = System.in;
+        try {
+            String token = "0123456789abcdef".repeat(4);
+            System.setIn(new ByteArrayInputStream(("  密碼  \n" + token + "\n").getBytes(StandardCharsets.UTF_8)));
+            assertArrayEquals("  密碼  ".toCharArray(), Main.readPassword());
+            assertEquals(token, Main.readManagedToken());
+            for (String bad : new String[] {"", token, token + "\r\n", token + "\nextra", "A".repeat(64) + "\n",
+                    "f".repeat(63) + "\n", "f".repeat(65) + "\n"}) {
+                System.setIn(new ByteArrayInputStream(bad.getBytes(StandardCharsets.US_ASCII)));
+                assertThrows(IOException.class, Main::readManagedToken);
+            }
+        } finally { System.setIn(original); }
+    }
+
+    private static String managedRequest(Path directory, String token, String command, String nonce) throws Exception {
+        try (var socket = java.nio.channels.SocketChannel.open(java.net.StandardProtocolFamily.UNIX)) {
+            socket.connect(java.net.UnixDomainSocketAddress.of(directory.resolve(ManagedClose.SOCKET_NAME)));
+            var bytes = java.nio.ByteBuffer.wrap(("LFMC1 " + command + " " + token + " " + nonce + "\n")
+                    .getBytes(StandardCharsets.US_ASCII));
+            while (bytes.hasRemaining()) socket.write(bytes);
+            var reply = java.nio.ByteBuffer.allocate(129);
+            while (socket.read(reply) != -1) assertTrue(reply.hasRemaining(), "Bounded control reply");
+            return new String(reply.array(), 0, reply.position(), StandardCharsets.US_ASCII);
+        }
+    }
+
+    @Test void managedStartupFailureRetainsCryptoFsAndReturnsOnlyAfterLiveClosedReply() throws Exception {
+        var directory = Files.createDirectory(vault.resolve("managed"));
+        Files.setPosixFilePermissions(directory, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+        String token = "b".repeat(64);
+        var control = ManagedClose.open(directory, token, Files.getOwner(directory));
+        var order = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var password = "test-secret".toCharArray();
+        var stdout = new java.io.ByteArrayOutputStream();
+        var stderr = new java.io.ByteArrayOutputStream();
+        var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        var startup = new java.util.concurrent.CountDownLatch(1);
+        var runner = new Thread(() -> {
+            try {
+                Main.runManaged(control, () -> order.add("mount"), () -> order.add("cryptofs"), () -> false,
+                        () -> { startup.countDown(); throw new IOException("secret startup detail"); },
+                        password, new java.io.PrintStream(stdout), new java.io.PrintStream(stderr));
+            } catch (Throwable error) { failure.set(error); }
+        });
+        runner.start();
+        assertTrue(startup.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (control.state() != ManagedClose.State.RETAINED && System.nanoTime() < deadline) Thread.sleep(10);
+        assertEquals(ManagedClose.State.RETAINED, control.state());
+        assertTrue(runner.isAlive());
+        assertTrue(order.isEmpty());
+        assertArrayEquals(new char[password.length], password);
+        assertFalse(stderr.toString().contains("secret"));
+        assertEquals("", stdout.toString());
+        assertThrows(IOException.class, control::close);
+        String nonce = "1".repeat(32);
+        String reply = managedRequest(directory, token, "close", nonce);
+        assertTrue(reply.startsWith("LFMC1 closing " + nonce + " ") || reply.startsWith("LFMC1 closed " + nonce + " "));
+        while (!reply.startsWith("LFMC1 closed ") && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+            reply = managedRequest(directory, token, "status", "2".repeat(32));
+        }
+        assertTrue(reply.matches("LFMC1 closed [12]{32} " + ProcessHandle.current().pid() + "\\n"));
+        runner.join(2000);
+        assertFalse(runner.isAlive());
+        assertNull(failure.get());
+        assertEquals(java.util.List.of("mount", "cryptofs"), order);
+        assertEquals("{\"protocol\":1,\"status\":\"closed\"}", stdout.toString().trim());
     }
 
     @Test void fuseAdapterRegistersFsyncCallback() throws Exception {

@@ -26,6 +26,8 @@ import java.util.Arrays;
 import java.util.Locale;
 import java.util.ServiceLoader;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Callable;
+import java.util.function.BooleanSupplier;
 
 /** Narrow private process protocol. Passwords are never accepted through argv or env. */
 public final class Main {
@@ -45,30 +47,37 @@ public final class Main {
             }
             if (args.length == 1 && args[0].equals("--capabilities")) {
                 int fence = System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("mac") ? 1 : 0;
-                System.out.println("{\"protocol\":1,\"init\":true,\"mount\":true,\"readonly\":true,\"password_stdin\":true,\"fenced_mountpoint_protocol\":" + fence + "}");
+                int managed = isFreeBsd() ? 1 : 0;
+                System.out.println("{\"protocol\":1,\"init\":true,\"mount\":true,\"readonly\":true,\"password_stdin\":true,\"fenced_mountpoint_protocol\":" + fence + ",\"managed_close_protocol\":" + managed + "}");
                 return;
             }
             if (args.length < 2 || (!args[0].equals("init") && !args[0].equals("mount"))) {
                 throw new IllegalArgumentException("Expected init DIRECTORY or mount VAULT MOUNTPOINT [--readonly]");
             }
             boolean init = args[0].equals("init");
-            if ((init && args.length != 2) || (!init && (args.length < 3 || args.length > 5))) {
+            if ((init && args.length != 2) || (!init && (args.length < 3 || args.length > 7))) {
                 throw new IllegalArgumentException("Invalid backend arguments");
             }
             boolean readonly = false, fenced = false;
+            Path managedDirectory = null;
             if (!init) for (int i = 3; i < args.length; i++) {
                 if (args[i].equals("--readonly") && !readonly) readonly = true;
                 else if (args[i].equals("--fenced-mountpoint") && !fenced
                         && System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("mac")) fenced = true;
+                else if (args[i].equals("--managed-close") && managedDirectory == null && isFreeBsd()
+                        && i + 1 < args.length) managedDirectory = Path.of(args[++i]);
                 else throw new IllegalArgumentException("Invalid backend arguments");
             }
+            if (!init && isFreeBsd() && managedDirectory == null)
+                throw new PrerequisiteException("FreeBSD Cryptomator requires supervised managed close.");
             char[] password = readPassword();
             try {
                 if (init) {
                     initialize(Path.of(args[1]), password);
                     System.out.println("{\"protocol\":1,\"status\":\"initialized\"}");
                 } else {
-                    mount(Path.of(args[1]), Path.of(args[2]), password, readonly, fenced);
+                    if (managedDirectory == null) mount(Path.of(args[1]), Path.of(args[2]), password, readonly, fenced);
+                    else mountManaged(Path.of(args[1]), Path.of(args[2]), password, readonly, managedDirectory);
                 }
             } finally {
                 Arrays.fill(password, '\0');
@@ -79,6 +88,26 @@ public final class Main {
                     : "Cryptomator operation failed (" + error.getClass().getSimpleName() + ")");
             System.exit(1);
         }
+    }
+
+    private static boolean isFreeBsd() {
+        return System.getProperty("os.name").equalsIgnoreCase("FreeBSD");
+    }
+
+    /** Second private pipe line, never argv/env. Password reading is unchanged. */
+    static String readManagedToken() throws IOException {
+        byte[] token = new byte[64];
+        try {
+            for (int i = 0; i < token.length; i++) {
+                int value = System.in.read();
+                if (!(value >= '0' && value <= '9') && !(value >= 'a' && value <= 'f'))
+                    throw new IOException("Invalid managed-close bootstrap");
+                token[i] = (byte) value;
+            }
+            if (System.in.read() != '\n' || System.in.read() != -1)
+                throw new IOException("Invalid managed-close bootstrap");
+            return new String(token, StandardCharsets.US_ASCII);
+        } finally { Arrays.fill(token, (byte) 0); }
     }
 
     static char[] readPassword() throws IOException {
@@ -138,6 +167,7 @@ public final class Main {
         var os = operatingSystem.toLowerCase(Locale.ROOT);
         if (os.contains("linux")) return ".LinuxFuseMountProvider";
         else if (os.contains("mac")) return ".FuseTMountProvider";
+        else if (os.equals("freebsd")) return ".FreeBsdFuseMountProvider";
         else throw new IOException("Unsupported Cryptomator platform");
     }
 
@@ -163,7 +193,74 @@ public final class Main {
         return ServiceLoader.load(MountService.class).stream().map(ServiceLoader.Provider::get)
                 .filter(service -> service.getClass().getName().endsWith(suffix) && service.isSupported())
                 .findFirst().orElseThrow(() -> new PrerequisiteException(suffix.equals(".FuseTMountProvider")
-                        ? MAC_RUNTIME_HELP : "Cryptomator requires the Linux libfuse3 runtime."));
+                        ? MAC_RUNTIME_HELP : suffix.equals(".FreeBsdFuseMountProvider")
+                        ? "Cryptomator requires the qualified FreeBSD FUSE3 provider and host runtime."
+                        : "Cryptomator requires the Linux libfuse3 runtime."));
+    }
+
+    /** Installed before the first mount attempt; startup errors retain the same closer. */
+    static void runManaged(ManagedClose control, AutoCloseable builder, AutoCloseable fs,
+                           BooleanSupplier retrySafe, Callable<? extends AutoCloseable> mountAction,
+                           char[] password, PrintStream out, PrintStream err) throws Exception {
+        control.setResources(builder, fs, retrySafe);
+        try {
+            try {
+                control.markMounted(mountAction.call());
+                if (!control.listenerFailed()) {
+                    out.println("{\"protocol\":1,\"status\":\"mounted\"}");
+                    out.flush();
+                }
+            } catch (Exception | LinkageError error) {
+                control.markStartupFailed();
+                err.println("Cryptomator startup failed; resources retained for explicit close");
+            }
+        } finally { Arrays.fill(password, '\0'); }
+        // No shutdown hook and no System.exit on a partial mount failure. A failed
+        // close keeps the JVM, adapter, CryptoFS and control listener reachable.
+        boolean interrupted = false;
+        for (;;) {
+            try { control.awaitClosed(); break; }
+            catch (InterruptedException error) { interrupted = true; }
+        }
+        // awaitClosed includes delivery of the bound live CLOSED reply. The
+        // independent stdout result and natural exit remain supervisor checks.
+        control.close();
+        out.println("{\"protocol\":1,\"status\":\"closed\"}");
+        out.flush();
+        if (interrupted) Thread.currentThread().interrupt();
+    }
+
+    private static void mountManaged(Path vault, Path point, char[] password, boolean readonly,
+                                     Path sessionDirectory) throws Exception {
+        validateMountpoint(point, false);
+        String token = readManagedToken();
+        var owner = sessionDirectory.getFileSystem().getUserPrincipalLookupService()
+                .lookupPrincipalByName(System.getProperty("user.name"));
+        var control = ManagedClose.open(sessionDirectory, token, owner);
+        org.cryptomator.cryptofs.CryptoFileSystem fs = null;
+        boolean attached = false;
+        try {
+            fs = CryptoFileSystemProvider.newFileSystem(vault, properties(vault, password, readonly));
+            var service = mountService();
+            var builder = service.forFileSystem(fs.getPath("/"));
+            // The selected provider owns even a mount() attempt that throws.
+            if (!(builder instanceof AutoCloseable closer) || !(builder instanceof BooleanSupplier retrySafe))
+                throw new IOException("Managed provider does not retain failed mount attempts");
+            builder.setMountpoint(point);
+            String flags = service.getDefaultMountFlags().replace("-oauto_unmount", "").trim();
+            if (readonly && service.hasCapability(MountCapability.READ_ONLY)) builder.setReadOnly(true);
+            if (readonly) flags += " -oro";
+            builder.setMountFlags(flags);
+            attached = true;
+            runManaged(control, closer, fs, retrySafe, builder::mount, password, System.out, System.err);
+        } finally {
+            // Before attachment no native mount has been attempted. After it,
+            // runManaged is the sole disposer, including failed startup.
+            if (!attached) {
+                try { if (fs != null) fs.close(); }
+                finally { control.close(); }
+            }
+        }
     }
 
     static boolean closeResources(AutoCloseable mount, AutoCloseable fs, PrintStream out, PrintStream err) {

@@ -218,7 +218,7 @@ def main() -> None:
         linux_patches = build_linux_patches(project, modules, stage, java_home, maven, env) if platform.system() == "Linux" else []
         subprocess.run([
             str(java_home / "bin/jlink"), *link_options,
-            "--add-modules", "java.base,java.compiler,java.naming,java.xml,jdk.unsupported",
+            "--add-modules", "java.base,java.compiler,java.naming,java.xml,jdk.net,jdk.unsupported",
             "--no-header-files", "--no-man-pages", "--strip-debug", "--compress", "zip-6",
             "--output", str(stage / "runtime"),
         ], env=env, check=True)

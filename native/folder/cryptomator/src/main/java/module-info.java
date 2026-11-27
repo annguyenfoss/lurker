@@ -1,4 +1,5 @@
 module org.lurker.cryptomator {
+    requires jdk.net;
     requires org.cryptomator.cryptofs;
     requires org.cryptomator.cryptolib;
     requires org.cryptomator.integrations.api;

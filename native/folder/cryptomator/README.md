@@ -9,6 +9,20 @@ download. The process stays in the foreground after mounting. Lurker must verify
 and gracefully unmount its recorded mount before terminating this process.
 Shutdown never calls the providers' forced-unmount interface.
 
+The FreeBSD candidate instead requires private `--managed-close SESSION_DIR`.
+A second stdin line supplies a random 256-bit token; it never appears in argv
+or diagnostics. `LFMC1` uses a caller-owned mode-0600 Unix socket in the existing
+mode-0700 session directory, native peer credentials, fresh request nonces and
+PID-bound replies. Failed startup/close retains the builder, adapter, CryptoFS,
+listener and JVM. Only a provider-proven terminal busy refusal permits a later
+explicit retry. Successful close disposes the provider before CryptoFS, delivers
+the bound socket acknowledgment, then emits stdout's close acknowledgment and
+exits normally. The supervisor must independently confirm exit zero. No SIGTERM
+or generic OS-unmount fallback participates in this candidate flow. Native
+provider/mounted qualification and Rust-core admission remain separate gates.
+The private runtime includes `jdk.net`; unsupported native peer credentials
+must fail closed.
+
 FUSE-NIO 5.1.0 is required for registered `fsync` support. Version 5.0.5 implemented
 the method but disabled its registration; daemon SIGKILL testing exposed lost
 SQLite WAL commits even after FULL commit and explicit file fsync. The native
