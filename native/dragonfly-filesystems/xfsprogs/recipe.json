@@ -1,0 +1,189 @@
+{
+  "status": "native formatter construction in progress; no runtime credit",
+  "source_archive_sha256": "dde65ead82d3cbfa9b4ded9796b6d22095d7d759a22d41ae6f1a4ec458bb0465",
+  "archive_bytes": 1482424,
+  "DPorts_revision": "91731d0e53e99b4ed0ab75677c9325d741a85123",
+  "official_patches": [
+    {
+      "name": "patch-fsr_xfs__fsr.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-fsr_xfs__fsr.c",
+      "sha256": "27d3e09f6442589f126d95e7a6caa86896dff591641a3124017a40b54dd65b51"
+    },
+    {
+      "name": "patch-include_freebsd.h",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-include_freebsd.h",
+      "sha256": "cbbe583a149fe9e80f3efedbd5985990135d0d1e8d5318d8fd6cb8d0f752e196"
+    },
+    {
+      "name": "patch-include_libxfs.h",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-include_libxfs.h",
+      "sha256": "bbee80d525ef963af3ae9699bc4a3307c5a72bb94e7432d448c4f2a68d1a6ec4"
+    },
+    {
+      "name": "patch-include_list.h",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-include_list.h",
+      "sha256": "a53dbec157046bf3a9517da0a77f984619f880a2189f972e924b1cf1c5bf6910"
+    },
+    {
+      "name": "patch-include_xfs__bit.h",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-include_xfs__bit.h",
+      "sha256": "113ac4d82b017e854f54911100f161a0e8a50dd2cff3e2bf6fba2091ba0cb825"
+    },
+    {
+      "name": "patch-io_mmap.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-io_mmap.c",
+      "sha256": "32370ca52eaf43ad58ba73641851dff9b63d0c0e3efb2ed60db6f8006f504413"
+    },
+    {
+      "name": "patch-io_readdir.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-io_readdir.c",
+      "sha256": "8c882f3685270dc75d2b533c9865654bb5c87d27bef40a9e44c086143808108e"
+    },
+    {
+      "name": "patch-libhandle_handle.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-libhandle_handle.c",
+      "sha256": "f830e31373b0bcff8ff0ea028e1a3378f4bea21104f5379072418fad9afdd6da"
+    },
+    {
+      "name": "patch-libhandle_jdm.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-libhandle_jdm.c",
+      "sha256": "41d570378bf5ff2b39aeadbe2ed902a84d21af139153f9512a182d08b887d81a"
+    },
+    {
+      "name": "patch-libxcmd_paths.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-libxcmd_paths.c",
+      "sha256": "6ce9f93547aec27d1e309bbdda502e177a2ed8cd12eeff0c4ec875a2494f4df1"
+    },
+    {
+      "name": "patch-libxfs_crc32.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-libxfs_crc32.c",
+      "sha256": "0e965411a77dc681330d80ac2724aef4d241f183d2671b385169c7e1e573a34d"
+    },
+    {
+      "name": "patch-libxfs_rdwr.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-libxfs_rdwr.c",
+      "sha256": "b004229f4ea9b226eadc3772f36b4b4999ad141a0e01bb24c76320e0f783aa09"
+    },
+    {
+      "name": "patch-libxfs_util.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-libxfs_util.c",
+      "sha256": "75bc835dc106bd2ddb711ae415de97ea87f1e3a30ad80e6e44033eb334c63295"
+    },
+    {
+      "name": "patch-libxfs_xfs__attr__remote.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-libxfs_xfs__attr__remote.c",
+      "sha256": "44a086ffe5caf390f7c0e7d1968400bdef27854c40c2ce990e786c123fca69a5"
+    },
+    {
+      "name": "patch-libxlog_util.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-libxlog_util.c",
+      "sha256": "35ceb1ba4b5830f9419a67a209a97649b24042fe2a2883d1d4ed0cfb43825e70"
+    },
+    {
+      "name": "patch-po_de.po",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-po_de.po",
+      "sha256": "08618e4fc91d3afc0d7edd79159a8d8888a534affd295a9ccf10dd1d021a30bf"
+    },
+    {
+      "name": "patch-repair_agheader.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_agheader.c",
+      "sha256": "46bbd2dc5d30df363ea8cf4ee763b2fdc8a5b4fd210701cb2cda21c737207fb4"
+    },
+    {
+      "name": "patch-repair_attr__repair.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_attr__repair.c",
+      "sha256": "2c92683fdae1ca92e0553222f00aa46aaa323e16f8d163a504832399280494a7"
+    },
+    {
+      "name": "patch-repair_attr__repair.h",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_attr__repair.h",
+      "sha256": "3eb0f6c86737edad028b45dd6a8cfee32ef73543e30cc748f5a4fa03b3e9daa5"
+    },
+    {
+      "name": "patch-repair_bmap.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_bmap.c",
+      "sha256": "9357cc842a06ad35370eeeed3e36e9c5884a2f5b4ad177bca3795522903571c0"
+    },
+    {
+      "name": "patch-repair_dino__chunks.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_dino__chunks.c",
+      "sha256": "9ece0ea9df3b84ae1c89cd234c3fcdce6b68c88d929caa0c0a4bd2787c7728c2"
+    },
+    {
+      "name": "patch-repair_dinode.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_dinode.c",
+      "sha256": "f6b97586cd10fec556e2eff1a108db2d07e9beccace5c800c7df6c8e3a939cc0"
+    },
+    {
+      "name": "patch-repair_dir2.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_dir2.c",
+      "sha256": "3332eba66162d9ab040898899a4232bc3da2700211c40ffcc18e7b328ae06f4d"
+    },
+    {
+      "name": "patch-repair_incore.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_incore.c",
+      "sha256": "010e89101271ab6c53881d2ce302fdef1ad5745b3a44262d4c34d3065ee04f43"
+    },
+    {
+      "name": "patch-repair_phase2.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_phase2.c",
+      "sha256": "aba44010476ce68acba18829538101c48f589294b9724131454d2e7705103de1"
+    },
+    {
+      "name": "patch-repair_phase3.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_phase3.c",
+      "sha256": "2c7e858d14ad88b3dfc52968c8c90b88a9f394d1c07c8075990bca7c8e851a34"
+    },
+    {
+      "name": "patch-repair_phase4.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_phase4.c",
+      "sha256": "d1c991b38221722d32095213c2c6f538679b7f613bc5ae8c5ffe99be8317f9f9"
+    },
+    {
+      "name": "patch-repair_phase6.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_phase6.c",
+      "sha256": "134a7b2295932dfef5b1c6487b39294b84a33b670cb1cf157fe5119057acf54e"
+    },
+    {
+      "name": "patch-repair_phase7.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_phase7.c",
+      "sha256": "3980ab37f6510a89eab42d90266daacb891ec4a152467f213da9803018fdafae"
+    },
+    {
+      "name": "patch-repair_progress.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_progress.c",
+      "sha256": "0b2b6d3a24ff85446fe4da9350261f0e1a4dc35e9ae59b877380fc4a3c4c6310"
+    },
+    {
+      "name": "patch-repair_sb.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_sb.c",
+      "sha256": "8aa6a0d75e7917528c0a1b31e8f2f1c57ec7dbc88bbd28647f1d07975643947f"
+    },
+    {
+      "name": "patch-repair_scan.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_scan.c",
+      "sha256": "924f092eb0dd32408ff72fe28b3ec17201332fa4d40201c1b3fc843a88a879cc"
+    },
+    {
+      "name": "patch-repair_xfs__repair.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/xfsprogs/files/patch-repair_xfs__repair.c",
+      "sha256": "bca10e903eb2d552508995342527e1548b94106f1e2bc7154df37f455ec22617"
+    }
+  ],
+  "input_bundle_sha256": "62b6dd2b24e146ad4c17e02991f4711190f23a49b0c8aed0c44456cadcaee9fd",
+  "schema": 1,
+  "kind": "separately-installed-native-formatter",
+  "target_os": "DragonFly",
+  "name": "xfsprogs",
+  "version": "3.2.4_4",
+  "DPorts_origin": "filesystems/xfsprogs",
+  "licenses": [
+    "LGPL-2.1-only",
+    "GPL-2.0-only"
+  ],
+  "jobs": 1,
+  "build_target": "mkfs",
+  "DragonFly_patches": [
+    "patches/0001-use-native-aio-probe.patch"
+  ]
+}
