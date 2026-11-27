@@ -89,6 +89,12 @@ current LKL callback signature. Its native control covers rearming, cancellation
 self-free and explicit callback quiescence. `timer_free` never joins an IRQ/self
 callback; a post-CPU-shutdown drain is required before freeing LKL memory. The
 standalone header/control proof alone does not qualify LKL boot or storage.
+The adapted source adds an optional `timer_quiesce` host-operation hook after
+CPU/thread/clock shutdown and before `free_mem()`. The NetBSD worker is the only
+provider of that hook in this build; other host initializers leave it null.
+Its separately pinned header is copied into the isolated LKL source tree and
+verified again on cache reuse. These changes are inside the native process's
+LKL library, not the NetBSD boot kernel or installed runtime providers.
 
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
 https://man.netbsd.org/mmap.2

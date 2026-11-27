@@ -200,6 +200,30 @@ int main(void) {
                 with self.assertRaisesRegex(RuntimeError, "SHA-256"):
                     BUILDER.fetch(archive)
 
+    def test_native_timer_copy_preserves_unknown_cache_and_requires_pinned_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            source = work / "source"
+            target = source / "tools/lkl/lib/netbsd-timer.h"
+            target.parent.mkdir(parents=True)
+            header = work / "timer.h"
+            header.write_bytes(b"pinned timer")
+            expected = BUILDER.digest(header)
+            with mock.patch.object(BUILDER, "TIMER_HEADER_SHA256", expected):
+                with self.assertRaisesRegex(RuntimeError, "Missing cached"):
+                    BUILDER.install_timer_header(source, header, allow_create=False)
+                BUILDER.install_timer_header(source, header, allow_create=True)
+                BUILDER.install_timer_header(source, header, allow_create=False)
+                target.write_bytes(b"unrelated cached input")
+                with self.assertRaisesRegex(RuntimeError, "Modified cached"):
+                    BUILDER.install_timer_header(source, header, allow_create=True)
+                self.assertEqual(target.read_bytes(), b"unrelated cached input")
+                target.unlink()
+                header.write_bytes(b"changed input")
+                with self.assertRaisesRegex(RuntimeError, "changed before copying"):
+                    BUILDER.install_timer_header(source, header, allow_create=True)
+                self.assertFalse(target.exists())
+
     def test_modified_upstream_file_prevents_resume(self):
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)

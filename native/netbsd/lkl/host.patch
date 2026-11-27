@@ -60,7 +60,38 @@
  LDLIBS_fs2tar-y := -larchive
 --- a/tools/lkl/lib/posix-host.c
 +++ b/tools/lkl/lib/posix-host.c
-@@ -484,7 +484,9 @@
+@@ -400,6 +400,21 @@
+ 	return 1e9*ts.tv_sec + ts.tv_nsec;
+ }
+ 
++#if defined(__NetBSD__)
++#include "netbsd-timer.h"
++static void *timer_alloc(void (*fn)(void))
++{
++	return nb_lkl_timer_alloc(fn);
++}
++static int timer_set_oneshot(void *timer, unsigned long ns)
++{
++	return nb_lkl_timer_set_oneshot(timer, ns);
++}
++static void timer_free(void *timer)
++{
++	nb_lkl_timer_free(timer);
++}
++#else
+ static void lkl_timer_callback(union sigval sv)
+ {
+ 	void (*fn)(void) = sv.sival_ptr;
+@@ -446,6 +461,8 @@
+ 	timer_delete(timer);
+ }
+ 
++#endif
++
+ static void panic(void)
+ {
+ 	assert(0);
+@@ -484,7 +501,9 @@
  }
  
  
@@ -71,7 +102,7 @@
  #define MAP_FIXED_NOREPLACE (MAP_FIXED | MAP_EXCL)
  #ifndef MAP_NORESERVE
  #define MAP_NORESERVE 0
-@@ -495,11 +497,49 @@
+@@ -495,11 +514,49 @@
  #endif
  #endif
  
@@ -121,7 +152,7 @@
  	ret = mmap(addr, size, get_prot(prot), fl, -1, 0);
  	if (ret != addr) {
  		if (ret != NULL)
-@@ -508,6 +548,7 @@
+@@ -508,6 +565,7 @@
  	}
  
  	return ret;
@@ -129,7 +160,7 @@
  }
  
  static int lkl_munmap(void *addr, unsigned long size)
-@@ -540,11 +581,15 @@
+@@ -540,11 +598,15 @@
  {
  	int prot = get_prot(mem_prot_flags);
  	int flags = MAP_SHARED | MAP_FIXED_NOREPLACE;
@@ -144,6 +175,39 @@
 +#endif
  }
  #endif // LKL_HOST_CONFIG_MMU
+ 
+@@ -593,6 +655,9 @@
+ 	.timer_alloc = timer_alloc,
+ 	.timer_set_oneshot = timer_set_oneshot,
+ 	.timer_free = timer_free,
++#if defined(__NetBSD__)
++	.timer_quiesce = nb_lkl_timers_quiesce,
++#endif
+ 	.print = print,
+ 	.mem_alloc = posix_malloc,
+ 	.mem_free = free,
+--- a/arch/lkl/include/uapi/asm/host_ops.h
++++ b/arch/lkl/include/uapi/asm/host_ops.h
+@@ -182,6 +182,9 @@
+ 	int (*timer_set_oneshot)(void *timer, unsigned long delta);
+ 	void (*timer_free)(void *timer);
+ 
++	/* Optional: no callbacks after CPU/tick shutdown, before free_mem. */
++	void (*timer_quiesce)(void);
++
+ 	void* (*ioremap)(long addr, int size);
+ 	int (*iomem_access)(const volatile void *addr, void *val, int size,
+ 			    int write);
+--- a/arch/lkl/kernel/setup.c
++++ b/arch/lkl/kernel/setup.c
+@@ -160,6 +160,8 @@
+ 	threads_cleanup();
+ 	/* Shutdown the clockevents source. */
+ 	tick_suspend_local();
++	if (lkl_ops->timer_quiesce)
++		lkl_ops->timer_quiesce();
+ 	free_mem();
+ 	lkl_ops->thread_join(current_thread_info()->tid);
  
 --- a/tools/lkl/lklfuse.c
 +++ b/tools/lkl/lklfuse.c
