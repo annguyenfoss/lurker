@@ -162,7 +162,22 @@ previous work FFS remain. The installed CLI/helper/desktop and all three native
 FUSE provider hashes remained unchanged. This is a standalone configured
 graceful-shutdown proof, not encrypted CGD reboot qualification, crash recovery
 or repair of the original failed active fixture. The CGD follow-up remains a
-separate reviewed phase.
+separate reviewed phase. Its initial native ABI/query gate compiled the exact
+reviewed read-only probe with base GCC 12.5.0 in a protected root-owned work
+directory. The ELF hash is
+`f59ce9ad3834640579905d9a0292a1abda887a11904a8e54570dff610589caf1`.
+Queries against unused CGD/vnd units 0/0 and 1/1 rejected with Device not
+configured; no mapping, data fixture, hook or reboot was created. Native header
+sizes, offsets, ioctl values and DISKUNIT/DISKPART observations are retained.
+The root filesystem has 1,965,298 KiB free and the work FFS 3,723,676 KiB after
+that gate; its mount flags were unchanged by this ABI gate. The work FFS had
+been remounted without `log` after the earlier standalone reboot; that delta is
+recorded for the next setup review rather than silently described as restored.
+A separate revised export worker/probe is source-only and remains uncompiled
+and unexecuted: same core registry flock across validation/export, exact single
+vdev topology, native device-unit/partition and profile checks, and a retained
+lock-holding guardian for unknown native child timeouts. Those changes require
+review and native mock/control gates before any encrypted fixture is admitted.
 The initial empty-pool `zpool list -H` uninitialized-return failure, unsupported
 `status -P` option and mistaken busy-probe payload path were preserved; only the
 harness was corrected, and no second fixture or kernel fix was introduced.
