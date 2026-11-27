@@ -271,7 +271,26 @@ retained separately. Evidence is `build/guardian-platform-ipc-v1/` and `-v2/` in
 the round's FreeBSD bucket; all dummy children are reaped.
 
 These are transport primitives, not a complete service. Public accept-side peer
-discovery, socket directory/endpoint custody, guardian-only status persistence,
-service deadlines, native teardown callbacks and driver integration remain
+discovery, socket directory/endpoint custody, service deadlines, native teardown
+callbacks and driver integration remain
 unimplemented or unqualified. No LKL, FUSE, provider ioctl, mount or encryption
 operation runs in these controls; no production completion authority is enabled.
+
+### Guardian-only status writer primitive
+
+`lfbg_status_persist` writes a common frame through a CLOEXEC duplicate of the
+guardian-held status descriptor. It checks the captured device/inode/owner,
+single link, mode 0600 and bounded regular-file size, then requires complete
+positioned writes, exact truncation, fsync, repeated identity and checked writer
+close. The original custody descriptor stays open on every result. A close
+error is never retried or converted to success; the common state machine must
+latch any failed persistence result. The worker inherits neither descriptor.
+
+Native regular-file controls pass 570 checks, including actual fsync/close
+followed by injected EIO: a valid clean-looking frame remains readable, but
+persistence still fails and the original exclusive lock remains held. Partial
+write failure, extra link, mode change, read-only descriptor, wrong inode,
+oversize and invalid message are also refused. All prior identity/spawn/stream
+controls pass on the same header. Evidence is `build/guardian-platform-status-v1/`.
+These writer results are not live completion authority; service/common-runtime
+callback wiring and native teardown remain separate work.

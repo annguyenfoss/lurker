@@ -548,4 +548,67 @@ static inline int lfbg_rpc_match(const struct lfg_message *identity,
     }
     return 0;
 }
+
+struct lfbg_status_identity { uint64_t device, inode; uint32_t uid; };
+static inline int lfbg_status_capture(int fd,struct lfbg_status_identity *out) {
+    struct stat st;
+    if (!out) {errno=EINVAL;return -1;}
+    if (lfbg_private_regular(fd,&st)<0) return -1;
+    int flags=fcntl(fd,F_GETFL);
+    if (flags<0) return -1;
+    if ((flags&O_ACCMODE)!=O_RDWR || (st.st_mode&07777)!=0600 ||
+        st.st_size<0 || st.st_size>LFG_FRAME_SIZE || !st.st_ino) {
+        errno=EPERM;return -1;
+    }
+    *out=(struct lfbg_status_identity){st.st_dev,st.st_ino,st.st_uid};return 0;
+}
+static inline int lfbg_status_check(int fd,const struct lfbg_status_identity *expected) {
+    struct lfbg_status_identity now;
+    if (!expected) {errno=EINVAL;return -1;}
+    if (lfbg_status_capture(fd,&now)<0) return -1;
+    if (now.device!=expected->device || now.inode!=expected->inode || now.uid!=expected->uid) {
+        errno=ESTALE;return -1;
+    }
+    return 0;
+}
+#ifndef LFBG_STATUS_PWRITE
+#define LFBG_STATUS_PWRITE pwrite
+#endif
+#ifndef LFBG_STATUS_FSYNC
+#define LFBG_STATUS_FSYNC fsync
+#endif
+#ifndef LFBG_STATUS_CLOSE
+#define LFBG_STATUS_CLOSE close
+#endif
+/* Guardian only. Keep the original status/custody FD open even on error.
+ * A duplicate writer shares its OFD/lock but is never child-exit proof. Return
+ * success only after checked write/truncate/sync/identity and writer close.
+ * Visible clean-looking bytes can survive an error: only the live guardian's
+ * separately owned actual wait and complete state may authorize completion.
+ */
+static inline int lfbg_status_persist(int fd,const struct lfbg_status_identity *expected,
+                                      const struct lfg_message *message) {
+    uint8_t bytes[LFG_FRAME_SIZE];
+    if (!message || lfg_encode(bytes,sizeof(bytes),message)!=LFG_OK) {errno=EPROTO;return -1;}
+    if (lfbg_status_check(fd,expected)<0) return -1;
+    int writer=fcntl(fd,F_DUPFD_CLOEXEC,16);
+    if (writer<0) return -1;
+    int error=0;size_t offset=0;
+    if (lfbg_status_check(writer,expected)<0) error=errno;
+    while (!error && offset<sizeof(bytes)) {
+        ssize_t n=LFBG_STATUS_PWRITE(writer,bytes+offset,sizeof(bytes)-offset,(off_t)offset);
+        if (n<0 && errno==EINTR) continue;
+        if (n<=0) {error=n<0?errno:EIO;break;}
+        if ((size_t)n>sizeof(bytes)-offset) {error=EIO;break;}
+        offset+=(size_t)n;
+    }
+    if (!error && ftruncate(writer,sizeof(bytes))<0) error=errno;
+    if (!error && LFBG_STATUS_FSYNC(writer)<0) error=errno;
+    if (!error && lfbg_status_check(writer,expected)<0) error=errno;
+    if (LFBG_STATUS_CLOSE(writer)<0 && !error) error=errno;
+    /* Never retry close: its error can leave ownership ambiguous. */
+    if (!error && lfbg_status_check(fd,expected)<0) error=errno;
+    if (error) {errno=error;return -1;}
+    return 0;
+}
 #endif

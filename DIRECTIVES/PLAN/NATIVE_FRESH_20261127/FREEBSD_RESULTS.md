@@ -1131,3 +1131,20 @@ is not included among these results.
   reaped, terminal inventory has no guardian process. Public accepted-peer
   discovery, status persistence, service and native teardown integration remain
   pending; no driver restart or crypto teardown authority is enabled.
+
+
+### Guardian-only status persistence primitive
+
+- Purpose/input: status custody and late-failure behavior, native user-only
+  source archive `88c3b76f...`, header `5f375b29...`.
+- Command/log: strict C11 compile/run, eight raw stages and exact source/binary
+  manifest in `build/guardian-platform-status-v1/`.
+- Outcome: 570 status checks pass; 29 identity, 41 spawn and 663 stream checks
+  remain passing. Actual fsync/close followed by injected EIO leaves valid
+  clean-looking bytes yet returns failure, preserves the original guardian FD
+  and exclusive lock, and leaks no writer FD. Partial write and unsafe
+  metadata/identity/message inputs fail closed. No file alone proves completion.
+- Cleanup/limits: all dummy children reaped, no guardian/Java/Cargo worker in
+  terminal inventory; private regular fixtures retained. No LKL/FUSE/provider
+  ioctl, mount or encrypted transport operation. Service and common-state
+  callback wiring remain pending, with product write guards unchanged.
