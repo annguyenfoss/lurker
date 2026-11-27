@@ -51,7 +51,8 @@
   "DragonFly_patches": [
     "patches/0001-dragonfly-modpost-relocations.patch",
     "patches/0002-dragonfly-posix-host.patch",
-    "patches/0003-dragonfly-uapi-native-macros.patch"
+    "patches/0003-dragonfly-uapi-native-macros.patch",
+    "patches/0004-durable-block-flush.patch"
   ],
   "native_build_prerequisites": [
     "GNU make",

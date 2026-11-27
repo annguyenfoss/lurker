@@ -1,0 +1,59 @@
+--- tools/lkl/include/lkl.h
++++ tools/lkl/include/lkl.h
+@@ -137,6 +137,8 @@
+ 		void *handle;
+ 	};
+ 	struct lkl_dev_blk_ops *ops;
++	/* Built-in backend exposes read-only state and durable write barriers. */
++	int read_only;
+ };
+ 
+ /**
+--- tools/lkl/lib/virtio_blk.c
++++ tools/lkl/lib/virtio_blk.c
+@@ -28,7 +28,7 @@
+ 	struct virtio_blk_req_trailer *t;
+ 	struct lkl_blk_req lkl_req;
+ 
+-	if (req->buf_count < 3) {
++	if (req->buf_count < 2) {
+ 		lkl_printf("virtio_blk: no status buf\n");
+ 		goto out;
+ 	}
+@@ -50,6 +50,13 @@
+ 	}
+ 
+ 	lkl_req.type = le32toh(h->type);
++	/* FLUSH has no data buffer, only the header and status. */
++	if (lkl_req.type == LKL_DEV_BLK_TYPE_FLUSH) {
++		if (req->buf_count != 2)
++			goto out;
++	} else if (req->buf_count < 3) {
++		goto out;
++	}
+ 	lkl_req.prio = le32toh(h->ioprio);
+ 	lkl_req.sector = le64toh(h->sector);
+ 	lkl_req.buf = &req->buf[1];
+@@ -82,7 +89,11 @@
+ 
+ 	dev->dev.device_id = LKL_VIRTIO_ID_BLOCK;
+ 	dev->dev.vendor_id = 0;
+-	dev->dev.device_features = 0;
++	dev->dev.device_features = disk->read_only ?
++		(1ULL << LKL_VIRTIO_BLK_F_RO) : 0;
++	/* Only the built-in host backend guarantees native fsync forwarding. */
++	if (!disk->read_only && !disk->ops)
++		dev->dev.device_features |= 1ULL << LKL_VIRTIO_BLK_F_FLUSH;
+ 	dev->dev.config_gen = 0;
+ 	dev->dev.config_data = &dev->config;
+ 	dev->dev.config_len = sizeof(dev->config);
+--- tools/lkl/lklfuse.c
++++ tools/lkl/lklfuse.c
+@@ -591,6 +591,7 @@
+ 	}
+ 
+ 	lklfuse.disk.fd = ret;
++	lklfuse.disk.read_only = lklfuse.ro;
+ 
+ 	ret = lkl_disk_add(&lklfuse.disk);
+ 	if (ret < 0) {

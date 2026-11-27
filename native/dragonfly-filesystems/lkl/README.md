@@ -38,3 +38,14 @@ using the actual native timer adapter. `tests/host-contract.c` links the freshly
 built library and checks imported wire layouts and the shutdown-hook ordering.
 Run both on native DragonFly as the ordinary user. Full native filesystem,
 flush/error, ownership and permission controls remain required before admission.
+
+Patch 0004 advertises read-only state and, for the built-in writable host
+backend, FLUSH support. It accepts the two-buffer FLUSH request and forwards it
+to the existing native fsync implementation. `tests/block-flush.c` wraps that
+same backend for measurement without substituting a custom disk operation
+(which would bypass the advertised capability). On a new native-formatted XFS
+image, normal write/fsync/readback and internal unmount pass with nine successful
+native flushes. A separate fault image makes only a FLUSH request use an invalid
+native FD; the real backend fsync error propagates as Linux EIO from file fsync.
+Fault-case unmount errors are retained and reported. These are unprivileged
+internal-LKL diagnostic controls, not host FUSE or product lifecycle proof.
