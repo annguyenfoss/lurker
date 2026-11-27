@@ -232,12 +232,40 @@ broader cipher/credential, frontend and reboot checks.
 
 ## Current continuation
 
-Native desktop validation is building from coordinator base `cca3c17` and a
-frozen six-file desktop overlay, with one Cargo worker and disk guards. The
-physical matrix finished before this build. CryFS compilation remains deferred
-for the native desktop/helper package and callback gate; its inputs are prepared.
-A bounded Go-FUSE transport assessment follows those priorities. No custom kernel
-feature work has started.
+Native desktop validation from coordinator base `cca3c17` and a frozen six-file
+overlay passed `cargo check --workspace`, the complete workspace test suite
+(127 passed, five explicitly ignored), and all three product builds. One Cargo
+worker, no incremental/debug data and disk guards were used. A first background
+launcher inherited ignored SIGINT/SIGQUIT and invalidated a tool-timeout test;
+resetting those dispositions allowed the complete suite to pass without a source
+change. The original failure remains in the evidence.
+
+All 16 DragonFly physical forms rendered at native scales and were reviewed.
+Both opt-in actual GUI/helper lifecycle callbacks executed as uid 1300 on the
+verified GPT scratch partition: LUKS1 and VeraCrypt each passed create, mount,
+write, close, reopen and compare. The first private callback runner omitted the
+ignored-test opt-in; that invalid receipt is retained separately and carries no
+runtime credit. The corrected runner requires one executed pass and zero ignored
+tests. A new trusted read-only identity/idle probe preceded these callbacks.
+Helper SHA-256:
+`20357c79765cbced2b503d5522744fdb3ee6dc836513b7e06faa6a260901981e`;
+desktop SHA-256:
+`35afa96e47eea64911feaa7a183e84a1abfa136f230a578c2823c76e3e87b3a8`.
+
+The canonical native stager collected Rust notices, verified the pinned private
+tcplay runtime and native library dependencies, and built a package selecting
+LUKS1 and VeraCrypt. Source-manifest SHA-256:
+`d8e350e9354ad21ea77dc7180b58400cbb2909ad80744ee8d20723aaaaf0f7c0`;
+archive SHA-256:
+`fc32381c4d87021cfc1fd572f11bc7829621450ce5e5b0135071a73219f9902f`.
+All 847 manifested files were verified when copying into the root-owned candidate
+prefix. This remains an explicitly recorded development overlay, not a final
+frozen-commit pass. A real login-user winit/software X11 window also passed at 1280 × 860,
+with 1,092 sampled colors, no loader overrides, and all owned children reaped.
+Pre-existing unregistered zero-filled X11 tool files were preserved and replaced
+with official native packages; missing ordinary cursor/keyboard libraries were
+installed. CryFS compilation follows this package/callback/window gate. A bounded Go-FUSE transport assessment follows those
+priorities. No custom kernel feature work has started.
 
 Final frozen-commit workspace check/test/build, all cipher/credential and
 conformance variations, ordinary mounted-vault reboot persistence, helper/Slint
