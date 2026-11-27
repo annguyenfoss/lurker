@@ -195,6 +195,20 @@ halt responses, then checks exactly-once release after a later zero response.
 The global FSID detector and actual mounted no-force lifecycle remain separate
 frontend gates. This helper neither detects nor unmounts a filesystem.
 
+`netbsd-mount.h` compares full native FSIDs with the exact fresh puffs type nonce,
+source and mount owner. It rejects prior or duplicate identities, never adopts
+a replacement pathname and searches for the recorded identity after moves. Its
+native control samples the host inventory and separately tests synthetic moved,
+replaced and inconsistent snapshots. It does not establish a mounted lifecycle.
+Run inventory queries outside a native host chroot. `MNT_NOWAIT` avoids stat RPCs
+but the native mount iterator still calls `vfs_busy`/`fstrans_start`; it can wait
+for a mount transaction. Therefore a serving PUFFS callback must not issue that
+query synchronously. A separately bounded native-only observer must query while
+the main thread keeps serving, and capture only after a real callback was served.
+That observer/cancellation boundary is still a required frontend gate.
+
+https://github.com/NetBSD/src/blob/4299530ca04c23eff6e740a3d97d29bca16c22fe/sys/kern/vfs_mount.c
+
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
 https://man.netbsd.org/mmap.2
 https://github.com/bminor/glibc/blob/glibc-2.42/elf/elf.h

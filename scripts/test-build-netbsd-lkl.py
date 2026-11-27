@@ -20,6 +20,17 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD", "native global mount inventory")
+    def test_global_mount_identity_survives_path_replacement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "mount-control"
+            control = BUILDER.ROOT / "native/netbsd/lkl/mount-control.c"
+            subprocess.run(["/usr/bin/cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror",
+                            str(control), "-o", str(binary)], check=True, timeout=30)
+            result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            print(result.stdout, end="")
+
     @unittest.skipUnless(platform.system() == "NetBSD", "native descriptor release gate")
     def test_shutdown_retains_resources_until_verified_absence_and_halt(self):
         with tempfile.TemporaryDirectory() as tmp:
