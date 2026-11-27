@@ -33,6 +33,27 @@ Earlier fresh full filesystem matrices remain evidence for their named
 identified unchanged coverage; do not present those receipts as executions of
 this new package. New failures determine any broader rerun scope.
 
+## Host FUSE packaging gate
+
+The older Linux creator closure copied its FUSE library into Lurker. That
+contradicts this round's host-only FUSE requirement; historical package
+installation/runtime successes do not establish final package compliance.
+The newer audit correctly rejects that payload, but its closure validator must
+also recognize the dependency as a qualified host provider.
+
+Ubuntu owns the Linux producer and its tests; FreeBSD owns the matching Linux
+stager consumer and tests. They coordinate a validated host-library inventory,
+native architecture/SONAME, administrator-controlled provider and actual loader
+resolution. Use their named packaging revision separately from Rust source
+`67894f6`; do not remove files without updating/verifying provenance, weaken the
+ban, or bypass it with an older stager. Build hashes describe provenance rather
+than prohibiting compatible administrator updates.
+
+The creator's exact ABI must exist on its host. In particular, openSUSE provides
+SONAME 3 rather than the old donor's SONAME 4; rebuild the pinned creator against
+the ordinary native provider instead of substituting an incompatible library.
+The final package inventory must contain no FUSE runtime or filesystem driver.
+
 ## UFS2 host prerequisite
 
 Debian reproduced a missing directory entry after successful create/fsync/stat
