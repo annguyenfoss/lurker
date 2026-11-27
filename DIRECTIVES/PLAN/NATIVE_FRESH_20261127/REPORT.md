@@ -100,6 +100,18 @@ continues. This refresh includes Fedora's metadata-only PEFS backing-role
 correction and the expanded frozen indices. FreeBSD and OpenBSD indexes await
 their active input batches.
 
+The subsequent Linux requirement audit directly checks 720 selected primary
+lifecycles, six e927 build gates, 36 healthy affected flows, 18 original negative
+archives, six absent-ack crash controls and 21 supplemental UFS1 reboot cases.
+It finds no missing applicable lifecycle cell, but exposes remaining benchmark
+proof gaps: mounted rename/deletion coverage, unrelated-user denial on openSUSE,
+and actual GUI physical disk-encryption submission on Arch. Targeted supplements
+are now in scope; affected completion is 4/5 rather than documentation-only 5/5.
+The new namespace plan covers native filesystem and directory-engine semantics
+without repeating the full payload matrix. Historical evidence losses remain
+disclosed. The private audit is `Linux-final-requirement-audit.json` under the
+round evidence root.
+
 The index review exposes retention and scope limits that remain reportable:
 Arch lost 24 physical folder console logs while retaining structured receipts;
 Gentoo deleted three initial ext4 selections later identified as ext2 before
