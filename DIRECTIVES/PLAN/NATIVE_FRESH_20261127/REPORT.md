@@ -57,9 +57,13 @@ Root reviewed these inputs and authorized one fresh small-cohort VM reboot
 with explicit administrator activation. That new gocryptfs-on-VeraCrypt/ZFS
 cohort passed: changed boot, all five persisted payload hashes, actual caller
 postboot writes and unrelated-user denials, automatic FUSE prerequisites and
-normal service close. Temporary activation was reverted. Root's receipt checks
-pass in `hosts/freebsd/validation/root-shutdown-service-reboot-audit.json`;
-serial-order and archived activation corroboration remain in progress. This
+normal service close. Temporary activation was reverted. Root independently
+checked the serial ordering through normal reboot, exact recipe/helper hashes,
+activation list/config and retained source in
+`hosts/freebsd/validation/root-shutdown-service-reboot-audit.json`. An archive
+basename collision overwrote the activated script copy with its rc fragment;
+the audit records the before/after execution hashes and retained byte-equivalent
+prototype instead of claiming that original archive instance survived. This
 does not turn the failed stock shutdown or clone recovery into ordinary passes.
 
 OpenBSD's exact `123d177` workspace passed 154 native tests, with 22 ignored,
