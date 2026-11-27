@@ -75,10 +75,38 @@ modes or full passes. Synthetic controls and primitive tests do not establish
 real mounted-storage support. Manual repair, force, custom reconciliation and
 test-only cleanup must not become ordinary-close or automatic-recovery passes.
 
-Availability and remaining-work rank are separate. Rank only retained in-scope
-implementation/qualification work; count deferred work and exclude cut work.
-When no actionable in-scope route remains, use **N/A — native capability
-unavailable**, not a low progress score or an indefinite deferred kernel task.
-Keep the capability limitation visible and reopen it only when a suitable
-established solution or new concrete evidence warrants reassessment. Do not
-claim that a bounded unsuccessful search proves support is impossible forever.
+## Two-axis status reports
+
+Keep work completion and filesystem support separate. Use the following English
+tags under each OS/filesystem pair; group pairs only when their assessments match.
+
+- **Completion:** `FINISHED` when all retained in-scope work is actually complete;
+  `5/5` when only report/evidence consolidation or documentation remains;
+  `4/5` for minor technical work or testing; `3/5` for substantial integration or
+  qualification; `2/5` for major design/implementation or a first safe route;
+  `1/5` for early actionable feasibility work; `0/5` when nothing has been done.
+- **Completion note:** Explain only the remaining work, its size and why that
+  justifies the completion score. Count deferred work; exclude cut work.
+- **Filesystem support:** Score demonstrated functionality against this benchmark:
+  `5/5` for the complete benchmark on the qualified native routes; `4/5` for a
+  usable route with specific gaps; `3/5` for a partial or unreliable lifecycle;
+  `2/5` for experimental/incomplete write capability; `1/5` for reader-only
+  capability; `0/5` when no usable native route has been qualified.
+- **Support note:** Explain tested capabilities, missing benchmark operations,
+  backend/source-kind coverage and any required driver/configuration. Do not
+  turn native controls or prototype evidence into a complete Lurker pass.
+- **Status:** State the current practical capability concisely.
+- **Completed:** State the work and evidence achieved.
+- **In progress:** Name actual active work; distinguish queued work and say
+  `None` when inactive.
+- **Remaining:** Name actionable retained work or state that none remains.
+
+An unavailable capability can have **Completion: FINISHED** when its bounded
+assessment, safe handling and documentation are complete, while its filesystem
+support remains `0/5` or `1/5`. Do not describe that as a low-progress job,
+deadlock or indefinite deferred kernel task. For example, macOS UFS1 with no
+qualified native route can be a finished assessment without writable support.
+Keep the limitation visible and reopen it only when a suitable established
+solution or new concrete evidence warrants reassessment. A bounded unsuccessful
+search does not prove support is impossible forever. This two-axis format
+supersedes the earlier single-rank/N/A reporting convention.
