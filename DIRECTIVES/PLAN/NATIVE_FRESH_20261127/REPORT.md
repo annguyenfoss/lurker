@@ -20,6 +20,11 @@ owner reports ten ordinary reboots covering 54 file/backing fixtures and three
 physical partitions, all six installed `/usr/bin/lurker` user flows, helper and
 GUI gates, and a clean final package/resource audit. These remain owner results;
 the coordinator's earlier payload audit has a narrower scope.
+Root subsequently checked the six new installed-prefix CLI receipts, all 42
+operations, original/appended hashes, private roots, writable Btrfs mounts and
+final package/cleanup outputs in `hosts/ubuntu/validation/root-installed-six-cli-audit.json`.
+The harness resolves `/usr/bin/lurker` to the verified installed binary before
+execution. This audit does not independently cover Ubuntu's full reboot matrix.
 
 DragonFly's final report is `696c899`. Root inspected the six ordinary-reboot
 receipts: five container fixtures cover UFS1, ext4, exFAT, HAMMER2 and NTFS,
