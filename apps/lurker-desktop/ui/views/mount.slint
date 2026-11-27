@@ -19,6 +19,7 @@ export component MountView inherits Card {
     in property <bool> is-netbsd: false;
     in property <bool> is-freebsd: false;
     in property <bool> is-openbsd: false;
+    in property <bool> is-dragonfly: false;
     in property <bool> supports-directories: true;
     in property <bool> supports-keyfile: true;
     in property <bool> supports-raid1c: false;
@@ -90,9 +91,9 @@ export component MountView inherits Card {
 
         Rectangle { height: UiTheme.s3; }
 
-        if root.supports-directories || root.is-linux || root.is-netbsd || root.is-freebsd || root.is-openbsd: Segmented {
+        if root.supports-directories || root.is-linux || root.is-netbsd || root.is-freebsd || root.is-openbsd || root.is-dragonfly: Segmented {
             value: root.source-kind;
-            options: root.is-netbsd ? (root.supports-directories ? root.linux-sources : root.partition-sources) : root.is-openbsd ? root.partition-sources : (root.is-macos || root.is-freebsd || (root.is-linux && !root.unprivileged)) ? root.linux-sources : root.file-sources;
+            options: (root.is-netbsd || root.is-dragonfly) ? (root.supports-directories ? root.linux-sources : root.partition-sources) : root.is-openbsd ? root.partition-sources : (root.is-macos || root.is-freebsd || (root.is-linux && !root.unprivileged)) ? root.linux-sources : root.file-sources;
             selected(v) => { root.source-kind = v; root.source = ""; }
         }
 
@@ -140,11 +141,11 @@ export component MountView inherits Card {
             }
         }
 
-        if root.source-kind == "partition" && (root.is-macos || root.is-netbsd || root.is-freebsd || root.is-openbsd): ThemedLineEdit {
+        if root.source-kind == "partition" && (root.is-macos || root.is-netbsd || root.is-freebsd || root.is-openbsd || root.is-dragonfly): ThemedLineEdit {
             text <=> root.source;
-            placeholder-text: root.is-netbsd ? "/dev/dkN" : root.is-macos ? "/dev/diskNsM" : root.is-openbsd ? "/dev/sdNc or /dev/sdNa" : "/dev/daNpM";
+            placeholder-text: root.is-netbsd ? "/dev/dkN" : root.is-macos ? "/dev/diskNsM" : root.is-openbsd ? "/dev/sdNc or /dev/sdNa" : root.is-dragonfly ? "/dev/vbdNsM" : "/dev/daNpM";
         }
-        if root.source-kind == "partition" && !root.is-macos && !root.is-netbsd && !root.is-freebsd && !root.is-openbsd: DevicePicker {
+        if root.source-kind == "partition" && !root.is-macos && !root.is-netbsd && !root.is-freebsd && !root.is-openbsd && !root.is-dragonfly: DevicePicker {
             devices: root.devices;
             value <=> root.source;
             selected-label: root.source-label;

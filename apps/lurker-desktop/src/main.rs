@@ -684,6 +684,11 @@ mod tests {
             use std::os::unix::fs::FileTypeExt;
             assert!(
                 (cfg!(target_os = "macos") && backend == lurker_core::VolumeType::Veracrypt)
+                    || (cfg!(target_os = "dragonfly")
+                        && matches!(
+                            backend,
+                            lurker_core::VolumeType::Luks1 | lurker_core::VolumeType::Veracrypt
+                        ))
                     || (cfg!(target_os = "openbsd")
                         && matches!(
                             backend,
@@ -697,7 +702,8 @@ mod tests {
             assert!(
                 partition.starts_with("/dev")
                     && (file_type.is_block_device()
-                        || (cfg!(target_os = "openbsd") && file_type.is_char_device()))
+                        || (cfg!(any(target_os = "openbsd", target_os = "dragonfly"))
+                            && file_type.is_char_device()))
             );
             partition
         } else {
@@ -955,6 +961,48 @@ mod tests {
             });
             render(&window);
             snapshot(&window, &format!("macos-vc-partition-open-bottom-{scale}"));
+        }
+        ui.hide().unwrap();
+    }
+
+    #[test]
+    fn dragonfly_physical_forms_render_at_native_scales() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        super::configure_platform(&ui, "dragonfly");
+        ui.show().unwrap();
+        for format in ["luks1", "vera"] {
+            ui.set_create_format(format.into());
+            render(&window);
+            let source = "/dev/vbd0s1";
+            ui.set_create_target_kind("partition".into());
+            ui.set_create_partition(source.into());
+            ui.set_mount_source_kind("partition".into());
+            ui.set_mount_source(source.into());
+            ui.set_mount_point("/mnt/work".into());
+            render(&window);
+            for scale in [1.0, 1.2] {
+                ui.set_ui_scale(scale);
+                for view in ["create", "manage"] {
+                    ui.set_current_view(view.into());
+                    for (position, delta) in [("top", 10000.0), ("bottom", -10000.0)] {
+                        ui.window()
+                            .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                                position: slint::LogicalPosition::new(1000.0, 500.0),
+                                delta_x: 0.0,
+                                delta_y: delta,
+                            });
+                        render(&window);
+                        assert_eq!(ui.get_create_target_kind(), "partition");
+                        assert_eq!(ui.get_mount_source_kind(), "partition");
+                        snapshot(
+                            &window,
+                            &format!("dragonfly-{format}-{view}-{position}-{scale}"),
+                        );
+                    }
+                }
+            }
         }
         ui.hide().unwrap();
     }

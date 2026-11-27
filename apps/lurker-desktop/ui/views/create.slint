@@ -38,7 +38,7 @@ export component CreateView inherits Card {
     out property <bool> directory-format: root.format == "gocryptfs" || root.format == "cryfs" || root.format == "cryptomator" || root.format == "pefs";
     out property <bool> variable-cipher: root.format == "luks" || root.format == "luks1" || root.format == "vera";
     out property <bool> supports-keyfile: root.variable-cipher || root.format == "geli" || root.format == "pefs";
-    private property <bool> supports-partition: (root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs" || (root.is-macos && root.format == "vera") || (root.is-netbsd && root.format == "cgd") || (root.is-freebsd && (root.format == "geli" || root.format == "vera")) || (root.is-openbsd && (root.format == "softraid" || root.format == "raid1c" || root.format == "vera"));
+    private property <bool> supports-partition: (root.is-linux && !root.unprivileged && !root.directory-format) || root.format == "apfs" || (root.is-macos && root.format == "vera") || (root.is-netbsd && root.format == "cgd") || (root.is-freebsd && (root.format == "geli" || root.format == "vera")) || (root.is-openbsd && (root.format == "softraid" || root.format == "raid1c" || root.format == "vera")) || (root.is-dragonfly && (root.format == "luks1" || root.format == "vera"));
     changed format => {
         root.target-kind = root.directory-format ? "directory" : "file";
         if !root.variable-cipher { root.cipher = "aes"; }
@@ -152,8 +152,9 @@ export component CreateView inherits Card {
                 if root.is-macos && (root.format == "apfs" || root.format == "vera"): ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/diskNsM"; }
                 if root.is-netbsd && root.format == "cgd": ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/dkN"; }
                 if root.is-freebsd && (root.format == "geli" || root.format == "vera"): ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/daNpM"; }
+                if root.is-dragonfly: ThemedLineEdit { text <=> root.partition; placeholder-text: "/dev/vbdNsM"; }
                 if root.is-openbsd: ThemedLineEdit { text <=> root.partition; placeholder-text: root.format == "vera" ? "/dev/sdNa" : "/dev/sdNc"; }
-                if !root.is-openbsd && !(root.is-macos && (root.format == "apfs" || root.format == "vera")) && !(root.is-netbsd && root.format == "cgd") && !(root.is-freebsd && (root.format == "geli" || root.format == "vera")): DevicePicker {
+                if !root.is-dragonfly && !root.is-openbsd && !(root.is-macos && (root.format == "apfs" || root.format == "vera")) && !(root.is-netbsd && root.format == "cgd") && !(root.is-freebsd && (root.format == "geli" || root.format == "vera")): DevicePicker {
                     devices: root.devices;
                     value <=> root.partition;
                     selected-label: root.partition-label;

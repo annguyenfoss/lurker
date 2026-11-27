@@ -80,6 +80,12 @@ pub fn validate_create_platform(
                     command.volume_type,
                     VolumeType::Geli | VolumeType::Veracrypt
                 ))
+            && !(os == "dragonfly"
+                && mode == lurker_core::PrivilegeMode::Privileged
+                && matches!(
+                    command.volume_type,
+                    VolumeType::Luks1 | VolumeType::Veracrypt
+                ))
             && !(os == "openbsd"
                 && mode == lurker_core::PrivilegeMode::Privileged
                 && matches!(
@@ -611,7 +617,7 @@ mod tests {
             "",
         )
         .unwrap();
-        for os in ["netbsd", "dragonfly"] {
+        for os in ["netbsd"] {
             assert!(super::validate_create_platform(&raw, os, PrivilegeMode::Privileged).is_err());
         }
         assert!(
@@ -621,6 +627,7 @@ mod tests {
         super::validate_create_platform(&raw, "freebsd", PrivilegeMode::Privileged).unwrap();
         super::validate_create_platform(&raw, "macos", PrivilegeMode::Privileged).unwrap();
         super::validate_create_platform(&raw, "openbsd", PrivilegeMode::Privileged).unwrap();
+        super::validate_create_platform(&raw, "dragonfly", PrivilegeMode::Privileged).unwrap();
     }
 
     #[test]
@@ -930,6 +937,53 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn dragonfly_physical_forms_preserve_native_backend_and_privilege() {
+        for format in ["luks1", "vera"] {
+            let command = build_create_command(
+                "partition",
+                format,
+                "",
+                "",
+                "/dev/vbd0s1",
+                "",
+                "MB",
+                "serpent",
+                "password",
+                "password",
+                "pass",
+                "",
+            )
+            .unwrap();
+            assert_eq!(command.source_kind, SourceKind::Block);
+            assert!(command.force);
+            assert!(command.size_gb.is_none());
+            assert_eq!(command.cipher, CreateCipher::Serpent);
+            assert_eq!(
+                command.volume_type,
+                if format == "luks1" {
+                    lurker_core::VolumeType::Luks1
+                } else {
+                    lurker_core::VolumeType::Veracrypt
+                }
+            );
+            super::validate_create_platform(
+                &command,
+                "dragonfly",
+                lurker_core::PrivilegeMode::Privileged,
+            )
+            .unwrap();
+            assert!(
+                super::validate_create_platform(
+                    &command,
+                    "dragonfly",
+                    lurker_core::PrivilegeMode::Unprivileged
+                )
+                .is_err()
+            );
+        }
     }
 
     #[test]
