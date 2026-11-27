@@ -170,6 +170,67 @@ injected metadata/flush/close failures. Test raw providers only after file
 controls and current opened-node identity/flush proofs. Product integration and
 container/device/backing matrices remain later gates.
 
+## Subsequent reviewed library and RAM diagnostic
+
+After the source assessment, the separately authorized build phase used a new
+12 GiB qcow2, serial `lurker-ob-lkl-4e4015`, bound to the existing domain UUID.
+The native guest identified its unique first-sector sentinel before base-FFS2
+initialization as sd3a. The build filesystem is
+`/srv/lurker-openbsd-lkl-build`; neither original 512 MiB scratch disk was
+repurposed. A read-only reread of the failed sd1 image retained SHA-256
+`6ed0ada081be4f84084b3e8aad4c789bcbc2056d8989168ce597c2879497dbbb`.
+An ordinary enumeration reboot and the scoped new build volume are distinct
+from the already completed ordinary-product reboot evidence.
+
+The unmodified base-tool diagnostic failed in linker/Clang configuration.
+A separate GNU-tool-only diagnostic reached native modpost compilation and
+failed on missing byteswap.h. Both first failures remain intact. The reviewed
+six-file OpenBSD host patch has SHA-256
+`8d418903144152e49276e2b2b52071d31170bd7f0b29bdee926ed1bbbba63be6`.
+Its timer, safe mapping and UAPI components passed native controls before the
+fresh adapted tree rebuilt all host/kernel objects and exported host_ops
+headers together. No stale additive-ABI objects were reused. Native GNU bc
+1.08.2 was also required: base bc rejected -q, and a preserved no-q control
+returned zero while emitting a parser error and bogus HZ0 constants. The
+private GNU bc generated the actual HZ100 header successfully.
+
+All compilation ran as UID1300, one worker. The first 600-second adapted
+compile window ended at its deadline; the owned process group was confirmed
+gone. A subsequent window verified the same 86,818 original source inputs and
+unchanged adapter identities, then completed the library. The exact static
+library is 328,372,428 bytes, SHA-256
+`d07dbeda5039932129d5a66dd232fd8d92c5d4e0aafecdbb98f718fe0070d4d3`.
+MMU/KASAN remain disabled. Host VIRTIO_NET/VIRTIO_NET_FD and Linux hijack targets
+remain disabled; inherited CONFIG_NET=y is recorded honestly. No native
+network transport or network-filesystem backend was built for this phase.
+
+Actual generated-header layout assertions passed. The linked native RAM
+contract then passed boot, getpid, measured nanosleep, halt and exactly one
+post-CPU/tick-shutdown, pre-memory-free timer-quiescence callback. An additional
+native negative control lowered only the emulated effective UID: halt returned
+Linux EPERM, left the instance running and callable, and did not drain timers.
+Restoring that emulated UID permitted successful halt and one drain. This
+matches setup.c:145–167: a negative reboot result returns before running-state
+change, CPU wait, cleanup, timer quiescence, free_mem and join. A future driver
+must retain its source/state on this error and cannot acknowledge clean close.
+
+The unchanged upstream RAM boot suite passed **35/35** as UID1300 against the
+same library, executable SHA-256
+`eed5f958cb95cb65f91bbfc32d0f5450ca8fa657ca3f382c01e0fb58eeab3d40`.
+It exercised only emulated RAM files, proc and internal loopback. No host disk
+was registered and no FUSE operation ran. The actual native root/build-FFS
+mount inventories were identical before and after both controls. The static
+library and generated SDK were archived and the contained library hash checked
+again. The indexed receipts, exact binaries, raw logs and source anchors are
+`build/lkl-native/library-ram-index.json` under the host evidence root.
+
+These results establish a native library/ABI/timer/RAM foundation. Native
+FUSE API26 adaptation, authenticated THRID-to-process request credentials,
+outward errno translation, synchronous namespace/barrier error handling,
+provider flush chains, safe normal close and native formatters remain separate
+unqualified gates. There was no LKL FUSE mount, formatter/device experiment,
+driver installation, shared product change or filesystem capability claim.
+
 Primary references:
 
 - https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
