@@ -72,8 +72,8 @@
     "host FUSE2 headers/library"
   ],
   "jobs": 1,
-  "ufs2_config": "not enabled; requires separate experimental assessment",
-  "runtime_qualification": "Native primitives/compile/ELF only; new mounted client awaits root review and actual native caller/foreign/held-handle controls.",
+  "ufs2_config": "not enabled; UFS configuration/formatter validation dependent on this cut prototype is not actionable",
+  "runtime_qualification": "Historical native diagnostics only; kernel-dependent route cut, no mounted foreground-client or product admission. No pending validation queue.",
   "distribution": "External host prerequisite; never include filesystem driver or FUSE in the Lurker private package.",
   "kernel_driver_config": [
     "BTRFS_FS=y",
@@ -134,6 +134,17 @@
     "product_admission": false,
     "credential_failure": "Sticky poisoned state; no new filesystem requests until verified complete restoration; registered cleanup capabilities only; retain source/channel until global absence; final exit1 even after recovery.",
     "halt_failure": "Negative halt retains channel/source; retry every50ms and retry verified credential restoration; only actual halt0 authorizes cleanup, with historical error retained.",
-    "admin_context": "Protected diagnostic controller must launch outside chroot/jail; client checks jail.jailed=0 and invariant held root-directory identity. This does not qualify a general product supervisor."
+    "admin_context": "Protected diagnostic controller must launch outside chroot/jail; client checks jail.jailed=0 and invariant held root-directory identity. This does not qualify a general product supervisor.",
+    "status": "historical-unqualified-design; dependent work cut"
+  },
+  "status": "cut-preserved-experimental-source-manifest",
+  "actionable": false,
+  "kernel_dependent_build_or_execution_allowed": false,
+  "scope_cut": {
+    "date": "2026-11-27",
+    "record": "SCOPE_CUT.md",
+    "reason": "Locally invented timer_quiesce kernel host-operations ABI and shutdown hook; novel kernel behavior is outside scope.",
+    "handling": "Preserve all source/artifacts/evidence; no restart, workaround or upstream-interface project. Independent userspace work remains separate.",
+    "allowed_boundary": "Established pre-made kernel patches remain allowed even if applied specifically for Lurker; existing supported parameters/configuration before build remain allowed. Novel means kernel code/behavior invented by Lurker, not all source patches or userspace work."
   }
 }

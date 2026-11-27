@@ -1,17 +1,21 @@
-# Native DragonFly LKL host driver construction
+# Archived DragonFly LKL host driver experiment
 
-This is a separately installed native host filesystem prerequisite. It uses
-DragonFly threads, local FD I/O and the stock host FUSE facility, with no VM,
-network transport or syscall-hijack library. It must never enter Lurker's app or
-private crypto bundle. The source, official DPorts patches, ordered DragonFly
-patches and required header hashes are pinned in `recipe.json`.
+**Cut on 2026-11-27.** This prototype injects a new embedded-kernel ABI slot and
+shutdown hook, which falls outside Lurker's non-invasive kernel integration
+boundary. Its kernel-dependent builds, controls, mounts and product admission
+are removed from actionable plans. Do not build, run or resume this recipe.
+No kernel workaround or upstream-interface project is planned. See
+[SCOPE_CUT.md](SCOPE_CUT.md) for completed work, provenance and the verified cut
+state. Source, partial artifacts, failed fixtures and evidence are preserved.
 
-Apply every patch and source header before a fresh one-worker build. The old
-outer Makefile does not track incremental kernel changes: a changed kernel or
-generated host ABI requires rebuilding its forwarded `tools/lkl/lib/lkl.o` and
-headers. Incremental diagnostic receipts are not a fresh factory qualification.
-UFS2 is not enabled; the native client accepts only Btrfs and XFS. Native
-formatter construction is separate from imported-image driver controls.
+The remainder describes historical diagnostic code, not installation or
+validation instructions. It used native DragonFly threads, local FD I/O and
+stock host FUSE, without a VM, network transport or syscall-hijack library.
+The pinned source and patch manifest remains in `recipe.json` solely for
+reproducibility of the record. It must never enter Lurker's app or private
+crypto bundle. No Btrfs, XFS or UFS2 product pass was established by this route;
+UFS2 was never enabled. Independent native formatter and userspace FUSE work
+remains separate from the cut embedded-kernel experiment.
 
 The host adapter supplies native thread identity and monotonic one-shot timers.
 Its explicit shutdown hook drains timer callbacks after CPU/clock shutdown and
@@ -61,11 +65,12 @@ and the FUSE session are prepared before the controller publishes the mount.
 The backing FD takes LOCK_EX|LOCK_NB before block-device registration and
 retains that claim until final drain/close. Same-file and hardlink claims conflict;
 symlinks are refused by O_NOFOLLOW. Native character-node flock is unsupported,
-so mapped/raw devices remain a separately reviewed lease gate. Captured native
-FSID/source/target must be globally absent before drain and channel/session
+so mapped/raw device admission was never qualified and is cut with this route.
+Captured native FSID/source/target must be globally absent before drain and
+channel/session
 disposal. Signals keep service alive and latch an unsuccessful final result; moved/replaced/uncertain
-mounts retain the source/channel. Ordinary user-chosen mountpath admission needs
-a separately reviewed supervisor/FD-bound target contract.
+mounts retain the source/channel. Ordinary user-chosen mountpath admission was
+never qualified; its dependent supervisor work is cut with this route.
 
 The scoped FUSE2 static library recipe is in `../fuse2`; the global installed
 provider is unchanged. Its64-byte native INIT reply preserves the negotiated
@@ -83,9 +88,10 @@ genuine restoration EPERM, unchanged data while poisoned, registered cleanup and
 verified recovery with historical failure retained. Fault activation exists only
 in separately compiled test translation units, never a production option. A
 native ELF with the scoped PIC FUSE2 archive links successfully. The new mounted
-client remains unqualified pending root review/trusted copy, actual native INIT,
-caller/foreign permissions, ownership/mode/time/set-ID checks, opener-death and
-inherited-descriptor controls, full payload/reopen and physical geometry tests.
+client was not qualified: actual native INIT, caller/foreign permissions,
+ownership/mode/time/set-ID checks, opener-death and inherited descriptors, full
+payload/reopen and physical geometry controls did not complete. These dependent
+controls are cut, not an actionable validation queue.
 No Lurker product or matrix pass follows from these construction receipts.
 
 The pinned kernel returns a negative halt before CPU/thread/timer cleanup. Both
@@ -95,7 +101,7 @@ negative result remains a final error. `tests/halt.c` proves a real reboot EPERM
 leaves the kernel running, native channel attached and source flock held, then
 verified root restoration permits halt0. The separate test-only halt driver can
 pause the retry for a controlled mounted retention test; that privileged test
-remains pending.
+was not executed and is cut with the dependent route.
 
 `fuse_parse_cmdline` adds a kernel-only default fsname. The native controller
 supplies the validated FUSE-device alias independently, so the client removes
@@ -119,8 +125,9 @@ and observer join must succeed before disposal.
 Protected diagnostic controllers must launch outside chroot and jail. The client
 checks root credentials, `jail.jailed=0`, and an unchanged held root-directory
 identity; those checks alone do not prove an arbitrary launch is outside chroot.
-A general product supervisor remains a separate gate. Native query-result and
+A general product supervisor was not qualified with this route. Query-result and
 thread controls are in `tests/observer.c`; `tests/fsid-probe.c` is read-only.
 The separate test-only observer driver holds the actual DESTROY callback before
 its reply, allowing present/unmounting/absent native syscall observations without
-closing the source early. Actual mounted controls remain pending review.
+closing the source early. Actual mounted controls were not executed and are
+cut with this dependent route.
