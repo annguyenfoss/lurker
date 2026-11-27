@@ -182,3 +182,45 @@ reserve; smaller ordinary-reboot cohorts will be used if needed. Eight closed
 owned raw failure/control images were made sparse by removing only allocated
 zero ranges; before/after SHA-256 checks preserved every logical byte and
 released 3,058,233,344 bytes. Failed encrypted images remain intact.
+
+The final Linux follow-up is now `67894f68525c55d5cbb48c743e1a98a308bd970f`.
+Its exact-source workspace build/check/test passed **168 tests, zero failures,
+15 ignored**, plus one explicitly enabled native kmod regression. The earlier
+576 matrix retains its original identity. That matrix's separate follow-up
+queue passed 27 groups and retained one normal-user terminal failure. Scoped
+read-only TTY/process evidence isolated competing sudo-rs terminal interaction
+from the loop lease. The exact process-group source preview passed unchanged
+normal-user password frontends and a binary-keyfile lifecycle, with 168 samples
+showing separate background groups, unchanged session identities and no stopped
+tasks. Arch committed the narrow correction in the designated 678 source.
+
+The newer packaging audit correctly rejected the older creator closure's private
+FUSE library. Producer `7d8f9a4` and consumer `fa063ac` now retain FUSE as an
+administrator-controlled native prerequisite, with exact architecture/SONAME,
+stable alias, actual dependency resolution and separate historical/current
+provider hashes. Ubuntu's native producer tests (17), actual GNU loader control,
+full six-backend stage, root creator boundary checks (17), and normal-user strict
+helper binary-keyfile lifecycles (21 JSON actions across all three disk methods)
+passed. Creator SHA-256 remains
+`7975cc4724d558fd10bafcc670627c56959a1c76d721f7f83dce855eb0052769`;
+zlib remains a legitimate private dependency with its notices. No FUSE payload
+is included. Packaging revisions are separate from the frozen Rust source.
+New CLI SHA-256 is
+`dca53903837f75aef85a277837dfbc17a49b753825cf88e8721a5f096f7f35e0`,
+helper `6b6cb0a14c38973605289563d37ed12b2d57130537ecd1044e3446c4058a5487`,
+and desktop `842b395c950fb4952210019d9433c0c05c56cdf84507ecfc5839701750e9af87`.
+
+The host UFS2 prerequisite now also includes the reviewed READDIR continuation
+patch, SHA-256
+`e5749cfe9b04b036843c43d5a75ccdb03af2f28c46add783dccdcca64ee41134`.
+Upstream formatting/lint checks, 28 library tests and a fresh release build
+passed. With no old-driver sessions, the corrected root-controlled driver was
+installed at SHA-256
+`78c7e182b87d1e7ad7d3ba21ad49d79444e55db70c9a740788efff57a936b7cb`
+(local vendor commit `51f0f3c`). The old-driver native control listed only 204
+of 512 files and omitted a newly created entry. The corrected driver listed all
+512, then all 513 including the new file, with stable repeated enumeration and
+normal closure. The temporary nightly formatter was removed afterward.
+The six affected UFS2 container rows and remaining final-user/desktop gates are
+queued sequentially as PID 305007; desktop gate coordinator PID 314208 waits.
+Ordinary OS reboot and the new destructive scratch disk remain pending.
