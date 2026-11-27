@@ -46,6 +46,9 @@ int main(void)
     assert(ob_lkl_result(-999999,0)==-EIO);
     assert(ob_lkl_result(LONG_MIN,0)==-EIO);
     assert(ob_lkl_result((long)INT_MAX+100,0)==(long)INT_MAX+100);
+    assert(ob_fuse_result((long)INT_MAX+100,0)==-EOVERFLOW);
+    assert(ob_fuse_result(INT_MAX,0)==INT_MAX);
+    assert(ob_fuse_result(-LKL_ENOTEMPTY,0)==-ENOTEMPTY);
     assert(ob_lkl_result(0,0)==0);
     int flags;
     assert(!ob_open_flags(O_RDWR|O_CREAT|O_EXCL|O_CLOEXEC|O_SYNC,&flags));

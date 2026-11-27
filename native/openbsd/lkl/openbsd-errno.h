@@ -5,6 +5,7 @@
 #ifndef LURKER_LKL_OPENBSD_ERRNO_H
 #define LURKER_LKL_OPENBSD_ERRNO_H
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <lkl.h>
 
@@ -409,5 +410,15 @@ static long ob_lkl_result(long result, int attribute)
 #endif
     fprintf(stderr, "lklfuse: unmapped Linux errno result %ld (attribute=%d)\n", result, attribute);
     return -EIO;
+}
+/* API26 callback results are int; offsets remain separate off_t arguments. */
+static int ob_fuse_result(long result, int attribute)
+{
+    long native = ob_lkl_result(result, attribute);
+    if (native > INT_MAX) {
+        fprintf(stderr, "lklfuse: callback result exceeds native int: %ld\n", result);
+        return -EOVERFLOW;
+    }
+    return (int)native;
 }
 #endif

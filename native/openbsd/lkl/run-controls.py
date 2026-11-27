@@ -18,10 +18,16 @@ def main():
     args.output.mkdir(mode=0o700)
     files=[x for x in own.iterdir() if x.is_file()]
     receipt={'started':time.time(),'uid':os.getuid(),'scope':'native primitives/RAM only; no host disk registration, FUSE mount, formatter or install','library_sha256':expected,'inputs':{x.name:sha(x) for x in files}}
+    controller=pathlib.Path('/srv/lurker-openbsd-lkl-build/preview/scripts/build-openbsd-lkl.py')
+    receipt['controller_sha256']=sha(controller)
+    headers=['fuse/fuse.h','fuse/fuse_common.h','sys/sysctl.h','sys/proc.h','sys/mount.h','sys/stat.h','sys/errno.h','sys/fcntl.h']
+    receipt['native_headers']={x:sha(pathlib.Path('/usr/include')/x) for x in headers}
+    receipt['tools']={x:sha(pathlib.Path('/usr/local/bin')/x) for x in ['egcc','greadelf']}
+    environment={'HOME':str(pathlib.Path.home()),'PATH':'/bin:/usr/bin:/usr/local/bin','LC_ALL':'C'}
+    receipt['environment']=environment
     (args.output/'inputs-before-execution.json').write_text(json.dumps(receipt,indent=2)+'\n')
-    spec=importlib.util.spec_from_file_location('producer','/srv/lurker-openbsd-lkl-build/preview/scripts/build-openbsd-lkl.py')
+    spec=importlib.util.spec_from_file_location('producer',controller)
     producer=importlib.util.module_from_spec(spec);spec.loader.exec_module(producer)
-    receipt['controller_sha256']=sha(pathlib.Path(spec.origin))
     receipt['host_mounts_before']=subprocess.check_output(['/sbin/mount'],text=True)
     results=[]
     for name in args.controls.split(','):
@@ -31,14 +37,14 @@ def main():
         if name=='credential':cmd+=[str(library)]
         cmd+=['-lpthread','-o',str(binary)]
         r={'name':name,'command':cmd}
-        c=subprocess.run(cmd,stdout=(args.output/(name+'-compile.stdout')).open('xb'),stderr=(args.output/(name+'-compile.stderr')).open('xb'));r['compile_returncode']=c.returncode
+        c=subprocess.run(cmd,env=environment,stdout=(args.output/(name+'-compile.stdout')).open('xb'),stderr=(args.output/(name+'-compile.stderr')).open('xb'));r['compile_returncode']=c.returncode
         if c.returncode==0:
             r['binary_sha256']=sha(binary)
             hdr=subprocess.check_output(['/usr/local/bin/greadelf','-l',str(binary)],text=True)
             (args.output/(name+'-readelf.txt')).write_text(hdr);assert '/usr/libexec/ld.so' in hdr
             cmd=[str(binary)]
             if name in ('credential','disk'):cmd+=[str(args.output/(name+'-fixture'))]
-            r.update(producer.run_build(cmd,args.output,dict(os.environ),args.output/(name+'-run.log'),45))
+            r.update(producer.run_build(cmd,args.output,environment,args.output/(name+'-run.log'),45))
         results.append(r)
     receipt['results']=results;receipt['finished']=time.time()
     receipt['host_mounts_after']=subprocess.check_output(['/sbin/mount'],text=True)
