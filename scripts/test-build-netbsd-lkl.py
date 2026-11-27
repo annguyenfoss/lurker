@@ -20,6 +20,17 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD", "native descriptor release gate")
+    def test_shutdown_retains_resources_until_verified_absence_and_halt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "shutdown-control"
+            control = BUILDER.ROOT / "native/netbsd/lkl/shutdown-control.c"
+            subprocess.run(["/usr/bin/cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror",
+                            str(control), "-o", str(binary)], check=True, timeout=30)
+            result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            print(result.stdout, end="")
+
     @unittest.skipUnless(platform.system() == "NetBSD" and os.environ.get("LURKER_NETBSD_LKL_SOURCE"), "built native LKL library required")
     def test_captured_credentials_umask_and_restoration_poison(self):
         source = Path(os.environ["LURKER_NETBSD_LKL_SOURCE"]).resolve(strict=True)

@@ -168,6 +168,17 @@ umasks and an injected restoration failure while its native source FD stays
 held. This component is not yet wired into the diagnostic frontend and does
 not establish mounted cleanup behavior.
 
+`netbsd-shutdown.h` gates final barrier, owned descriptor closure and library
+cleanup on global captured-mount absence and a successful LKL halt. Current
+upstream `arch/lkl/kernel/setup.c` returns a negative halt result before CPU,
+thread and timer quiescence. A failed halt therefore retains resources and
+requires a later retry; subsequent success never erases the earlier failure.
+Its native control retains actual descriptors through missing identity, a moved
+mount represented as globally present, inventory failure and three negative
+halt responses, then checks exactly-once release after a later zero response.
+The global FSID detector and actual mounted no-force lifecycle remain separate
+frontend gates. This helper neither detects nor unmounts a filesystem.
+
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
 https://man.netbsd.org/mmap.2
 https://github.com/bminor/glibc/blob/glibc-2.42/elf/elf.h
