@@ -52,7 +52,14 @@ a new Git index and required the resulting tree to equal the release's published
 upstream patch SHA256 `0a516cc322371fce9418495ec183419b3f8c8c49805e33f0f1d78be56222cd71`
 are retained under the private `build/release-lkl-2cdd-1/` round evidence. This is
 recovery of existing published bytes, not a new configuration or port. The
-separate bounded native library build is in progress; it has no runtime pass yet.
+separate bounded native build passed both architecture slices. Its new universal
+archive is `393adeda69a338c8085c68c5178337c27f67c6ba99d0f8db454be0b3827314cd`,
+with 128 matching exported headers. Both slices passed symbol/link checks; native
+arm64 libc-before-initialization, version and invalid-argument controls passed.
+No LKL initialization, syscall, filesystem runtime or mount was executed. The
+first control compilation omitted the existing POSIX host parameter and failed;
+the corrected harness and all source-fetch failures remain in the same evidence
+packet. The published ICMP host-header warning is retained without a port repair.
 
 ## Historical c4 source and build
 
