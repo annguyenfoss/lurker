@@ -16,6 +16,8 @@ Protect disks, file containers and directories with the CLI or native desktop ap
 - WIP — Planned or integration in progress
 - — Unavailable
 
+### Disk, volume, and container encryption
+
 <table width="100%">
   <thead>
     <tr>
@@ -26,7 +28,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <th scope="col" width="1%" nowrap><samp>OpenBSD</samp></th>
       <th scope="col" width="1%" nowrap><samp>NetBSD</samp></th>
       <th scope="col" width="1%" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
-      <th scope="col" width="1%" nowrap><samp>Windows</samp></th>
     </tr>
   </thead>
   <tbody align="center" valign="middle">
@@ -38,12 +39,10 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"> <sup>🛈</sup></td>
-      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;2</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
       <td>WIP</td>
@@ -58,13 +57,11 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">A&#8203;P&#8203;F&#8203;S<br>E&#8203;n&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;e&#8203;d</td>
       <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
@@ -78,17 +75,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
-      <td align="left">P&#8203;E&#8203;F&#8203;S</td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left" nowrap>softraid<br>CRYPTO&nbsp;/&nbsp;RAID1C</td>
@@ -96,7 +82,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
     </tr>
@@ -108,7 +93,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">BitLocker</td>
@@ -118,17 +102,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
-      <td>WIP</td>
-    </tr>
-    <tr height="60">
-      <td align="left">EFS</td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
@@ -138,7 +111,33 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td>WIP</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>WIP</td>
+    </tr>
+  </tbody>
+</table>
+
+### Directory encryption
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th scope="col" align="left" width="10000">Encryption</th>
+      <th scope="col" width="1%" nowrap><samp>Linux</samp></th>
+      <th scope="col" width="1%" nowrap><samp>MacOS</samp></th>
+      <th scope="col" width="1%" nowrap><samp>FreeBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>OpenBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>NetBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
+    </tr>
+  </thead>
+  <tbody align="center" valign="middle">
+    <tr height="60">
+      <td align="left">P&#8203;E&#8203;F&#8203;S</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s</td>
@@ -148,7 +147,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
-      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">C&#8203;r&#8203;y&#8203;F&#8203;S</td>
@@ -158,7 +156,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
-      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">C&#8203;r&#8203;y&#8203;p&#8203;t&#8203;o&#8203;m&#8203;a&#8203;t&#8203;o&#8203;r</td>
@@ -168,8 +165,34 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>WIP</td>
       <td>WIP</td>
       <td><sup>—</sup></td>
-      <td>WIP</td>
     </tr>
+    <tr height="60">
+      <td align="left">securefs</td>
+      <td>WIP</td>
+      <td>WIP</td>
+      <td>WIP</td>
+      <td>WIP</td>
+      <td>WIP</td>
+      <td><sup>—</sup></td>
+    </tr>
+  </tbody>
+</table>
+
+### Individual-file encryption — CLI
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th scope="col" align="left" width="10000">Encryption</th>
+      <th scope="col" width="1%" nowrap><samp>Linux</samp></th>
+      <th scope="col" width="1%" nowrap><samp>MacOS</samp></th>
+      <th scope="col" width="1%" nowrap><samp>FreeBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>OpenBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>NetBSD</samp></th>
+      <th scope="col" width="1%" nowrap><samp>DragonFly&nbsp;BSD</samp></th>
+    </tr>
+  </thead>
+  <tbody align="center" valign="middle">
     <tr height="60">
       <td align="left">a&#8203;g&#8203;e</td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
@@ -178,7 +201,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">O&#8203;p&#8203;e&#8203;n&#8203;S&#8203;S&#8203;L<br>CMS</td>
@@ -188,7 +210,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>WIP</td>
     </tr>
     <tr height="60">
       <td align="left">G&#8203;n&#8203;u&#8203;P&#8203;G<br>(OpenPGP)</td>
@@ -198,25 +219,9 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td>WIP</td>
     </tr>
   </tbody>
 </table>
-
-age, OpenSSL CMS and GnuPG support individual-file encryption through the CLI on Linux, macOS and all four BSDs. Windows support is planned.
-
-On macOS, `--type apfs` creates a plain disk image containing an encrypted APFS volume. Open and close unlock and lock that volume through `diskutil`. External data-partition creation requires `--force`. The flow is tested on disposable images and their virtual partitions, with a representative encrypted external USB partition also qualified in the fresh native round.
-
-
-Native VeraCrypt also supports unmounted external GPT data partitions with `--force`, using exFAT and an administrator-controlled complete installation for native authorization. See [Mac VeraCrypt partitions](native/macos/veracrypt-partitions.md).
-
-Apple encrypted images default to APFS. The CLI and helper also accept `--filesystem ext4`, `ntfs` or `zfs` with separately installed native host tools and drivers; the desktop keeps its native filesystem default. Native-only macOS VeraCrypt qualification uses the explicit audited macFUSE build; the default FUSE-T build's SMB transport is excluded. Directory engines use local FUSE-T FSKit. See [native Apple filesystem setup](native/macos/apple-filesystems.md) and the [fresh macOS qualification](DIRECTIVES/PLAN/NATIVE_FRESH_20261127/MACOS_RESULTS.md).
-
-LUKS1 and LUKS2 on Windows are planned via WSL 2.
-
-On Linux, UFS1 creation requires a write-enabled native UFS driver. LUKS2 selects 512-byte logical sectors for UFS1 while keeping the chosen cipher and KDF costs.
-
-BitLocker on Linux, macOS, and FreeBSD is planned for opening existing volumes. Writable access depends on filesystem qualification.
 
 🛈 LUKS1 on DragonFly BSD has limited resilience to sudden power loss.
 
