@@ -38,7 +38,9 @@ pub(super) fn format(mapped: &str, selected: Option<CreateFilesystem>) -> AppRes
         CreateFilesystem::Ufs1 => exec("/sbin/newfs", &args(&["-O", "1", "-U", mapped]), None)?,
         CreateFilesystem::Ufs2 => exec("/sbin/newfs", &args(&["-O", "2", "-U", mapped]), None)?,
         CreateFilesystem::Ext4 => exec("/usr/local/sbin/mkfs.ext4", &args(&["-F", mapped]), None)?,
-        CreateFilesystem::Xfs => exec("/usr/local/sbin/mkfs.xfs", &args(&["-f", mapped]), None)?,
+        filesystem @ (CreateFilesystem::Xfs | CreateFilesystem::Btrfs) => {
+            return format_lkl(mapped, filesystem);
+        }
         CreateFilesystem::Ntfs => {
             // ntfs-3g's FreeBSD formatter otherwise assumes 512-byte sectors,
             // while GELI may expose 4096-byte logical sectors. Native NTFS commands
@@ -96,6 +98,56 @@ pub(super) fn format(mapped: &str, selected: Option<CreateFilesystem>) -> AppRes
         }
     };
     Ok(())
+}
+
+/// These host formatters operate only on the freshly created decrypted provider.
+/// Existing filesystems never enter this path during ordinary open.
+fn format_lkl(mapped: &str, filesystem: CreateFilesystem) -> AppResult<()> {
+    let info = exec("/usr/sbin/diskinfo", &args(&[mapped]), None)?;
+    let sectors = lkl_sector_count(mapped, &info)?;
+    match filesystem {
+        CreateFilesystem::Xfs => {
+            exec("/usr/local/sbin/mkfs.xfs", &args(&["-f", mapped]), None)?;
+        }
+        CreateFilesystem::Btrfs => {
+            // The native FreeBSD formatter route converts a fresh empty NTFS
+            // filesystem. Its provider and crypto geometry remain unchanged.
+            // The shared executor disables this port's unsafe UBLIO retry path.
+            exec(
+                "/usr/local/sbin/mkntfs",
+                &args(&["-F", "-Q", "-s", "512", mapped, &sectors.to_string()]),
+                None,
+            )?;
+            exec("/usr/local/sbin/ntfs2btrfs", &args(&[mapped]), None)?;
+        }
+        _ => {
+            return Err(AppError::new(
+                "Unexpected FreeBSD host filesystem formatter.",
+            ))
+        }
+    }
+    Ok(())
+}
+
+/// The qualified external driver needs 512-byte providers. Check the exact
+/// native source, media length and sector count before a formatter can write.
+fn lkl_sector_count(mapped: &str, info: &str) -> AppResult<u64> {
+    let mut fields = info.split_whitespace();
+    let source = fields.next();
+    let sector = fields.next().and_then(|value| value.parse::<u32>().ok());
+    let bytes = fields.next().and_then(|value| value.parse::<u64>().ok());
+    let sectors = fields.next().and_then(|value| value.parse::<u64>().ok());
+    if info.lines().filter(|line| !line.trim().is_empty()).count() != 1
+        || source != Some(mapped)
+        || sector != Some(512)
+        || bytes.is_none_or(|length| length == 0)
+        || sectors.is_none_or(|count| count == 0 || count.checked_mul(512) != bytes)
+    {
+        return Err(AppError::new(
+            "FreeBSD XFS/Btrfs creation requires the exact decrypted provider with consistent 512-byte native geometry.",
+        ));
+    }
+    Ok(sectors.unwrap())
 }
 
 fn probe(mapped: &str) -> AppResult<String> {
@@ -365,6 +417,28 @@ fn sector_size(mapped: &str, info: &str) -> AppResult<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lkl_formatter_geometry_requires_exact_consistent_512_byte_provider() {
+        assert_eq!(
+            lkl_sector_count("/dev/md0.eli", "/dev/md0.eli 512 2147483136 4194303 0 0\n").unwrap(),
+            4194303
+        );
+        for info in [
+            "/dev/md1.eli 512 2147483136 4194303",
+            "/dev/md0.eli 4096 2147479552 524287",
+            "/dev/md0.eli 512 2147483136 4194304",
+            "/dev/md0.eli 512 0 0",
+            "/dev/md0.eli 512 512 18446744073709551615",
+            "/dev/md0.eli 512 invalid 18446744073709551615",
+            "/dev/md0.eli 512 512 1\n/dev/md1.eli 512 512 1",
+        ] {
+            assert!(lkl_sector_count("/dev/md0.eli", info).is_err(), "{info}");
+        }
+        // Formatter preparation alone must not admit unsupervised writes.
+        assert!(validate(Some(CreateFilesystem::Btrfs), VolumeType::Geli).is_err());
+        assert!(validate(Some(CreateFilesystem::Xfs), VolumeType::Geli).is_err());
+    }
+
     #[test]
     fn ntfs_sector_geometry_must_describe_the_exact_decrypted_device() {
         assert!(validate(Some(CreateFilesystem::Ntfs), VolumeType::Geli).is_ok());

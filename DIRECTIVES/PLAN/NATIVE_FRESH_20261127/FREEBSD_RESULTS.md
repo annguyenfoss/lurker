@@ -794,3 +794,26 @@ the applicable new product-container cases. `device-lkl/` retains before/after
 live/persistent XML, qcow metadata and guest identity receipts. All four
 previous disks are preserved. Any later VM state-preservation/recovery inventory
 must include this fifth disk; no reboot or recovery action was performed.
+
+
+### Formatter preparation and live completion requirement
+
+Native formatter preparation now checks the exact decrypted source, positive
+media length, 512-byte sectors and consistent sector count before invoking
+XFS formatting or fresh-empty-NTFS-to-Btrfs conversion. Existing XFS/Btrfs
+write guards remain unchanged. Its native focused tests pass 2/0/0 and
+workspace check/test pass with 159 passed, 0 failed and 13 ignored. The executed
+formatter source is
+`c1086997d735f76f9b961d30ca6eceb1a1c88838539c97385a7afbe96932a6ce`,
+based on `b721dab`; evidence is `validation/lkl-formatter-prep/attempt-2/`.
+The preceding E0308 compilation failure is retained separately as attempt1.
+
+The strict status-file parser/reader is an auxiliary primitive, not sufficient
+teardown authority. A visible clean record plus released flock can survive a
+failed final status fsync/error rewrite while the producer exits nonzero.
+A live guardian must retain the actual owned worker wait status, source custody
+and identity-bound RPC completion, including parent flush/close errors, before
+product admission. Its common v2 codec is being coordinated with macOS;
+FreeBSD native peer credentials and GEOM/FUSE callbacks remain separate.
+No encrypted provider is released solely from the file record, and no new
+write admission is enabled by this preparation.
