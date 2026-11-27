@@ -35,21 +35,46 @@ The explicitly started configured-UFS1 jobs are complete on Arch (`121172a`)
 and Ubuntu (`87a33b7`, `f53eda2`): each passed six container and six physical
 cases, frontend/permission checks and ordinary reboot persistence. Stock-kernel
 failures remain historical; these routes require the documented matching
-write-enabled module. Gentoo's twelve cells and supported GUI lifecycle have
-passed; its six-fixture ordinary-reboot cohort is in progress. See the three
+write-enabled module. Gentoo completed all twelve cells, its supported GUI Auto
+lifecycle, six-fixture ordinary reboot and final archive/cleanup (`d0cee9c`). No
+Linux host owner records a retained ready filesystem job. See the three
 UFS1 host reports for exact source, module, retained-failure and cleanup records.
 
-FreeBSD Cryptomator candidate `2424fb3` has native ABI/compiler/provider-only
-proofs, not a mounted vault pass. Its replacement must avoid libfuse3's forced
-unmount and retain the adapter/CryptoFS/JVM after partial or failed close.
-Managed caller, direct FSID-unmount worker and Rust-client controls are under
-native qualification; core admission remains disabled. The old blocked state
+FreeBSD Cryptomator's no-force provider (`a4663c0`), shared managed Java caller
+(`333346e`) and Rust client (`a5be4e1`) have passed native primitive, lifecycle
+and fake-resource interoperability controls. Shared Java checks also passed on
+Linux and macOS. These are not mounted-vault passes. A separately verified pilot
+image is prepared (`1a70f4a`); the reviewed real-controller source is at its
+compile-only gate, with no mounted pilot yet. Core admission remains disabled.
+The old blocked state
 is preserved in saved RAM and five original disks. Operational cold recovery
 on verified copies completed (`c2bd194`, `96088d8`); root verified 84 recovery
 references and the post-boot baseline (`04aced6`). This is not a product reboot
 pass. Independent guardian primitives continue: Mac's user-only service passed
 477 checks in ten synthetic cases (`5762904`), without LKL/FUSE/storage or
 product admission. Whole-round completion remains unproven.
+
+The released macOS companion LKL source `2cdd0e9` has now produced a distinct
+universal library (`393adeda…7314cd`), matching headers and native pure ABI/libc
+controls (`f8b916a`). The published source tree was recovered exactly, without
+inventing kernel code. Guardian/worker integration is the next userspace batch;
+no storage or product pass is credited to this new library. NetBSD's documented
+shutdown-hook configuration passed a standalone ZFS graceful reboot (`48abbef`);
+encrypted CGD/ZFS reboot qualification remains separate.
+
+DragonFly subsequently stopped in a HAMMER2 I/O/assertion kernel panic while the
+gocryptfs ABI/source batch was being frozen. The native C probe finished; its
+new Go build, tests and mount adoption never started. Hypervisor block status
+reports no current error and host capacity is available, but cause is not
+established. RAM, firmware and all three disk images are being preserved before
+operational recovery. Earlier five-filesystem results retain their original
+identities; neither host health nor a product recovery pass follows from them.
+
+Current reporting uses `FILESYSTEM_QUALIFICATION.md`'s separate completion and
+filesystem-support scores. A finished unavailable-route assessment is not an
+indefinitely deferred implementation job. Retained deferred work counts toward
+completion; cut novel-kernel work does not. Final requirement coverage review
+continues independently of evidence-file integrity checks.
 
 Nine host owners now provide private `completion-evidence-index.json` files
 mapping the acceptance requirements to exact receipts and limitations. Root's
