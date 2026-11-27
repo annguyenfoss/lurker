@@ -369,8 +369,10 @@ clarification about that architecture.
   rename/fstat probe reproduced that state. Shared correction `c3dd43b` retries
   metadata on the same held descriptor for a bounded interval while preserving
   immediate type/owner/mode checks and persistent-hardlink rejection. Its native
-  overlay regression passed; exact-commit Linux workspace checks are running
-  and the new OpenBSD product lifecycle remains a separate gate. NetBSD's
+  overlay regression passed; Debian's exact-commit workspace check/test passed
+  with 171 tests and no failures (`670d11f`). The repaired normal OpenBSD CLI
+  and helper each passed the full caller-owned payload/privacy lifecycle and
+  configured-close identity negatives; the desktop gate remains pending. NetBSD's
   comparable native FFS(log) probe completed 10,000 renames without observing
   an extra link, so its installed `8e09ac8` candidate proceeds with that scope
   decision and retained probe, rather than rebuilding solely for the source hash.
