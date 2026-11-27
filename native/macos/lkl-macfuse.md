@@ -6,6 +6,17 @@ refusal remains in place until a replacement mounted route passes qualification.
 An in-process native library using local I/O is eligible; the older Btrfs
 VM/network-export routes remain excluded.
 
+The new kernel-patch scope holds this dependent runtime route. In-process LKL
+still contains an embedded kernel: its kernel implementation, headers, scheduler,
+syscall dispatch and kernel link policy require eligible already published/tested
+upstream or mainstream provenance. The custom namespace export-list patch below
+changes the kernel partial link and is not exempt because its file is Python.
+The pinned Darwin vendor fork is public, but mainstream adoption of its kernel
+port changes has not been established. Preserve the historical builds/controls;
+do not rebuild or execute this dependent route as new acceptance, or enable
+product dispatch, while that boundary is unresolved. Plain native POSIX guardian
+and codec work is independent and contains no embedded kernel.
+
 ## Exact source and build
 
 - xlinuxfs: `f9da28e8cfdf6a4574a31e8baa9ba1811ef4c2e4` (2026-10-30), GPL-2.0.
@@ -96,8 +107,10 @@ FSKit extension acceptance. The frozen `025f558` package results remain unchange
 
 ## Kernel and native host symbol boundary
 
-Apply `lkl-darwin-symbols.patch` as well as the flush patch before a new source
-build. The upstream Darwin recipe made only memcpy/memset/memmove private.
+The historical candidate applied `lkl-darwin-symbols.patch` alongside the flush
+patch. Its kernel partial-link modification is now held under the scope above;
+it is not an instruction to run another build. The upstream Darwin recipe made
+only memcpy/memset/memmove private.
 Its combined kernel object also exported formatting and string functions,
 including snprintf/vsnprintf, which could capture native host calls. A native
 adapter review candidate crashed in that kernel formatting implementation before
