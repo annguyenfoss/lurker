@@ -270,7 +270,7 @@ def install_alias(directory, name, target):
         path.symlink_to(target)
 
 
-def gnu_toolchain(work):
+def gnu_toolchain(work, bc=None):
     """Use official native tools privately; derive format from an actual object."""
     tools = {"gcc": "/usr/local/bin/egcc", "cc": "/usr/local/bin/egcc",
              "ar": "/usr/local/bin/gar", "as": "/usr/local/bin/gas",
@@ -279,6 +279,11 @@ def gnu_toolchain(work):
              "stat": "/usr/local/bin/gstat", "sha1sum": "/usr/local/bin/gsha1sum",
              "python": str(Path(sys.executable).resolve()),
              "python3": str(Path(sys.executable).resolve())}
+    if bc is not None:
+        path = Path(bc)
+        if not path.is_absolute() or not path.is_file() or not os.access(path, os.X_OK):
+            raise RuntimeError("Use an absolute executable native compatible bc path")
+        tools["bc"] = str(path.resolve(strict=True))
     directory = work / "native-gnu-bin"
     directory.mkdir(exist_ok=True)
     for name, target in tools.items():
@@ -303,6 +308,8 @@ def gnu_toolchain(work):
                 "format_probe_object_sha256": digest(obj), "objdump": output,
                 "compiler_version": subprocess.check_output([tools["cc"], "--version"], text=True),
                 "format": match.group(1)}
+    if bc is not None:
+        identity["bc_version"] = subprocess.check_output([tools["bc"], "--version"], text=True, timeout=30)
     arguments = ["CC=" + tools["cc"], "HOSTCC=" + tools["cc"],
                  "LD=/usr/bin/ld", "AR=" + tools["ar"], "AS=" + tools["as"],
                  "NM=" + tools["nm"], "OBJCOPY=" + tools["objcopy"],
@@ -316,6 +323,7 @@ def main(argv=None):
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--bc", type=Path, help="Compatible native bc build tool; base OpenBSD bc is not compatible")
     parser.add_argument("--adapted", action="store_true", help="Apply reviewed OpenBSD host-only inputs; no mount approval")
     parser.add_argument("--gnu-tools", action="store_true", help="Use a private native GNU toolchain overlay; sources stay unmodified")
     parser.add_argument("--target", choices=("library", "boot"), default="library")
@@ -326,6 +334,10 @@ def main(argv=None):
         parser.error("Build as an ordinary user; no install or mount is performed")
     if not 1 <= args.timeout <= 7200:
         parser.error("Use a timeout between 1 and 7200 seconds")
+    if args.gnu_tools and not args.bc:
+        parser.error("Provide --bc for the native compatible GNU bc prerequisite")
+    if args.bc and not args.gnu_tools:
+        parser.error("--bc is used with --gnu-tools")
     if args.adapted and not args.gnu_tools:
         parser.error("The reviewed adapter requires --gnu-tools")
     if args.receipt.exists() or args.receipt.is_symlink():
@@ -357,7 +369,7 @@ def main(argv=None):
                                LC_ALL="C", PYTHONDONTWRITEBYTECODE="1")
             compiler_arguments = ["CC=/usr/bin/cc", "HOSTCC=/usr/bin/cc"]
             if args.gnu_tools:
-                directory, compiler_arguments, identity = gnu_toolchain(work)
+                directory, compiler_arguments, identity = gnu_toolchain(work, args.bc)
                 environment["PATH"] = str(directory) + ":" + environment["PATH"]
                 receipt["native_toolchain"] = identity
             if args.adapted:

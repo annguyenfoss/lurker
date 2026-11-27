@@ -107,6 +107,20 @@ class NativeTools(unittest.TestCase):
             self.assertIn("GCC", identity["compiler_version"])
 
 
+    @unittest.skipUnless(os.environ.get("LURKER_OPENBSD_LKL_BC"), "requires native GNU bc build tool")
+    def test_declared_native_bc_is_recorded_and_only_privately_aliased(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bc = Path(os.environ["LURKER_OPENBSD_LKL_BC"]).resolve(strict=True)
+            directory, arguments, identity = build.gnu_toolchain(Path(temp), bc)
+            self.assertEqual(os.readlink(directory / "bc"), str(bc))
+            self.assertEqual(identity["tool_sha256"]["bc"], build.digest(bc))
+            self.assertIn("1.08.2", identity["bc_version"])
+            process = subprocess.run([str(bc), "-q"], input="2^64\n", capture_output=True,
+                                     text=True, check=True, timeout=10)
+            self.assertEqual(process.stdout.strip(), "18446744073709551616")
+            self.assertEqual(process.stderr, "")
+
+
 class AdapterInputs(unittest.TestCase):
     def test_adapter_refuses_existing_generated_abi_inputs(self):
         with tempfile.TemporaryDirectory() as temp:

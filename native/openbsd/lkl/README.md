@@ -72,3 +72,14 @@ no glibc runtime or FUSE library is copied. The first two unmodified diagnostics
 remain separate: base linker/Clang configuration, then missing byteswap.h in
 actual native GCC16 modpost compilation. No filesystem-driver runtime credit
 follows from these diagnostics or the native primitive checks.
+
+GNU-tool builds require `--bc /absolute/native/gnu-bc`. OpenBSD base bc is not
+compatible with Linux timeconst.bc: removing its unsupported -q still emitted
+HZ0 and a parser error despite exit0. The qualified build-tool candidate is
+native GNU bc1.08.2 from https://ftp.gnu.org/gnu/bc/bc-1.08.2.tar.gz,
+SHA-256 `ae470fec429775653e042015edc928d07c8c3b2fc59765172a330d3d87785f86`,
+verified against the official NetBSD pkgsrc SHA-512/BLAKE2s/size record. Build it
+as an ordinary user; keep it private to the build workspace. The producer only
+adds a private alias and records its path/hash/version; it does not replace base
+bc or elevate this tool. Native GNU bc generated the actual HZ100 constants
+successfully; the incompatible-base attempt remains preserved.
