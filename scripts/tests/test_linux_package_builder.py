@@ -24,7 +24,7 @@ class NativeSelection(unittest.TestCase):
         self.manifest = {"selected_backends": sorted(builder.REQUIRED_BACKENDS),
                          "bundled_artifacts": sorted(builder.REQUIRED_ARTIFACTS),
                          "desktop_runtime": {"renderer": "software"},
-                         "userspace_filesystem": {"bundled": False, "helper": "lurker-fs", "protocol": 4,
+                         "userspace_filesystem": {"bundled": False, "helper": "lurker-fs", "protocol": 5,
                             "contract": "private-crypto-external-filesystem"}}
 
     def test_accepts_either_verified_veracrypt_route(self):
@@ -47,6 +47,9 @@ class NativeSelection(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must not bundle"):
                 builder.require_full_package(self.prefix, self.manifest)
             path.unlink()
+        self.manifest["userspace_filesystem"]["protocol"] = 4
+        with self.assertRaisesRegex(ValueError, "external host filesystem contract"):
+            builder.require_full_package(self.prefix, self.manifest)
         del self.manifest["userspace_filesystem"]
         with self.assertRaisesRegex(ValueError, "external host filesystem contract"):
             builder.require_full_package(self.prefix, self.manifest)

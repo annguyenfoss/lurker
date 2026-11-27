@@ -36,7 +36,7 @@ def require_full_package(prefix, manifest):
         if path.name in {"lurker-fs", "lklfuse"} or STAGE.HOST_FUSE_LIBRARY.fullmatch(path.name):
             raise ValueError("Linux application package must not bundle filesystem drivers or FUSE libraries")
     if "veracrypt-userspace" in artifacts and manifest.get("userspace_filesystem") != {
-            "bundled": False, "helper": "lurker-fs", "protocol": 4,
+            "bundled": False, "helper": "lurker-fs", "protocol": 5,
             "contract": "private-crypto-external-filesystem"}:
         raise ValueError("Unprivileged crypto package requires the external host filesystem contract")
     for product in PRODUCTS:

@@ -782,6 +782,9 @@ Version needs section '.gnu.version_r' contains 2 entries:
         self.assertEqual("{}", (args.output / name).read_text())
         manifest = json.loads((args.output / "share/lurker/manifest.json").read_text())
         self.assertEqual(stager.digest(args.output / name), manifest["files"][name]["sha256"])
+        self.assertEqual(manifest["userspace_filesystem"], {"bundled": False,
+            "helper": "lurker-fs", "protocol": 5, "contract": "private-crypto-external-filesystem"})
+        self.assertFalse((args.output / "libexec/lurker/backends/lurker-fs").exists())
 
     def test_crypto_contract_rejects_legacy_filesystem_sdk(self):
         root = self.root / "crypto-contract"; root.mkdir()

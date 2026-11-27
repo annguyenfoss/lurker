@@ -1318,7 +1318,7 @@ def stage(args):
                     "selected_backends": sorted(selected), "bundled_artifacts": sorted(artifacts),
                     "host_tools": requirements, "native_dependencies": dependencies, "host_fuse": host_fuse,
                     "host_libraries": host_libraries,
-                    "userspace_filesystem": ({"bundled": False, "helper": "lurker-fs", "protocol": 4,
+                    "userspace_filesystem": ({"bundled": False, "helper": "lurker-fs", "protocol": 5,
                         "contract": "private-crypto-external-filesystem"} if "veracrypt-userspace" in artifacts else None),
                     "desktop_authorization": authorization,
                     "desktop_runtime": desktop_display_requirements(system, args.desktop),
@@ -1335,7 +1335,7 @@ def stage(args):
                         + (["FreeBSD login-user FUSE directory mounts require vfs.usermount=1"]
                            if system == "FreeBSD" and selected & {"gocryptfs", "cryfs"} else [])
                         + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])
-                        + (["VeraCrypt userspace requires host FUSE/fusermount3 and a separately installed protocol-4 lurker-fs filesystem driver"] if "veracrypt-userspace" in artifacts else [])
+                        + (["VeraCrypt userspace requires host FUSE/fusermount3 and a separately installed protocol-5 lurker-fs filesystem driver"] if "veracrypt-userspace" in artifacts else [])
                         + (["VeraCrypt's creator requires the declared native host FUSE userspace ABI; FUSE libraries remain external prerequisites"]
                            if any(host_libraries.values()) else [])
                         + (["VeraCrypt requires the declared native host FUSE2 userspace library and kernel interface"] if "veracrypt-bsd" in artifacts else [])
