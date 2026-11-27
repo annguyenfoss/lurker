@@ -96,9 +96,10 @@ and tested. Evaluate build, header and linker changes by what they do; neither
 their pathname nor implementation language settles the classification. If a
 route requires novel kernel development and no established alternative is
 available, report the capability limitation and continue other in-scope work.
-The existing deferral of eligible kernel-build work until the ordinary-route
-assessment is finished remains in force; deferral is not permission to perform
-experimental kernel development later.
+Eligible kernel-build work remains deferred until ordinary-route assessment is
+finished unless the user explicitly starts a deferred job. Current exceptions
+are recorded in the round's `BRIEF.md`; they do not authorize experimental
+kernel development.
 
 When a scope audit finds out-of-scope work, document completed experiments:
 what was changed, how it was developed and how far it progressed. Cut all
@@ -247,6 +248,11 @@ abrupt power-loss work, which uses [disposable VM clones](../../docs/vm-powerlos
 when required by the task.
 
 ## Remote job setup and evidence
+
+Document every test and experiment in concise factual notes: purpose, exact
+inputs/revision, command and raw-log references, outcome, blocker and cleanup.
+Do not skip failed or partial attempts. Keep raw logs separate from summaries;
+avoid repeated narrative and do not rerun tests solely to expand documentation.
 
 1. Commit the code under test before dispatch. The runner uses Git snapshots.
 2. Check the selected guest's OS, toolchains, CPU/RAM, swap and actual storage

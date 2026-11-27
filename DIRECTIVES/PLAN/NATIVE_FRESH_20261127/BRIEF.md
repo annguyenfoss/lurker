@@ -93,6 +93,11 @@ This replaces the earlier instruction not to interrupt such running work.
 Eligible kernel builds on the ten VMs remain deferred until ordinary candidates
 and tests have finished and the complete ordinary-route assessment has been
 reported. Do not begin them merely because one cell lacks a stock driver.
+The user subsequently explicitly started the deferred UFS1 jobs on Arch Linux,
+Ubuntu and Gentoo. Those three owners may now build and qualify matching
+write-enabled configurations under the established-code boundary, preserving
+the ordinary boot setup. This exception does not reopen cut kernel inventions
+or require rerunning the other nine completed filesystem routes.
 Ordinary matching external driver modules are assessed separately, with the
 same established-solution requirement. Passing our tests alone does not qualify
 an experimental kernel change.
