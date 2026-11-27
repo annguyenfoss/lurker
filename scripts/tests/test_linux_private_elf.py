@@ -41,6 +41,55 @@ class PrivateElfTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Unsafe/non-private"):
                 elf.private_closure([self.helper])
 
+    def test_fuse_and_its_transitive_host_dependencies_are_not_copied(self):
+        zlib = self.root / "libz.so.1"
+        graph = {self.helper: self.info(["libfuse3.so.4", zlib.name]),
+                 zlib: self.info(["libc.so.6"], [zlib.name])}
+        host = {}
+        record = {"name": "libfuse3.so.4", "required_by": []}
+        with mock.patch.object(elf, "elf_info", side_effect=graph.__getitem__), \
+             mock.patch.object(elf, "host_library", return_value=record) as provider, \
+             mock.patch.object(elf, "system_library", return_value=zlib) as private:
+            self.assertEqual(elf.private_closure([self.helper], host), {zlib.name: zlib})
+        provider.assert_called_once_with("libfuse3.so.4", "native")
+        private.assert_called_once_with(zlib.name, "native")
+        self.assertEqual(host["libfuse3.so.4"]["required_by"], [self.helper.name])
+
+    def test_host_provider_keeps_alias_and_records_build_identity(self):
+        alias = self.root / "libfuse3.so.4"
+        provider = self.root / "libfuse3.so.3.18.3"
+        provider.write_bytes(b"first administrator build")
+        alias.symlink_to(provider.name)
+        with mock.patch.object(elf, "library_alias", return_value=alias), \
+             mock.patch.object(elf, "administrator_library", side_effect=lambda path: path.resolve()), \
+             mock.patch.object(elf, "elf_info", return_value=self.info(soname=[alias.name])), \
+             mock.patch.object(elf, "package_info", return_value={"name": "fuse3", "version": "3.18.3"}):
+            first = elf.host_library(alias.name, "native")
+            replacement = self.root / "libfuse3.so.3.18.4"
+            replacement.write_bytes(b"compatible administrator update")
+            alias.unlink(); alias.symlink_to(replacement.name)
+            second = elf.host_library(alias.name, "native")
+        self.assertEqual(first["path"], second["path"])
+        self.assertEqual(first["soname"], second["soname"])
+        self.assertNotEqual(first["build_sha256"], second["build_sha256"])
+        self.assertEqual(second["build_resolved_path"], str(replacement))
+
+    def test_host_fuse_requires_matching_machine_and_soname(self):
+        for info in [self.info(soname=["libfuse3.so.4"], machine="foreign"),
+                     self.info(soname=["libfuse3.so.3"])]:
+            with self.subTest(info=info), \
+                 mock.patch.object(elf, "library_alias", return_value=self.helper), \
+                 mock.patch.object(elf, "administrator_library", return_value=self.helper), \
+                 mock.patch.object(elf, "elf_info", return_value=info):
+                with self.assertRaisesRegex(RuntimeError, "architecture/SONAME"):
+                    elf.host_library("libfuse3.so.4", "native")
+
+    def test_host_provider_cannot_traverse_user_writable_ancestors(self):
+        library = self.root / "libfuse3.so.4"; library.write_bytes(b"not executed")
+        alias = self.root / "alias"; alias.symlink_to(library)
+        with self.assertRaisesRegex(RuntimeError, "administrator-controlled"):
+            elf.administrator_library(alias)
+
     def test_mixed_architectures_are_rejected(self):
         library = self.root / "libfake.so.1"
         with mock.patch.object(elf, "elf_info", side_effect=[self.info([library.name]), self.info(machine="foreign")]), \
@@ -51,7 +100,7 @@ class PrivateElfTests(unittest.TestCase):
     def test_no_soname_abi_aliases(self):
         requested = self.root / "libfuse3.so.3"
         requested.write_bytes(b"not executed")
-        with mock.patch.object(elf, "LIBRARY_DIRS", [str(self.root)]), \
+        with mock.patch.object(elf, "native_library_candidates", return_value=iter([requested])), \
              mock.patch.object(elf, "elf_info", return_value=self.info(soname=["libfuse3.so.4"])):
             with self.assertRaisesRegex(RuntimeError, "SONAME differs"):
                 elf.system_library(requested.name, "native")
@@ -72,6 +121,14 @@ class PrivateElfTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Forbidden glibc"):
                 elf.bundle(self.root, [self.helper.name], self.root / "cache")
         self.assertFalse((self.root / "lib/libc.so.6").exists())
+
+    def test_fuse_cannot_be_injected_into_private_manifest(self):
+        fake = self.root / "libfuse3.so.4"; fake.write_bytes(b"not executed")
+        with mock.patch.object(elf, "private_closure", return_value={fake.name: fake}), \
+             mock.patch.object(elf, "patcher", return_value=(Path("/not/executed"), {})):
+            with self.assertRaisesRegex(RuntimeError, "FUSE must remain a host"):
+                elf.bundle(self.root, [self.helper.name], self.root / "cache")
+        self.assertFalse((self.root / "lib/libfuse3.so.4").exists())
 
     def test_missing_license_is_a_hard_failure(self):
         package = {"name": "lurker-unit-package-with-no-notices", "version": "1", "licenses": "UnprovidedLicense"}

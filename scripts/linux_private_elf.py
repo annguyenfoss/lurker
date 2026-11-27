@@ -1,7 +1,8 @@
 """Build-only private ELF dependency closure; never installs or elevates.
 
-The host supplies its ABI (glibc/loader and C++ runtime). Every other DT_NEEDED
-object is copied under its exact SONAME, with private origin-relative lookup.
+The host supplies its ABI (glibc/loader and C++ runtime) and FUSE facilities.
+Other DT_NEEDED objects are copied under their exact SONAME, with private
+origin-relative lookup. Host FUSE provenance never becomes a bundled payload.
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -21,6 +23,7 @@ PATCHELF_URL = "https://github.com/NixOS/patchelf/releases/download/0.18.0/patch
 PATCHELF_SHA256 = "1952b2a782ba576279c211ee942e341748fdb44997f704dd53def46cd055470b"
 SYSTEM = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|resolv|util|anl|nss_[^/]+|BrokenLocale)\.so(?:\..*)?)$")
 BASELINE = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m|pthread|dl|rt|resolv|util|anl|nss_[^/]+|BrokenLocale|stdc\+\+|gcc_s)\.so(?:\..*)?)$")
+HOST_FUSE = re.compile(r"^lib(?:fuse(?:3|-t)?|osxfuse|refuse|puffs)\.so(?:\.[0-9]+)*$")
 LIBRARY_DIRS = ("/usr/lib", "/usr/lib64", "/lib", "/lib64", "/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/lib/aarch64-linux-gnu")
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_+.:@-]+$")
 
@@ -55,13 +58,25 @@ def validate_search(info, expected, path):
         raise RuntimeError("Unsafe/non-private ELF search path: " + str(path))
 
 
-def system_library(name, machine):
+def native_library_candidates(name):
+    """Use the native loader cache before its ordinary fallback directories."""
+    tool = shutil.which("ldconfig")
+    if tool:
+        result = subprocess.run([tool, "-p"], capture_output=True, text=True,
+                                timeout=30, env={**os.environ, "LC_ALL": "C"})
+        if result.returncode == 0:
+            for found, path in re.findall(r"^\s*(\S+)\s+[^\n]*?=>\s+(/\S+)", result.stdout, re.M):
+                if found == name:
+                    yield Path(path)
+    for directory in LIBRARY_DIRS:
+        yield Path(directory) / name
+
+
+def library_alias(name, machine):
     if not SAFE_NAME.fullmatch(name) or "/" in name:
         raise RuntimeError("Invalid dependency name: " + name)
-    for directory in LIBRARY_DIRS:
-        candidate = Path(directory) / name
+    for candidate in native_library_candidates(name):
         if candidate.exists():
-            candidate = candidate.resolve(strict=True)
             info = elf_info(candidate)
             if info["machine"] == machine:
                 if info["soname"] != [name]:
@@ -70,10 +85,63 @@ def system_library(name, machine):
     raise RuntimeError("Cannot resolve native dependency for target machine: " + name)
 
 
-def private_closure(helpers):
+def system_library(name, machine):
+    return library_alias(name, machine).resolve(strict=True)
+
+
+def administrator_library(path):
+    """Check every alias and traversed ancestor, including intermediate links."""
+    path = Path(path)
+    if not path.is_absolute():
+        raise RuntimeError("Host library path must be absolute")
+    pending, current, links = list(path.parts[1:]), Path("/"), 0
+    root = current.lstat()
+    if root.st_uid != 0 or root.st_mode & 0o022:
+        raise RuntimeError("Host library ancestor is not administrator-controlled: /")
+    while pending:
+        component = pending.pop(0)
+        if component in ("", "."):
+            continue
+        if component == "..":
+            current = current.parent
+            continue
+        candidate = current / component
+        info = candidate.lstat()
+        if info.st_uid != 0 or (not stat.S_ISLNK(info.st_mode) and info.st_mode & 0o022):
+            raise RuntimeError("Host library path is not administrator-controlled: " + str(candidate))
+        if stat.S_ISLNK(info.st_mode):
+            links += 1
+            if links > 40:
+                raise RuntimeError("Too many host library aliases")
+            target = Path(os.readlink(candidate))
+            if target.is_absolute():
+                current = Path("/")
+                pending = list(target.parts[1:]) + pending
+            else:
+                pending = list(target.parts) + pending
+        else:
+            current = candidate
+    if not current.is_file():
+        raise RuntimeError("Host library provider is not a regular file")
+    return current
+
+
+def host_library(name, machine):
+    alias = library_alias(name, machine)
+    provider = administrator_library(alias)
+    info = elf_info(provider)
+    if info["machine"] != machine or info["soname"] != [name]:
+        raise RuntimeError("Host library architecture/SONAME differs: " + name)
+    return {"name": name, "soname": name, "path": str(alias), "machine": machine,
+            "build_resolved_path": str(provider), "build_sha256": digest(provider),
+            "producer_package": package_info(provider), "required_by": []}
+
+
+def private_closure(helpers, host_libraries=None):
     """Resolve by native ELF metadata only; never execute ldd or payload code."""
     queue = [(Path(path), False) for path in helpers]
     resolved = {}
+    host_libraries = {} if host_libraries is None else host_libraries
     machine = None
     while queue:
         path, library = queue.pop(0)
@@ -83,6 +151,13 @@ def private_closure(helpers):
             raise RuntimeError("Mixed ELF architectures in private closure")
         validate_search(info, "$ORIGIN" if library else "$ORIGIN/lib", path)
         for name in info["needed"]:
+            if HOST_FUSE.fullmatch(name):
+                if name not in host_libraries:
+                    host_libraries[name] = host_library(name, machine)
+                requester = "lib/" + path.name if library else path.name
+                if requester not in host_libraries[name]["required_by"]:
+                    host_libraries[name]["required_by"].append(requester)
+                continue
             if BASELINE.fullmatch(name):
                 continue
             if SYSTEM.fullmatch(name):
@@ -217,7 +292,8 @@ def bundle(output_dir, helper_names, cache_dir, offline=False):
     for path in helpers:
         if not SAFE_NAME.fullmatch(path.name) or path.parent != root or path.is_symlink() or not path.is_file():
             raise RuntimeError("Unsafe/missing helper input: " + str(path))
-    libraries = private_closure(helpers)
+    host_libraries = {}
+    libraries = private_closure(helpers, host_libraries)
     tool, tool_provenance = patcher(cache_dir, offline)
     directory = root / "lib"
     if directory.is_symlink(): raise RuntimeError("Private library directory must not be a symlink")
@@ -227,6 +303,7 @@ def bundle(output_dir, helper_names, cache_dir, offline=False):
     records, files, package_notices = [], {}, {}
     for name, source in sorted(libraries.items()):
         if SYSTEM.fullmatch(name): raise RuntimeError("Forbidden glibc/loader library: " + name)
+        if HOST_FUSE.fullmatch(name): raise RuntimeError("FUSE must remain a host library: " + name)
         target = directory / name
         if target.is_symlink(): raise RuntimeError("Private libraries must be regular SONAME files")
         source_sha256 = digest(source)
@@ -247,12 +324,15 @@ def bundle(output_dir, helper_names, cache_dir, offline=False):
     helper_records = {}
     for path in helpers:
         before = digest(path)
-        subprocess.run([tool, "--set-rpath", "$ORIGIN/lib", path], check=True)
+        if elf_info(path)["search"] != ["$ORIGIN/lib"]:
+            subprocess.run([tool, "--set-rpath", "$ORIGIN/lib", path], check=True)
         info = elf_info(path)
         if info["search"] != ["$ORIGIN/lib"]: raise RuntimeError("Helper relocation failed: " + path.name)
         helper_records[path.name] = {"source_sha256": before, "sha256": digest(path), "needed": info["needed"]}
     manifest = {"schema": 1, "libraries": records, "files": files, "helpers": helper_records,
-                "patcher": tool_provenance, "platform_libraries": "host glibc/loader and C++ runtime; never copied"}
+                "host_libraries": [host_libraries[name] for name in sorted(host_libraries)],
+                "patcher": tool_provenance,
+                "platform_libraries": "host glibc/loader, C++ runtime and FUSE facilities; never copied"}
     temporary = root / "private-libraries.json.tmp"
     temporary.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n"); temporary.chmod(0o644)
     temporary.replace(root / "private-libraries.json")
