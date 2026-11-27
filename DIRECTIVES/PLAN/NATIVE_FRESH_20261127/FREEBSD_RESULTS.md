@@ -920,3 +920,54 @@ That alternative still requires implementation and native lifecycle controls,
 including busy, moved/replaced mount and startup failure cases. Exact upstream
 release sources and hashes are retained in
 `inventory/cryptomator-fuse3-lifecycle/manifest.json`.
+
+
+### Preserved v5 VFS state: second operational recovery, phases 1–4
+
+The retained v5 startup failure also blocks candidate1's real global FileStore
+factory. A coordinator-reviewed read-only inventory found the same four v5
+process births plus candidate1 controller55751/1795758763.816865 and
+Java55792/1795758815.091114. No independent build/test, md/GELI mapping or open
+FUSE descriptor remained; NOWAIT mount enumeration showed only base/build
+filesystems. That enumeration did not establish v5 recovery. Exact native
+process births/stacks/FDs, all-five-disk XML/QMP identities, console screenshot,
+memory/capacity and the approved plan are retained under
+`validation/v5-recovery-plan-20261127T0630Z/`.
+
+After exclusive test freeze and immediate identity revalidation, explicit native
+`virsh save --paused` completed successfully. The same domain reached terminal
+`shut off (saved)`, and saved XML retained all five disk paths/serials. This
+preserves the nonterminal guest process state; it does not turn the earlier
+failed normal or forced-recovery unmount into a successful close. No new force,
+reset, repair, filesystem import or guest shutdown hook was used.
+
+New preservation root is
+`/srv/build/lurker-native-fresh-20261127/freebsd/v5-preservation-20261127T062744Z`,
+operator-owned mode0700. Original saved RAM is root-owned0600, 4,159,435,151
+bytes. An initial stdout-based native volume download exited zero but failed
+reader byte-count verification; no hash from that attempt is credited. The
+separately approved correction downloaded the exact saved-memory volume into
+a new O_EXCL/O_NOFOLLOW0600 operator file with command output kept separate.
+Its measured length matches exactly and SHA-256 is
+`a6e8278830b7bdc7888725f3f7246b251af925b63545e8fb6425e1d2e47f492a`.
+Original RAM path/dev/inode/owner/mode/size remained unchanged. A transient
+native DIR pool was scoped only to this preservation directory; only its
+metadata was destroyed afterward. No RAM bytes were printed.
+
+All five original qcows were inspected offline as standalone with qcow
+metadata `corrupt=false`, then copied byte-for-byte without reflinks, synced
+and fully hash-compared. Source dev/inode/size/mtime/owner/mode remained unchanged. Original/copy SHA-256 pairs
+match for vda `37b4685e...`, vdb `a3dbe4fc...`, vdc `6185bc3e...`, vdd
+`3a9268a4...` and vde `c1b06086...`; complete digests/paths/identities are in
+`offline-all-five-result.json`. The original five disks, current saved RAM and
+the earlier stock-shutdown failure's separate RAM/four original disks are all
+preserved. The proposed domain XML changes exactly five source paths to these
+verified copies; UUID, MAC, serials and all other configuration remain unchanged.
+Proposed XML SHA-256 is
+`174b14b0881a60635d3b9679ee6aceac366cbde90ff8fde77d05ac6c1f9381e5`.
+
+`copy-and-XML-review.json` binds 35 executed small evidence files, including the
+failed and corrected reader attempts. At this milestone the domain is still
+shut off: no XML redefine, cold start or saved-RAM restore has occurred. A cold
+recovery requires the coordinator's separate copied-identity/XML review and
+must remain distinct from ordinary shutdown and product qualification.
