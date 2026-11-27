@@ -44,6 +44,13 @@ experimental kernel developer. Judge a change by its provenance, maturity and
 technical effect, not whether it is needed specifically to make Lurker work.
 The phrase "Lurker-specific kernel patch" is not a reliable scope distinction.
 
+**"Novel" means kernel code or behavior invented by Lurker. Applying an
+established pre-made patch does not count as injecting novel code**, even when
+that patch changes kernel code or is applied specifically to enable Lurker.
+Selecting existing kernel parameters or configuration options, including before
+building a kernel, is generally allowed. This is not a blanket ban on patches
+or on newly written ordinary Lurker userspace code.
+
 The distribution goal is ordinary downloadable software suitable for mainstream
 Linux distribution and BSD repositories. Prefer setup that a technically
 competent user of that OS can reproduce with established tools and instructions.
@@ -82,12 +89,17 @@ The existing deferral of eligible kernel-build work until the ordinary-route
 assessment is finished remains in force; deferral is not permission to perform
 experimental kernel development later.
 
-When a scope audit finds already-completed or currently running out-of-scope
-work, report what was changed, how it was developed, current progress and what
-remains. Do not interrupt the agent or its running job solely because of that
-finding. Do not start additional out-of-scope work or automatically restart work
-that was already held or cancelled. Preserve its evidence, distinguish functional
-results from scope eligibility, and continue independent in-scope work.
+When a scope audit finds out-of-scope work, document completed experiments:
+what was changed, how it was developed and how far it progressed. Cut all
+partially completed, in-progress and planned out-of-scope work now. Stop its
+running jobs through their owning coordinator, verify terminal state, and remove
+those tasks from actionable plans. This supersedes the earlier instruction not
+to interrupt already-running out-of-scope work. Preserve source, partial
+artifacts, failures and receipts as historical evidence; do not delete them or
+count them as eligible support. Do not restart cut work. Propagate this rule to
+all subagents and audit their completed, current and planned work, including
+descendants. Continue independent in-scope work and established patch/config
+integration; do not cancel it merely because another route is out of scope.
 
 ## Remote execution boundary
 

@@ -1,11 +1,15 @@
 # Kernel scope audit
 
-Updated 2026-11-27 after all eleven host owners acknowledged the clarified rule.
+Updated 2026-11-27; the newest stop-and-cut instruction supersedes the previous
+non-interruption policy. A fresh audit has been requested from all eleven owners.
 The authoritative policy is `DIRECTIVES/LLM/DEVELOPMENT.md`, Kernel integration
 boundary. Existing upstream/mainstream patches and established documented
 procedures may be applied for Lurker. Inventing and validating novel kernel
 behavior, ABI hooks or experimental ports is outside scope. Local authorship,
 file location and successful local tests do not settle the classification alone.
+"Novel" means Lurker's own invented kernel code or behavior. Applying established
+patches does not count as novel code; existing kernel configuration and parameter
+changes, including before a kernel build, are generally allowed.
 
 ## Confirmed experimental kernel work already performed
 
@@ -60,7 +64,9 @@ established scope decision.
 
 ## Current execution and handling
 
-- All eleven host owners received and acknowledged the scope and handling rule.
+- All eleven host owners acknowledged the earlier boundary. All have now been
+  asked to audit completed/current/planned work against the stricter stop-and-cut
+  instruction; retain their individual confirmations before claiming completion.
 - No out-of-scope kernel build or test is currently reported running. NetBSD's
   rebuild had already been cancelled before the user instructed agents not to
   interrupt existing work for a scope finding; it has not been restarted.
@@ -68,9 +74,11 @@ established scope decision.
   Java/FFM integration and perform no kernel changes, kernel builds or LKL
   execution. Standalone userspace
   guardian, observer, evidence and provenance work is tracked separately.
-- Already-running work must not be interrupted solely because an audit flags
-  its scope. Report its changes, method and progress. Start no new out-of-scope
-  work and do not automatically restart previously held/cancelled jobs.
+- Cut partial, in-progress and planned work that invents kernel code or behavior
+  for Lurker. Stop any such running jobs through their owner and verify terminal
+  state; remove tasks from actionable plans. The user's latest instruction
+  explicitly replaces the earlier non-interruption rule. Established patches,
+  supported configuration and independent userspace work remain in scope.
 - Preserve source, partial artifacts and failures; do not destructively revert,
   delete or relabel them. Stock native workflows retain their original scope.
 
