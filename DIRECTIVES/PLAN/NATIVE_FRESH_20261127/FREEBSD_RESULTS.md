@@ -901,7 +901,7 @@ Evidence is `build/cryptomator-port-source/native-sourcekit-1/`.
 
 Candidate1 remains separately blocked, not a terminal failed build: its real
 FileStore factory reaches `getfsstat` and waits in native `vfs_busy`. Controller
-55751 and Java55792 remain nonterminal; the original stage timeout did not reap
+55751 and Java PID 55792 remain nonterminal; the original stage timeout did not reap
 the kernel-blocked child. Exact starts, current process states and earlier raw
 Java/kernel diagnostics are in
 `build/cryptomator-port-source/native-candidate-1/`. No new signal, mount or
@@ -926,8 +926,8 @@ release sources and hashes are retained in
 
 The retained v5 startup failure also blocks candidate1's real global FileStore
 factory. A coordinator-reviewed read-only inventory found the same four v5
-process births plus candidate1 controller55751/1795758763.816865 and
-Java55792/1795758815.091114. No independent build/test, md/GELI mapping or open
+process births plus candidate1 controller PID 55751/1795758763.816865 and
+Java PID 55792/1795758815.091114. No independent build/test, md/GELI mapping or open
 FUSE descriptor remained; NOWAIT mount enumeration showed only base/build
 filesystems. That enumeration did not establish v5 recovery. Exact native
 process births/stacks/FDs, all-five-disk XML/QMP identities, console screenshot,
@@ -943,7 +943,7 @@ reset, repair, filesystem import or guest shutdown hook was used.
 
 New preservation root is
 `/srv/build/lurker-native-fresh-20261127/freebsd/v5-preservation-20261127T062744Z`,
-operator-owned mode0700. Original saved RAM is root-owned0600, 4,159,435,151
+operator-owned mode 0700. Original saved RAM is root-owned mode 0600, 4,159,435,151
 bytes. An initial stdout-based native volume download exited zero but failed
 reader byte-count verification; no hash from that attempt is credited. The
 separately approved correction downloaded the exact saved-memory volume into
@@ -981,14 +981,14 @@ must remain distinct from ordinary shutdown and product qualification.
   `executed-preservation-evidence/` in the recovery-plan bucket above.
 - Verified exactly five regular copy files, atomically moved their directory to
   `/srv/build/lurker-native-fresh-20261127/freebsd/v5-coldboot-20261127T062744Z`,
-  then set that directory0755 only. Copies remained0600; originals, RAM and its
-  private0700 parent stayed unchanged. Native define/start both exited zero.
-- Outcome: new boot `1795761640.321351`, unchanged FreeBSD15.1-p7 GENERIC;
+  then set that directory mode 0755 only. Copies remained mode 0600; originals, RAM and its
+  private mode 0700 parent stayed unchanged. Native define/start both exited zero.
+- Outcome: new boot `1795761640.321351`, unchanged FreeBSD 15.1-p7 GENERIC;
   all five disk bindings match. Automatic fusefs/usermount/devfs prerequisites
   are present; both ZFS pools report ONLINE with no known data errors. Seven
   pinned product/driver/candidate manifest hashes match and all six old process
   identities are absent. `recovery-result.json` binds the post-boot inventory.
-- Exceptions retained: native `geom eli status` exits1 because this boot has no
+- Exceptions retained: native `geom eli status` exits 1 because this boot has no
   loaded ELI class; that command is not credited as absence proof. The complete
   native GEOM graph has no ELI providers and mdconfig is empty. Captured serial
   covers late network startup through login, including duplicate loopback-route
@@ -1001,14 +1001,27 @@ must remain distinct from ordinary shutdown and product qualification.
 ### Cryptomator no-force candidate1: memory-only gate
 
 - Purpose/input: compile and exercise the proposed userspace lifecycle policy;
-  frozen32-file archive `add00ba9...`, base `db54eb0`, UID/EUID1300, one worker.
+  frozen 32-file archive `add00ba9...`, base `db54eb0`, UID/EUID 1300, one worker.
 - Command/log: `native-no-force-1/dispatch.json`, `build-result.json` and full
   output archive `6def7445...` under `build/cryptomator-port-source/`.
-- Outcome: all13 build stages pass;99 FFM fields,30 callbacks,3 native strings;
-  13 fake-backend lifecycle controls and13 focused Python tests pass. Manifest
-  `aba0c156...`;18 raw build/ABI logs and full gzip CRC independently verified.
+- Outcome: all 13 build stages pass; 99 FFM fields, 30 callbacks, 3 native strings;
+  13 fake-backend lifecycle controls and 13 focused Python tests pass. Manifest
+  `aba0c156...`; 18 raw build/ABI logs and full gzip CRC independently verified.
 - Collection-only failure: an initial archive collector expected a wrong status
   literal and stopped before archiving; corrected without rerunning any test.
 - Limit/cleanup: zero native mount/channel operations. Upstream FileStore
   factory, native absence/unmount races and shared Main retention remain open.
   Jobs are terminal, fixtures/images retained, no mount or old job restarted.
+
+
+### Common guardian runtime: standalone native controls
+
+- Purpose/input: shared POSIX state and actual owned-child wait, exact `1f7a42d`
+  three-file snapshot; native FreeBSD login user, no embedded kernel execution.
+- Command/log: strict C11 `cc -Wall -Wextra -Werror -O2`, `result.json` and
+  three raw logs under `build/guardian-common-v2/`.
+- Outcome: 1,095 checks across 16 cases pass; only libc/libsys linked. Real exit0,
+  exit1 and signal15 waits are observed; native mount outcomes are control inputs.
+  Archive `a4367a78...` hash and gzip CRC verified.
+- Limit/cleanup: no native mount, FUSE, device or geometry qualification. Owned
+  children reaped, controller terminal, private regular-file fixtures retained.
