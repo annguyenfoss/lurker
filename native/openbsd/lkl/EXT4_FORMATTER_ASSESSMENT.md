@@ -32,9 +32,10 @@ The historical LKL .config enables EXT4_FS, JBD2 and ext4 POSIX ACL/security;
 that is only configuration evidence. Its local shutdown-hook/UAPI dependency
 makes the existing LKL libraries ineligible for new route admission under the
 clarified no-bespoke-kernel rule. An installed eligible native formatter does
-not cure that dependency or qualify Create/Read/Write. A first mounted pilot
-remains held until an eligible published kernel basis and live guardian
-completion authority are established and reviewed.
+not cure that dependency or qualify Create/Read/Write. The proposed first
+mounted pilot through this experimental route is cut.
+No kernel variant, new interface/upstream-PR project or formatter/mount task is
+queued. The installed formatter inventory remains an independent native fact.
 
 No mke2fs command except the read-only -V query was executed. No filesystem was
 formatted, mounted or checked by this assessment, and no raw device was opened.

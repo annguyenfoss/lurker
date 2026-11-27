@@ -1,20 +1,26 @@
 # Native OpenBSD LKL diagnostic
 
-The current route is held under the clarified prohibition on bespoke kernel
-changes. Read `KERNEL_PROVENANCE_AUDIT.md`: both recorded libraries depend on
-local kernel shutdown/UAPI changes. The commands and results below are retained
-as historical diagnostics, not authorization to rebuild/test/admit this route.
-Only independent host-only work may continue without a new eligible basis.
+The experimental kernel-dependent route is **CUT**. It is not queued for
+resumption. Read `KERNEL_PROVENANCE_AUDIT.md` for the completed work, preserved
+partial client and removed future stages. Existing supported parameters and
+configuration, including before building, and
+established pre-made kernel patches applied for Lurker remain allowed. Novel
+means kernel code/behavior invented by Lurker: our timer ABI and shutdown
+placement cross that boundary; ordinary userspace changes do not automatically
+do so. No new workaround, upstream-PR project or wait for a new kernel interface is part of this task.
 
-This work produces an external host-tool candidate. It does not install a
-filesystem driver, mount LKL, modify the kernel or enable a Lurker filesystem.
+All recipes below are retained historical records, not an actionable build,
+test or admission plan. The work changed LKL kernel source and never replaced
+the OpenBSD boot kernel. It installed no filesystem driver and enabled no
+Lurker filesystem. Independent native-only observer work remains separate.
 Read `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/OPENBSD_LKL_ASSESSMENT.md` first.
 
 The first diagnostic preserves unmodified upstream inputs at
 `d0f76a77e8c2ca68bd7d96190b8da09040eab072`, archive SHA-256
 `ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e168`.
-Use a work-specific native build filesystem with at least 6 GiB free, as an
-ordinary OpenBSD amd64 user:
+The historical diagnostic used a work-specific native build filesystem with
+at least 6 GiB free and ran as an ordinary OpenBSD amd64 user. Its archived
+invocation was:
 
 ```sh
 python3 scripts/tests/test_build_openbsd_lkl.py
@@ -104,9 +110,10 @@ user. Host mounts must remain unchanged. This is a library/ABI/timer proof;
 filesystem callbacks, request credentials, barriers, normal-close handling and
 native formatters remain unqualified.
 
-The next approved primitive phase is recorded in `ADAPTER_CONTRACT.md`.
+The completed historical primitive phase is recorded in `ADAPTER_CONTRACT.md`.
+Its invocation below is preserved for provenance and is not queued to run.
 `run-controls.py --output NEW_DIRECTORY --controls caller,abi,credential,disk,shutdown`
-runs five native controls against the exact qualified library/SDK, as UID1300.
+ran five native controls against the recorded experimental library/SDK as UID1300.
 It writes source/controller/header/tool hashes before execution, clears the
 compiler/test environment, uses bounded process groups and preserves each first
 failure. Its diagnostic paths intentionally refer to this qualification's

@@ -1,13 +1,15 @@
-# Proposed native OpenBSD filesystem adapter boundary
+# Historical OpenBSD filesystem adapter contract — experimental route cut
 
-This is a source contract for review, following the qualified native library
-and RAM-only controls. It does not authorize a FUSE mount, formatter/device
-experiment, driver installation or product capability. Keep the reviewed host
-patch `8d418903144152e49276e2b2b52071d31170bd7f0b29bdee926ed1bbbba63be6`
-and exact static library `d07dbeda5039932129d5a66dd232fd8d92c5d4e0aafecdbb98f718fe0070d4d3`
-unchanged while developing independent adapter primitives.
+This historical contract is preserved for review of work already done. The
+experimental kernel-dependent route and all remaining stages are **CUT** and
+removed from actionable plans. No restart, new kernel workaround, upstream-PR
+project, formatter/mount pilot or product admission is scheduled. The confirmed
+novel timer ABI/shutdown dependency and the final process audit are documented
+in `KERNEL_PROVENANCE_AUDIT.md`. Independent native-only observer work is separate.
+The technical requirements below describe the former design, not authorized
+future tasks.
 
-## First scope
+## Former scope
 
 Build a separate native executable against actual base FUSE API26 and its
 external administrator-controlled library. Use explicit operation signatures,
@@ -120,16 +122,13 @@ subsequent restored-credential retry succeeds. The filesystem adapter must not
 call lkl_cleanup, free state or close backing after a rejected halt. Positive
 halt must complete the reviewed quiescence hook before free_mem.
 
-## Review gates before storage
+## Final stage disposition
 
-1. Native compile/type audit, generated errno/flag/layout checks, thread/process
-   snapshot controls, RAM-only emulated credential transitions and restore-fault
-   controls; no FUSE mount or disk registration.
-2. Reviewed regular-FD I/O/FLUSH/error-latch controls and lifecycle state-machine
-   fault tests; no formatter or filesystem mount.
-3. Separate approval of the concrete file-backed native formatter and first
-   mount/control plan, including normal-unmount/busy/error preservation and
-   exact native fsid monitoring. Preserve every first failure.
-4. Actual filesystem payload/ownership/group/foreign-denial/durability/lifecycle
-   evidence before any installed prerequisite, raw provider, shared core/UI or
-   matrix eligibility claim.
+1. Caller/ABI/native credential and RAM primitives: completed historical
+   diagnostics, with exact receipts preserved.
+2. Held-file I/O/error and release-state primitives: completed historical
+   diagnostics; no filesystem capability claim.
+3. Native formatter/file-backed mount and actual FUSE service: planned or partial,
+   now cut. No format or mount occurred. Client source is preserved, not queued.
+4. Installed prerequisite, raw providers, shared core/UI and matrix eligibility:
+   never admitted through this route; all such planned tasks are cut.

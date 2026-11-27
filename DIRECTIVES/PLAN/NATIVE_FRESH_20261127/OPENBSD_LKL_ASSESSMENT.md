@@ -1,11 +1,17 @@
 # OpenBSD native LKL prerequisite — source-only assessment
 
-The clarified user rule excludes bespoke kernel-source changes, including LKL
-kernel code inside a native process. The later local shutdown-hook/UAPI build
-therefore cannot support new route admission. It is held, with all historical
-receipts preserved. Exact provenance and dependency classification are in
-`native/openbsd/lkl/KERNEL_PROVENANCE_AUDIT.md`. The source-only assessment and
-subsequent native diagnostics below retain their original chronological scope.
+The experimental kernel-dependent route is **CUT**, including all partial and
+planned client/formatter/mount/install/admission stages. Existing supported
+parameters/configuration, including before building, and established pre-made
+kernel patches applied specifically for Lurker remain allowed. Novel means
+kernel code/behavior invented by Lurker; our timer ABI field and shutdown
+placement meet that definition. This is not a blanket userspace or patch ban.
+This route is not queued for resumption, a kernel workaround,
+an upstream-PR project or waiting for a new interface. A fresh process audit
+found all owned jobs and descendants terminal. Independent native userspace
+observer work was not stopped. Exact provenance, completed work and cut state
+are in `native/openbsd/lkl/KERNEL_PROVENANCE_AUDIT.md`. All design requirements,
+recipes and results below are preserved historical records, not future tasks.
 
 A native OpenBSD port is a plausible ordinary host-tool candidate for Btrfs and
 XFS. Package absence and missing in-kernel drivers do not establish that these
@@ -157,25 +163,14 @@ The proposed first source/build/boot ownership is limited to
 Shared core, UI, stager and capability registrations remain out of scope until
 actual qualified filesystem controls and review.
 
-## Smallest reviewed next phase
+## Historical phase proposal — superseded by the cut
 
-First provide a separate work-specific native build filesystem with at least
-6 GiB free; root currently has about 1.7 GiB. Preserve both existing 512 MiB
-scratch devices and their failure bytes. Pin sources/notices and capture the
-first unmodified native compilation diagnostics with one worker and a deadline.
-Then review the host-only patches and generated UAPI layouts before a bounded
-RAM-only boot test. No installed provider, Lurker capability or private backend
-registration follows from a compile or boot success.
-
-Before any filesystem mount, require native unit/probe coverage for timers,
-stack bounds, collision-safe mapping, exact errno translation, authenticated
-thread/request credentials, ordered flush failures and normal close. Only then
-use new regular-file images for native formatter, mount/write/fsync/close and
-reopen controls, actual caller/group ownership, unrelated-user denial, deliberate
-nonempty-rmdir/unsupported-operation errors, busy-unmount preservation, and
-injected metadata/flush/close failures. Test raw providers only after file
-controls and current opened-node identity/flush proofs. Product integration and
-container/device/backing matrices remain later gates.
+The former proposal led to the build and primitive diagnostics recorded below.
+Its remaining formatter, actual filesystem mount, driver/provider install,
+raw-device and product integration stages were never admitted and are now cut.
+No further experimental kernel development or dependent validation is queued.
+The previous source/design requirements are retained above solely to explain
+those historical decisions and capability gaps.
 
 ## Subsequent reviewed library and RAM diagnostic
 
@@ -231,11 +226,11 @@ library and generated SDK were archived and the contained library hash checked
 again. The indexed receipts, exact binaries, raw logs and source anchors are
 `build/lkl-native/library-ram-index.json` under the host evidence root.
 
-These results establish a native library/ABI/timer/RAM foundation. Native
-FUSE API26 adaptation, authenticated THRID-to-process request credentials,
-outward errno translation, synchronous namespace/barrier error handling,
-provider flush chains, safe normal close and native formatters remain separate
-unqualified gates. There was no LKL FUSE mount, formatter/device experiment,
+These historical results do not establish an eligible kernel basis under the
+final boundary. Actual filesystem callbacks, synchronous namespace/barrier
+behavior, provider flush chains, safe mounted close and native formatting were
+not qualified; all remaining experimental-route tasks are now cut. There was
+no LKL FUSE mount, formatter/device experiment,
 driver installation, shared product change or filesystem capability claim.
 
 The separately reviewed phases 1 and 2 then passed five native primitive

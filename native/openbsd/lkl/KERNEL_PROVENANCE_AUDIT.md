@@ -1,15 +1,53 @@
-# OpenBSD LKL kernel provenance hold
+# OpenBSD LKL kernel provenance and final cut
 
-The clarified user scope permits only popular/upstream/mainstream, already
-published and tested kernel changes. It excludes Lurker-specific kernel patches
-and their tests. This includes LKL kernel source compiled into a native process;
-being outside the OpenBSD boot kernel does not create an exception.
+Lurker must remain non-invasive software suitable for ordinary mainstream OS
+repositories. **Novel means kernel code or behavior invented by Lurker.**
+Applying established pre-made patches does not count as novel, including
+kernel-source patches applied specifically for Lurker. Existing supported
+parameters and configuration, including selection before building, are allowed.
+There is no blanket ban on kernel patches or userspace integration. Eligibility
+depends on provenance, maturity and actual effect, not a "Lurker-specific" label
+or a file's location in a userspace tool.
 
-The present OpenBSD LKL route is **held**. No further kernel-source delta,
-new kernel-dependent build/control, filesystem admission or mounted pilot will
-use these artifacts under the clarified scope. Completed diagnostics, first
-failures, sources and exact outputs remain preserved under their original
-identities. Ordinary encryption qualification retains its separate identities.
+Inventing and validating kernel ABI fields, lifecycle behavior or an
+experimental kernel port is outside this project. Our timer-draining concept
+is conventional, but Lurker invented this inserted ABI field and its shutdown
+placement; neither came from established pre-made upstream/mainstream guidance.
+This includes LKL kernel source compiled into a native process.
+
+The experimental OpenBSD LKL route is **CUT**, not queued for resumption.
+The latest user instruction supersedes the earlier non-interruption rule:
+partial, in-progress and planned out-of-scope work must end immediately. A fresh
+read-only root/user process inventory found no task coordinator, compiler,
+control, worker or descendant still running, so no signal was necessary.
+No experimental work was restarted, reverted, deleted or executed for this cut.
+Source, exact outputs and all first failures remain preserved.
+
+The custom kernel-dependent library/client/driver work and its proposed
+formatter/mount/install/raw-provider/product stages have been removed from the
+actionable plan. There is no kernel workaround, upstream-PR project, maintained
+kernel variant or wait for a new kernel interface in this task. Ordinary
+qualification keeps its original artifact identities; independent userspace
+observer work is not cut by this decision.
+
+## Completed, partial and planned work
+
+- Completed: the custom shutdown/UAPI adaptation, two native library identities,
+  generated ABI/RAM contracts, upstream 35-test RAM suites and the recorded
+  primitive controls. These are historical experimental results, not an
+  eligible filesystem route under the current boundary.
+- Partial and cut: four API26 client/callback source files. Normal RAM callback
+  and unmounted constructor controls completed before the earlier scope audit;
+  callback fault modes, live guardian admission and actual service integration
+  did not. The four files remain preserved and untracked, with a private exact
+  source archive; they are not queued for further testing or completion.
+- Planned and cut: additional kernel/source work, importing the syscall-bounds
+  fix, a first file-backed formatter/mount pilot, driver installation, raw
+  providers and Lurker capability/matrix admission through this experimental
+  route. No such mount, format, installation or admission occurred.
+- Independent and complete: the native-only observer controls and signed native
+  ext4 formatter inventory. The observer has no LKL header/library/runtime
+  dependency; its work was not stopped. The formatter assessment was read-only.
 
 ## Exact input and patch provenance
 
@@ -33,6 +71,10 @@ the added kernel shutdown hook and its UAPI field.
 | `tools/lkl/Makefile.autoconf` | Custom build configuration: OpenBSD target/native tool format/pthread linking, host network backends disabled, upstream MMU/KASAN options selected off. |
 | `tools/lkl/Makefile` | Custom build tooling: private GNU stat/sed aliases for native OpenBSD tools. |
 
+Local host build, linker and header glue is not excluded merely because it was
+written for Lurker. Its actual effect and established provenance need individual
+assessment. This cut follows the confirmed invented kernel behavior and ABI.
+
 No Kconfig source file was changed. Selecting existing upstream configuration
 options is distinct from patching source; it does not cure the shutdown/UAPI
 changes. Inherited CONFIG_NET=y and enabled EXT4/JBD2/Btrfs/XFS were recorded
@@ -48,7 +90,7 @@ alias header is host compatibility glue. The ELF overlay is unchanged published
 glibc2.42 file-format declarations, SHA-256
 `fd6e7f3e3c74ee9d64b9f92ce3cc31b34413ca2622a167320ea053ce9a68110f`,
 not a copied glibc runtime. Native GNU gcc/binutils/bc and OpenBSD base FUSE are
-ordinary host prerequisites, independent of the eligibility hold.
+ordinary host prerequisites, independent of the experimental-route cut.
 
 ## Artifact dependency
 
@@ -65,8 +107,8 @@ Its new patch `native/openbsd/lkl/flush.patch`, committed in `61cb41b`, SHA-256
 changes only `tools/lkl/lib/virtio_blk.c`: explicit custom-callback FLUSH opt-in,
 two-buffer requests, native status forwarding and malformed-request checks.
 That is a host transport change. However, the resulting archive reuses the exact
-same custom kernel member and modified generated ABI. It is also held for route
-admission. Its standalone stubbed codec test is independent of a running kernel;
+same custom kernel member and modified generated ABI. Its route-admission plan
+is also cut. Its standalone stubbed codec test is independent of a running kernel;
 its RAM tests remain historical diagnostics of the recorded custom archive.
 Neither artifact may be relabeled as an unmodified or published-kernel result.
 The proposed NetBSD syscall-bounds kernel fix was never imported or built here.
@@ -78,12 +120,14 @@ clock and native mount inventory APIs. It can be reviewed/tested independently,
 without linking LKL, running a kernel or mounting anything. The installed signed
 OpenBSD e2fsprogs1.47.3 inventory/manual assessment is likewise independent and
 has not formatted storage. Native FUSE callback/client source and snapshots
-are preserved, but kernel-dependent callback execution/admission is held.
+are preserved, and kernel-dependent callback execution/admission is cut.
 
 Detailed exact before/after file hashes, controller/source snapshots and stopped
 process inventory are retained in the host evidence directory at
 `build/lkl-native/new-kernel-scope-audit/dependency-audit.json` and
-`held-source-before-review.json`. Earlier test receipts remain intact.
+`held-source-before-review.json`. The final fresh process inventory and cut
+receipt are in `build/lkl-native/final-cut-audit/terminal-jobs.json`. Earlier
+test receipts remain intact.
 
 Primary published references inspected earlier:
 
