@@ -2,7 +2,8 @@
 
 Status: in progress. These are newly executed observations, not a release pass.
 Buran was not rebooted. The three representative physical USB samples passed;
-frozen-candidate package validation remains pending. Private evidence is under
+the renewed frozen package passed its 280 conformance checks; explicit native
+filesystem and installed-artifact validation are still running. Private evidence is under
 `target/goal-validation/native-fresh-20261127/hosts/macos/`; the corresponding
 remote root is `/tmp/lurker-native-fresh-20261127-macos`.
 
@@ -221,23 +222,96 @@ proof of CoW. Journaling/replay observations stay separate from format flags.
   `build/device-executed-frontend-manifest.json` and
   `build/device-frontend-postformat.json`.
 
-## Frozen package validation in progress
+## Publisher follow-up and frozen package validation
 
-The named final Mac candidate is `3bfed465c77d2b859761dc3fb37ff25d9da80123`;
-other hosts' later working-tree changes are excluded. Native run
-`20261126T231244Z-1c26f1a8` passed workspace check and 144 tests, with no failures
-and 12 ignored optional tests, using Rust 1.100.0 and one build worker. The DMG
-built and passed hdiutil verification. SHA-256:
+The first frozen candidate `3bfed465c77d2b859761dc3fb37ff25d9da80123` passed
+workspace check, 144 tests and the complete extracted-DMG conformance suite:
+14 profiles, 280 checks. The package was built and verified with one Cargo
+worker using Rust 1.100.0. DMG SHA-256:
 `08959e888f994de5adbdd2b045e2c7c0af0d0824241af8e5cec5c679c42b52c8`.
+Its 12 eligible inner-filesystem cases passed four payload opens each.
 
-The extracted application passed deep/strict signature verification. Its exact
-240-file administrator-owned qualification copy preserves all packaged bytes;
-its directory/file group and other write bits were removed before privileged
-backend testing, and signatures still verify. The package is ad-hoc signed,
-not notarized. The final package conformance profiles, applicable filesystem
-matrix, installed CLI/helper/desktop callbacks and owned cleanup audit are
-running. All 130 ledger cells will be reconciled to those receipts. Reboot
-persistence remains unexercised on Buran by instruction.
+The complete directory sweep then exposed a new CryFS/UFS2 publication failure:
+removing a published directory also removed its native AppleDouble companion,
+leaving a stale entry in the outer staging snapshot. That failed artifact and
+fixture remain under their original identity in
+`cases/final-directory-ufs2-ptv_g8kj/`.
+
+Commit `12a3f93` captures native companions through anchored descriptors before
+publication can remove them. It validates the AppleDouble header, version,
+entry bounds and association with the base entry; preserves the captured bytes
+durably; refuses metadata winners and ordinary files at paired metadata names;
+and retains errors for missing ordinary files. Configuration publication stays
+last. Eight native unit tests passed, including malformed/symlink metadata,
+ordinary standalone files, paired ordinary-file refusal and no-clobber cases.
+The exact source overlay passed workspace check and 148 tests, plus 11 expected
+positive filesystem regressions: CryFS/Cryptomator on UFS2, APFS, ext4, NTFS and
+ZFS, and Cryptomator on exFAT. The known Apple exFAT CryFS refusal remained.
+Module SHA-256:
+`417d6ac39bb9962e41a330bcad454fb05b38983deabf3c03d8ecc0c2a22061db`.
+
+Supplementary artificial metadata tests on UFS2 remain limitations, not passes.
+A manually encoded companion whose native copy produced a different container
+was refused without overwriting it. An unsupported malformed/symlink fixture
+hit host-driver EIO and stalled its own normal unmount; SIGTERM to the exact
+owned driver released the pending operations. Its raw image and logs are
+retained. No global filesystem service or unrelated storage was changed.
+UFS2 evidence qualifies the ordinary regular-file/directory vault patterns
+actually exercised, rather than complete filesystem metadata semantics.
+
+The first installed desktop test binary was placed outside `Contents/MacOS`.
+Its in-process inventory consequently lacked the packaged backend while the
+actual helper mounted successfully. That test assertion and cleanup failure
+left one owned native mount and caused subsequent physical controls to refuse
+an unverifiable mount. The exact source/mount was closed normally; the failure
+receipts were preserved. With the test binary in a separate app clone's proper
+bundle layout, the same frozen package passed the default VeraCrypt callback,
+virtual-partition CLI four-open/negative controls, and actual partition callback.
+Both inventory and mount engine paths/hashes and runtime provenance are in
+`build/final-vc-discovery-layout.json`. The actual production bundle remained
+unchanged. All six default callbacks and the 39 Apple foreign-filesystem helper
+requests therefore have successful receipts; failed attempts are separate.
+
+Commit `025f558` records a separately installed native macFUSE exFAT alternative
+for directory backings. Mature Free exFAT v1.4.0 revision
+`0372fdeab2b878736fa20c9c510a0766a7996cdc` builds against macFUSE 2. Its small
+host-only patch implements exclusive rename on its existing single dispatcher.
+The installed `3bfed46` package passed all three directory engines on this route,
+with four payload opens each. Independent plain-native controls passed four
+backing unmount/remount phases, 0700/0600 masks and file/parent fsync. Driver
+SHA-256: `c11f6960a81e52c37e43d6655d2339796d24cf783e1383385a8700e3fa599a73`;
+patch SHA-256: `8da5872d6b49786c6d28fd780f381f486659347979da65a97430f92fc8b932ea`.
+The driver, license and provenance are host prerequisites, never app contents.
+Apple's exFAT FSKit route continues to refuse CryFS's atomic primitive.
+
+The native exFAT 16-way collision control retained one winner and all 15 losing
+sources, but some losers received ERANGE instead of EEXIST through the current
+macFUSE high-level path. This is an explicit errno-contract limitation, not a
+concurrency pass. No installed macFUSE library was changed. The reproduction
+and inferred upstream-library explanation are in `native/macos/exfat-macfuse.md`.
+
+The renewed named final candidate is
+`025f558499695a9962ff9754ee9663c0ba7bc95e`. Native run
+`20261127T001035Z-fbbade78` passed workspace check and 151 tests, with no failures
+and 12 ignored optional tests. Its DMG built and passed hdiutil verification.
+SHA-256: `1a4849331e127039f13bc8665c8942a4145972f2089241bd276df243f9943cf9`.
+The exact extracted package passed all 14 profiles and 280 conformance checks.
+
+The renewed extracted app and its administrator-owned production installation
+passed deep/strict signature verification. All 240 packaged files match; only
+owner/mode hardening was applied to the qualification installation. The test
+executable is added to a separate bundle clone in `Contents/MacOS`. The native
+hardware serial reader passed against the Toshiba, and the software renderer
+produced eight create/open frames at 100% and 120%; scrolled action buttons are
+visible without horizontal overflow. The package is ad-hoc signed, not notarized.
+
+The final 30 eligible filesystem cells, installed CLI/helper/desktop and guarded
+virtual-partition controls are running against this new package. Their per-case
+exit gates are authoritative; earlier controllers that returned zero despite
+failed individual cases are not acceptance evidence. Final ledger reconciliation
+and owned cleanup remain pending. No further Toshiba sample is needed for this
+publisher change; the three physical samples retain their original artifacts.
+Buran's reboot persistence remains unexercised by instruction.
 
 Primary eligibility sources:
 https://github.com/macos-fuse-t/fuse-t
