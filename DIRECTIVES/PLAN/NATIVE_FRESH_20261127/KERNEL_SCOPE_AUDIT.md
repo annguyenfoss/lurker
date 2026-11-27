@@ -1,7 +1,7 @@
 # Kernel scope audit
 
 Updated 2026-11-27; the newest stop-and-cut instruction supersedes the previous
-non-interruption policy. A fresh audit has been requested from all eleven owners.
+non-interruption policy. All eleven owners returned fresh scope/job audits.
 The authoritative policy is `DIRECTIVES/LLM/DEVELOPMENT.md`, Kernel integration
 boundary. Existing upstream/mainstream patches and established documented
 procedures may be applied for Lurker. Inventing and validating novel kernel
@@ -10,6 +10,10 @@ file location and successful local tests do not settle the classification alone.
 "Novel" means Lurker's own invented kernel code or behavior. Applying established
 patches does not count as novel code; existing kernel configuration and parameter
 changes, including before a kernel build, are generally allowed.
+Customized kernel builds are allowed with reproducible existing configuration
+selections, established patches and upstream-associated guidelines. Competent
+users should be able to inspect those settings and reproduce the build without
+reviewing or adopting kernel code invented by Lurker.
 
 ## Confirmed experimental kernel work already performed
 
@@ -64,9 +68,8 @@ established scope decision.
 
 ## Current execution and handling
 
-- All eleven host owners acknowledged the earlier boundary. All have now been
-  asked to audit completed/current/planned work against the stricter stop-and-cut
-  instruction; retain their individual confirmations before claiming completion.
+- All eleven host owners received the exact definition and returned fresh
+  completed/current/planned-work audits under the stricter stop-and-cut rule.
 - No out-of-scope kernel build or test is currently reported running. NetBSD's
   rebuild had already been cancelled before the user instructed agents not to
   interrupt existing work for a scope finding; it has not been restarted.
@@ -81,6 +84,31 @@ established scope decision.
   supported configuration and independent userspace work remain in scope.
 - Preserve source, partial artifacts and failures; do not destructively revert,
   delete or relabel them. Stock native workflows retain their original scope.
+
+## Stop-and-cut owner audit
+
+All eleven owners were sent the exact definition and the replacement handling
+rule in `2d3c82c`. Their fresh completed/current/planned-work audits report:
+
+| Owner | Verified execution state and scope disposition |
+| --- | --- |
+| Arch Linux | No owned jobs across all UIDs, mounts or descendants. No novel kernel implementation found in its FS5 delta. Cut prospective kernel/interface/port experiments, including novel UFS1 work. Common configuration/build review remains separate. |
+| Debian | No kernel jobs or descendants. Completed Linux donor-dependent observations preserved. Cut novel-kernel-dependent follow-ups; current FreeBSD Cryptomator Java/FFM/source packaging is independent userspace work. |
+| Ubuntu | No owned build/test/runtime jobs, mounts, GUI binds or descendants. No novel UFS1 code started. Cut all prospective novel kernel work; no automatic restart. |
+| Fedora | No owned jobs, mounts, sessions or descendants. Donor FS5 observations and existing modules preserved. Cut prospective novel kernel/ABI experiments; no rebuild or reboot needed. |
+| openSUSE | No owned build/qualification jobs or descendants. All e927 work terminal. No novel-kernel continuation remains planned. |
+| Gentoo | No owned jobs, e927 mounts, descendants or queued work. Existing UFS1 configuration distinguished from novel code. Cut prospective new kernel behavior/ABI/lifecycle/port work. |
+| macOS | No active LKL/FUSE/guardian/formatter jobs or descendants. No Lurker-invented kernel implementation found in nineteen local patches. Cut hypothetical new kernel hooks/ABI/halt logic, Darwin-port invention and NetBSD bounds-fix import. Established vendor-patch maturity remains a separate question. |
+| FreeBSD | No active kernel/LKL build or storage-test job; no descendants. Cut the unstarted plan to invent FUSE RENAME2 kernel support. Seven official Ports patches remain eligible established inputs. Local host-transport classification is separate. |
+| NetBSD | Cancelled build remains terminal `-15`; no owned build/runtime jobs or descendants. Cut custom ABI/shutdown, bounds-repair and proposed novel lifecycle/page-free continuation. Preserve all experimental code and results. |
+| OpenBSD | No matching root/user coordinators, compilers, controls or descendants. Cut invented ABI/shutdown-dependent development and its client qualification. Independent completed observer remains separate. |
+| DragonFly BSD | No experimental compilers, clients, tests, mounts or descendants. Cut the locally invented ABI/shutdown-hook route and dependent qualification. Preserve source, binaries and failure receipts. |
+
+No owner reported an active novel-kernel job requiring a new termination signal.
+This does not claim that every host is free of blocked processes: FreeBSD's old
+failed-FUSE cleanup/stat waits and the unrelated Cryptomator global-stat wait
+remain nonterminal. They are retained operational failures, not running kernel
+development, and must not be relabeled as successful cleanup.
 
 Detailed private audits are retained under the round's host directories:
 NetBSD `build/lkl-native/new-scope-kernel-audit.*`, OpenBSD

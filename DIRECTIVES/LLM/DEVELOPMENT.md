@@ -51,12 +51,23 @@ Selecting existing kernel parameters or configuration options, including before
 building a kernel, is generally allowed. This is not a blanket ban on patches
 or on newly written ordinary Lurker userspace code.
 
+**Building a customized kernel to support Lurker is allowed.** Its differences
+may consist of existing parameter/configuration selections and established
+pre-made patches or documented guidelines associated with upstream/mainstream
+projects. Provide the exact configuration changes, patch provenance and build
+instructions so a competent OS user can inspect the settings, apply the same
+established inputs and build the kernel themselves. Users must not need to
+review, adopt or maintain kernel code invented by Lurker to use that route.
+The distinction is established inputs versus Lurker-invented kernel code, not
+stock versus customized kernel or whether source files are patched.
+
 The distribution goal is ordinary downloadable software suitable for mainstream
 Linux distribution and BSD repositories. Prefer setup that a technically
 competent user of that OS can reproduce with established tools and instructions.
 Selecting existing supported parameters and configuration options is generally
-in scope. Do not make installation depend on maintaining our own kernel variant,
-inventing kernel behavior, or getting a new kernel interface accepted upstream.
+in scope. A reproducible customized configuration is acceptable; do not make
+installation depend on maintaining kernel code invented by Lurker or getting
+our new kernel behavior/interface accepted upstream.
 Patch size alone does not establish suitability: a few lines can change an ABI
 or shutdown ordering and create a lasting maintenance obligation. Routine Lurker
 userspace fixes remain in scope; an established external filesystem capability

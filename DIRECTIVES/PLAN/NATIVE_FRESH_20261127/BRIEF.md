@@ -78,6 +78,18 @@ the integration boundary in `DIRECTIVES/LLM/DEVELOPMENT.md`: applying pre-made
 patches or established guidance from well-known upstream/mainstream projects
 is allowed; inventing and validating novel kernel code, ABI hooks or ports is
 out of scope, including inside LKL. "Needed for Lurker" does not decide scope.
+"Novel" means kernel code or behavior invented by Lurker; applying an established
+pre-made patch is not novel, even if it changes kernel code. Existing supported
+kernel parameters/configuration, including before building, are generally
+allowed. Building a customized kernel for Lurker is also allowed using those
+existing selections, established patches and documented upstream-associated
+guidelines. Supply reproducible configuration differences, patch provenance and
+build steps a competent OS user can follow; never require adoption or review of
+kernel code invented by Lurker. A customized build is not itself a scope breach.
+Audit completed, current and planned work across all agents. Document
+completed out-of-scope experiments; stop and cut partial/in-progress/planned
+out-of-scope work, verify stopped jobs, and preserve its historical evidence.
+This replaces the earlier instruction not to interrupt such running work.
 Eligible kernel builds on the ten VMs remain deferred until ordinary candidates
 and tests have finished and the complete ordinary-route assessment has been
 reported. Do not begin them merely because one cell lacks a stock driver.
