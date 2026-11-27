@@ -64,3 +64,9 @@ were needed. Mount identity values were control inputs, not native mount proof.
 Remaining gates are production supervisor/driver integration, component/install
 trust, actual native identity callbacks, provider lifecycle and core capability
 fencing; platform signal policies must stay distinct.
+
+Coordinator review: `root-service-control-audit.json` independently verifies all
+126 reference hashes/sizes and archive members, full gzip CRC, the final native
+receipt/log, committed service/common-runtime bytes and terminal process inventory.
+It confirms 477 assertion executions, four normal completions and six retained
+failures with separate fixture recovery. It adds no storage or admission claim.
