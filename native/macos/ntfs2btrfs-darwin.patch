@@ -1,0 +1,470 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -44,7 +44,9 @@
+     src/xxhash.c
+ )
+ 
+-if(MSVC)
++if(APPLE)
++    # Use the existing table implementation; GNU x86 assembly is not Mach-O.
++elseif(MSVC)
+     enable_language(ASM_MASM)
+     set(SRC_FILES ${SRC_FILES} src/crc32c-masm.asm)
+ else()
+@@ -53,6 +55,11 @@
+ endif()
+ 
+ add_executable(ntfs2btrfs ${SRC_FILES})
++
++if(APPLE)
++    add_executable(ntfs2btrfs-crc32c-check src/darwin_crc_check.cpp)
++    target_sources(ntfs2btrfs-crc32c-check PRIVATE FILE_SET CXX_MODULES FILES src/crc32c.cpp)
++endif()
+ 
+ target_sources(ntfs2btrfs PUBLIC FILE_SET CXX_MODULES FILES
+     src/crc32c.cpp
+--- a/src/crc32c.cpp
++++ b/src/crc32c.cpp
+@@ -23,7 +23,9 @@
+ export module crc32c;
+ 
+ #ifndef _WIN32
+-#ifdef __i386__
++#if defined(__APPLE__)
++#define __stdcall
++#elif defined(__i386__)
+ #define __stdcall __attribute__((stdcall))
+ #elif defined(__x86_64__)
+ #define __stdcall __attribute__((ms_abi))
+@@ -79,7 +81,7 @@
+ };
+ 
+ // x86 and amd64 versions live in asm files
+-#if !defined(__i386__) && !defined(__x86_64__) && !defined(_M_IX86) && !defined(_M_X64)
++#if defined(__APPLE__) || (!defined(__i386__) && !defined(__x86_64__) && !defined(_M_IX86) && !defined(_M_X64))
+ extern "C"
+ uint32_t __stdcall calc_crc32c_sw(uint32_t seed, const uint8_t* msg, uint32_t msglen) {
+     uint32_t rem = seed;
+--- a/src/rollback.cpp
++++ b/src/rollback.cpp
+@@ -324,7 +324,8 @@
+ 
+         auto& ci = *(btrfs_chunk*)(ptr + sizeof(key));
+ 
+-        basic_string_view<uint8_t> chunk_item{ptr + sizeof(key), offsetof(btrfs_chunk, stripe) + (ci.num_stripes * sizeof(btrfs_stripe))};
++        basic_string_view<char8_t> chunk_item{reinterpret_cast<const char8_t*>(ptr) + sizeof(key),
++            offsetof(btrfs_chunk, stripe) + ci.num_stripes * sizeof(btrfs_stripe)};
+ 
+         chunks.emplace(+key.offset, buffer_t{chunk_item.data(), chunk_item.data() + chunk_item.size()});
+ 
+--- a/src/ntfs.cpp
++++ b/src/ntfs.cpp
+@@ -482,14 +482,43 @@
+     uint64_t inode;
+ };
+ 
++#ifdef __APPLE__
++// Only a login-user fresh regular-file format candidate, never arbitrary disks.
++export struct fresh_target {
++    uint64_t device;
++    uint64_t inode;
++    uint64_t bytes;
++};
++
++class owned_descriptor {
++public:
++    owned_descriptor() = default;
++    owned_descriptor(const owned_descriptor&) = delete;
++    owned_descriptor& operator=(const owned_descriptor&) = delete;
++    ~owned_descriptor() { if (value >= 0) ::close(value); }
++    void reset(int next) { if (value >= 0) ::close(value); value = next; }
++    int get() const { return value; }
++    int release() { auto old = value; value = -1; return old; }
++private:
++    int value = -1;
++};
++#endif
++
+ export class ntfs {
+ public:
++#ifdef __APPLE__
++    ntfs(const string& fn, const fresh_target& expected);
++    void flush_checked();
++    void close_checked();
++    void require_fresh_metadata();
++#else
+     ntfs(const string& fn);
++#endif
+ 
+     ~ntfs() {
+ #ifdef _WIN32
+         CloseHandle(h);
+-#else
++#elif !defined(__APPLE__)
+         close(fd);
+ #endif
+     }
+@@ -507,7 +536,14 @@
+ #ifdef _WIN32
+     HANDLE h;
+ #else
+-    int fd;
++    int fd = -1;
++#ifdef __APPLE__
++    uint64_t extent_bytes = 0;
++private:
++    owned_descriptor descriptor;
++    fresh_target expected_identity{};
++public:
++#endif
+ #endif
+ };
+ 
+--- a/src/ntfs2.cpp
++++ b/src/ntfs2.cpp
+@@ -32,6 +32,12 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <unistd.h>
++#ifdef __APPLE__
++#include <sys/file.h>
++#include <cerrno>
++#include <climits>
++#include <limits>
++#endif
+ #else
+ #include <windows.h>
+ #endif
+@@ -291,7 +297,11 @@
+     return mappings;
+ }
+ 
++#ifdef __APPLE__
++ntfs::ntfs(const string& fn, const fresh_target& expected) : expected_identity(expected) {
++#else
+ ntfs::ntfs(const string& fn) {
++#endif
+     unsigned int sector_size = 512;
+ 
+ #ifdef _WIN32
+@@ -335,6 +345,31 @@
+         }
+     }
+ 
++#elif defined(__APPLE__)
++    if (!geteuid() || getuid() != geteuid() || getgid() != getegid())
++        throw formatted_error("Fresh format requires the unelevated login user.");
++    if (expected.bytes < 2ull * 1024 * 1024 * 1024 || expected.bytes % 4096 ||
++        expected.bytes > (uint64_t)numeric_limits<off_t>::max())
++        throw formatted_error("Fresh format requires an aligned regular file of at least 2 GiB.");
++    struct stat before{};
++    if (lstat(fn.c_str(), &before) || !S_ISREG(before.st_mode) || before.st_nlink != 1 ||
++        before.st_uid != geteuid() || (before.st_mode & 0777) != 0600 ||
++        (uint64_t)before.st_dev != expected.device || (uint64_t)before.st_ino != expected.inode ||
++        before.st_size < 0 || (uint64_t)before.st_size != expected.bytes)
++        throw formatted_error("Fresh-file path is not the expected private regular file.");
++    descriptor.reset(open(fn.c_str(), O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK));
++    fd = descriptor.get();
++    if (fd < 0)
++        throw formatted_error("Fresh-file open failed (errno {}).", errno);
++    struct stat info{};
++    if (fstat(fd, &info) || !S_ISREG(info.st_mode) || info.st_nlink != 1 ||
++        info.st_uid != geteuid() || (info.st_mode & 0777) != 0600 ||
++        (uint64_t)info.st_dev != expected.device || (uint64_t)info.st_ino != expected.inode ||
++        info.st_size < 0 || (uint64_t)info.st_size != expected.bytes)
++        throw formatted_error("Fresh-file identity, ownership, mode or extent differs.");
++    if (flock(fd, LOCK_EX | LOCK_NB))
++        throw formatted_error("Fresh-file exclusive lock failed (errno {}).", errno);
++    extent_bytes = expected.bytes;
+ #else
+     fd = open(fn.c_str(), O_RDWR | O_EXCL);
+ 
+@@ -348,6 +383,17 @@
+     boot_sector_buf.resize((size_t)sector_align(sizeof(NTFS_BOOT_SECTOR), sector_size));
+     read(0, boot_sector_buf.data(), boot_sector_buf.size());
+     boot_sector = reinterpret_cast<NTFS_BOOT_SECTOR*>(boot_sector_buf.data());
++
++#ifdef __APPLE__
++    // NTFS stores either the sector count or last sector number, depending on
++    // formatter. Both layouts must fit this exact independently verified file.
++    if (boot_sector->BytesPerSector != 512 || boot_sector->SectorsPerCluster != 8 ||
++        boot_sector->TotalSectors > numeric_limits<uint64_t>::max() / 512)
++        throw formatted_error("Fresh NTFS requires 512-byte sectors and 4096-byte clusters.");
++    const auto volume_bytes = boot_sector->TotalSectors * 512;
++    if (volume_bytes != extent_bytes && volume_bytes != extent_bytes - 512)
++        throw formatted_error("NTFS geometry differs from the verified file extent.");
++#endif
+ 
+     // make sure is NTFS
+     if (memcmp(boot_sector->FsName, NTFS_FS_NAME, sizeof(NTFS_FS_NAME) - 1))
+@@ -763,6 +809,22 @@
+ }
+ 
+ void ntfs::read(uint64_t offset, uint8_t* buf, size_t length) {
++#ifdef __APPLE__
++    if (fd < 0 || offset > extent_bytes || length > extent_bytes - offset)
++        throw formatted_error("Read exceeds the verified fresh-file extent.");
++    while (length) {
++        const auto count = min(length, (size_t)SSIZE_MAX);
++        const auto result = pread(fd, buf, count, (off_t)offset);
++        if (result < 0 && errno == EINTR)
++            continue;
++        if (result <= 0)
++            throw formatted_error("Fresh-file read made no progress (result {}, errno {}).", result, result < 0 ? errno : 0);
++        offset += (uint64_t)result;
++        buf += result;
++        length -= (size_t)result;
++    }
++    return;
++#else
+     buffer_t tmpbuf;
+     uint64_t orig_offset, orig_length;
+     uint8_t* orig_buf = nullptr;
+@@ -821,10 +883,25 @@
+ 
+     if (orig_buf)
+         memcpy(orig_buf, tmpbuf.data() + orig_offset - offset, orig_length);
++#endif
+ }
+ 
+ void ntfs::write(uint64_t offset, const uint8_t* buf, size_t length) {
+-#ifdef _WIN32
++#ifdef __APPLE__
++    if (fd < 0 || offset > extent_bytes || length > extent_bytes - offset)
++        throw formatted_error("Write exceeds the verified fresh-file extent.");
++    while (length) {
++        const auto count = min(length, (size_t)SSIZE_MAX);
++        const auto result = pwrite(fd, buf, count, (off_t)offset);
++        if (result < 0 && errno == EINTR)
++            continue;
++        if (result <= 0)
++            throw formatted_error("Fresh-file write made no progress (result {}, errno {}).", result, result < 0 ? errno : 0);
++        offset += (uint64_t)result;
++        buf += result;
++        length -= (size_t)result;
++    }
++#elif defined(_WIN32)
+     LARGE_INTEGER posli;
+     DWORD written;
+ 
+@@ -856,3 +933,48 @@
+     } while (true);
+ #endif
+ }
++
++#ifdef __APPLE__
++void ntfs::flush_checked() {
++    struct stat info{};
++    if (fd < 0 || fstat(fd, &info) || !S_ISREG(info.st_mode) || info.st_nlink != 1 ||
++        info.st_uid != geteuid() || (info.st_mode & 0777) != 0600 ||
++        (uint64_t)info.st_dev != expected_identity.device ||
++        (uint64_t)info.st_ino != expected_identity.inode || info.st_size < 0 ||
++        (uint64_t)info.st_size != extent_bytes)
++        throw formatted_error("Fresh-file identity changed before synchronization.");
++    int result;
++    do { result = fsync(fd); } while (result < 0 && errno == EINTR);
++    if (result < 0)
++        throw formatted_error("Fresh-file fsync failed (errno {}).", errno);
++    do { result = fcntl(fd, F_FULLFSYNC); } while (result < 0 && errno == EINTR);
++    if (result < 0)
++        throw formatted_error("Fresh-file full media synchronization failed (errno {}).", errno);
++}
++
++void ntfs::close_checked() {
++    const int closing = descriptor.release();
++    fd = -1;
++    // Do not retry close after an error: the descriptor may already be consumed.
++    if (closing < 0 || ::close(closing))
++        throw formatted_error("Fresh-file close failed (errno {}).", closing < 0 ? 0 : errno);
++}
++
++void ntfs::require_fresh_metadata() {
++    auto bitmap = mft->read(0, 0, ntfs_attribute::BITMAP);
++    if (bitmap.size() < 4 || !(bitmap[0] & 1) || !(bitmap[0] & (1u << NTFS_ROOT_DIR_INODE)) || bitmap.size() > 8192)
++        throw formatted_error("Fresh profile rejects this nonempty/extended MFT layout.");
++    for (size_t index = 16; index < bitmap.size() * 8; index++) {
++        if (!(bitmap[index / 8] & (1u << (index % 8))))
++            continue;
++        // Fresh mkntfs reserves 0..15, and uses 24..26 for these $Extend files.
++        if (index < 24 || index > 26)
++            throw formatted_error("Fresh profile refuses allocated user-file MFT records.");
++        ntfs_file file(*this, index);
++        const auto name = file.get_filename();
++        const char* expected[] = {"\\$Extend\\$Quota", "\\$Extend\\$ObjId", "\\$Extend\\$Reparse"};
++        if (name != expected[index - 24])
++            throw formatted_error("Fresh profile refuses an unexpected NTFS metadata file.");
++    }
++}
++#endif
+--- a/src/ntfs2btrfs.cpp
++++ b/src/ntfs2btrfs.cpp
+@@ -39,6 +39,9 @@
+ #include <map>
+ #include <getopt.h>
+ #include <assert.h>
++#ifdef __APPLE__
++#include <charconv>
++#endif
+ 
+ #ifdef _WIN32
+ #include <windows.h>
+@@ -46,7 +49,7 @@
+ #include <sys/mman.h>
+ #endif
+ 
+-#if !defined(_WIN32) && !defined(__FreeBSD__)
++#if !defined(_WIN32) && !defined(__FreeBSD__) && !defined(__APPLE__)
+ #define USE_MMAP
+ #endif
+ 
+@@ -3871,12 +3874,18 @@
+         r.write_trees(dev);
+     }
+ 
++#ifdef __APPLE__
++    dev.flush_checked();
++#endif
+     write_superblocks(dev, chunk_root, root_root, compression, csum_type);
+ 
+     clear_first_cluster(dev);
+-}
+-
+-#if defined(__i386__) || defined(__x86_64__)
++#ifdef __APPLE__
++    dev.flush_checked();
++#endif
++}
++
++#if !defined(__APPLE__) && (defined(__i386__) || defined(__x86_64__))
+ static void check_cpu() noexcept {
+ #ifndef _MSC_VER
+     unsigned int cpuInfo[4];
+@@ -3922,10 +3931,30 @@
+         throw formatted_error("Unrecognized hash type {}.", s);
+ }
+ 
++#ifdef __APPLE__
++static fresh_target parse_fresh_target(string_view value) {
++    uint64_t fields[3]{};
++    for (unsigned int i = 0; i < 3; i++) {
++        auto colon = value.find(':');
++        auto field = value.substr(0, colon);
++        auto result = from_chars(field.data(), field.data() + field.size(), fields[i]);
++        if (field.empty() || result.ec != errc{} || result.ptr != field.data() + field.size() ||
++            (i < 2 && colon == string_view::npos) || (i == 2 && colon != string_view::npos))
++            throw formatted_error("Expected --fresh-format=DEVICE:INODE:BYTES in unsigned decimal.");
++        if (colon != string_view::npos)
++            value.remove_prefix(colon + 1);
++    }
++    return {fields[0], fields[1], fields[2]};
++}
++#endif
++
+ int main(int argc, char* argv[]) {
+     enum option_values {
+         OPTION_HELP,
+         OPTION_VERSION,
++#ifdef __APPLE__
++        OPTION_FRESH_FORMAT,
++#endif
+     };
+ 
+     static const option options[] = {
+@@ -3935,6 +3964,9 @@
+         { "no-datasum", no_argument, nullptr, 'd' },
+         { "help", no_argument, nullptr, OPTION_HELP },
+         { "version", no_argument, nullptr, OPTION_VERSION },
++#ifdef __APPLE__
++        { "fresh-format", required_argument, nullptr, OPTION_FRESH_FORMAT },
++#endif
+         { nullptr, 0, nullptr, 0 }
+     };
+ 
+@@ -3943,6 +3975,9 @@
+         btrfs_compression_type compression;
+         enum btrfs_csum_type csum_type;
+         bool do_rollback = false, nocsum = false;
++#ifdef __APPLE__
++        optional<fresh_target> fresh;
++#endif
+ 
+ #ifdef WITH_ZSTD
+         compression = btrfs_compression_type::zstd;
+@@ -3980,6 +4015,13 @@
+                     nocsum = true;
+                 break;
+ 
++#ifdef __APPLE__
++                case OPTION_FRESH_FORMAT:
++                    if (fresh)
++                        throw formatted_error("Duplicate --fresh-format identity.");
++                    fresh = parse_fresh_target(optarg);
++                    break;
++#endif
+                 case OPTION_HELP:
+                     print(R"(Usage: ntfs2btrfs [OPTION]... device
+ Convert an NTFS filesystem to Btrfs.
+@@ -3989,8 +4031,11 @@
+   -h, --hash=ALGO            checksum algorithm to use; ALGO can be 'crc32c'
+                                 (default), 'xxhash', 'sha256', or 'blake2'
+   -r, --rollback             rollback to the original filesystem
+-  -d, --no-datasum           disable data checksums
++  -d, --no-datasum           disable data checksums (forbidden by Darwin fresh profile)
+ )");
++#ifdef __APPLE__
++                    print("Darwin candidate: --fresh-format=DEVICE:INODE:BYTES is required; only empty owned 0600 regular NTFS files, CRC32C/data checksums, no compression or rollback.\n");
++#endif
+                     return 1;
+ 
+                 case OPTION_VERSION:
+@@ -4010,8 +4055,14 @@
+ 
+         fn = argv[optind];
+ 
+-#if defined(__i386__) || defined(__x86_64__)
++#if !defined(__APPLE__) && (defined(__i386__) || defined(__x86_64__))
+         check_cpu();
++#endif
++
++#ifdef __APPLE__
++        if (!fresh || do_rollback || nocsum || csum_type != btrfs_csum_type::crc32c ||
++            compression != btrfs_compression_type::none)
++            throw formatted_error("Darwin candidate requires --fresh-format=DEVICE:INODE:BYTES, CRC32C, data checksums, no compression and no rollback.");
+ #endif
+ 
+         if (do_rollback) {
+@@ -4078,9 +4129,17 @@
+         if (nocsum)
+             print("Not calculating checksums.\n");
+ 
++#ifdef __APPLE__
++        ntfs dev(fn, *fresh);
++        dev.require_fresh_metadata();
++#else
+         ntfs dev(fn);
++#endif
+ 
+         convert(dev, compression, csum_type, nocsum);
++#ifdef __APPLE__
++        dev.close_checked();
++#endif
+     } catch (const exception& e) {
+         cerr << e.what() << endl;
+         return 1;
+--- /dev/null
++++ b/src/darwin_crc_check.cpp
+@@ -0,0 +1,14 @@
++// Copyright 2026 Lurker contributors. GPL-2.0-or-later.
++// Native build-only integrity probe; no filesystem/image operations.
++#include <cstdint>
++#include <cstdio>
++import crc32c;
++int main() {
++    const uint8_t text[] = "123456789";
++    const auto full = calc_crc32c(0xffffffffu, text, 9);
++    const auto split = calc_crc32c(calc_crc32c(0xffffffffu, text, 4), text + 4, 5);
++    if (~full != 0xe3069283u || split != full || calc_crc32c(0x12345678u, text, 0) != 0x12345678u)
++        return 1;
++    puts("native portable CRC32C canonical/split/empty probes passed");
++    return 0;
++}
