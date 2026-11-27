@@ -1240,3 +1240,43 @@ allocated), insufficient alone. Explicitly reviewed Rustup inspection finds
 A verified-copy/compatibility-symlink proposal for Rustup plus archival pkg-cache
 reclaim is submitted; no file has been moved or removed. Historical failed
 fixtures, source originals and results remain unselected and unchanged.
+
+
+### Verified cache relocation and actual pilot preflight hold
+
+- Purpose/input: recover root headroom using the coordinator-approved exact
+  proposal `3ea50826...`, with no builds, service tests or pilot during the move.
+- Attempt1 failure: a filename/log escaping bug stops at original-manifest
+  collection, before any copy, swap or reclamation. Raw failed records and a
+  prefix-only reader note are preserved; source data is unchanged by that attempt.
+- Attempt2 command/log: `build/root-space-relocation-20261127T092107Z-attempt2/`
+  has the exact script, commands, original/copy manifests and four fresh native
+  no-job/FD/mapping gates. All administrative operations use trusted base tools;
+  the orchestrator runs as the login user.
+- Outcome: copy/hash/type/mode/fsync gates pass for 178 Rustup regular files and
+  79 root-owned pkg archives, with original identities/bytes unchanged before
+  swapping. The old Rustup path becomes a compatibility symlink; cleared,
+  noninstalling rustup/rustc/cargo version queries match. Only then are the exact
+  backed-up 178/79 regular files reclaimed. Empty old Rustup directories,
+  archival copies, manifests, pkg configuration and all 79 existing cache aliases
+  remain; the latter now target missing cache files, not an automatic archival
+  execution path. No failed fixture/result or protected VM original is touched.
+- Capacity/evidence: root and tmp measure 2,187,423,744 bytes free, above 2GiB by
+  39,940,096 bytes. Eighteen receipt hashes and archive `2b8b67cf...` SHA/gzip
+  are verified. This modest margin must be rechecked before actual runtime.
+
+`build/cryptomator-real-runtime-review-1/` then prepares launcher `a13692eb...`
+and performs read-only artifact/prerequisite checks: binary `79ceaf5d...`, image
+archive `0110d5b9...`, helper `216831ca...`, all 291 image entries/21 symlinks,
+unchanged boot, host FUSE3 3.18.3, loaded fusefs, device mode 0666 and user mounts.
+Vault/evidence paths remain absent; no Java/test/init/mount is executed. The
+launcher directs parent-created native close-worker receipts to private buildpool
+storage, preserving the tiny short `/tmp` mount/session footprint.
+
+Memory admission fails: measured free+inactive is 1,006,497,792 bytes; after the
+256MiB JVM plus 32MiB close-worker heap estimate, only 704,507,904 remains against
+2GiB required. ARC is recorded separately (about 1.316GB), not counted as free;
+its setting is automatic zero, effective maximum about 3.172GB. A supported
+runtime-parameter-only ARC cap is proposed, not applied. Actual pilot remains
+held. Guardian service source work has begun in the owned header, but its
+constructor/controls remain incomplete and no phase-A native gate has run.
