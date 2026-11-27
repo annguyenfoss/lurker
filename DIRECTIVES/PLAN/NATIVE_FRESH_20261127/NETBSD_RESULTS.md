@@ -134,8 +134,7 @@ attempts module unloading. The final hook runs after ordered shutdown handlers.
 Direct `reboot(8)`/`halt(8)` bypass those handlers, and a crash does not run them.
 A hook failure is not a shutdown veto: `rc.shutdown` ultimately exits zero.
 
-The shutdown hook has not been installed or tested across a reboot. The first
-released native batch passed on one fresh 512 MiB regular-file vdev on the
+The first released native batch passed on one fresh 512 MiB regular-file vdev on the
 identified work FFS: pool GUID `606192775680998110`, actual UID/EUID 1300 common
 payload write/append/reopen/hash checks, normal non-forced export/import, busy
 export returning Device busy with the mount unchanged, and wrong pool GUID,
@@ -144,21 +143,43 @@ terminated and reaped; the final pool is closed, all four labels are exported,
 and no other pool or encrypted mapping is active. The native fixture vdev is
 root-private; its separate caller-owned 0700 plaintext mountpoint is directly
 searchable through `/tmp`. No root-only traversal workaround supplied the
-ordinary-user proof. A separately reviewed `shutdown(8)` reboot remains pending.
+ordinary-user proof. A separately reviewed single `shutdown -r now` reboot then
+passed using the same fixture and the exact reviewed root-controlled hook.
+The actual hook receipt recorded normal export of that pool; before any postboot
+import all four labels showed exported state and the same GUID. A normal
+non-forced import returned the full preboot PDF/text hashes as actual UID/EUID
+1300. A further append and distinct new file survived normal export, non-forced
+reimport and final hash verification. The repeated common append helper first
+hit its existing-second-file O_EXCL assumption after appending text; that failed
+receipt was preserved, and a bounded continuation used a distinct new filename.
+No existing payload was removed or overwritten to accommodate that failure.
+
+The temporary hook was removed only after matching its installed inode/hash,
+and `/etc` was fsynced to restore prior absence. All pools and encrypted mappings
+are closed; the native ZFS module was normally unloaded to its original absent
+state. The temporary plaintext underlay was removed; only base mounts and the
+previous work FFS remain. The installed CLI/helper/desktop and all three native
+FUSE provider hashes remained unchanged. This is a standalone configured
+graceful-shutdown proof, not encrypted CGD reboot qualification, crash recovery
+or repair of the original failed active fixture. The CGD follow-up remains a
+separate reviewed phase.
 The initial empty-pool `zpool list -H` uninitialized-return failure, unsupported
 `status -P` option and mistaken busy-probe payload path were preserved; only the
 harness was corrected, and no second fixture or kernel fix was introduced.
-It must preserve existing local hooks, avoid broad pool enumeration or force,
-and restore all temporary configuration. It cannot repair the preserved active
-failed fixture or establish crash recovery. No kernel invention is required for
-that limited configuration route; the earlier local kernel repair remains cut.
+The tested hook targeted only independently authenticated pool GUID/vdev/mount
+identities. No broad export, force, boot-kernel change or library change was used.
+The earlier local kernel repair remains cut.
 
-The private source hashes, exact findings and unexecuted qualification batch are
+The private source hashes, exact findings and original proposed batch are
 in `hosts/netbsd/build/zfs-retained-source-assessment/{inputs,assessment}.json`.
 The native batch, its frozen plan, all failed attempts, exact worker/hook bytes
 and terminal inventories are under `hosts/netbsd/build/zfs-shutdown-config-proof/`;
 the final phase-1–4 receipt has SHA-256
 `acad8988fc8abb399a62351b64f390453bb90f5d209fc6dbf1ec108842a219eb`.
+The final standalone reboot receipt has SHA-256
+`95462efb23af67079e02de7ed990301dddb290b049dc7e0ff5cdb495bca4ff1a`,
+with the complete control/evidence archive SHA-256
+`b47e82cc2e21e77550404856b3b076a7fa9eaf78c3e6debb5fe8b7c08d30e373`.
 Primary references:
 
 - https://man.netbsd.org/NetBSD-11.0/rc.8
