@@ -35,6 +35,9 @@ def main():
 
     def save(): h.atomic_json(receipt, result)
 
+    def mounted(path):
+        return h.linux_mount_record(Path('/proc/self/mountinfo').read_text(), path)['mountpoint'] == str(path)
+
     def native(argv):
         r = subprocess.run(['sudo', '-n', *map(str, argv)], capture_output=True, text=True, timeout=180)
         if r.returncode: raise RuntimeError(str(argv[0]) + ': ' + r.stderr[-1200:])
@@ -52,6 +55,7 @@ def main():
         mountpoint = Path(old['mountpoint'])
         credential_path = Path(old['fixture']) / '.generated-test-credential'
         password = ''
+        stalled = False
         folder = mountpoint / 'Lurker payload'
         prefix = ['/usr/bin/sudo', '-n'] if privileged else []
         def cli(action, operand):
@@ -63,13 +67,17 @@ def main():
         def payload(phase, wanted):
             args = ['/usr/bin/python3', str(Path(__file__).with_name('FEDORA_REBOOT_IO.py')),
                     str(mountpoint), json.dumps(wanted), phase]
-            if privileged:
-                return json.loads(native(args))
-            process = subprocess.run(args, capture_output=True, text=True, timeout=60)
-            if process.returncode: raise RuntimeError(process.stderr[-1200:])
-            return json.loads(process.stdout)
+            process = subprocess.run((['sudo', '-n'] if privileged else []) + args,
+                                     capture_output=True, text=True, timeout=90)
+            response = json.loads(process.stdout)
+            if process.returncode or not response['ok']:
+                error = RuntimeError(response.get('error', process.stderr[-1200:]))
+                error.worker = response.get('payload_worker')
+                raise error
+            return response['hashes']
         try:
             if keyfile:
+                password = None
                 if h.file_hash(keyfile) != old['keyfile_sha256']:
                     raise RuntimeError('Retained binary keyfile identity differs')
                 new['keyfile_sha256'] = old['keyfile_sha256']
@@ -99,12 +107,18 @@ def main():
             cli('unmount', [mountpoint]); cli('mount', [old['source'], mountpoint])
             new['after_reopen_hashes'] = payload('verify', expected)
             cli('unmount', [mountpoint]); new['status'] = 'passed'
-        except Exception as e: new.update(status='failed', error=str(e))
+        except Exception as e:
+            new.update(status='failed', error=str(e))
+            if getattr(e, 'worker', None):
+                new['payload_worker'] = e.worker
+                stalled = e.worker.get('remaining', False)
+                if stalled: result['live_payload_worker'] = e.worker
         finally:
-            if os.path.ismount(mountpoint) and not (a.prepare and new['status'] == 'passed'):
+            if not stalled and mounted(mountpoint) and not (a.prepare and new['status'] == 'passed'):
                 try: cli('unmount', [mountpoint])
                 except Exception as e: new['cleanup_error'] = str(e)
-            new['mount_remaining'] = os.path.ismount(mountpoint); save()
+            new['mount_remaining'] = True if stalled else mounted(mountpoint); save()
+        if stalled: raise RuntimeError('Retain live payload worker and its mounted storage')
 
     save()
     for row in matrix['cases']:
@@ -126,15 +140,17 @@ def main():
                 if fs in {'apfs', 'hammer2'}: args += ['-i', '-t', fs]
                 if fs == 'ufs1': args += ['-i', '-t', 'ufs']
                 native([*args, image, mount])
-            if not os.path.ismount(mount): raise RuntimeError('Backing mount missing')
+            if not mounted(mount): raise RuntimeError('Backing mount missing')
             for row in matrix['cases']:
                 if row['route'] == 'directory-on-filesystem' and row['filesystem'] == fs: case(row)
         except Exception as e:
             result.setdefault('backing_errors', []).append(dict(filesystem=fs, error=str(e))); save()
         finally:
-            if os.path.ismount(mount) and not a.prepare:
+            if not result.get('live_payload_worker') and mounted(mount) and not a.prepare:
                 try: native(['zpool', 'export', backing['pool']] if fs == 'zfs' else ['umount', mount])
                 except Exception as e: result.setdefault('cleanup_errors', []).append(str(e)); save()
+        if result.get('live_payload_worker'):
+            raise RuntimeError('Stop admission while a payload worker retains native storage')
     result['status'] = 'terminal'; result['finished'] = time.time(); save()
     print(json.dumps(dict(receipt=str(receipt), counts={s: sum(c['status'] == s for c in result['cases']) for s in ('passed', 'failed')})))
 
