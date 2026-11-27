@@ -20,6 +20,17 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD", "native NetBSD pthread timers")
+    def test_monotonic_timer_rearm_self_free_and_quiescence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "timer-control"
+            source = BUILDER.ROOT / "native/netbsd/lkl/timer-control.c"
+            subprocess.run(["/usr/bin/gcc", "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-pthread",
+                            "-o", str(binary), str(source)], check=True, timeout=30)
+            result = subprocess.run([str(binary)], text=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            print(result.stdout, end="")
+
     @unittest.skipUnless(platform.system() == "NetBSD" and os.environ.get("LURKER_NETBSD_LKL_SOURCE"), "built native LKL UAPI required")
     def test_generated_native_uapi_matches_kernel_layout(self):
         source = Path(os.environ["LURKER_NETBSD_LKL_SOURCE"]).resolve(strict=True)

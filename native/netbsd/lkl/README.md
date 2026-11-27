@@ -81,6 +81,15 @@ mount identity, and then close only its owned channel. The current diagnostic
 patch does not implement that lifecycle boundary; its output remains unsuitable
 for runtime mounting.
 
+The stock POSIX `SIGEV_THREAD` timer path also blocks LKL boot on this host:
+NetBSD's installed `sigevent(3)` documents that notification mode as unsupported.
+Native timers expired without callbacks while matched signal notifications
+worked. `netbsd-timer.h` supplies a separate monotonic pthread worker for the
+current LKL callback signature. Its native control covers rearming, cancellation,
+self-free and explicit callback quiescence. `timer_free` never joins an IRQ/self
+callback; a post-CPU-shutdown drain is required before freeing LKL memory. The
+standalone header/control proof alone does not qualify LKL boot or storage.
+
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
 https://man.netbsd.org/mmap.2
 https://github.com/bminor/glibc/blob/glibc-2.42/elf/elf.h
