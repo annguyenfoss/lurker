@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "kind": "separately-installed-native-host-filesystem-driver",
+  "target_os": "DragonFly",
+  "name": "fusefs-lkl",
+  "version": "4.16.g20180628_5",
+  "license": "GPL-2.0-only",
+  "upstream": "https://github.com/lkl/linux",
+  "source_revision": "86dd3afb590eccc1903611bdaa8bac87757eb80d",
+  "source_archive_sha256": "d63cccf64ab8938389b0054e3e68ee467100bfc98475b1864ab7dac542d51317",
+  "source_archive_bytes": 164254140,
+  "DPorts_revision": "91731d0e53e99b4ed0ab75677c9325d741a85123",
+  "DPorts_origin": "filesystems/lkl",
+  "official_patches": [
+    {
+      "name": "patch-arch_lkl_Kconfig",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/lkl/files/patch-arch_lkl_Kconfig",
+      "sha256": "6fbd96666085b6658ee4ae6418fc627c324c417d573aabf45fcc6ff9ffb01e4f"
+    },
+    {
+      "name": "patch-arch_lkl_Makefile",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/lkl/files/patch-arch_lkl_Makefile",
+      "sha256": "9643fc707c6242e38017023b0e1b48f143f2e7ac46348272c198cb1af5290516"
+    },
+    {
+      "name": "patch-arch_lkl_include_uapi_asm_host__ops.h",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/lkl/files/patch-arch_lkl_include_uapi_asm_host__ops.h",
+      "sha256": "3c817231e9b07d74f9d946a466b2d503813399b50e90105b772e6869347bbb67"
+    },
+    {
+      "name": "patch-tools_lkl_Makefile",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/lkl/files/patch-tools_lkl_Makefile",
+      "sha256": "cfb6a6d1ea93e8f15ebcddb61aef659b28ad843e788fed484cc416edc3c503b6"
+    },
+    {
+      "name": "patch-tools_lkl_Makefile.autoconf",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/lkl/files/patch-tools_lkl_Makefile.autoconf",
+      "sha256": "d9c44960322240f9266e929ce4ad2288d38d1c8b0cf1e46308c46306499a398f"
+    },
+    {
+      "name": "patch-tools_lkl_Targets",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/lkl/files/patch-tools_lkl_Targets",
+      "sha256": "b70063fd07507813ea54984d7fc709f3fd7bb80445d3c85a083145e282d2222e"
+    },
+    {
+      "name": "patch-tools_lkl_lib_virtio__blk.c",
+      "url": "https://raw.githubusercontent.com/DragonFlyBSD/DPorts/91731d0e53e99b4ed0ab75677c9325d741a85123/filesystems/lkl/files/patch-tools_lkl_lib_virtio__blk.c",
+      "sha256": "38e2ea6c21ae0caba4840826917df94585bc561d313b1c9633b23888c0ffd03a"
+    }
+  ],
+  "DragonFly_patches": [
+    "patches/0001-dragonfly-modpost-relocations.patch"
+  ],
+  "native_build_prerequisites": [
+    "GNU make",
+    "GCC",
+    "GNU binutils",
+    "bison",
+    "GNU bc",
+    "GNU sed",
+    "GNU stat",
+    "Python3",
+    "host FUSE2 headers/library"
+  ],
+  "jobs": 1,
+  "ufs2_config": "not enabled; requires separate experimental assessment",
+  "runtime_qualification": "unproven; no product admission",
+  "distribution": "External host prerequisite; never include filesystem driver or FUSE in the Lurker private package.",
+  "kernel_driver_config": [
+    "BTRFS_FS=y",
+    "XFS_FS=y"
+  ]
+}
