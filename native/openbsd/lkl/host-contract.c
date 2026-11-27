@@ -57,10 +57,16 @@ int main(void)
 	unsigned long long before = lkl_host_ops.time();
 	assert(lkl_sys_nanosleep(&delay, NULL) == 0);
 	assert(lkl_host_ops.time() - before >= 4500000);
+	/* A rejected reboot has not drained workers or surrendered the instance. */
+	assert(lkl_sys_setresuid(-1, 1300, -1) == 0);
+	assert(lkl_sys_halt() == -LKL_EPERM);
+	assert(lkl_is_running() && quiesce_calls == 0);
+	assert(lkl_sys_getpid() > 0);
+	assert(lkl_sys_setresuid(-1, 0, -1) == 0);
 	assert(lkl_sys_halt() == 0);
 	assert(!lkl_is_running() && quiesce_calls == 1);
 	lkl_cleanup();
-	puts("RAM-only native LKL boot/nanosleep/halt and post-CPU pre-free-memory callback passed");
+	puts("RAM-only native LKL boot/nanosleep/rejected-halt/retry and post-CPU pre-free-memory callback passed");
 #endif
 	return 0;
 }

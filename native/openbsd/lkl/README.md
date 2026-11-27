@@ -44,16 +44,17 @@ condition API. Free never joins a callback, including one blocked on LKL CPU/IRQ
 ownership. A separate quiescence drain is permitted only after CPU/thread/tick
 shutdown and before freeing emulated memory. Native tests cover self-rearm,
 self-free, a blocked callback with nonblocking free and delayed quiescence,
-replacement/cancellation, large deadlines and 32 drained workers. This component
-is not yet wired into an LKL build or a filesystem mount.
+replacement/cancellation, large deadlines and 32 drained workers. The reviewed
+library and RAM-only controls now exercise this component inside LKL; no
+filesystem mount is qualified.
 
 The native memory control checks pthread stack-top conversion against a real
 local variable, refuses destructive fixed mappings, preserves an occupied hint,
 and verifies that only its own alternate mapping is released. A read-only
 mquery checks that cleanup; the mapping implementation never uses query-then-map
 or MAP_FIXED. Failed mmap, unaligned/overflow requests, anonymous reuse and an
-actual shared-file mapping are covered. This primitive is not yet wired into
-LKL, and MMU remains outside the initial boot profile.
+actual shared-file mapping are covered. The reviewed library includes this
+primitive, while MMU remains outside the initial boot profile.
 
 `--adapted --gnu-tools` applies the reviewed OpenBSD host-only patch and copies
 its separately hash-pinned timer/memory components into a fresh uncompiled
@@ -88,7 +89,10 @@ successfully; the incompatible-base attempt remains preserved.
 directory-entry layouts while proving native signal aliases are restored.
 Compile with `LURKER_LKL_ABI_ONLY` for that check alone. Its full form links the
 exact native library and exercises only RAM boot, getpid, a measured nanosleep,
-halt and the explicit post-CPU, pre-free-memory quiescence callback. It registers
+rejected halt, restored emulated effective UID, successful retry and the explicit
+post-CPU, pre-free-memory quiescence callback. The rejected halt must return
+Linux EPERM while leaving the instance running and the quiescence count zero.
+Only the later successful halt may drain workers and permit cleanup. It registers
 no host disk, links no FUSE library and must run as the ordinary qualification
 user. Host mounts must remain unchanged. This is a library/ABI/timer proof;
 filesystem callbacks, request credentials, barriers, normal-close handling and
