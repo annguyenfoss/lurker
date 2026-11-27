@@ -31,7 +31,7 @@ ARTIFACTS = {"veracrypt-create": "veracrypt", "veracrypt-userspace": "veracrypt"
              "veracrypt-bsd": "veracrypt", "veracrypt-dragonfly": "veracrypt", "gocryptfs": "gocryptfs",
              "cryfs": "cryfs", "cryptomator": "cryptomator"}
 ENTRY = {"veracrypt-create": ["lurker-veracrypt-create"],
-         "veracrypt-userspace": ["lurker-veracrypt", "lurker-fs", "lurker-veracrypt-create"],
+         "veracrypt-userspace": ["lurker-veracrypt", "lurker-veracrypt-create"],
          "veracrypt-bsd": ["lurker-veracrypt-bsd"], "veracrypt-dragonfly": ["lurker-tcplay"], "gocryptfs": ["gocryptfs"],
          "cryfs": ["cryfs"], "cryptomator": ["lurker-cryptomator", "runtime/bin/java"]}
 VERACRYPT_ARTIFACTS = {
@@ -642,6 +642,22 @@ def verify_linux_private_libraries(root, kind):
     return manifest
 
 
+def verify_linux_crypto_contract(root, source, pin, archives):
+    crypto = json_file(root / "userspace-crypto-source.json")
+    expected = {"schema": 1, "protocol": "lurker-userspace-4",
+        "contract": "private-crypto-external-filesystem",
+        "source": list(pin["veracrypt"]),
+        "source_archive_sha256": archives["veracrypt"],
+        "patch_sha256": hashlib.sha256(source.read("native/linux-userspace/patches/veracrypt.patch")).hexdigest(),
+        "binary_sha256": digest(root / "lurker-veracrypt"),
+        "private_libraries_sha256": digest(root / "private-libraries.json")}
+    if crypto != expected:
+        fail("Linux private crypto/external filesystem contract or provenance differs")
+    allowed = set(ENTRY["veracrypt-userspace"]) | {"creator-source.json", "userspace-crypto-source.json", "private-libraries.json", "artifact-manifest.json"}
+    if any(str(path.relative_to(root)).split("/")[0] not in allowed | {"lib", "licenses"} for path, _ in entries(root)):
+        fail("Linux private crypto artifact contains a filesystem driver or unrelated input")
+
+
 def validate_backend(kind, directory, source):
     root = safe_root(directory)
     list(entries(root))
@@ -720,13 +736,7 @@ def validate_backend(kind, directory, source):
         private_manifest = verify_linux_private_libraries(root, kind)
         verify_linux_static_wx(root, private_manifest, source)
         if kind == "veracrypt-userspace":
-            if json_file(root / "sources.json") != {key: list(value) for key, value in pin.items()}:
-                fail("Linux userspace source pins differ")
-            if json_file(root / "source-archives.json") != archives:
-                fail("Linux userspace source archive checksums differ")
-            stable_patch = source.constant("scripts/build-linux-userspace.py", "LKL_STABLE_PATCH")
-            if json_file(root / "lkl-stable-source.json") != stable_patch:
-                fail("LKL stable patch provenance differs")
+            verify_linux_crypto_contract(root, source, pin, archives)
             envelope = json_file(root / "artifact-manifest.json")
             verify_envelope(envelope, root, source, kind)
     else:
@@ -1284,7 +1294,7 @@ def stage(args):
                 copied_tree("licenses", share / "licenses" / kind)
                 if kind == "veracrypt-userspace":
                     copied_file("private-libraries.json", private / "private-libraries.json")
-                metadata = ["bsd-veracrypt-source.json"] if kind == "veracrypt-bsd" else ["sources.json", "source-archives.json", "lkl-stable-source.json", "creator-source.json", "artifact-manifest.json", "private-libraries.json"]
+                metadata = ["bsd-veracrypt-source.json"] if kind == "veracrypt-bsd" else ["userspace-crypto-source.json", "creator-source.json", "artifact-manifest.json", "private-libraries.json"]
                 for name in metadata:
                     if (directory / name).is_file():
                         target = share / "provenance" / kind
@@ -1308,6 +1318,8 @@ def stage(args):
                     "selected_backends": sorted(selected), "bundled_artifacts": sorted(artifacts),
                     "host_tools": requirements, "native_dependencies": dependencies, "host_fuse": host_fuse,
                     "host_libraries": host_libraries,
+                    "userspace_filesystem": ({"bundled": False, "helper": "lurker-fs", "protocol": 4,
+                        "contract": "private-crypto-external-filesystem"} if "veracrypt-userspace" in artifacts else None),
                     "desktop_authorization": authorization,
                     "desktop_runtime": desktop_display_requirements(system, args.desktop),
                     "host_tool_requirements": {backend: TOOLS.get(system, {}).get(backend, []) for backend in sorted(selected)},
@@ -1323,7 +1335,7 @@ def stage(args):
                         + (["FreeBSD login-user FUSE directory mounts require vfs.usermount=1"]
                            if system == "FreeBSD" and selected & {"gocryptfs", "cryfs"} else [])
                         + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])
-                        + (["VeraCrypt userspace/LKL requires the FUSE kernel interface and fusermount3"] if "veracrypt-userspace" in artifacts else [])
+                        + (["VeraCrypt userspace requires host FUSE/fusermount3 and a separately installed protocol-4 lurker-fs filesystem driver"] if "veracrypt-userspace" in artifacts else [])
                         + (["VeraCrypt's creator requires the declared native host FUSE userspace ABI; FUSE libraries remain external prerequisites"]
                            if any(host_libraries.values()) else [])
                         + (["VeraCrypt requires the declared native host FUSE2 userspace library and kernel interface"] if "veracrypt-bsd" in artifacts else [])

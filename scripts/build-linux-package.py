@@ -32,6 +32,13 @@ def require_full_package(prefix, manifest):
             or artifacts - VERACRYPT_ARTIFACTS != REQUIRED_ARTIFACTS
             or len(artifacts & VERACRYPT_ARTIFACTS) != 1):
         raise ValueError("A full Linux package with all locked routes is required")
+    for path in prefix.rglob("*"):
+        if path.name in {"lurker-fs", "lklfuse"} or STAGE.HOST_FUSE_LIBRARY.fullmatch(path.name):
+            raise ValueError("Linux application package must not bundle filesystem drivers or FUSE libraries")
+    if "veracrypt-userspace" in artifacts and manifest.get("userspace_filesystem") != {
+            "bundled": False, "helper": "lurker-fs", "protocol": 4,
+            "contract": "private-crypto-external-filesystem"}:
+        raise ValueError("Unprivileged crypto package requires the external host filesystem contract")
     for product in PRODUCTS:
         STAGE.require_executable(prefix / "bin" / product)
     if not manifest["desktop_runtime"]:

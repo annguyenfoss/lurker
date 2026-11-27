@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build private Linux backends; never install, elevate, or change the host.
+"""Build private Linux crypto backends; never install, elevate, or change the host.
 
 Upstream encryption and filesystem implementations stay in external processes.
 Only the small, reviewed integration patches are part of the Lurker repository.
@@ -352,6 +352,20 @@ def finalize_private_libraries(output, helper_names, wx_metadata, cache, offline
     return manifest
 
 
+def publish_crypto_manifest(output):
+    """Describe only independent crypto inputs, never a bundled filesystem driver."""
+    if any((output / name).exists() for name in ("lurker-fs", "lklfuse")):
+        raise RuntimeError("Private crypto artifact must not contain a filesystem driver")
+    manifest = {"schema": 1, "protocol": "lurker-userspace-4",
+        "contract": "private-crypto-external-filesystem",
+        "source": SOURCES["veracrypt"],
+        "source_archive_sha256": SOURCE_ARCHIVE_SHA256["veracrypt"],
+        "patch_sha256": hashlib.sha256((ROOT / "native/linux-userspace/patches/veracrypt.patch").read_bytes()).hexdigest(),
+        "binary_sha256": hashlib.sha256((output / "lurker-veracrypt").read_bytes()).hexdigest(),
+        "private_libraries_sha256": hashlib.sha256((output / "private-libraries.json").read_bytes()).hexdigest()}
+    (output / "userspace-crypto-source.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, default=ROOT / "target/userspace/src")
@@ -360,7 +374,9 @@ def main():
     parser.add_argument("--tool-cache-dir", type=Path, default=ROOT / "target/private-elf-cache")
     parser.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 2))
     parser.add_argument("--offline", action="store_true")
-    parser.add_argument("--only-creator", action="store_true", help="Build only the private header/container creator; omit FUSE/LKL helpers")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--only-creator", action="store_true", help="Build only the private header/container creator")
+    mode.add_argument("--crypto-only", action="store_true", help="Build private crypto and creator only (the default); filesystem drivers are installed separately")
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("These helpers are Linux-only.")
@@ -369,13 +385,14 @@ def main():
     if args.jobs < 1:
         parser.error("--jobs must be positive.")
     required = ["gcc", "g++", "make", "pkg-config", "patch", "strip", "readelf"]
-    if not args.only_creator:
-        required.extend(["flex", "bison", "bc", "perl"])
     for tool in required:
         if not shutil.which(tool):
             parser.error(f"Required build tool not found: {tool}")
     run(["pkg-config", "--exists", "fuse3"])
-    names = ["veracrypt-create"] if args.only_creator else list(SOURCES)
+    output = args.output_dir.resolve()
+    if any((output / name).exists() for name in ("lurker-fs", "lklfuse")):
+        parser.error("Output contains a filesystem driver; use a fresh crypto-only output directory")
+    names = ["veracrypt-create"] if args.only_creator else ["veracrypt-create", "veracrypt"]
     sources = {name: prepare(name, args.source_dir.resolve(), args.offline) for name in names}
     vc = sources["veracrypt-create"]
     wx_config, wx_metadata = build_module("linux_wx").build(args.wx_cache_dir, args.jobs, args.offline)
@@ -388,38 +405,20 @@ def main():
         finalize_private_libraries(args.output_dir.resolve(), ["lurker-veracrypt-create"], wx_metadata, args.tool_cache_dir, args.offline)
         return
     build_cpp(sources["veracrypt"], flags, wx_metadata, args.jobs)
-    lkl = sources["lkl"]
-    # tools/lkl regenerates this from our patched defconfig plus host settings.
-    # Never inherit filesystem selections from an earlier upstream/cache build.
-    (lkl / ".config").unlink(missing_ok=True)
-    run(["make", "-C", lkl / "tools/lkl", f"-j{args.jobs}", lkl / "tools/lkl/lklfuse"])
-    output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    binaries = {
-        "lurker-veracrypt": sources["veracrypt"] / "src/Main/veracrypt",
-        "lurker-fs": lkl / "tools/lkl/lklfuse",
-    }
-    for name, binary in binaries.items():
-        destination = output / name
-        temporary = output / (name + ".tmp")
-        shutil.copy2(binary, temporary)
-        temporary.chmod(0o755)
-        run(["strip", "--strip-unneeded", temporary])
-        version = subprocess.check_output([temporary, "--lurker-userspace-version"], text=True).strip()
-        if version != "lurker-userspace-4":
-            raise RuntimeError(f"Invalid userspace helper: {binary}")
-        temporary.replace(destination)
+    binary = sources["veracrypt"] / "src/Main/veracrypt"
+    temporary = output / "lurker-veracrypt.tmp"
+    shutil.copy2(binary, temporary)
+    temporary.chmod(0o755)
+    run(["strip", "--strip-unneeded", temporary])
+    version = subprocess.check_output([temporary, "--lurker-userspace-version"], text=True, timeout=5).strip()
+    if version != "lurker-userspace-4":
+        raise RuntimeError("Invalid private crypto helper protocol")
+    temporary.replace(output / "lurker-veracrypt")
     publish_creator(vc, output)
-    licenses = output / "licenses"
-    licenses.mkdir(exist_ok=True)
-    shutil.copy2(vc / "License.txt", licenses / "VeraCrypt.txt")
-    shutil.copy2(lkl / "COPYING", licenses / "Linux.txt")
-    shutil.copytree(lkl / "LICENSES", licenses / "Linux", dirs_exist_ok=True)
-    (output / "source-archives.json").write_text(json.dumps(SOURCE_ARCHIVE_SHA256, indent=2) + "\n")
-    (output / "sources.json").write_text(json.dumps(SOURCES, indent=2) + "\n")
-    (output / "lkl-stable-source.json").write_text(json.dumps(LKL_STABLE_PATCH, indent=2) + "\n")
-    finalize_private_libraries(output, ["lurker-veracrypt", "lurker-fs", "lurker-veracrypt-create"], wx_metadata, args.tool_cache_dir, args.offline)
-    print(f"Userspace helpers built in {output}. Nothing was installed.")
+    finalize_private_libraries(output, ["lurker-veracrypt", "lurker-veracrypt-create"], wx_metadata, args.tool_cache_dir, args.offline)
+    publish_crypto_manifest(output)
+    print(f"Private crypto helpers built in {output}. Install the host filesystem prerequisite separately.")
 
 
 if __name__ == "__main__":

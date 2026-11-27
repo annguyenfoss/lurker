@@ -233,6 +233,20 @@ class NativePrivatePackaging(unittest.TestCase):
         self.assertEqual(info['binary_sha256'], hashlib.sha256(creator.read_bytes()).hexdigest())
         self.assertEqual(info['private_libraries_sha256'], hashlib.sha256((output / 'private-libraries.json').read_bytes()).hexdigest())
 
+    def test_crypto_manifest_binds_only_independent_crypto_and_rejects_driver(self):
+        output = self.root / 'crypto'; output.mkdir()
+        (output / 'lurker-veracrypt').write_bytes(b'crypto')
+        (output / 'private-libraries.json').write_text('{}')
+        self.builder.publish_crypto_manifest(output)
+        manifest = json.loads((output / 'userspace-crypto-source.json').read_text())
+        self.assertEqual(manifest['contract'], 'private-crypto-external-filesystem')
+        self.assertEqual(manifest['protocol'], 'lurker-userspace-4')
+        self.assertEqual(manifest['binary_sha256'], hashlib.sha256(b'crypto').hexdigest())
+        self.assertNotIn('lkl', json.dumps(manifest))
+        (output / 'lurker-fs').write_bytes(b'not a private encryption engine')
+        with self.assertRaisesRegex(RuntimeError, 'filesystem driver'):
+            self.builder.publish_crypto_manifest(output)
+
 
 if __name__ == '__main__':
     unittest.main()

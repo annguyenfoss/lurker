@@ -49,7 +49,7 @@ class UnixBuild(unittest.TestCase):
 
     def test_linux_default_veracrypt_includes_userspace_and_creator(self):
         stages = dict(self.recipe("Linux", {"luks", "luks1", "veracrypt", "gocryptfs", "cryfs", "cryptomator"}))
-        self.assertNotIn("--only-creator", stages["build-veracrypt-userspace"])
+        self.assertIn("--crypto-only", stages["build-veracrypt-userspace"])
         self.assertIn("userspace-provenance", stages)
         self.assertIn("build-gocryptfs", stages)
         self.assertIn("build-cryfs", stages)
@@ -135,10 +135,12 @@ class UnixBuild(unittest.TestCase):
     def test_cached_userspace_helpers_are_checked_before_rebinding(self):
         directory = self.root / "native"
         directory.mkdir()
-        helper = directory / "lurker-fs"
+        helper = directory / "lurker-veracrypt"
         helper.write_bytes(b"original compiled helper")
         manifest = {"schema": 1, "backend": "veracrypt-userspace", "os": platform.system(),
-                    "architecture": platform.machine(), "files": {"lurker-fs": {"sha256": hashlib.sha256(helper.read_bytes()).hexdigest()}}}
+                    "architecture": platform.machine(), "files": {"lurker-veracrypt": {"sha256": hashlib.sha256(helper.read_bytes()).hexdigest()}}}
+        (directory / "userspace-crypto-source.json").write_text(json.dumps({"contract": "private-crypto-external-filesystem", "protocol": "lurker-userspace-4"}))
+        manifest["files"]["userspace-crypto-source.json"] = {"sha256": hashlib.sha256((directory / "userspace-crypto-source.json").read_bytes()).hexdigest()}
         (directory / "artifact-manifest.json").write_text(json.dumps(manifest))
         builder.verify_userspace_cache(directory, self.module)
         helper.write_bytes(b"corrupt cached helper")
@@ -148,7 +150,7 @@ class UnixBuild(unittest.TestCase):
     def test_cached_userspace_verification_precedes_rust_build(self):
         directory = self.root / "cache/veracrypt-vc/output"
         directory.mkdir(parents=True)
-        (directory / "sources.json").write_text("{}")
+        (directory / "userspace-crypto-source.json").write_text("{}")
         stages = self.recipe("Linux", {"veracrypt"})
         self.assertEqual("userspace-cache-verification", stages[0][0])
         self.assertFalse(any(name == "build-veracrypt-userspace" for name, _ in stages))
@@ -206,7 +208,7 @@ class UnixBuild(unittest.TestCase):
     def test_prerequisites_report_missing_tools_before_expensive_builds(self):
         stages = self.recipe("Linux", {"veracrypt", "cryfs"})
         with mock.patch.object(builder.shutil, "which", return_value=None):
-            with self.assertRaisesRegex(ValueError, "missing build prerequisites.*cmake.*wx-config"):
+            with self.assertRaisesRegex(ValueError, "missing build prerequisites.*cmake.*pkg-config"):
                 builder.prerequisites(stages, self.args)
 
     def test_native_only_build_does_not_require_java_or_cxx(self):

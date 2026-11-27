@@ -50,6 +50,11 @@ def verify_userspace_cache(directory, module):
     envelope = module.json_file(root / "artifact-manifest.json")
     if envelope.get("schema") != 1 or envelope.get("backend") != "veracrypt-userspace":
         raise ValueError("cached Linux native helpers require a complete userspace artifact envelope")
+    if (root / "lurker-fs").exists() or (root / "lklfuse").exists():
+        raise ValueError("cached private crypto artifact contains a filesystem driver")
+    crypto = module.json_file(root / "userspace-crypto-source.json")
+    if crypto.get("contract") != "private-crypto-external-filesystem" or crypto.get("protocol") != "lurker-userspace-4":
+        raise ValueError("cached private crypto artifact lacks the external filesystem contract")
     module.verify_platform(envelope)
     module.verify_files(root, envelope["files"])
     actual = {str(path.relative_to(root)) for path, _ in module.entries(root)} - {"artifact-manifest.json"}
@@ -150,16 +155,12 @@ def recipe(args, system, selected, artifacts, cache, work, module):
     if "veracrypt" in selected and not any(kind.startswith("veracrypt-") for kind in artifacts):
         directory = cache / ("veracrypt-" + args.native_keys["veracrypt"]) / "output"
         if system == "Linux":
-            if (directory / "sources.json").is_file():
-                # Validate the previous build's bytes before rebinding unchanged
-                # native code to a newer application source commit.
+            if (directory / "userspace-crypto-source.json").is_file():
                 stages.insert(0, ("userspace-cache-verification", [python, str(Path(__file__).resolve()),
                                   "--verify-userspace-cache", str(directory)]))
-            native("veracrypt-userspace", directory, "sources.json",
-                   [python, str(scripts / "build-linux-userspace.py"), "--source-dir", str(directory.parent / "src"),
+            native("veracrypt-userspace", directory, "userspace-crypto-source.json",
+                   [python, str(scripts / "build-linux-userspace.py"), "--crypto-only", "--source-dir", str(directory.parent / "src"),
                     "--output-dir", str(directory), "--jobs", str(args.jobs)])
-            # This is a file envelope for a cached native build, not a claim
-            # that unchanged third-party objects were rebuilt at this commit.
             envelope = directory / "artifact-manifest.json"
             stages.append(("userspace-provenance", [python, str(scripts / "stage-unix.py"), "record", *source_args,
                            "--kind", "veracrypt-userspace", "--directory", str(directory),
@@ -285,7 +286,7 @@ def prerequisites(stages, args):
     tools = {"cargo"}
     for name, _ in stages:
         if name == "build-veracrypt-userspace":
-            tools.update(("gcc", "g++", "make", "wx-config", "pkg-config", "patch", "strip", "flex", "bison", "bc", "perl"))
+            tools.update(("gcc", "g++", "make", "pkg-config", "patch", "strip"))
         elif name == "build-veracrypt-bsd":
             tools.update(("gmake", "c++", "pkg-config", "patch"))
         elif name == "build-veracrypt-dragonfly":

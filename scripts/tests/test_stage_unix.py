@@ -1,5 +1,6 @@
 """Packaging policy and path tests; no payloads or encryption tools execute."""
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -770,7 +771,7 @@ Version needs section '.gnu.version_r' contains 2 entries:
         directory = self.root / "userspace"
         (directory / "lib").mkdir(parents=True)
         (directory / "licenses").mkdir()
-        for name in (*stager.ENTRY["veracrypt-userspace"], "private-libraries.json", "lib/libexample.so.1", "licenses/example.txt"):
+        for name in (*stager.ENTRY["veracrypt-userspace"], "userspace-crypto-source.json", "private-libraries.json", "lib/libexample.so.1", "licenses/example.txt"):
             (directory / name).write_text(name)
         (directory / "private-libraries.json").write_text("{}")
         args.select = ["veracrypt"]
@@ -781,6 +782,27 @@ Version needs section '.gnu.version_r' contains 2 entries:
         self.assertEqual("{}", (args.output / name).read_text())
         manifest = json.loads((args.output / "share/lurker/manifest.json").read_text())
         self.assertEqual(stager.digest(args.output / name), manifest["files"][name]["sha256"])
+
+    def test_crypto_contract_rejects_legacy_filesystem_sdk(self):
+        root = self.root / "crypto-contract"; root.mkdir()
+        (root / "lurker-veracrypt").write_bytes(b"crypto")
+        (root / "private-libraries.json").write_text("{}")
+        pin = {"veracrypt": ["upstream", "revision"]}; archives = {"veracrypt": "archive"}
+        source = mock.Mock(); source.read.return_value = b"patch"
+        manifest = {"schema": 1, "protocol": "lurker-userspace-4",
+            "contract": "private-crypto-external-filesystem", "source": pin["veracrypt"],
+            "source_archive_sha256": "archive", "patch_sha256": hashlib.sha256(b"patch").hexdigest(),
+            "binary_sha256": stager.digest(root / "lurker-veracrypt"),
+            "private_libraries_sha256": stager.digest(root / "private-libraries.json")}
+        path = root / "userspace-crypto-source.json"; path.write_text(json.dumps(manifest))
+        stager.verify_linux_crypto_contract(root, source, pin, archives)
+        driver = root / "lurker-fs"; driver.write_bytes(b"external only")
+        with self.assertRaisesRegex(ValueError, "filesystem driver"):
+            stager.verify_linux_crypto_contract(root, source, pin, archives)
+        driver.unlink()
+        manifest["contract"] = "legacy-bundled-filesystem"; path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "contract or provenance"):
+            stager.verify_linux_crypto_contract(root, source, pin, archives)
 
     def test_cryptomator_helper_runtime_sources_match_selected_commit(self):
         names = ("src/main/java/org/lurker/cryptomator/Main.java", "src/main/java/module-info.java",
