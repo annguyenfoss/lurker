@@ -649,4 +649,92 @@ static inline int lfbg_status_persist(int fd,const struct lfbg_status_identity *
     if (error) {errno=error;return -1;}
     return 0;
 }
+
+struct lfbg_endpoint {
+    int directory_fd,listener_fd,ready;
+    struct stat directory,socket,listener;
+    char directory_path[PATH_MAX];
+};
+#define LFBG_SOCKET_NAME "guardian.sock"
+#ifndef LFBG_ENDPOINT_CHMOD
+#define LFBG_ENDPOINT_CHMOD fchmodat
+#endif
+static inline int lfbg_endpoint_check(const struct lfbg_endpoint *endpoint) {
+    struct stat held,named,socket,listener;
+    if (!endpoint || endpoint->directory_fd<0 || endpoint->listener_fd<0) {errno=EINVAL;return -1;}
+    int directory_flags=fcntl(endpoint->directory_fd,F_GETFD),listener_flags=fcntl(endpoint->listener_fd,F_GETFD);
+    if (directory_flags<0 || listener_flags<0) return -1;
+    if (fstat(endpoint->directory_fd,&held)<0 || fstat(endpoint->listener_fd,&listener)<0 || lstat(endpoint->directory_path,&named)<0 ||
+        fstatat(endpoint->directory_fd,LFBG_SOCKET_NAME,&socket,AT_SYMLINK_NOFOLLOW)<0) return -1;
+    if (!S_ISDIR(held.st_mode) || !S_ISDIR(named.st_mode) ||
+        held.st_dev!=endpoint->directory.st_dev || held.st_ino!=endpoint->directory.st_ino ||
+        named.st_dev!=held.st_dev || named.st_ino!=held.st_ino ||
+        held.st_uid!=geteuid() || named.st_uid!=geteuid() ||
+        (held.st_mode&07777)!=0700 || (named.st_mode&07777)!=0700 ||
+        !(directory_flags&FD_CLOEXEC) || !(listener_flags&FD_CLOEXEC) ||
+        !S_ISSOCK(listener.st_mode) || listener.st_dev!=endpoint->listener.st_dev ||
+        listener.st_ino!=endpoint->listener.st_ino ||
+        !S_ISSOCK(socket.st_mode) || socket.st_dev!=endpoint->socket.st_dev ||
+        socket.st_ino!=endpoint->socket.st_ino || socket.st_uid!=geteuid() ||
+        socket.st_nlink!=1 || (socket.st_mode&07777)!=0600) {errno=ESTALE;return -1;}
+    return 0;
+}
+/* Fresh existing canonical private directory only; never unlink an old name.
+ * Return 0 ready, 1 retained after bind publication, -1 with no owned endpoint.
+ * A retained result keeps the descriptors and requires explicit reconciliation.
+ */
+static inline int lfbg_endpoint_create(const char *directory,struct lfbg_endpoint *out) {
+    struct lfbg_endpoint endpoint={.directory_fd=-1,.listener_fd=-1};
+    int error=0;
+    if (!out) {errno=EINVAL;return -1;}
+    *out=endpoint;
+    if (!directory || directory[0]!='/' || getuid()!=geteuid()) {errno=EPERM;return -1;}
+    if (!realpath(directory,endpoint.directory_path)) return -1;
+    if (strcmp(directory,endpoint.directory_path)) {errno=EPERM;return -1;}
+    endpoint.directory_fd=open(directory,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+    if (endpoint.directory_fd<0) return -1;
+    if (fstat(endpoint.directory_fd,&endpoint.directory)<0) {error=errno;goto no_endpoint;}
+    if (!S_ISDIR(endpoint.directory.st_mode) || endpoint.directory.st_uid!=geteuid() ||
+        (endpoint.directory.st_mode&07777)!=0700) {error=EPERM;goto no_endpoint;}
+    endpoint.listener_fd=socket(AF_LOCAL,SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK,0);
+    if (endpoint.listener_fd<0) {error=errno;goto no_endpoint;}
+    if (fstat(endpoint.listener_fd,&endpoint.listener)<0) {error=errno;goto no_endpoint;}
+    if (!S_ISSOCK(endpoint.listener.st_mode) || !endpoint.listener.st_ino) {error=EPERM;goto no_endpoint;}
+    if (lfbg_enable_listener_credentials(endpoint.listener_fd)<0) {error=errno;goto no_endpoint;}
+    struct sockaddr_un address={.sun_family=AF_LOCAL};
+    memcpy(address.sun_path,LFBG_SOCKET_NAME,sizeof(LFBG_SOCKET_NAME));
+    address.sun_len=(uint8_t)(offsetof(struct sockaddr_un,sun_path)+sizeof(LFBG_SOCKET_NAME));
+    if (bindat(endpoint.directory_fd,endpoint.listener_fd,(struct sockaddr *)&address,address.sun_len)<0) {error=errno;goto no_endpoint;}
+    *out=endpoint; /* From this point a named owned socket may exist. */
+    if (fstatat(endpoint.directory_fd,LFBG_SOCKET_NAME,&endpoint.socket,AT_SYMLINK_NOFOLLOW)<0) {error=errno;goto retained;}
+    *out=endpoint;
+    if (LFBG_ENDPOINT_CHMOD(endpoint.directory_fd,LFBG_SOCKET_NAME,0600,AT_SYMLINK_NOFOLLOW)<0) {error=errno;goto retained;}
+    if (lfbg_endpoint_check(out)<0 || listen(endpoint.listener_fd,4)<0) {error=errno;goto retained;}
+    out->ready=1;return 0;
+retained:
+    errno=error?error:EIO;return 1;
+no_endpoint:
+    if (endpoint.listener_fd>=0) (void)close(endpoint.listener_fd);
+    if (endpoint.directory_fd>=0) (void)close(endpoint.directory_fd);
+    errno=error?error:EIO;return -1;
+}
+static inline int lfbg_endpoint_accept(const struct lfbg_endpoint *endpoint) {
+    if (!endpoint || !endpoint->ready) {errno=EINVAL;return -1;}
+    if (lfbg_endpoint_check(endpoint)<0) return -1;
+    int fd=accept4(endpoint->listener_fd,NULL,NULL,SOCK_CLOEXEC|SOCK_NONBLOCK);
+    if (fd<0) return -1;
+    if (lfbg_endpoint_check(endpoint)<0) {int error=errno;(void)close(fd);errno=error;return -1;}
+    return fd;
+}
+/* Only for an already quiescent service after its separate protocol authority.
+ * This helper grants no worker/storage completion. Never remove a replacement.
+ */
+static inline int lfbg_endpoint_close(struct lfbg_endpoint *endpoint) {
+    if (lfbg_endpoint_check(endpoint)<0) return -1;
+    if (unlinkat(endpoint->directory_fd,LFBG_SOCKET_NAME,0)<0) return -1;
+    int fd=endpoint->listener_fd;endpoint->listener_fd=-1;endpoint->ready=0;
+    if (close(fd)<0) return -1;
+    fd=endpoint->directory_fd;endpoint->directory_fd=-1;
+    return close(fd);
+}
 #endif

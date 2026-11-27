@@ -1168,3 +1168,22 @@ is not included among these results.
   source/log hashes verified, socket fixtures retained. Endpoint custody and
   service/common-runtime callbacks remain pending. No LKL/FUSE/mount/device
   operation or product support admission.
+
+
+### Native guardian endpoint custody
+
+- Purpose/input: existing `bindat/connectat` with held private directory and
+  socket identities; header v2 `ca352009...`, source archive `2216328c...`.
+- Command/log: strict C11 and dummy local clients in
+  `build/guardian-platform-endpoint-v1/` and `-v2/`, API source retained.
+- Outcome: v1 passes 66 checks; source review adds listener descriptor identity
+  and CLOEXEC fences, with v2 passing 75 checks. Directory/socket/FD replacement,
+  moved directory, unsafe modes and preexisting files are refused; bind never
+  overwrites. A post-bind injected error retains its exact owned descriptors.
+  Prior identity29/spawn41/stream663/status570/public646 pass on v1 and retain
+  those original identities; their helper bodies are unchanged by v2.
+- Cleanup/limits: both dummy clients reaped, no guardian/Java/Cargo worker
+  remains. Same-object path/FD restoration is explicit fixture cleanup, not
+  production adoption. Endpoint closure alone grants no storage authority;
+  actual service/common callbacks/native teardown and product admission remain
+  pending. No LKL/FUSE/mount/device job was started.

@@ -270,8 +270,7 @@ failed compilation at a codec argument-order mistake; its immutable failure is
 retained separately. Evidence is `build/guardian-platform-ipc-v1/` and `-v2/` in
 the round's FreeBSD bucket; all dummy children are reaped.
 
-These are transport primitives, not a complete service. Socket directory/endpoint
-custody, service deadlines, native teardown
+These are transport primitives, not a complete service. Service deadlines and native teardown
 callbacks and driver integration remain
 unimplemented or unqualified. No LKL, FUSE, provider ioctl, mount or encryption
 operation runs in these controls; no production completion authority is enabled.
@@ -317,4 +316,30 @@ correctly refused earlier with ENOTCONN; that failed test is preserved. Only the
 test expectation changed in v2, and passing identity/spawn/stream/status results
 from v1 retain their original identities. All six v2 dummy children are reaped;
 no guardian remains. Evidence is `build/guardian-platform-public-v1/` and `-v2/`.
-Socket endpoint custody and actual service/runtime integration remain pending.
+Actual service/runtime integration remains pending.
+
+### Private endpoint custody
+
+`lfbg_endpoint_create` uses the existing public FreeBSD `bindat` API relative
+to a held canonical caller-owned mode-0700 directory, without changing cwd.
+It never removes an existing socket or file. Listener credentials are enabled
+before bind/listen; the node is mode 0600 and listener/directory FDs are CLOEXEC.
+Capture and repeated checks bind the named directory, held directory, socket
+node and native listener descriptor identities. A moved/replaced directory,
+socket or descriptor is refused rather than adopted or removed.
+
+https://github.com/freebsd/freebsd-src/blob/bb03631fe3b7/lib/libsys/bindat.2
+
+The create result distinguishes ready (0), retained after bind publication (1),
+and no owned endpoint (-1). A retained result keeps descriptors for explicit
+reconciliation. Endpoint close is only for an independently authorized,
+quiescent service: it grants no worker or storage completion authority.
+Native v1 passes 66 checks. V2 adds listener descriptor identity and CLOEXEC
+checks, passing 75 checks including replacement-descriptor refusal. Previous
+identity29/spawn41/stream663/status570/public646 results retain their native v1
+scope because only endpoint helpers changed. Tests explicitly restore the same
+held original objects to finish their fixtures; production never auto-adopts a
+new path. Evidence is `build/guardian-platform-endpoint-v1/` and `-v2/`.
+Both dummy clients are reaped and only owned test socket names are removed.
+The actual service loop, common callback wiring and native teardown remain
+pending; no LKL/FUSE/mount/device operation or production admission is enabled.
