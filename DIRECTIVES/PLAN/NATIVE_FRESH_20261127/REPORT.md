@@ -33,12 +33,24 @@ later checks do not reconstruct missing historical data or failed images.
 
 macOS report correction `3eaf842` retracts the earlier public-source blocker for
 xlinuxfs/LKL. Pinned public Darwin/arm64 source and its local I/O bridge provide
-a credible native build route for Btrfs/XFS. A fresh host-library build and
-bridge controls are underway, using a hash-verified imported Linux Btrfs seed
-only for driver testing. Native Mac formatting and a mounted macFUSE adapter
-still require separate proof; restricted FSKit entitlements remain a blocker
-for that transport. Existing XFS guards remain in force. No new route is yet
-a product pass, and no additional USB operation has been performed.
+a credible native build route for Btrfs/XFS. The native library now builds for
+both Mach-O architectures. Host-transport correction `59b0a12` explicitly opts
+verified callbacks into FLUSH and handles its two-buffer request. Native bridge
+controls on ext4 and imported Btrfs/XFS passed four payload opens and actual
+host-fsync/error-forwarding checks. Baseline callbacks issued no host fsync and
+hid injected EIO; those failures remain preserved. Imported seeds establish
+driver I/O only. Native Mac formatting and a mounted macFUSE adapter still
+require separate proof; restricted FSKit entitlements remain a blocker for that
+transport. Existing XFS guards remain in force. No new route is yet a product
+pass, and no additional USB operation has been performed.
+
+The Linux package audit found a separate existing-feature gap: installed
+`67894f6` supplies the privileged VeraCrypt creator but lacks the unprivileged
+crypto helper and a separately installed host filesystem helper. Earlier
+privileged successes do not establish unprivileged operation. Resolver/readiness
+correction `18692a5` separates those paths and passed 97 native Arch core tests.
+Crypto-only packaging and external-driver provisioning are being implemented;
+helper/desktop readiness and actual unprivileged package lifecycles remain gates.
 
 Ubuntu's final report is `e68bb47`: both 130-cell source-kind ledgers contain
 54 passed, six stock-UFS1 unavailable and 70 platform-inapplicable cells. The
@@ -91,6 +103,13 @@ basename collision overwrote the activated script copy with its rc fragment;
 the audit records the before/after execution hashes and retained byte-equivalent
 prototype instead of claiming that original archive instance survived. This
 does not turn the failed stock shutdown or clone recovery into ordinary passes.
+
+Preparation `c045e7b` centralizes the fixed GELI profile and filesystem geometry
+selection for file/device creation. Exact native FreeBSD workspace check/test
+passed 150 tests, with 13 ignored; source and log hashes were independently
+corroborated. Existing Btrfs/XFS write guards remain unchanged. The external
+driver's flush, credential, errno and checked-drain contract must pass before
+filesystem admission and the corresponding user documentation are committed.
 
 OpenBSD's exact `123d177` workspace passed 154 native tests, with 22 ignored,
 and all three products built. Native staging and package construction passed;
