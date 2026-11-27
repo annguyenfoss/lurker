@@ -173,11 +173,35 @@ The root filesystem has 1,965,298 KiB free and the work FFS 3,723,676 KiB after
 that gate; its mount flags were unchanged by this ABI gate. The work FFS had
 been remounted without `log` after the earlier standalone reboot; that delta is
 recorded for the next setup review rather than silently described as restored.
-A separate revised export worker/probe is source-only and remains uncompiled
-and unexecuted: same core registry flock across validation/export, exact single
-vdev topology, native device-unit/partition and profile checks, and a retained
-lock-holding guardian for unknown native child timeouts. Those changes require
-review and native mock/control gates before any encrypted fixture is admitted.
+The first ABI compile did not explicitly set TMPDIR; its scratch placement was
+not attested. Both unchanged baseline sources were then compiled with protected
+work-local TMPDIR, producing byte-identical ELFs; verbose compiler traces retain
+the actual work-local assembly/object/linker scratch paths. The first receipts
+and that limitation were preserved.
+
+Independent review corrected the proposed device export worker before storage
+use: same core registry flock across validation/export, exact single-vdev ONLINE
+topology, native unit/partition/profile checks, and an exception-proof guardian.
+The revised query probe compiled natively as ELF
+`7cb5ce8a88c676756642012cb0586061155a025aa920206869d1d081b5aeccd9`;
+both unused-unit pairs rejected. Exact worker `e53fe41b...` passed ten native
+no-storage mock cases: positive completion, deadline, guardian SIGTERM, receipt
+ENOSPC, rename/fsync/log-write failures, output overflow, inventory timeout and
+an exited leader with a remaining output writer. Competing same-inode flock
+opens stayed blocked until all retained children and output streams completed,
+including recording failures. Overflow was drained/discarded without child
+signals; faults returned failure rather than false export success. All case
+PIDs, native birth samples, terminal waits, lock samples and failed receipts
+are retained under `hosts/netbsd/build/zfs-cgd-shutdown-config-proof/`.
+These controls used a work-local mock registry and replaced inventory children;
+real core-registry wiring, configured CGD identity and actual device export
+remain unqualified. No encrypted fixture, mapping, real export, hook or reboot
+was created. The real `/var/run/lurker-bsd` remained absent. Terminal native
+inventories match the prior mounts/flags and all unused CGD/vnd units. Root
+headroom is separately 1,965,296 KiB, with 3,716,630 KiB free on the work FFS.
+The complete fault evidence archive has SHA-256
+`96bcc848078e23b16707040fea5a95a97b283a5e82fd2dc529b0f67fc1be895f`.
+A fresh encrypted lifecycle still requires separate engineering release.
 The initial empty-pool `zpool list -H` uninitialized-return failure, unsupported
 `status -P` option and mistaken busy-probe payload path were preserved; only the
 harness was corrected, and no second fixture or kernel fix was introduced.
