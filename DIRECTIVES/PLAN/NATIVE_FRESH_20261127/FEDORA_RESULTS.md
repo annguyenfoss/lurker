@@ -1,4 +1,4 @@
-# Fedora fresh qualification — completed with recorded host prerequisites
+# Fedora fresh qualification — recorded payload and reboot results
 
 Qualified follow-up source:
 `67894f68525c55d5cbb48c743e1a98a308bd970f` passed workspace check, tests and build;
@@ -19,6 +19,11 @@ host prerequisites: stock Fedora does not enable UFS writes, while the existing
 configured matching module passes; APFS and FUSE-UFS upstream writing remains
 experimental. No new customized kernel build was started. Quick filesystem
 properties remain unknown where untested; this is not a full filesystem audit.
+
+The later [mounted namespace supplement](FEDORA_NAMESPACE.md) passes 32 of 40
+logical scopes. A genuine UFS2 unlink/disconnection failure leaves one UFS2 scope failed and
+three blocked; four NTFS scopes are held. Those expanded observations qualify the
+current namespace result without relabeling the earlier payload/reboot passes.
 
 Host owner: `fedora`, exclusive `adjutant@fedora-core-01`. This report concerns
 fresh execution only. Previous installed artifacts supply inspected backend and
