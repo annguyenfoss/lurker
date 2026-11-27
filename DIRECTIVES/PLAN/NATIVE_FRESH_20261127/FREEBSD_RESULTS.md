@@ -435,6 +435,30 @@ that limitation is explicit in the operator instructions.
 Native stager checks pass **57 tests, zero failures**, including umask 077 public
 modes and proof that these assets are dormant, pinned source files. Manual
 protocol evidence is `validation/freebsd-shutdown-service-control-result.json`.
+The first manual prototype remains separately identified by script SHA
+`9002fce976248f916993be88f8c697090e82561a22845f432bca0040b0dce4c0`.
+Review then required an immutable bounded list and strict tab/duplicate parsing.
+The revised service captures at most 64 KiB in a private root-owned 0400 file and
+uses that exact snapshot for validation and execution. Its raw-line parser
+rejects extra/trailing tabs and duplicate mountpoints, including existing aliases.
+Temporary snapshot files are removed on normal/error exits.
+
+Fresh revised proof uses a gocryptfs vault inside a new VeraCrypt/ZFS volume,
+with actual UID 1300 payload write/append/final phases and three service closes.
+Each close confirms the non-root directory branch completes before the root
+outer branch. A busy inner holder preserves both layers; releasing it allows
+normal close. Twelve native prevalidation/no-op checks preserve both mounts and
+registry state. Concurrent atomic list editing makes 741 replacements across 40
+plan calls: 23 complete valid snapshot plans are accepted and 17 invalid snapshots
+are rejected, with no mixed or unvalidated output. A native syscall/name trace
+and successful snapshot cleanup are retained. Current script SHA-256 is
+`7acc546b7dcda537ac7b286e98725287dcf31ef9093a572bf84534b62c25ca8d`;
+`validation/freebsd-shutdown-service-control-v2-result.json` identifies that
+revised native proof. It remains dormant and outside rc.d. The explicit list is
+for the active cohort; already-closed/unowned targets cause normal refusal, not
+automatic registry enumeration or error-string-based skipping. That operator
+contract is documented separately from a general idempotent shutdown manager.
+
 Actual ordinary reboot with explicit service activation is still pending; no
 manual test or optional-service result replaces the failed stock shutdown.
 

@@ -1,7 +1,7 @@
 # Optional FreeBSD shutdown setup
 
 `lurker_shutdown` is an opt-in native rc.d service for an administrator-selected
-list of Lurker mountpoints. It closes them in the exact order supplied; inner
+list of active Lurker mountpoints. It closes them in the exact order supplied; inner
 user directory mounts must precede their outer native volumes. Each operation uses Lurker's
 normal identity-checked close. It never force-unmounts, repairs filesystems,
 imports pools or obtains credentials.
@@ -21,7 +21,8 @@ sudo sysrc lurker_shutdown_enable=YES
 Prepare `shutdown-targets` before those commands. Each non-comment line contains
 an existing account name, one literal tab, and an absolute mountpoint. Spaces and
 Unicode in mountpoints are preserved; tabs and newlines cannot occur in a path.
-List each mountpoint once, with user directory mounts before their outer mounts.
+Duplicate mountpoints and extra or trailing tab separators are rejected. List
+user directory mounts before their outer mounts.
 For example, replace these paths with the actual managed mounts:
 
 ```text
@@ -30,8 +31,10 @@ root	/data/outer volume
 ```
 
 The list, installed CLI, any required sudo executable, and their ancestors must
-be canonical, root-owned and not group/world writable. The full list is validated
-before any close. `oneplan` validates and prints the ordered actions without
+be canonical, root-owned and not group/world writable. Each action captures at
+most 64 KiB in a private, read-only snapshot, validates that complete snapshot,
+and uses the same snapshot for execution even if the administrator replaces
+the original list. `oneplan` validates and prints the ordered actions without
 closing storage. `service lurker_shutdown onestop` explicitly tests that plan
 before a machine shutdown. Keep the selected cohort within the host's measured
 memory capacity.
@@ -44,7 +47,9 @@ account. This is separate from the shutdown service.
 
 A busy or unconfirmed close returns failure and stops this service's list. The
 system shutdown mechanism can still continue terminating processes; this service
-does not veto shutdown. Close busy mounts normally before requesting shutdown.
+does not veto shutdown. Already-closed or unowned targets also produce refusal.
+Keep the list limited to mounts left open for this shutdown; close busy mounts
+normally and remove their entries before requesting shutdown.
 The failed stock shutdown and any later explicitly enabled service qualification
 must remain separate results in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/FREEBSD_RESULTS.md`.
 
