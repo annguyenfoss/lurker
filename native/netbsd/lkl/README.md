@@ -46,6 +46,9 @@ Linux-style `endian.h` include to native `sys/endian.h`.
 Native endian inlines are preloaded before LKL temporarily hides `__unused`
 while parsing its UAPI; header discovery uses the same include-overlay flags
 as host compilation. All compatibility files stay inside the build directory.
+NetBSD's native `si_*` signal-field aliases are saved and restored around that
+UAPI import as well. GNU sha1sum runs the upstream generated-header checks;
+the final configuration and generated input hashes are retained in the receipt.
 
 The mmap helper never passes `MAP_FIXED`. It accepts only the exact requested
 address and releases only an alternate mapping returned by its own syscall.

@@ -20,6 +20,35 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD", "native NetBSD signal aliases")
+    def test_native_signal_aliases_survive_lkl_header_import(self):
+        patch = (BUILDER.ROOT / BUILDER.HOST_PATCH).read_text()
+        section = patch.split("+++ b/tools/lkl/include/lkl.h\n", 1)[1]
+        post = "\n".join(line[1:] for line in section.splitlines()
+                         if line[:1] in (" ", "+"))
+        start = post.index("#if defined(__NetBSD__)")
+        end = post.index('#pragma pop_macro("__unused")')
+        guard = post[start:end]
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            stub = work / "lkl/asm/syscalls.h"
+            stub.parent.mkdir(parents=True)
+            stub.write_text("struct imported_signal {int si_signo,si_errno,si_code,si_pid,si_uid;};\n"
+                            "static int imported_signal_fields(void) {struct imported_signal s={1,2,3,4,5};return s.si_signo+s.si_errno+s.si_code+s.si_pid+s.si_uid;}\n")
+            source = "#include <signal.h>\n#include <sys/endian.h>\n" + guard + "\n" + r'''
+int main(void) {
+    siginfo_t native={0};
+    native.si_signo=SIGUSR1; native.si_errno=1; native.si_code=2;
+    native.si_pid=123; native.si_uid=456;
+    return !(imported_signal_fields()==15 && native.si_signo==SIGUSR1 &&
+             native.si_errno==1 && native.si_code==2 &&
+             native.si_pid==123 && native.si_uid==456);
+}
+'''
+            (work / "probe.c").write_text(source)
+            subprocess.run(["/usr/bin/gcc", "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-I", str(work), "-o", str(work / "probe"), str(work / "probe.c")], check=True, timeout=30)
+            subprocess.run([str(work / "probe")], check=True, timeout=10)
+
     @unittest.skipUnless(platform.system() == "NetBSD", "native NetBSD mmap semantics")
     def test_native_exact_mmap_preserves_collision_and_cleans_only_its_mapping(self):
         patch = (BUILDER.ROOT / BUILDER.HOST_PATCH).read_text()

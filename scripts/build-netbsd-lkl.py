@@ -24,13 +24,14 @@ SOURCE_SHA256 = "ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e16
 SOURCE_URL = f"https://codeload.github.com/lkl/linux/tar.gz/{REVISION}"
 ROOT = Path(__file__).resolve().parent.parent
 HOST_PATCH = "native/netbsd/lkl/host.patch"
-HOST_PATCH_SHA256 = "9523d3917b394d1ea9a1425b7d5b0c1813baf258fe0e5188e2cc6e7fdcf1f0a5"
+HOST_PATCH_SHA256 = "f7de5f38e904c46ed79458866ddb404d61d63f561d0d94eecd3c93fed8a9ca7a"
 FLUSH_PATCH = "native/macos/lkl-darwin-flush.patch"
 FLUSH_PATCH_SHA256 = "0dd2c89942ede5a2c373191601054dcd9b2e4e17c4e1b1c568d02a2bfc8fcf8b"
 ELF_HEADER_URL = "https://raw.githubusercontent.com/bminor/glibc/glibc-2.42/elf/elf.h"
 ELF_HEADER_SHA256 = "fd6e7f3e3c74ee9d64b9f92ce3cc31b34413ca2622a167320ea053ce9a68110f"
 PATCH_TARGETS = {"tools/lkl/Makefile", "tools/lkl/Makefile.autoconf", "tools/lkl/Targets",
-                 "tools/lkl/lib/posix-host.c", "tools/lkl/lib/virtio_blk.c", "tools/lkl/lklfuse.c"}
+                 "tools/lkl/lib/posix-host.c", "tools/lkl/lib/virtio_blk.c", "tools/lkl/lklfuse.c",
+                 "tools/lkl/include/lkl.h"}
 
 
 def digest(path):
@@ -248,7 +249,7 @@ def main():
                 native_bin.mkdir(exist_ok=True)
                 interpreter = str(Path(sys.executable).resolve(strict=True))
                 for name, target in {"python3": interpreter, "sed": "/usr/pkg/bin/gsed",
-                                     "stat": "/usr/pkg/bin/gstat"}.items():
+                                     "stat": "/usr/pkg/bin/gstat", "sha1sum": "/usr/pkg/bin/gsha1sum"}.items():
                     alias = native_bin / name
                     if alias.exists() or alias.is_symlink():
                         if not alias.is_symlink() or os.readlink(alias) != target:
@@ -266,7 +267,7 @@ def main():
                 receipt["overlay_inputs"] = {str(path.relative_to(overlay)): digest(path)
                                               for path in overlay.rglob("*") if path.is_file()}
                 headers = [Path("/usr/include") / name for name in
-                           ("sys/bswap.h", "sys/endian.h", "sys/mman.h", "sys/sysctl.h", "sys/proc.h")]
+                           ("sys/bswap.h", "sys/endian.h", "sys/mman.h", "sys/sysctl.h", "sys/proc.h", "sys/siginfo.h", "signal.h")]
                 headers.extend(Path("/usr/include/refuse").glob("*.h"))
                 receipt["native_sdk_inputs"] = {str(path): digest(path) for path in headers}
                 receipt["toolchain"] = {name: subprocess.check_output(command, text=True)
@@ -283,6 +284,14 @@ def main():
             receipt.update(command=command, log=str(log), state="building")
             args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
             receipt.update(run_build(command, source / "tools/lkl", environment, log, args.timeout))
+            generated = [source / name for name in
+                         (".config", "tools/lkl/Makefile.conf", "tools/lkl/include/lkl_autoconf.h",
+                          "arch/lkl/include/generated/uapi/asm/syscall_defs.h")]
+            receipt["generated_inputs"] = {str(path.relative_to(source)): digest(path)
+                                            for path in generated if path.is_file()}
+            if (source / ".config").is_file():
+                receipt["filesystem_configuration"] = [line for line in (source / ".config").read_text().splitlines()
+                                                        if re.match(r"(?:# )?CONFIG_(?:BTRFS_FS|XFS_FS|MMU|KASAN|UFS_FS|UFS_FS_WRITE|NET)(?:=| )", line)]
             receipt["state"] = "terminal"
     except BaseException as error:
         receipt.update(state="error", error=repr(error))

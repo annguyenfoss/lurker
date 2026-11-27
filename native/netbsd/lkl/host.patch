@@ -201,3 +201,85 @@
  
  	ret = lkl_init(&lkl_host_ops);
  	if (ret < 0) {
+--- a/tools/lkl/include/lkl.h
++++ b/tools/lkl/include/lkl.h
+@@ -20,7 +20,79 @@
+ #pragma push_macro("__unused")
+ #undef __unused
+ 
++#if defined(__NetBSD__)
++/* Native signal aliases must not rewrite imported LKL field names. */
++#pragma push_macro("si_fd")
++#undef si_fd
++#pragma push_macro("si_args")
++#undef si_args
++#pragma push_macro("si_pid")
++#undef si_pid
++#pragma push_macro("si_pe_lwp")
++#undef si_pe_lwp
++#pragma push_macro("si_addr")
++#undef si_addr
++#pragma push_macro("si_status")
++#undef si_status
++#pragma push_macro("si_signo")
++#undef si_signo
++#pragma push_macro("si_uid")
++#undef si_uid
++#pragma push_macro("si_errno")
++#undef si_errno
++#pragma push_macro("si_error")
++#undef si_error
++#pragma push_macro("si_retval")
++#undef si_retval
++#pragma push_macro("si_pe_other_pid")
++#undef si_pe_other_pid
++#pragma push_macro("si_value")
++#undef si_value
++#pragma push_macro("si_utime")
++#undef si_utime
++#pragma push_macro("si_sysnum")
++#undef si_sysnum
++#pragma push_macro("si_stime")
++#undef si_stime
++#pragma push_macro("si_trap2")
++#undef si_trap2
++#pragma push_macro("si_trap3")
++#undef si_trap3
++#pragma push_macro("si_trap")
++#undef si_trap
++#pragma push_macro("si_band")
++#undef si_band
++#pragma push_macro("si_pe_report_event")
++#undef si_pe_report_event
++#pragma push_macro("si_code")
++#undef si_code
++#endif
+ #include <lkl/asm/syscalls.h>
++#if defined(__NetBSD__)
++#pragma pop_macro("si_code")
++#pragma pop_macro("si_pe_report_event")
++#pragma pop_macro("si_band")
++#pragma pop_macro("si_trap")
++#pragma pop_macro("si_trap3")
++#pragma pop_macro("si_trap2")
++#pragma pop_macro("si_stime")
++#pragma pop_macro("si_sysnum")
++#pragma pop_macro("si_utime")
++#pragma pop_macro("si_value")
++#pragma pop_macro("si_pe_other_pid")
++#pragma pop_macro("si_retval")
++#pragma pop_macro("si_error")
++#pragma pop_macro("si_errno")
++#pragma pop_macro("si_uid")
++#pragma pop_macro("si_signo")
++#pragma pop_macro("si_status")
++#pragma pop_macro("si_addr")
++#pragma pop_macro("si_pe_lwp")
++#pragma pop_macro("si_pid")
++#pragma pop_macro("si_args")
++#pragma pop_macro("si_fd")
++#endif
++
+ 
+ #pragma pop_macro("__unused")
+ 
