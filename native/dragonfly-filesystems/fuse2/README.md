@@ -29,3 +29,12 @@ passes; actual linked-driver INIT and mounted payload proof remain required.
 Privileged use requires review and a verified copy into an administrator-owned
 external prerequisite prefix. No loader override or user-writable executable may
 be elevated.
+
+The legacy BSD library unmount helper uses MNT_FORCE and discards its result.
+A qualified native client must avoid both `fuse_mount` and `fuse_unmount`, use
+the exported unmounted channel constructor, and prove global captured-FSID
+absence before session/channel destruction. `tests/channel.c` verifies the real
+native exported constructor, session attachment and descriptor disposal without
+mounting anything. It uses the exact installed compatibility declaration because
+that compatibility header prohibits direct inclusion at API26. This API control
+does not qualify the client's mounted lifecycle.
