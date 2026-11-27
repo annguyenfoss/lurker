@@ -1,5 +1,15 @@
 # Fedora fresh qualification — in progress
 
+Current checkpoint: exact follow-up source
+`67894f68525c55d5cbb48c743e1a98a308bd970f` passed workspace check, tests and build;
+all 408 archived source files retain their hashes. Native packaging awaits the
+coordinated host-FUSE dependency export and stager revision. The earlier
+`576505d` package completed 60 container cells, 75 physical cases, six direct
+helper samples and 204 conformance subcases. Those results retain their original
+artifact identity; the older private-FUSE closure does not satisfy the final
+packaging gate. Reboot persistence and the new installed-artifact gates remain
+pending. Historical sections below describe observations at their named stage.
+
 Host owner: `fedora`, exclusive `adjutant@fedora-core-01`. This report concerns
 fresh execution only. Previous installed artifacts supply inspected backend and
 host-tool inputs, never pass receipts. Windows and nested compatibility systems
@@ -113,8 +123,8 @@ Private local evidence:
   `logs/backend-input-hashes.log`, `logs/candidate-fresh-upstreams.log` preserve
   host/update/input details.
 
-No qcow2 has been attached or overwritten yet. All applicable container cases
-precede scratch-device work. Native device runner verifies the unique scratch
+At the initial container checkpoint no qcow2 had been attached or overwritten.
+All applicable container cases preceded scratch-device work. The device runner verifies the unique scratch
 serial and active children immediately before destructive product creation.
 Native LUKS2/UFS1 research after the initial batch **passed** with explicit
 512-byte sectors and unchanged approved AES-XTS/plain64, 512-bit key and Argon2id
@@ -326,4 +336,37 @@ suite also passes, including negative responses and terminal-session persistence
 The last physical VeraCrypt/keyfile/Btrfs sample remains for ordinary reboot
 verification. The committed `FEDORA_HELPER_REBOOT.py` checks its identity and
 payload without formatting it. Packaged lifecycle conformance and ordinary
-reboot verification remain in progress.
+reboot verification were still pending at that helper checkpoint.
+
+## Completed conformance and UFS2 pagination prerequisite
+
+The `576505d` conformance queue subsequently completed 204 passing subcases:
+108 native kernel-route cases, 36 directory-route cases, and 60 VeraCrypt
+binary-keyfile cases across AES, Serpent and Twofish. There were no failures or
+skips. Compact logs and JSON are retained in
+`validation/576505d-runtime-conformance-evidence.tar.gz`.
+
+Debian's retained physical UFS2 fixture exposed a separate host-driver defect:
+create, fsync and stat succeeded, but subsequent directory enumeration omitted
+the new name. The pinned FUSE driver incorrectly returned EOF for every nonzero
+directory offset. The minimal host-only `FEDORA_FUSE_UFS_READDIR.patch` corrects
+that pagination check (commit `9e27dcc`, SHA256
+`e5749cfe9b04b036843c43d5a75ccdb03af2f28c46add783dccdcca64ee41134`).
+Apply it after the rename and barrier patches to the same pinned upstream source.
+The external source clone records the third change as `6f8dab2`.
+
+All 28 rufs tests and the release build pass. On Fedora the old two-patch driver
+enumerated 204 of 512 long names and hid a newly created entry. The corrected
+driver enumerates all 512, then all 513 after creation, with equal repeated scans.
+Seven rename/collision controls and three normal/injected-EIO fsync controls also
+pass. The administrator-controlled installed driver SHA256 is
+`237e0467fa4da053c721dd171b71243aee4c7e056a9b66054d6e4ed938c70f30`;
+installation occurred after all prior UFS sessions closed. Both prior binaries
+and all failure receipts remain retained. This driver is never bundled in Lurker.
+
+The follow-up gate will exercise all twelve UFS2 slots using this driver: three
+disk methods and three directory engines for containers and physical storage.
+The earlier physical directory backing used the configured kernel UFS2 writer;
+that remains separate coverage. The new physical backing explicitly selects the
+corrected host FUSE driver. New normal-user password/keyfile fixtures will also
+join the ordinary reboot cohort, retaining their creation and reopen identities.
