@@ -1,7 +1,9 @@
 # FreeBSD fresh qualification checkpoint
 
-This is an ordinary-route checkpoint, not a final complete host pass. Final container/device matrices and reboot
-persistence are still in progress. Product integration, desktop callbacks and
+This is an ordinary-route checkpoint, not a final complete host pass. Final
+installed container/device matrices have finished. An ordinary shutdown
+with 33 qualified mounted fixtures stalled; reboot persistence and final cleanup
+have not passed. Product integration, desktop callbacks and
 canonical package installation have completed the gates recorded below. Old reports are not counted as fresh passes.
 Private receipts are under `target/goal-validation/native-fresh-20261127/hosts/freebsd/`;
 remote logs and preserved fixtures are under `/srv/lurker-fresh-20261127/`.
@@ -101,8 +103,8 @@ and `ntfs-3g` paths after clearing the environment. With the owned guard
 removed, product container (seven operations) and physical partition (14
 operations) lifecycles both pass, including Auto and conformance guards.
 This was an ordinary driver cache configuration gap, not an OS or sector-size
-impossibility. These are scoped overlay retests; final frozen replay remains
-pending. Native fixture is `native-geli4096-ntfs-noublio-1795731158`, product
+impossibility. The final installed container and physical replay also passes.
+Native fixture is `native-geli4096-ntfs-noublio-1795731158`, product
 container `lurker-fs-cli-miq3lut4`, physical `product-geli-preview-1795731313`
 on `/dev/vtbd2p7`. Native PEFS over fresh NTFS failed a nested Bitcoin write
 with `EBADF`; over exFAT it failed opening the nested payload with `ENOENT`.
@@ -131,13 +133,15 @@ assessment is reported. No such custom build has started.
 The private `cases/applicability.json` enumerates all **130 method/filesystem
 cells**, with initial receipts and scoped retests. GELI/NTFS now raises the
 current successful pair count to 31; the initial 41 attempts remain 30 passes
-and 11 non-passes. Final frozen receipt reconciliation is pending. OS-specific hdiutil,
+and 11 non-passes. The installed replay is reconciled separately below.
+OS-specific hdiutil,
 diskutil, CGD and softraid methods are not FreeBSD providers. No eligible native
 LUKS1/LUKS2 read/write implementation has been established: libluksde is an
 experimental read-only LUKS1 reader and explicitly excludes LUKS2. libfsapfs is
-an experimental read-only APFS reader. Cryptomator's current JNI FUSE provider
-has Linux/macOS/Windows ABI layouts without a FreeBSD provider; it needs a
-native port, not merely installation of an ordinary missing package. These
+an experimental read-only APFS reader. Cryptomator's selected Java FFM provider
+has Linux/macOS/Windows ABI layouts
+without a FreeBSD provider; actual native assessment below leaves this as
+feasible integration work, not an unavailable platform. These
 are explicit current limitations, not compatibility-layer passes.
 
 Representative baseline conformance completed **11 suites, 132 passed,
@@ -179,14 +183,15 @@ busy-close preservation, no-force refusal, system/build-pool disk refusal and
 partitioned-whole-disk refusal. Preview fixture is
 `product-geli-preview-1795730659`. Earlier p3 creation succeeded but the private
 wrapper called a function absent from its older harness; that failed receipt
-and its closed partition are retained. Full frozen product/device validation
-and desktop physical-source exposure remain pending.
+and its closed partition are retained. The final installed physical matrix and
+the later desktop physical-source
+controls below supersede this preview; its source identity remains separate.
 
 After that preview, owned crypto mappings and plaintext mounts had closed. The
 scoped conformance nullfs mount and dedicated build pool remain intentional.
 Each completed user-FUSE batch restored `vfs.usermount` to its original zero.
-The newer final matrix below is actively using its own fixtures; final cleanup
-and orderly reboot persistence have not yet been counted.
+The newer final matrix below uses its own fixtures. Final cleanup and orderly
+reboot persistence have not passed; the failed ordinary shutdown is recorded below.
 
 ## Final ordinary candidate and remaining native gaps
 
@@ -228,14 +233,87 @@ those UI changes. The final package window check supplements those callbacks.
 The fresh final device is the independent 8 GiB qcow2
 `/srv/build/lurker-native-fresh-20261127/freebsd/device-final.qcow2`, domain
 `freebsd-core-01`, target vdd, guest `/dev/vtbd3`, serial `lurker-fb-final-data`.
-Native size/serial/idle state were verified before creating 17 retained GPT
-partitions. Final container and device batches use the same installed binaries;
+Native size/serial/idle state were verified before partitioning. Eighteen GPT
+partitions are now retained, including a failed private helper attempt on p17
+and its successful fresh p18 retest. Final container and device batches use the
+same installed binaries;
 all **14/14 physical rows** (seven filesystems times GELI/VeraCrypt) have passed
 108 CLI operations. All original hashes match, all append hashes match the final
 five hashes, all targets are UID/GID 1300 mode 0700 and all 14 closed normally.
-Both physical Serpent/Twofish binary-key variants also pass. Directory backings,
-scoped conformance, helper and reboot gates remain in progress; these counts do
-not imply complete host qualification.
+Both physical Serpent/Twofish binary-key variants also pass.
+
+The final installed file/container and directory-on-file-backed matrix has
+**41 attempts: 31 passes, six guards and four retained directory gaps**. All 31
+passing receipts match the original pinned hashes and append/final five-file
+hashes, and all 41 close. The six guards are Btrfs/XFS for both disk methods
+(policy/integration pending) and APFS for both (no qualified write route).
+The four gaps remain PEFS and bundled CryFS on NTFS/exFAT.
+
+The separate directory-on-physical-device batch has **21 attempts: 17 passes
+and the same four gaps**. This covers PEFS/gocryptfs/CryFS on all seven actual
+native filesystems backed by the fresh GELI partitions. Passing PEFS/HAMMER2 is
+qualified to its original same-HAMMER2 plaintext target; the external ZFS target
+limitation below must not be inferred to pass. All completed inner and outer
+mounts closed normally before the later reboot-access batch reopened them.
+
+Installed conformance adds **36 passes, zero failures**: CryFS and VeraCrypt AES
+with password and binary-key credentials, including explicit/Auto and negative
+controls. The earlier 132 passes retain their own baseline source and artifact
+identities; unchanged PEFS/gocryptfs and additional VeraCrypt option coverage is
+carried from those fresh controls, not relabeled as installed-package results.
+Installed helper file and fresh physical p18 lifecycles each pass seven
+operations, actual UID 1300 payload I/O, three payload opens, pinned hashes and
+normal close. A private plan permission failure and a parallel native-listing
+deadline on p17 are retained; p18 used a readable sanitized identity and a
+240-second native-query deadline on an otherwise quiescent host.
+
+### Actual caller access and failed ordinary shutdown
+
+Historical full PDF writer/reader credentials were audited separately from
+ownership metadata. The final 14 direct rows, GELI/VeraCrypt file rows and PEFS
+payload rows used UID 0; `SUDO_UID=1300` selected target ownership but did not
+change the writer's effective UID. gocryptfs/CryFS and both final helper payloads
+used actual UID 1300. Root-created payload file ownership is not proof of caller
+access and is not silently reassigned.
+
+A subsequent scoped access batch passes **33 actual UID 1300 nonce-file
+write/fsync/read controls** and **33 unrelated UID 65534 list/read/write denial
+controls**, with every plaintext ancestor searchable: 14 physical rows, two
+helper-created fixtures and 17 qualified directory backings. These are access
+proofs, distinct from the historical full PDF root-writer phases. The nonce
+files were retained for post-reboot checks.
+
+That access batch exposed a genuine PEFS/HAMMER2 mount-target limitation. With
+the plaintext target on ZFS, both root and UID 1300 create/fsync succeed but
+lookup/read returns ENOENT. Filename lengths 8/33/64/80/128 all reproduce it;
+plain HAMMER2 controls pass, and making the ciphertext fixture ancestor
+searchable does not fix it. A fresh native PEFS-only control with the same
+AES256-XTS/600000 profile reproduces all five failures on an external ZFS
+target and passes all five on a same-HAMMER2 target. The installed product at
+its original same-HAMMER2 target passes caller write/read and unrelated-user
+denial. Failed external-target mounts closed normally, and receipts/files were
+preserved. This is not attributed to caller permissions or filename length.
+
+After all 33 qualified mounts and access gates were observed, the authorized
+ordinary `shutdown -r now` was issued. It **did not complete**. The console
+reached buffers-synced output, detached helper GELI mappings, then reported an
+unrecoverable I/O failure and suspension of the final physical VeraCrypt/ZFS
+pool `lurker_96445_1795736711956201591_5`. SSH refuses connections; the same live
+VM remains running with an unchanged console. No force reset, detach, hidden
+reconciliation or shutdown hook has been introduced. Local
+`validation/shutdown-observation-20261127T010848Z/` retains console SHA-256
+`8f6105d19cc6c318c99d6b8e8e9e87c85ae858e476ee58f75bb8e71b03ca0f46`,
+domain XML, QMP state, block backing paths and resource observations. The full
+cohort/access receipts remain on the preserved build disk awaiting collection.
+
+Primary FreeBSD 15.1 shutdown sources and VeraCrypt's signal/mount-discovery
+sources support a transport-ordering hypothesis: user processes terminate
+before kernel filesystem shutdown, while ZFS's pool-name mount does not match
+VeraCrypt's literal md-device discovery. The exact transport death sequence is
+not proven without guest diagnostics. Console swap-pager exhaustion warnings
+are retained; their contribution is also unproven because no immediate
+pre-shutdown VM/RSS snapshot was captured. No reboot or final clean-resource
+pass is credited. All qcow backing files are preserved.
 
 Measured filesystem features below describe the created native profiles, not
 all capabilities available under other mount/format options. Both backend rows
@@ -281,6 +359,34 @@ mount/geometry changes remain held pending the user's explicit eligibility
 preference for this separately installed host route. No positive native control
 has been relabeled as a product pass, and no name-based impossibility is claimed.
 
+### Cryptomator ordinary native source assessment
+
+Native Maven 3.9.16 and OpenJDK 25.0.5.1+2-freebsd-1 were installed after the
+immutable crypto matrix. All three private crypto engines and the host FUSE 2
+provider retained their prior hashes. Native Java FFM works on actual FreeBSD
+amd64: the SysV x64 linker calls getuid and returns UID 1300. Native FUSE3 headers
+report `struct stat` size 224 with st_size at offset 112; the selected Linux
+jFUSE generated binding uses offset 48. Selecting that Linux binding would be an
+ABI error, not a valid port.
+
+The unchanged pinned helper and locked runtime dependencies build natively.
+Cryptomator initialization succeeds as UID 1300; mounting fails because neither
+the helper selection nor upstream service providers supply a FreeBSD ABI.
+An ordinary native FUSE 3.18.3 passthrough control demonstrates the host route:
+the upstream example needs documented config direct_io for FreeBSD read/write;
+its fsync stub was replaced by real native fsync/fdatasync before counting
+persistence. That control passes the canonical full payload across three
+mounts, append/final hashes and normal closes as UID 1300. The final fixture is
+`native-fuse3-directio-fsync-control-1795740528`; failed cached-write controls and
+the earlier fsync-stub experiment remain separate.
+
+This establishes native Java/FUSE feasibility, not a Cryptomator product pass.
+Genuine FreeBSD structure/errno bindings, provider registration and helper
+selection remain integration work. No OS masquerade, copied crypto logic,
+shared core enablement or custom kernel change was used. New Java packages also
+installed fonts; the prior installed native desktop-window result remains
+identified, and a post-install window repeat is pending guest recovery.
+
 ## Primary ordinary-route sources inspected this round
 
 - https://docs.freebsd.org/en/books/handbook/filesystems/
@@ -302,3 +408,14 @@ Additional primary source inputs:
 - https://download.tuxera.com/opensource/ntfs-3g_ntfsprogs-2026.9.28.tgz
 - https://github.com/lkl/linux
 - https://api.github.com/repos/lkl/linux/commits/master
+
+Shutdown source inputs and native ABI/provider assessments:
+
+- https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.1/sbin/init/init.c
+- https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.1/libexec/rc/rc.shutdown
+- https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.1/libexec/rc/rc.d/zfs
+- https://raw.githubusercontent.com/freebsd/freebsd-src/releng/15.1/sys/kern/kern_shutdown.c
+- https://raw.githubusercontent.com/veracrypt/VeraCrypt/VeraCrypt_1.26.31/src/Driver/Fuse/FuseService.cpp
+- https://raw.githubusercontent.com/veracrypt/VeraCrypt/VeraCrypt_1.26.31/src/Core/Unix/FreeBSD/CoreFreeBSD.cpp
+- https://github.com/cryptomator/jfuse
+- https://github.com/libfuse/libfuse/blob/fuse-3.18.3/example/passthrough.c
