@@ -154,8 +154,12 @@ The private audit is
 It records a harness provenance-field bug: eleven physical rows contain the
 preceding filesystem proof where the shared initial disk reverification belongs.
 The first row and GUI receipt retain that full proof, and all rows retain their
-original sentinel-bound disk identities. Original receipt preservation and an
-explicit metadata correction are pending. CryFS physical backings, credential
+original sentinel-bound disk identities. Root subsequently verified exact
+preservation of all twelve original receipts and separate corrected copies:
+only that provenance field changes, with all payloads, actions and outcomes
+unchanged. The correction is audited in
+`hosts/openbsd/validation/root-physical-metadata-correction-audit.json`; it adds
+no new storage execution or per-case device poll. CryFS physical backings, credential
 conformance and ordinary reboot qualification remain active; these milestones
 do not establish whole-round completion.
 
