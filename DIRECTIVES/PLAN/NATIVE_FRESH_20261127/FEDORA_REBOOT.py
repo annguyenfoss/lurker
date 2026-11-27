@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reopen the retained Fedora final sweep after an observed ordinary reboot."""
-import argparse, hashlib, importlib.util, json, os, subprocess, time
+import argparse, hashlib, importlib.util, json, os, re, subprocess, time
 from pathlib import Path
 
 
@@ -9,10 +9,17 @@ def main():
     for key in ('matrix', 'binary', 'harness', 'output'):
         p.add_argument('--' + key, type=Path, required=True)
     p.add_argument('--before-boot-id', required=True)
+    p.add_argument('--runtime-commit', required=True)
+    p.add_argument('--creation-artifact', action='append', default=[], help='Explicit prior COMMIT:SHA256 identity for unchanged encrypted fixtures')
     p.add_argument('--prepare', action='store_true', help='Verify and leave owned fixtures mounted before reboot')
     a = p.parse_args()
     if os.geteuid() == 0 or os.uname().nodename != 'fedora-core-01':
         p.error('Run as the Fedora login user')
+    if not re.fullmatch(r'[0-9a-f]{40}', a.runtime_commit): p.error('Full runtime commit is required')
+    prior = []
+    for identity in a.creation_artifact:
+        if not re.fullmatch(r'[0-9a-f]{40}:[0-9a-f]{64}', identity): p.error('Creation identity must be full COMMIT:SHA256')
+        prior.append(tuple(identity.split(':')))
     boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     if not a.prepare and boot == a.before_boot_id: p.error('Boot ID did not change')
     if a.prepare and boot != a.before_boot_id: p.error('Unexpected boot before preparation')
@@ -23,7 +30,7 @@ def main():
     a.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     result = dict(host=os.uname().nodename, kernel=os.uname().release,
         phase='prepare' if a.prepare else 'verify', before_boot_id=a.before_boot_id, after_boot_id=boot,
-        binary_sha256=h.file_hash(a.binary), cases=[], status='running')
+        binary_sha256=h.file_hash(a.binary), runtime_commit=a.runtime_commit, explicit_prior_creation_artifacts=prior, cases=[], status='running')
     receipt = a.output / 'reboot.json'
 
     def save(): h.atomic_json(receipt, result)
@@ -38,7 +45,7 @@ def main():
         if old.get('status') != 'passed': return
         privileged = row['route'] == 'privileged'
         new = dict(backend=row['backend'], filesystem=row['filesystem'], route=row['route'],
-                   source=old['source'], status='running', operations=[])
+                   source=old['source'], creation_commit=old['commit'], creation_binary_sha256=old['binary_sha256'], runtime_commit=a.runtime_commit, status='running', operations=[])
         result['cases'].append(new); save()
         mountpoint = Path(old['mountpoint'])
         credential_path = Path(old['fixture']) / '.generated-test-credential'
@@ -60,7 +67,9 @@ def main():
             return json.loads(process.stdout)
         try:
             password = native(['cat', credential_path]) if privileged else credential_path.read_text()
-            if old['binary_sha256'] != result['binary_sha256']: raise RuntimeError('Candidate binary changed')
+            creation_identity = (old['commit'], old['binary_sha256'])
+            if creation_identity not in [(a.runtime_commit, result['binary_sha256']), *prior]:
+                raise RuntimeError('Creation/runtime artifact transition was not explicitly identified')
             cli('mount', [old['source'], mountpoint])
             identity_path = mountpoint if privileged else Path(old['source'])
             identity = h.linux_mount_record(Path('/proc/self/mountinfo').read_text(), identity_path)
