@@ -774,3 +774,23 @@ in `validation/lkl-driver-final12/`, bound by archive
 `db3d520a847fa137c5e76555645dbe8c285ebe8127979fbb32dc448d233050ca`
 (191 files). Product write guards and the previous v5 failed startup/recovery
 state remain unchanged. No Lurker product or final-package pass is claimed.
+
+
+The exact final12 tool is now explicitly installed as the external prerequisite
+`/usr/local/sbin/lklfuse-host-io`, with root-owned metadata/license under
+`/usr/local/share/lkl-host-io/`. Binary mode is 0555, metadata/license 0644,
+directories 0755; all ancestors are administrator controlled. The canonical
+protocol query passes. `validation/lkl-driver-final12/canonical-install.json`
+records this setup; no service, private backend or product admission is enabled.
+
+For upcoming product device cases, a new standalone 24-GiB qcow2 is attached
+live and persistently to the same domain
+`04179a0f-f945-4351-bb07-c4235a9e60c7` at target `vde`:
+`/srv/build/lurker-native-fresh-20261127/freebsd/lkl-data.qcow2`.
+Guest `/dev/vtbd4` independently reports serial `lurker-fb-lkl-data`,
+25769803776 bytes, 512-byte sectors and idle access state. No GPT exists and
+the first/last MiB are zero. Only read checks have run; device formatting awaits
+the applicable new product-container cases. `device-lkl/` retains before/after
+live/persistent XML, qcow metadata and guest identity receipts. All four
+previous disks are preserved. Any later VM state-preservation/recovery inventory
+must include this fifth disk; no reboot or recovery action was performed.
