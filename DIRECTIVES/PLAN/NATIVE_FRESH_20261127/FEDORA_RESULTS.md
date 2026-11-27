@@ -2,8 +2,8 @@
 
 Current checkpoint: exact follow-up source
 `67894f68525c55d5cbb48c743e1a98a308bd970f` passed workspace check, tests and build;
-all 408 archived source files retain their hashes. Native packaging awaits the
-coordinated host-FUSE dependency export and stager revision. The earlier
+all 408 archived source files retain their hashes. The corrected six-backend
+stage passes; native RPM creation and installed-artifact gates are running. The earlier
 `576505d` package completed 60 container cells, 75 physical cases, six direct
 helper samples and 204 conformance subcases. Those results retain their original
 artifact identity; the older private-FUSE closure does not satisfy the final
@@ -370,3 +370,27 @@ The earlier physical directory backing used the configured kernel UFS2 writer;
 that remains separate coverage. The new physical backing explicitly selects the
 corrected host FUSE driver. New normal-user password/keyfile fixtures will also
 join the ordinary reboot cohort, retaining their creation and reopen identities.
+
+## Corrected host-FUSE packaging
+
+Packaging uses producer `7d8f9a4275f24fc1c303afe52c33d862e190e2db` and
+consumer `fa063ac5292a8b47ebfae2dafa083b9700c249ef`, separately from Rust
+source `67894f6`. Fedora's native dependency export correctly refused to publish
+an incomplete license inventory: installed `zlib-ng-compat` omits notices that
+belong to its uninstalled sibling source package `zlib-ng`. That failed fresh
+export remains preserved; no notice was omitted or fabricated.
+
+The licensed Debian export archive SHA256 is
+`5282c969dffbdfbb3bdefb3ca3ffb1320ba82c58677d7d60da9398dc1accc2e0`.
+All eight private-library/license inventory files and the creator SHA256
+`7975cc4724d558fd10bafcc670627c56959a1c76d721f7f83dce855eb0052769`
+remain unchanged. The qualified producer measured Fedora's actual native FUSE
+provider and a new derived envelope records that binding without introducing
+Debian path aliases. Native validation confirms `/lib64/libfuse3.so.4` resolves
+to administrator-controlled `/usr/lib64/libfuse3.so.3.18.3`, supplied by
+`fuse3-libs-3.18.3-1.fc45`, SHA256
+`d6e5f6fefbdc478161cf437ccfa3f4519d81c5bc57a0221ebe166327e60e5f2b`.
+The corrected manifest SHA256 is
+`d64461c6084e0df799ab9c5fa47b149045d43e2a733c647f83212762bc46d38b`.
+No FUSE runtime or filesystem driver belongs in the new package. Final package
+inventory, actual loader resolution and runtime tests remain separate gates.
