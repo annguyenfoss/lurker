@@ -1,9 +1,9 @@
 # Arch Linux fresh native qualification
 
-Status: final follow-up running. No prior-round runtime receipts count. All
-applicable container and physical baseline cells are reconciled; stock UFS1 is
-blocked by its read-only driver. Physical cipher variations, final desktop and
-reboot gates remain in progress.
+Status: ordinary-route qualification complete. No prior-round runtime receipts
+count. Applicable container and physical cells, final installed-package gates and
+ordinary reboot are reconciled. Stock UFS1 remains blocked by its read-only
+driver; custom kernel builds remain deferred by the round authority.
 
 The synchronized pacman update and orderly reboot completed. Running kernel is
 `7.3.6-arch1-1`; boot ID changed from `68eb9a41-7454-4f21-9dbf-165c9e7f6951`
@@ -96,9 +96,33 @@ Three physical UFS1 creates safely reject read-only initialization without owned
 mounts or children remaining. Each changed disk was exported and all one-GiB
 bytes verified before the next overwrite. The LUKS2 UFS1 header confirms sector
 size 512 and unchanged Argon2id memory 1,048,576 KiB. These are successful
-negative controls, not writable-UFS1 passes. Physical cipher/keyfile factors,
-final window/default callbacks, fresh helper file cohort and ordinary reboot
-verification are still running or queued.
+negative controls, not writable-UFS1 passes. All 15 additional physical factors
+passed: Serpent/Twofish passwords for three disk methods and AES/Serpent/Twofish
+binary keyfiles for all three. The earlier AES-password physical cells retain
+their 576505d identities.
+
+The final installed desktop opened its real winit/software-rendered window;
+the screenshot was visually inspected with the complete form visible. Actual
+native-default gocryptfs and LUKS callbacks passed through the packaged helper,
+without a test-only source overlay. Fresh strict helper file/folder preparation
+passed all six methods. The seven-fixture cohort additionally includes the last
+physical LUKS2/Twofish/keyfile volume. An ordinary reboot changed boot ID to
+`e911aeb7-a447-4568-b1c2-ce48a5a41044` on the same updated kernel. All seven
+reopened, verified prior hashes, appended and created a new file, closed normally,
+reopened and verified all six hashes, then closed. The cohort records 92 complete
+strict-JSON responses. HAMMER2 was initially unloaded after boot and loaded
+through normal Auto reopen; it was not manually preloaded.
+
+The physical factor's original payload is private UID0 data, while the filesystem
+root belongs to UID1300 at mode 0700. The initial actual-user verifier correctly
+received EACCES on that root-private tree; its failed receipt and full raw image
+are retained. A separate UID1300 payload tree was written/fsynced/read and
+verified across normal close/reopen and reboot, without chowning the old data.
+Explicit UID0 verification covers the root-written tree. Both trees passed
+post-reboot append/new-file and close/reopen hashes. A private test's additional
+mode assertion on public paper files was corrected to record their actual modes;
+those files remain UID1300/0644 under a private 0700 directory. Its receipt and
+raw snapshot are retained, with no product/source change inferred.
 
 The baseline additionally passed 18 Btrfs cipher/authentication/Auto variations,
 36 kernel and 36 folder conformance cases, and an actual native desktop
@@ -139,9 +163,12 @@ hash receipts but lost their console-log bytes when their backings were
 reformatted. This limitation is retained; ZFS logs were recovered before its
 format was cleared, and affected reruns preserve external logs. The retired
 576505d reboot cohort's 327 files were fully archived and byte-verified before
-three closed guest images were reclaimed. Only fully transferred terminal
-staging artifacts and successful closed synthetic ciphertext have otherwise
-been reclaimed. Unrelated storage, jobs and cached sources are preserved.
+three closed guest images were reclaimed. The completed final cohort
+additionally has a complete 415-file archive with every byte/hash verified before
+its three passed closed guest images were reclaimed. Transferred terminal
+staging artifacts and passed closed synthetic ciphertext were reclaimed with
+source/inode/resource guards. Unrelated storage, jobs and cached sources are
+preserved.
 
 Private evidence is under
 `target/goal-validation/native-fresh-20261127/hosts/archlinux/`, including the
@@ -149,5 +176,14 @@ Private evidence is under
 manifests, driver/tool provenance, per-case operation/hash receipts, failed raw
 snapshots, conformance/feature results and live checkpoint. Persistent remote
 root is `/home/adjutant/.cache/lurker/native-fresh-20261127-archlinux`, exposed by
-`/tmp/lurker-native-fresh-20261127-archlinux`. Final reboot, cleanup and scratch
-detachment are pending; this report does not claim completed qualification.
+`/tmp/lurker-native-fresh-20261127-archlinux`. Final cleanup confirms no owned
+mounts, loops, mappers or backend processes. The owned scratch disk and SCSI
+controller were detached from both live and persistent domain configuration;
+original disks/controllers match the pre-test XML. The qcow2 remains at
+`/srv/build/lurker-native-fresh-20261127/archlinux/scratch-576505d.qcow2`, mode
+0600, with temporary QEMU access removed and a clean qemu-img integrity check.
+Its final guest raw SHA-256 is
+`3e6a42aeeb53f568620e00cc32f3fdcef7db6e15e3e4f2f0f6ae1d30452dc0d5`.
+The guest has approximately 1.9 GiB free after guarded cleanup. The remaining
+ordinary-route limitation is the stock UFS1 writer; historical evidence limits
+above remain explicit.
