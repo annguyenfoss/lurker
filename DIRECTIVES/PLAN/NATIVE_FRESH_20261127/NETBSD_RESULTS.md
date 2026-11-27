@@ -104,6 +104,12 @@ partition), and `hosts/netbsd/cases/applicability-final.json` (all 130 cells).
 The executed harness hashes and exact source/package manifests are under
 `hosts/netbsd/build/`. These are relative to the round's private evidence root.
 
+Final post-boot integrity rechecked all 860 manifest entries plus the manifest
+itself (861 packaged payload files), matching hashes, root ownership and safe
+modes. Three successfully verified closed reboot containers were hashed before
+removal; failed fixtures and all parameter/receipt evidence were preserved. The
+host has 1.9 GiB free and no owned crypto processes remain.
+
 ## Earlier fresh investigations and artifact identities
 
 
