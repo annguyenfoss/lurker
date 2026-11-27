@@ -181,6 +181,26 @@ reboot preparation. Its failed receipt is retained; the supported `--help`
 probe passed and preparation resumed without a product change. Native windows
 were already successful and were not repeated for that invocation correction.
 
+## Shared snapshot regression after qualification
+
+Exact committed source `c3dd43bf19657baecc89c6e69bb5910e0cfd2dcd` subsequently
+passed the bounded Debian workspace check/test regression, run
+`20261127T012205Z-7bfadbd0`: **171 passed, zero failed, 15 ignored**. The new
+held-snapshot replacement/transient-link/persistent-link test passed. Source
+came from its exact Git archive, SHA-256
+`12124a343d9742e66832d209b88b87aa387024332a019f373905d5a38e87e8d8`, with no
+worktree overlays. Existing managed Rust 1.100.0/Python 3.15.2 caches were used
+with one Cargo worker after checking for compiler conflicts.
+
+This follow-up runs `cargo check --workspace` and
+`cargo test --workspace --no-fail-fast` only. The installed qualified package
+remains `67894f6`, with all three component hashes unchanged. Its original GUI
+test executable was preserved with its recorded hash before compiler-cache
+reuse. Source, check/test logs, counts and retention receipts are under
+`validation/session-snapshot-c3dd43b.json` and
+`build/session-snapshot-c3dd43b/` in the private evidence root; the complete job
+also remains in the owned VM's retained-build directory.
+
 ## Evidence and retained storage
 
 Private evidence root:
