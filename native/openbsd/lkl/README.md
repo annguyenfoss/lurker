@@ -83,3 +83,13 @@ as an ordinary user; keep it private to the build workspace. The producer only
 adds a private alias and records its path/hash/version; it does not replace base
 bc or elevate this tool. Native GNU bc generated the actual HZ100 constants
 successfully; the incompatible-base attempt remains preserved.
+
+`host-contract.c` validates the actual generated Linux stat, signal, packet and
+directory-entry layouts while proving native signal aliases are restored.
+Compile with `LURKER_LKL_ABI_ONLY` for that check alone. Its full form links the
+exact native library and exercises only RAM boot, getpid, a measured nanosleep,
+halt and the explicit post-CPU, pre-free-memory quiescence callback. It registers
+no host disk, links no FUSE library and must run as the ordinary qualification
+user. Host mounts must remain unchanged. This is a library/ABI/timer proof;
+filesystem callbacks, request credentials, barriers, normal-close handling and
+native formatters remain unqualified.
