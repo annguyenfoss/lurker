@@ -1,10 +1,12 @@
 # Fedora affected Linux contract 5 follow-up — e927e40
 
 The bounded affected runtime checks pass on Fedora as login UID/GID 1300.
-Ordinary installation of the unsigned native RPM remains blocked by the stock
-signature policy. Runtime qualification used its byte-verified payload in a new
-administrator-controlled private prefix. This does not establish an RPM-database
-installation, global launcher/menu integration or uninstall result.
+Runtime qualification used the native RPM's byte-verified payload in a new
+administrator-controlled private prefix. A subsequent, separately authorized
+qualification-only signing control passed normal RPM-database installation,
+installed CLI/helper discovery, actual XDG/GIO desktop launch and uninstall under
+the unchanged stock signature policy. Temporary trust and tools were removed.
+This is not release signing or repository acceptance.
 
 This follow-up is separate from `FEDORA_RESULTS.md` and the original 576505d /
 67894f6 filesystem, physical-device and reboot receipts. Those results retain
@@ -30,6 +32,8 @@ physical-device matrix or ordinary reboot was repeated for this batch.
 The ordinary `rpm -i --test` returned “does not verify: no signature” before
 installation. The dependency-only transaction test passed. Verification policy
 and package trust were preserved; the original 67894f6 private prefix was retained.
+That original unsigned refusal remains evidence; only a separately identified
+signed copy was used for the later normal installation control below.
 
 The Rust frontends were built natively. The independently qualified crypto
 protocol 4, restricted creator and external filesystem protocol 5 binaries were
@@ -87,10 +91,12 @@ filesystems or physical devices.
 
 Private evidence root:
 `target/goal-validation/native-fresh-20261127/hosts/fedora/build/unprivileged-e927/`.
-The completion index contains 136 hashed references and explicit scope/gaps:
+The completion index contains 405 hashed references and explicit scope/gaps:
 
 - `completion-evidence-index.json`, SHA-256
-  `c3af820981a08733edbd8bc185775da96fafe2bedd305da817ae9ffb3a5dcc10`.
+  `0f507e14ef97ed05dc293bab0979766402476441e7458039adba08b6eaef8a8e`.
+  The previous index, SHA-256 `c3af820981a08733`, is retained under its full
+  hash-named filename; earlier evidence was not relabeled.
 - `native-e927-receipts-components-package.tar.gz`, SHA-256
   `7886941d4333fdb96f7e47e419ab22a57e4b365073f25fb0554d20e94850384a`:
   all 1,382 collected members, before/after hashes and complete gzip CRC verify.
@@ -122,3 +128,64 @@ Read-only final measurements confirm the earlier configured UFS1 module
 `a13a90c94c41ca34` and three-patch UFS2 driver `237e0467fa4da053` are unchanged.
 Their earlier observed passes remain distinct from stock Fedora limitations.
 No UFS configuration work or new UFS tests occurred in this follow-up.
+
+## Qualification-only normal RPM installation closeout
+
+The disposable signing-only RSA3072 certificate was explicitly labeled
+**DISPOSABLE QUALIFICATION ONLY**, with a one-day lifetime. Its sole full
+fingerprint was `757b5c8c0acb8dce124415df88595d405d60a64a`; public certificate
+SHA-256 is `6472fe732e43d9846cd5335f5f056617f5aff420be03221f93c35b15d6cb7f75`.
+The secret stayed in a private 0700 GnuPG home and was never exported. Only a copy
+of the original RPM was signed: SHA-256
+`384de42deeee08c63059870983689387f575984eee0b569e803e0aa12ea0b538`.
+The immutable header and uncompressed cpio remained identical to the unsigned
+original; the complete cpio SHA-256 is
+`abe72da7cc7faa786eb39ea22465bb62580f3d54497e567bbabfe4c523b67c27`.
+
+Official `rpm-sign` and `desktop-file-utils` were the only two added packages;
+their existing Fedora 45 signatures and transactions were inspected. The RPM
+has no scriptlets or triggers, and all 1,738 candidate paths were collision-free.
+The first controller had a syntax error before host operations. Private user
+RPMDB initialization then failed with EACCES; root wrapper and direct `rpmdb`
+attempts reported ENOENT. A retained syscall trace showed EACCES creating the
+lock followed by ENOENT on a read-only fallback. No matching AVC was observed.
+The private database had generic `var_lib_t`, while the stock database had
+`rpm_var_lib_t`. An expressly approved type-only correction to the exact private
+database inode allowed initialization and verification. The real RPMDB was not
+relabeled; no policy module, boolean, enforcement or signature setting changed.
+
+The root-private isolated database trusted only the pinned certificate and
+verified the signed copy using native RPM tools with explicit `--dbpath` and
+stock `all` / `0x20100` verification settings. After exact hash/fingerprint
+checks, normal system import and `rpm -i --test` / `rpm -ivh` passed. RPMDB NEVRA,
+dependencies, all 1,738 paths, empty `rpm -V`, and the three exact e927 frontend
+ELF hashes verified. Installed CLI help and helper readiness passed; the helper
+reported filesystem protocol 5 ready. Both prior private prefixes were unchanged.
+
+`desktop-file-validate` accepted the installed entry. Actual
+`gio launch /usr/share/applications/io.lurker.desktop.desktop` launched UID 1300
+PID 58370 with window `0x200003` and exact installed desktop binary hash
+`b43bf89dd9ae6c07`. The inspected frame showed the create view and **0 mounted**;
+raw XWD SHA-256 is `52a5cf50126950cdae88a2b0488e7439bbf102cc5c7bbaea3d6a4cb6c6684336`.
+This proves installed XDG entry/GIO launch, not interaction with a desktop-shell
+panel. No additional storage or reboot sweep was run.
+
+Normal uninstall removed every installed path. Only the full pinned temporary
+fingerprint was erased; the original Fedora 45 certificate/export, 753-package
+baseline and policy hashes were restored. The two added tools were removed
+normally. After verified public evidence collection, the private agent and
+secret-key home, owned root staging/database and its temporary label, and
+Xauthority were removed. The original and signed RPMs, public certificate and
+failures remain. SELinux is Enforcing, both prior prefixes are unchanged, and
+final free space was 19,997,782,016 bytes.
+
+Short per-run notes, exact controllers, commands and logs are under
+`packaging-sign-plan/`. Public archive SHA-256 is
+`2f373a703e6113bd934685b66a1c1eced060391cb2c926d9774f798698aa6274`;
+all 117 retained member hashes verify and no secret-key home was collected.
+The separate final-state/log archive is
+`dafc8f5e6c67dd5cf7bbf64803dc28ffae28ba7cda60fec6f7edab5969c21810`.
+Final receipt audit matches 110 of 112 command-log records: two intermediate
+window-tree polling outputs were overwritten by the final same-label log.
+Their original hashes remain, but those two stdout byte streams are unavailable.
+The decisive final tree, PID, ELF, frame and completed cleanup receipts verify.
