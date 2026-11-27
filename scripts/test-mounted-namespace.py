@@ -314,9 +314,11 @@ def main():
             save(args.receipt, receipt)
         os._exit(0 if receipt["status"] == "passed" else 1)
     deadline = time.monotonic() + args.timeout
+    wait_status = None
     while time.monotonic() < deadline:
-        waited, _ = os.waitpid(pid, os.WNOHANG)
+        waited, status = os.waitpid(pid, os.WNOHANG)
         if waited:
+            wait_status = status
             break
         time.sleep(0.05)
     else:
@@ -324,8 +326,10 @@ def main():
         terminal = False
         stop_deadline = time.monotonic() + 1
         while time.monotonic() < stop_deadline:
-            if os.waitpid(pid, os.WNOHANG)[0]:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+            if waited:
                 terminal = True
+                wait_status = status
                 break
             time.sleep(0.05)
         receipt = json.loads(args.receipt.read_text())
@@ -334,6 +338,16 @@ def main():
                        cleanup_prohibited_until_worker_and_mount_reviewed=True)
         save(args.receipt, receipt)
     receipt = json.loads(args.receipt.read_text())
+    receipt["native_wait_status"] = wait_status
+    clean_exit = (wait_status is not None and os.WIFEXITED(wait_status)
+                  and os.WEXITSTATUS(wait_status) == 0)
+    receipt["worker_exited_zero"] = clean_exit
+    if wait_status is not None:
+        receipt["worker_exit_code"] = os.waitstatus_to_exitcode(wait_status)
+    if receipt["status"] == "passed" and not clean_exit:
+        receipt.update(status="failed-worker-exit", preserve_unexpected_remnants=True,
+                       error="Worker did not exit normally with status zero")
+    save(args.receipt, receipt)
     print(json.dumps({"status": receipt["status"], "receipt": str(args.receipt),
                       "worker_pid": pid, "actions": len(receipt["actions"])}))
     return 0 if receipt["status"] == "passed" else 1

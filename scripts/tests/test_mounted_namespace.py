@@ -1,7 +1,10 @@
 """Admission checks for the mounted namespace integration probe."""
 
 import importlib.util
+import os
 from pathlib import Path
+import signal
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -47,6 +50,40 @@ class AdmissionTests(unittest.TestCase):
                 patch.object(probe.os, "open", side_effect=AssertionError("unexpected path access")):
             with self.assertRaisesRegex(RuntimeError, "effective UID"):
                 probe.MountedNamespace(args, {})
+
+
+class WorkerTerminationTests(unittest.TestCase):
+    def test_passed_receipt_cannot_hide_nonzero_or_signal_exit(self):
+        class PassedReceipt:
+            def __init__(self, args, receipt):
+                self.receipt = receipt
+                self.fd = os.open(os.devnull, os.O_RDONLY)
+
+            def run(self):
+                self.receipt["status"] = "passed"
+
+        real_exit = os._exit
+        for expected in (1, -signal.SIGTERM):
+            def abnormal_exit(_):
+                if expected < 0:
+                    os.kill(os.getpid(), -expected)
+                real_exit(expected)
+
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                receipt = directory / "result.json"
+                args = ["probe", str(directory / "mount"), "--expect-mount-id", "1",
+                        "--expect-source", "test", "--expect-fstype", "test",
+                        "--expect-euid", str(os.geteuid()), "--receipt", str(receipt)]
+                with patch.object(probe, "MountedNamespace", PassedReceipt), \
+                        patch.object(probe.sys, "argv", args), \
+                        patch.object(probe.os, "_exit", abnormal_exit):
+                    self.assertEqual(probe.main(), 1)
+                result = probe.json.loads(receipt.read_text())
+                self.assertEqual(result["status"], "failed-worker-exit")
+                self.assertEqual(result["worker_exit_code"], expected)
+                self.assertFalse(result["worker_exited_zero"])
+                self.assertTrue(result["preserve_unexpected_remnants"])
 
 
 if __name__ == "__main__":

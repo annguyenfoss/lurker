@@ -48,3 +48,10 @@ an injected harness-only rename failure with retained file/directory contents,
 and a bounded stalled worker which remains a failure after termination.
 Private logs, executed controller and per-action receipts are retained under
 `hosts/archlinux/build/mounted-namespace/` in the round evidence root.
+
+The worker-exit follow-up also requires the native wait status to be a normal
+zero exit; a passed-looking JSON file cannot override a nonzero exit or signal.
+Four unit checks and seven actual native controls passed with this correction,
+including forked workers which write a passed receipt and then exit1 or receive
+SIGTERM. Those outcomes remain failures. The earlier harness/version receipts
+are preserved separately rather than relabeled.
