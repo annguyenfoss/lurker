@@ -25,8 +25,9 @@ three directory engines, both in containers and on the new physical scratch
 disk: 54 positive cells in each dimension. The 130-cell ledger records 70
 OS-inapplicable combinations and six UFS1 driver-blocked cells per dimension.
 Directory engines use the named filesystem as their native backing, rather than
-as a selectable inner format. LKL filesystem routes are excluded from native
-acceptance.
+as a selectable inner format. These baseline counts retain their original
+driver/source identities. The later unprivileged external-host-driver follow-up
+is recorded separately below.
 
 | Filesystem | Container cells | Physical cells | Native route |
 | --- | ---: | ---: | --- |
@@ -187,3 +188,48 @@ Its final guest raw SHA-256 is
 The guest has approximately 1.9 GiB free after guarded cleanup. The remaining
 ordinary-route limitation is the stock UFS1 writer; historical evidence limits
 above remain explicit.
+
+## Completed unprivileged follow-up and execution status
+
+Arch-owned execution is complete and idle. A fresh read-only process/mount check
+at 2026-11-27 06:28:31 UTC found no owned jobs across all UIDs, no owned mounts
+and no temporary build disk. There is no remaining implementation or testing
+blocker for the nine qualified filesystems excluding UFS1, and no agent task
+waiting on the user, another host owner or the coordinator's final cross-host
+audit. No additional build, matrix rerun or kernel experiment is queued.
+
+The latest native functional batch finished at 2026-11-27 04:46:00 UTC using
+source `e927e40bb235815343302677531d48f1afa4f939`. Its native workspace gates
+passed 186 Rust tests, zero failures and 15 ignored, plus 101 Python checks.
+The real pacman package `lurker 0.1.0.native20261127.e927e40-1` remains installed;
+package verification reported zero altered files. All six AES/Serpent/Twofish
+password/keyfile CLI lifecycles passed as UID1300 using Auto discovery and the
+downloaded payload, including XFS, ext4 and Btrfs. Each completed write,
+close/reopen, append/new-file, close/reopen and five-hash verification.
+
+The package contains independent crypto protocol 4; its administrator-installed
+filesystem prerequisite uses protocol 5. Three actual encrypted-host transient
+FLUSH controls on XFS/Btrfs/ext4 produced caller EIO and two close refusals each,
+preserving the session, raw transport identity and source lock. Original failed
+ciphertext, keys, acknowledgements and logs were independently archived and
+verified before separately labelled test-only manual recovery. Genuine
+absent-acknowledgement crash recovery, strict helper calls, native GUI callbacks
+and live CLI/helper/desktop-row close with both backend paths temporarily absent
+also passed. The exact backend files were restored. The build-only disk was
+normally unmounted, detached from live and persistent VM configuration and
+retained privately; original disk sources match the pre-test inventory.
+
+The configuration/Kbuild source-scope question is resolved by `7d0f183` and
+`KERNEL_SCOPE_AUDIT.md`: existing upstream configuration selections and the
+upstream generic-header selection are eligible integration. It is not a pending
+Arch blocker. Stock UFS1 remains a separate capability gap; no novel UFS1 kernel
+work or deferred experiment has started.
+
+Private follow-up evidence is indexed in
+`build/unprivileged-pilot/pilot-e927-completion-evidence-index.json`, with
+controller provenance and cleanup supplements in the same directory. The
+append-only `agent-terminal-status-7d0f183.json` records the final handoff and
+supersedes earlier pending-eligibility wording without changing frozen indexes
+or runtime identities. The historical 24 missing physical console logs and lost
+early synthetic credentials remain missing evidence; this follow-up does not
+reconstruct them or claim a new full matrix or reboot run.
