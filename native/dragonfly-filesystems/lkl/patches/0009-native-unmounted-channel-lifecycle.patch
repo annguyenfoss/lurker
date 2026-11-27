@@ -142,8 +142,22 @@
      if (halt < 0) {
          fprintf(stderr, "lklfuse: failed to halt: %s\n", lkl_strerror(halt));
          if (!ret) ret = halt;
-@@ -654,109 +694,118 @@
+@@ -652,111 +692,133 @@
+     return ret;
+ }
  
++/* fuse_parse_cmdline synthesizes a kernel-only fsname. Native publication
++ * uses our separately validated FUSE-device alias; keep every other option
++ * for fuse_new's own validation rather than silently ignoring unknown flags. */
++static int remove_kernel_name(struct fuse_args *arguments)
++{
++    static const struct fuse_opt options[] = {
++        FUSE_OPT_KEY("fsname=", FUSE_OPT_KEY_DISCARD),
++        FUSE_OPT_END,
++    };
++    return fuse_opt_parse(arguments, NULL, options, NULL);
++}
++
  int main(int argc, char **argv)
  {
 -	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -274,7 +288,8 @@
 +        return 1;
 +    if (fuse_opt_parse(&args, &lklfuse, lklfuse_opts, lklfuse_opt_proc) ||
 +        !lklfuse.file || !lklfuse.type || !lklfuse.source_alias ||
-+        fuse_parse_cmdline(&args, &target, &multithreaded, &foreground)) goto finish;
++        fuse_parse_cmdline(&args, &target, &multithreaded, &foreground) ||
++        remove_kernel_name(&args)) goto finish;
 +    if (!foreground || multithreaded || lklfuse.mb < 32 || lklfuse.mb > 512 ||
 +        !lklfuse.native_allow_other ||
 +        !lklfuse.native_default_permissions ||

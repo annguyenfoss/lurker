@@ -96,3 +96,12 @@ leaves the kernel running, native channel attached and source flock held, then
 verified root restoration permits halt0. The separate test-only halt driver can
 pause the retry for a controlled mounted retention test; that privileged test
 remains pending.
+
+`fuse_parse_cmdline` adds a kernel-only default fsname. The native controller
+supplies the validated FUSE-device alias independently, so the client removes
+only fsname before calling the high-level unmounted constructor. Every other
+option still reaches its normal parser. `tests/constructor-options.c` verifies
+the actual argument pipeline and native constructor, plus rejection of an
+unrelated unknown option. The first reviewed024 attempt failed on the synthetic
+fsname before readiness/publication; its untouched fixture and failure receipt
+are retained.
