@@ -421,3 +421,30 @@ https://github.com/tsujamin/userspaceLUKS
 https://luksbox.penthertz.com/docs/security/cryptography
 https://github.com/HuanchuanTech/xlinuxfs
 https://github.com/gereoffy/btrfs4mac
+
+## Supplementary native LKL bridge proof
+
+After the frozen package qualification, the pinned public Darwin LKL source
+built on Buran with LLVM 19.1.7 and Xcode 27.2. Seven profile tests passed;
+957 used source/profile/header files matched the pinned Git inputs. The
+universal archive contains arm64 and x86_64 slices; runtime controls used arm64.
+Upstream platform/capability C tests and four common-payload opens passed for
+ext4, Btrfs and XFS through the native local-file bridge. Btrfs and modern XFS
+seeds were imported from fresh Ubuntu formatter controls, with verified hashes
+and independent Mac clones. This is not native Mac formatting acceptance.
+
+The unpatched block transport issued no host fsync and swallowed an injected
+flush failure despite successful payload reopens. Commit `59b0a12` adds explicit
+flush-capable registration while preserving existing registration semantics.
+The final archive forwarded native fsync and propagated injected EIO on all
+three filesystems, followed by normal LKL close. Other archive members were
+unchanged. The old native XFS formatter's invalid V4 seed and the earlier
+combined-lipo verification syntax failure remain retained failures.
+
+The frozen package's 30 passed cells and three earlier USB sample identities
+remain unchanged. No host-visible LKL filesystem mount, replacement driver
+installation, new USB write or XFS guard removal occurred. Mounted macFUSE
+integration still needs native errno/credential handling, permission and busy
+controls, and a qualified native formatter. `native/macos/lkl-macfuse.md` records
+the exact source and remaining gates. Private receipts, hashes and the reviewed
+adapter design are under `validation/native-lkl/` in the Mac evidence root.
