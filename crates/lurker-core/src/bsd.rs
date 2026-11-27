@@ -1259,6 +1259,7 @@ fn mount_pefs(c: MountCommand, output: Output) -> AppResult<()> {
             "PEFS mountpoint must be empty and unmounted.",
         ));
     }
+    pefs::validate_placement(&source, &target)?;
     let mut session = Session {
         version: 1,
         id: unique_id(),

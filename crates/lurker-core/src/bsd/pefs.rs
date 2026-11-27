@@ -1,12 +1,12 @@
 //! PEFS directory adapter. The common BSD layer owns directory reservation,
 //! session records and mount identity. Never flush keys before a normal unmount:
 //! flushing them would invalidate open files even if the filesystem is busy.
-use super::{Credential, args, exec};
+use super::{args, exec, Credential};
 use crate::{AppError, AppResult, CreateCipher};
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
+use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
 use std::path::Path;
 
 const PEFS: &str = "/usr/local/sbin/pefs";
@@ -52,6 +52,44 @@ fn kernel_package_match(kernel: &str, package: &str) -> bool {
         .parse::<u32>()
         .ok()
         .is_some_and(|value| value != 0 && build.parse::<u32>().ok() == Some(value))
+}
+
+/// The native HAMMER2/PEFS stack loses lookup of newly synced files when its
+/// plaintext target is on ZFS. UFS2 and same-HAMMER2 targets pass matched native
+/// controls, so reject only the observed bad pair before publishing a session.
+pub(super) fn validate_placement(source: &Path, mountpoint: &Path) -> AppResult<()> {
+    validate_filesystems(&filesystem_name(source)?, &filesystem_name(mountpoint)?)
+}
+
+fn validate_filesystems(source: &str, mountpoint: &str) -> AppResult<()> {
+    if source == "hammer2" && mountpoint == "zfs" {
+        return Err(AppError::new(
+            "PEFS with HAMMER2 ciphertext cannot use a ZFS mountpoint: the native stack cannot look up newly written files. Choose a HAMMER2 or UFS2 mountpoint.",
+        ));
+    }
+    Ok(())
+}
+
+fn filesystem_name(path: &Path) -> AppResult<String> {
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| AppError::new("The PEFS directory path contains a NUL byte."))?;
+    let mut native = std::mem::MaybeUninit::<libc::statfs>::uninit();
+    // SAFETY: path is NUL-terminated and native points to writable statfs storage.
+    if unsafe { libc::statfs(path.as_ptr(), native.as_mut_ptr()) } != 0 {
+        return Err(AppError::io(
+            "Inspect native PEFS placement filesystem",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    // SAFETY: statfs succeeded and initialized the native structure.
+    let native = unsafe { native.assume_init() };
+    let bytes: Vec<u8> = native.f_fstypename.iter().map(|byte| *byte as u8).collect();
+    let end = bytes.iter().position(|byte| *byte == 0).ok_or_else(|| {
+        AppError::new("The native PEFS placement filesystem name is unterminated.")
+    })?;
+    std::str::from_utf8(&bytes[..end])
+        .map(str::to_owned)
+        .map_err(|_| AppError::new("The native PEFS placement filesystem name is not UTF-8."))
 }
 
 pub(super) fn initialize(
@@ -216,6 +254,21 @@ fn mount_matches(mounts: &[super::Mounted], source: &Path, mountpoint: &Path) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn placement_rejects_only_the_proven_hammer2_to_zfs_pair() {
+        assert!(validate_filesystems("hammer2", "zfs").is_err());
+        for (source, target) in [
+            ("hammer2", "hammer2"),
+            ("hammer2", "ufs"),
+            ("zfs", "hammer2"),
+            ("zfs", "zfs"),
+            ("ufs", "zfs"),
+            ("ext2fs", "zfs"),
+        ] {
+            assert!(validate_filesystems(source, target).is_ok());
+        }
+    }
 
     #[test]
     fn exact_kernel_build_is_required() {

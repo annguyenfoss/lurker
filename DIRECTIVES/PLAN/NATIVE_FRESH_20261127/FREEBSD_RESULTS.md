@@ -294,6 +294,25 @@ its original same-HAMMER2 target passes caller write/read and unrelated-user
 denial. Failed external-target mounts closed normally, and receipts/files were
 preserved. This is not attributed to caller permissions or filename length.
 
+A subsequent matched native HAMMER2-source/UFS2-target control passes all five
+filename lengths as actual UID 1300, alongside the same-HAMMER2 positive. The
+restriction is therefore scoped to the proven HAMMER2-to-ZFS placement, not all
+cross-filesystem targets. The product now checks native source/target filesystem
+names after verifying the empty unmounted target and before session publication
+or backend writes. Only that pair is rejected, with HAMMER2/UFS2 alternatives.
+
+The owned guard overlay on exact base `0c548ded6c2e5700a1e37e9d699c6cfe257c0b2f`
+passes native core **75 tests, zero failures, 12 explicit ignores**, plus CLI
+build. The pre-mutation native negative proves identical ciphertext tree hashes/
+metadata, registry records, mount table and empty target before/after rejection.
+The same source then passes product opens at both HAMMER2 and UFS2 targets,
+canonical hashes, actual caller nonce writes/fsync/reads, unrelated-user denials
+and normal closes. Overlay CLI SHA-256 is
+`68afb9eef0464352cde6c2254c6bc949ce6f9d7036a947e3088b65ffa85a2088`;
+`validation/pefs-placement-product-proof-result.json` records exact formatted
+source hashes and full receipts. This is a scoped guard validation; the installed
+`d601bc5` package has not been relabeled or replaced by it.
+
 After all 33 qualified mounts and access gates were observed, the authorized
 ordinary `shutdown -r now` was issued. It **did not complete**. The console
 reached buffers-synced output, detached helper GELI mappings, then reported an
