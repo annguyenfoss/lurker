@@ -9,10 +9,36 @@ under target/goal-validation/native-fresh-20261127/.
 ## Latest reconciliation
 
 The chronological milestones below retain their original candidate and scope.
-The current completed host reports include all six Linux distributions, macOS,
-DragonFly and NetBSD; their stated driver and source-version limitations still
-apply. OpenBSD installed-package qualification and FreeBSD's controlled
-shutdown-service qualification remain active. Whole-round completion is unproven.
+Recorded candidate qualification reports cover all six Linux distributions,
+macOS, DragonFly and NetBSD within their stated driver/source scopes. The native
+LKL eligibility clarification has reopened ordinary driver assessment on several
+hosts. OpenBSD installed-package qualification and FreeBSD adapter work remain
+active. Whole-round completion is unproven.
+
+Nine host owners now provide private `completion-evidence-index.json` files
+mapping the acceptance requirements to exact receipts and limitations. Root's
+`audits/evidence-index-integrity.json` independently checks 4,196 indexed files
+and archive members against frozen index snapshots, with no hash/size mismatch
+in that audit. This establishes evidence identity, not requirement coverage or
+the truth of every availability claim. The requirement-by-requirement review
+continues. FreeBSD and OpenBSD indexes await their active input batches.
+
+The index review exposes retention and scope limits that remain reportable:
+Arch lost 24 physical folder console logs while retaining structured receipts;
+Gentoo deleted three initial ext4 selections later identified as ext2 before
+their reclassification as failures; several Linux historical payloads lack
+direct numeric EUID samples. Gentoo's old pool check used an invalid field;
+new valid read-only pool/dataset commands now return empty inventories. These
+later checks do not reconstruct missing historical data or failed images.
+
+macOS report correction `3eaf842` retracts the earlier public-source blocker for
+xlinuxfs/LKL. Pinned public Darwin/arm64 source and its local I/O bridge provide
+a credible native build route for Btrfs/XFS. A fresh host-library build and
+bridge controls are underway, using a hash-verified imported Linux Btrfs seed
+only for driver testing. Native Mac formatting and a mounted macFUSE adapter
+still require separate proof; restricted FSKit entitlements remain a blocker
+for that transport. Existing XFS guards remain in force. No new route is yet
+a product pass, and no additional USB operation has been performed.
 
 Ubuntu's final report is `e68bb47`: both 130-cell source-kind ledgers contain
 54 passed, six stock-UFS1 unavailable and 70 platform-inapplicable cells. The
