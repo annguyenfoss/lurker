@@ -6,7 +6,7 @@ original 576/678/e927 payload matrices or repeat their reboots/builds.
 Probe SHA256:
 `9d4d6cc09d8b87e5503c7a6129554470017821f0f76b6fd8a5fd289ebaef11a6`.
 
-## Initial outcomes
+## Namespace outcomes
 
 | Filesystem | Native encrypted filesystem | gocryptfs | CryFS | Cryptomator |
 | --- | --- | --- | --- | --- |
@@ -16,13 +16,13 @@ Probe SHA256:
 | XFS | VeraCrypt: pass | pass | pass | pass |
 | APFS | LUKS1: pass | pass | pass | pass |
 | UFS2 | LUKS2: pass | pass | pass | **unlink EIO; retained** |
-| HAMMER2 | pending | pending | pending | pending |
-| exFAT | pending | pending | pending | pending |
-| ZFS | pending | pending | pending | pending |
+| HAMMER2 | VeraCrypt: pass | pass | pass | pass |
+| exFAT | LUKS1: pass | pass | pass | pass |
+| ZFS | LUKS2: pass | pass | pass | pass |
 | NTFS | coordinator hold | coordinator hold | coordinator hold | coordinator hold |
 
-There are 23 complete passes (253 actions), one failed scope after seven passed
-actions, twelve independent non-NTFS scopes pending and four NTFS scopes held.
+All 36 authorized non-NTFS scopes are terminal: 35 complete passes (385 actions),
+one failed scope after seven passed actions, and four NTFS scopes still held.
 All UFS2 scopes are now quarantined: the three completed profiles retain their
 passes; the failed Cryptomator profile is a newly exposed defect/status downgrade.
 There is no proof that an old passing run exercised this identical failing
@@ -90,7 +90,28 @@ remnant. Receipts: `normal-close-ufs2.json` and
 forced unmount or repair was used. This cleanup does not turn the failed
 namespace action into a pass or prove its protected payload after failure.
 
-Only after that terminal cleanup, PID13279/controller SHA`c487c62f…` started the
-twelve independent HAMMER2/exFAT/ZFS scopes in a new evidence directory. There
-is no UFS2 retry. NTFS remains on its separate coordinator hold. The common
-CryFS source-only assessment remains frozen and unchanged.
+Only after that terminal cleanup, PID13279/controller SHA`c487c62f…` completed
+all twelve independent HAMMER2/exFAT/ZFS scopes in a new evidence directory.
+There was no UFS2 retry. NTFS remains on its separate coordinator hold. The
+common CryFS source-only assessment remains frozen and unchanged.
+
+## Terminal verification
+
+`finalize.py` verified all 36 exact per-action receipt hashes and their native
+worker exit results without rerunning a test. Installed CLI/helper/desktop and
+all recorded driver hashes matched preflight; `dpkg -V lurker` passed. No owned
+backend process, mount, mapper or loop remained. The eight new closed ciphertext
+images and their factors remain retained; their hashes are indexed. Resource
+admission stayed above2GiB free on every checked volume; minimum available
+RAM2,436,653,056B. Final free space: root5,239,554,048B,
+evidence3,472,699,392B, work10,230,312,960B.
+
+The final metadata archive has382 members, SHA256
+`e3f0d4eeacfbaeb2f27bf567f9ad1dfb1216a3c0dd7e01165603a6369a09228a`;
+`final-audit.json` SHA256 is
+`31035c1cab1de9206f42f2c33920af40c77bde3ee251ac2408ee888846ae3650`.
+The private `completion-evidence-index.json` maps every scope to its exact local
+receipt and SHA256, with the failed-original off-host custody and cleanup
+references. UFS1/ext4/Btrfs/XFS/APFS/HAMMER2/exFAT/ZFS have no remaining owned
+namespace work. UFS2 remains quarantined after the newly exposed failure;
+NTFS's four scopes remain held. No test is currently running.
