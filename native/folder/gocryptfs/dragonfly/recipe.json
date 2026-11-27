@@ -1,0 +1,19 @@
+{
+  "phase": "native-userspace-ABI-build-only",
+  "gocryptfs_revision": "756cd453d7afe69fd2a00a7592fd2d9869a6f756",
+  "gocryptfs_archive_sha256": "6969e36aad99027ba87a1113eb9aff995af7457eb99b59f84ebd93ff42f84175",
+  "go_fuse_revision": "2d50fff207d78c197869fa492eff3a79bc1d8408",
+  "go_fuse_module_version": "v2.12.1-0.20261018182834-2d50fff207d7",
+  "stock_wire_header_revision": "e17b9176356e3afb3427d71c21108a8a849cd4d5",
+  "stock_wire_header": "sys/vfs/fuse/fuse_abi.h",
+  "stock_wire_header_installed": false,
+  "toolchain": "go1.26.11 dragonfly/amd64",
+  "jobs": 1,
+  "cgo_enabled": false,
+  "engine_build_tags": ["without_openssl"],
+  "crypto_changes": false,
+  "kernel_changes": false,
+  "LKL_dependency": false,
+  "mount_or_live_FD_adoption_tests": false,
+  "backend_admission": false
+}
