@@ -46,7 +46,7 @@ Age, GnuPG OpenPGP, and OpenSSL CMS are approved for one-file encryption and dec
 - **Batch 3**
   - LUKS1 and LUKS2 on macOS, FreeBSD, OpenBSD, and NetBSD, plus LUKS2 on DragonFly BSD. Start with file-backed AES profiles. Qualify Btrfs access separately for existing Linux Lurker vaults.
   - gocryptfs and securefs on OpenBSD and NetBSD.
-  - Stable CryFS 1.x on OpenBSD and NetBSD, and Cryptomator on FreeBSD, OpenBSD, and NetBSD. FreeBSD and NetBSD CryFS have native private builds and core routes; fresh packaged lifecycle qualification is in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/`.
+  - Stable CryFS 1.x on OpenBSD and NetBSD, and Cryptomator on FreeBSD, OpenBSD, and NetBSD. FreeBSD, NetBSD and OpenBSD CryFS have native private builds and core routes; fresh packaged lifecycle qualification is in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/`.
 
 ### Windows roadmap
 
@@ -153,6 +153,17 @@ the native driver's probe. The defaults below apply to other filesystems.
   remains unsupported. Do not weaken cache or durability behavior to hide that
   host limitation. Packaged and full backing-filesystem qualification remain
   separate gates.
+- OpenBSD CryFS uses its native base FUSE through administrator authorization.
+  The trusted private engine applies and locks `unveil` after exec using held
+  source/mount/state directory descriptors. Ordinary ciphertext/state I/O uses
+  the invoking account; root is regained only for native mount setup and dropped
+  permanently before filesystem initialization. Creation initializes privately
+  and publishes ciphertext as the caller through held directory descriptors.
+  Per-caller root-controlled records bind source inode, process birth and kernel
+  fsid for discovery and normal close. The fixed CryFS profile is unchanged;
+  size, alternate ciphers, keyfiles and replacement remain unsupported.
+  Backing-filesystem limitations and final packaged qualification are separate
+  from this native integration.
 - Cryptomator format 8: upstream `SIV_GCM` suite (AES-SIV names, AES-GCM contents), with upstream scrypt key wrapping.
 - gocryptfs, CryFS and Cryptomator accept a password and their fixed format profile. They take no size, keyfile, alternate `--cipher` or destructive replacement option. PEFS has a separate native FreeBSD profile and module qualification.
 - FreeBSD PEFS: AES-256-XTS with PBKDF2/600000, a verifier chain in `.pefs.db` and profile metadata in `.pefs.conf`; password or binary keyfile. Requires the matching kernel module and native utility. Preserve these metadata files with the encrypted directory.

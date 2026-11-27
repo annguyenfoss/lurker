@@ -112,10 +112,23 @@ pub fn run_configured_close(command: UnmountCommand, output: Output) -> AppResul
     folder::unmount_source(command, output)
 }
 
-/// Directory engines must remain in the login user's session even when an
-/// older frontend sends the default privileged mode. PEFS uses its native BSD
-/// authorization route and is intentionally excluded by the folder adapter.
+/// Directory engines normally remain in the login user's session even when
+/// an older frontend requests privileged mode. PEFS and OpenBSD CryFS require
+/// native authorization; OpenBSD CryFS then limits root identity to its mount
+/// acquisition while ordinary vault I/O runs as the invoking account.
 pub fn request_requires_user_session(command: &CommandAction) -> AppResult<bool> {
+    #[cfg(target_os = "openbsd")]
+    {
+        if command.volume_type() == VolumeType::Cryfs { return Ok(false); }
+        if command.volume_type() == VolumeType::Auto {
+            match command {
+                CommandAction::Unmount(_) => return Ok(false),
+                CommandAction::Mount(c) if c.source.is_dir()
+                    && folder::detect_type(&c.source)? == VolumeType::Cryfs => return Ok(false),
+                _ => (),
+            }
+        }
+    }
     if native_directory_request(command) {
         return Ok(false);
     }
@@ -239,7 +252,10 @@ pub fn list_native_active_volumes() -> AppResult<Vec<ActiveVolume>> {
                 "Native volume listing requires administrator authorization.",
             ));
         }
-        bsd::list_active_volumes()
+        let mut volumes = bsd::list_active_volumes()?;
+        #[cfg(target_os = "openbsd")]
+        volumes.extend(folder::list_active_volumes()?);
+        Ok(volumes)
     }
     #[cfg(not(any(
         target_os = "freebsd",
@@ -341,13 +357,14 @@ pub fn effective_uid() -> u32 {
     unsafe { libc::geteuid() }
 }
 
-/// Internal frontend entry point for a login-user directory backend monitor.
+/// Internal frontend entry point for the platform directory backend monitor.
 pub fn run_folder_supervisor_if_requested() -> Option<i32> {
     #[cfg(any(
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "netbsd"
+        target_os = "netbsd",
+        target_os = "openbsd"
     ))]
     {
         folder::run_supervisor_if_requested()
@@ -356,7 +373,8 @@ pub fn run_folder_supervisor_if_requested() -> Option<i32> {
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "netbsd"
+        target_os = "netbsd",
+        target_os = "openbsd"
     )))]
     {
         None
@@ -372,5 +390,25 @@ pub fn run_macos_filesystem_supervisor_if_requested() -> Option<i32> {
     #[cfg(not(target_os = "macos"))]
     {
         None
+    }
+}
+
+#[cfg(all(test, target_os = "openbsd"))]
+mod openbsd_directory_policy_tests {
+    use super::*;
+    #[test]
+    fn automatic_directory_authorization_is_exclusive_to_actual_cryfs() {
+        let root = tempfile::tempdir().unwrap();
+        let command = CommandAction::Mount(MountCommand {
+            privilege_mode: PrivilegeMode::Privileged,
+            source: root.path().to_owned(), peer_sources: Vec::new(), allow_degraded: false,
+            mountpoint: root.path().join("mount"), tag: None, volume_type: VolumeType::Auto,
+            passphrase: None, keyfile: None, readonly: false,
+        });
+        for (marker, authorized) in [("cryfs.config", true), ("vault.cryptomator", false), ("gocryptfs.conf", false)] {
+            let path = root.path().join(marker); std::fs::write(&path, b"{}").unwrap();
+            assert_eq!(request_requires_user_session(&command).unwrap(), !authorized, "{marker}");
+            std::fs::remove_file(path).unwrap();
+        }
     }
 }

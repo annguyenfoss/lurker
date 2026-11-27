@@ -40,6 +40,21 @@ export component MountView inherits Card {
     in-out property <string> passphrase: "";
     in-out property <string> key-file: "";
 
+    private property <bool> directory-source: root.is-openbsd && root.source-kind == "directory";
+    private property <bool> source-supports-keyfile: root.supports-keyfile && !root.mirrored && !root.directory-source;
+    changed directory-source => {
+        if root.directory-source {
+            root.mirrored = false;
+            root.peer-source = "";
+            root.degraded = false;
+            root.auth-method = "pass";
+            root.key-file = "";
+        }
+    }
+    changed source-supports-keyfile => {
+        if !root.source-supports-keyfile { root.auth-method = "pass"; root.key-file = ""; }
+    }
+
     in property <[DeviceInfo]> devices;
     callback device-picked(DeviceInfo);
     callback rescan;
@@ -93,7 +108,7 @@ export component MountView inherits Card {
 
         if root.supports-directories || root.is-linux || root.is-netbsd || root.is-freebsd || root.is-openbsd || root.is-dragonfly: Segmented {
             value: root.source-kind;
-            options: (root.is-netbsd || root.is-dragonfly) ? (root.supports-directories ? root.linux-sources : root.partition-sources) : root.is-openbsd ? root.partition-sources : (root.is-macos || root.is-freebsd || (root.is-linux && !root.unprivileged)) ? root.linux-sources : root.file-sources;
+            options: (root.is-netbsd || root.is-dragonfly || root.is-openbsd) ? (root.supports-directories ? root.linux-sources : root.partition-sources) : (root.is-macos || root.is-freebsd || (root.is-linux && !root.unprivileged)) ? root.linux-sources : root.file-sources;
             selected(v) => { root.source-kind = v; root.source = ""; }
         }
 
@@ -155,7 +170,7 @@ export component MountView inherits Card {
         }
     }
 
-    if root.supports-raid1c: CardSection {
+    if root.supports-raid1c && !root.directory-source: CardSection {
         Toggle { label: "Mirrored softraid (RAID1C)"; checked <=> root.mirrored; }
         if root.mirrored: VerticalLayout {
             spacing: UiTheme.s3;
@@ -174,12 +189,12 @@ export component MountView inherits Card {
 
     // ── Unlock with section ───────────────────────────────────────────
     CardSection {
-        SectionHead { title: "UNLOCK WITH"; hint: "passphrase or key file"; }
+        SectionHead { title: "UNLOCK WITH"; hint: root.source-supports-keyfile ? "passphrase or key file" : "passphrase"; }
 
         VerticalLayout {
             spacing: UiTheme.s3;
 
-            if root.supports-keyfile && !root.mirrored: Segmented {
+            if root.source-supports-keyfile: Segmented {
                 value <=> root.auth-method;
                 options: [
                     { value: "pass", label: "Passphrase" },

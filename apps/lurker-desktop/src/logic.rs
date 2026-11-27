@@ -503,7 +503,7 @@ mod tests {
             ("macos", "apple", 6),
             ("freebsd", "geli", 5),
             ("netbsd", "cgd", 2),
-            ("openbsd", "softraid", 3),
+            ("openbsd", "softraid", 4),
             ("dragonfly", "luks1", 2),
         ] {
             let formats = super::create_formats(os, false);

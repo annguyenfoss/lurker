@@ -11,13 +11,19 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+fn authorized_native_directory(kind: VolumeType, os: &str) -> bool {
+    os == "openbsd" && kind == VolumeType::Cryfs
+}
+
 pub fn close(
     mut command: UnmountCommand,
     timeout: Option<Duration>,
     output: &Output,
 ) -> AppResult<()> {
-    let login_directory =
-        command.volume_type.is_directory() && command.volume_type != VolumeType::Pefs;
+    let native_directory = authorized_native_directory(command.volume_type, std::env::consts::OS);
+    let login_directory = command.volume_type.is_directory()
+        && command.volume_type != VolumeType::Pefs
+        && !native_directory;
     let unprivileged = command.privilege_mode == PrivilegeMode::Unprivileged;
     if unprivileged && !cfg!(target_os = "linux") {
         return Err(AppError::new("Unprivileged mode requires Linux."));
@@ -37,7 +43,7 @@ pub fn close(
     }
 
     let Some(timeout) = timeout else {
-        if root {
+        if root && !native_directory {
             command.target = trusted_privileged_storage_source(&command.target)?;
         }
         let metadata = fs::metadata(&command.target)
@@ -141,6 +147,18 @@ fn replay_log(log: &File, success: bool, output: &Output) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_directory_exception_is_openbsd_cryfs_only() {
+        for os in ["linux", "macos", "freebsd", "dragonfly", "netbsd", "openbsd"] {
+            for kind in [VolumeType::Auto, VolumeType::Gocryptfs, VolumeType::Cryfs,
+                VolumeType::Cryptomator, VolumeType::Pefs, VolumeType::Softraid,
+                VolumeType::Raid1c, VolumeType::Veracrypt] {
+                assert_eq!(authorized_native_directory(kind, os), os == "openbsd" && kind == VolumeType::Cryfs,
+                    "unexpected root directory exception for {os} / {kind}");
+            }
+        }
+    }
 
     #[test]
     fn timeout_leaves_worker_alive_to_complete() {

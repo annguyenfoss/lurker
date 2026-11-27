@@ -341,7 +341,7 @@ export component MainWindow inherits Window {
                                 is-freebsd: root.platform-os == "freebsd";
                                 is-openbsd: root.platform-os == "openbsd";
                                 is-dragonfly: root.platform-os == "dragonfly";
-                                supports-directories: root.is-linux || root.is-macos || root.platform-os == "freebsd" || root.platform-os == "netbsd";
+                                supports-directories: root.is-linux || root.is-macos || root.platform-os == "freebsd" || root.platform-os == "netbsd" || root.platform-os == "openbsd";
                                 supports-keyfile: root.platform-os != "netbsd";
                                 supports-raid1c: root.platform-os == "openbsd";
                                 mirrored <=> root.mount-mirrored;

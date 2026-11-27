@@ -1057,6 +1057,55 @@ mod tests {
     }
 
     #[test]
+    fn openbsd_directory_forms_clear_disk_only_credentials_and_mirror_fields() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let window = setup_test_window();
+        let ui = super::MainWindow::new().unwrap();
+        super::configure_platform(&ui, "openbsd");
+        ui.show().unwrap();
+        render(&window);
+        ui.set_create_format("cryfs".into());
+        render(&window);
+        assert_eq!(ui.get_create_target_kind(), "directory");
+        ui.set_create_file_path("/home/adjutant/vaults".into());
+        ui.set_create_file_name("work".into());
+        ui.set_current_view("manage".into());
+        ui.set_mount_source_kind("partition".into());
+        ui.set_mount_auth_method("key".into());
+        render(&window);
+        ui.set_mount_key_file("/tmp/stale-key".into());
+        ui.set_mount_mirrored(true);
+        render(&window);
+        ui.set_mount_peer_source("/dev/sd2c".into());
+        ui.set_mount_degraded(true);
+        ui.set_mount_source_kind("directory".into());
+        render(&window);
+        assert!(!ui.get_mount_mirrored());
+        assert!(!ui.get_mount_degraded());
+        assert_eq!(ui.get_mount_peer_source(), "");
+        assert_eq!(ui.get_mount_auth_method(), "pass");
+        assert_eq!(ui.get_mount_key_file(), "");
+        ui.set_mount_source("/home/adjutant/vaults/work".into());
+        ui.set_mount_point("/mnt/private/work".into());
+        for scale in [1.0, 1.2] {
+            ui.set_ui_scale(scale);
+            for view in ["create", "manage"] {
+                ui.set_current_view(view.into());
+                for (position, delta) in [("top", 10000.0), ("bottom", -10000.0)] {
+                    ui.window().dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                        position: slint::LogicalPosition::new(1000.0, 500.0),
+                        delta_x: 0.0,
+                        delta_y: delta,
+                    });
+                    render(&window);
+                    snapshot(&window, &format!("openbsd-cryfs-{view}-{position}-{scale}"));
+                }
+            }
+        }
+        ui.hide().unwrap();
+    }
+
+    #[test]
     fn openbsd_mirror_fields_render_and_clear_when_ordinary_storage_is_selected() {
         let _guard = TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let window = setup_test_window();

@@ -260,8 +260,9 @@ Privileged mode uses these system tools; unprivileged requirements are listed ab
 Complete Linux/BSD distributions are staged with `scripts/stage-unix.py`; see
 `docs/unix-packaging.md` for build inputs, dependency manifests and archive layout.
 A Cargo-only build supplies the Rust products, not the bundled encryption engines.
-Directory engines run as the login user: gocryptfs needs host FUSE support, stable
-CryFS 1.0.3 uses FUSE ABI 2, and Cryptomator carries a private Java runtime.
+Directory data I/O runs as the login user: gocryptfs needs host FUSE support,
+stable CryFS 1.0.3 uses FUSE ABI 2, and Cryptomator carries a private Java runtime.
+OpenBSD CryFS also needs administrator authorization for native FUSE mounting.
 
 ## Directory and native BSD CLI backends
 
@@ -281,6 +282,14 @@ gocryptfs helper. [macOS requirements](macos-backends.md)
 FreeBSD can use privately packaged stable CryFS 1.0.3 with the host's FUSE
 facilities. It runs as the login user. Filesystem-specific qualification and
 prerequisites are recorded in `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/`.
+
+OpenBSD can use privately packaged stable CryFS with base FUSE. Run CLI
+create/mount/unmount through administrator authorization while preserving the
+invoking account; the desktop uses its trusted helper. Use a private directory
+owned by that account for both the new vault's parent and the mountpoint's
+parent. CryFS takes a passphrase, without a size, keyfile or alternate cipher.
+Native integration does not establish every backing filesystem; see the fresh
+round's `OPENBSD_RESULTS.md` for qualified cases and current limitations.
 
 Native BSD defaults are GELI/UFS (FreeBSD), CGD/FFSv2 (NetBSD), softraid CRYPTO/FFS
 (OpenBSD), and LUKS1/UFS (DragonFly). Native containers take `<file> <size-gb>` and

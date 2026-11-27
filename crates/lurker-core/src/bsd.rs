@@ -1959,7 +1959,7 @@ fn sync_directory(path: &Path) -> AppResult<()> {
         .map_err(|e| AppError::io("Sync directory", e))
 }
 
-#[cfg(target_os = "netbsd")]
+#[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
 pub(crate) fn folder_mount_identity(path: &Path) -> AppResult<Option<String>> {
     let mut matches = mounts()?.into_iter().filter(|entry| entry.target == path);
     let Some(mount) = matches.next() else {
@@ -1976,8 +1976,16 @@ pub(crate) fn folder_mount_identity(path: &Path) -> AppResult<Option<String>> {
         "fsid": mount.fsid, "source": mount.source,
         "target": mount.target, "filesystem": mount.filesystem,
     }))
-    .map(|value| Some(format!("netbsd-fsid:{value}")))
+    .map(|value| Some(format!("{}-fsid:{value}", std::env::consts::OS)))
     .map_err(|e| AppError::new(format!("Cannot record native folder mount identity: {e}")))
+}
+
+#[cfg(target_os = "openbsd")]
+pub(crate) fn folder_runtime_probe(program: &str, args: &[OsString]) -> AppResult<String> {
+    if !matches!(program, "/usr/bin/readelf" | "/usr/bin/ldd") {
+        return Err(AppError::new("Unexpected native folder runtime inspection tool."));
+    }
+    exec_in_locale(program, args, None, "C", None, Duration::from_secs(30), None)
 }
 
 fn mounts() -> AppResult<Vec<Mounted>> {

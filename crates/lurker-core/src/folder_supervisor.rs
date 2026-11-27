@@ -135,19 +135,23 @@ fn session_for_directory(root: &Path, canonical_dir: &Path) -> AppResult<Session
 }
 
 fn run(dir: PathBuf, executable: PathBuf, initializing: bool, descriptor: Option<i32>) -> AppResult<()> {
-    if crate::effective_uid() == 0 {
+    if crate::effective_uid() == 0 && !cfg!(target_os = "openbsd") {
         return Err(AppError::new(
             "Folder supervisor must run as the login user.",
         ));
     }
     let dir =
         fs::canonicalize(dir).map_err(|e| AppError::io("Cannot resolve folder session", e))?;
-    let session = session_for_directory(&runtime_path(), &dir)?;
+    let session = session_for_directory(&runtime_path()?, &dir)?;
     if find_program(session.backend)? != executable {
         return Err(AppError::new(
             "Supervisor backend differs from the selected private executable.",
         ));
     }
+    #[cfg(target_os = "openbsd")]
+    if session.backend != VolumeType::Cryfs || crate::effective_uid() != 0 { return Err(AppError::new("Only authorized OpenBSD CryFS may use a privileged supervisor.")); }
+    #[cfg(target_os = "openbsd")]
+    openbsd::validate_backend(&executable)?;
     let held_fence = fence::inherited(descriptor, &session)?;
     let mut password = Vec::new();
     std::io::stdin()
@@ -179,6 +183,8 @@ fn run(dir: PathBuf, executable: PathBuf, initializing: bool, descriptor: Option
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    #[cfg(target_os = "openbsd")]
+    { openbsd::confine(&mut command, &executable, &session, initializing)?; }
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
@@ -333,6 +339,8 @@ mod tests {
             backend: VolumeType::Gocryptfs,
             source: base.join("vault"),
             source_identity: Identity { device: 1, inode: 2 },
+            #[cfg(target_os = "openbsd")]
+            openbsd_underlay: None,
             #[cfg(target_os = "freebsd")]
             boot_id: None,
             mountpoint: base.join("mount"),

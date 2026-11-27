@@ -24,6 +24,8 @@ mod fence;
 mod netbsd_process;
 #[cfg(target_os = "openbsd")]
 mod openbsd_process;
+#[cfg(target_os = "openbsd")]
+mod openbsd;
 #[cfg(target_os = "netbsd")]
 mod netbsd;
 #[cfg(target_os = "macos")]
@@ -31,6 +33,8 @@ mod netbsd;
 mod macos_publication;
 
 pub(crate) fn run_supervisor_if_requested() -> Option<i32> {
+    #[cfg(target_os = "openbsd")]
+    if let Some(code) = openbsd::dispatch_publisher() { return Some(code); }
     supervisor::dispatch()
 }
 
@@ -59,7 +63,7 @@ pub(crate) fn handles(command: &CommandAction) -> AppResult<bool> {
     match command {
         CommandAction::Mount(c) if c.source.is_dir() => Ok(is_folder(detect_type(&c.source)?)),
         CommandAction::Unmount(c) => {
-            let sessions = session_snapshot(&runtime_path())?;
+            let sessions = session_snapshot(&runtime_path()?)?;
             if sessions.is_empty() {
                 return Ok(false);
             }
@@ -108,7 +112,8 @@ fn supported(kind: VolumeType) -> bool {
             target_os = "linux",
             target_os = "macos",
             target_os = "freebsd",
-            target_os = "netbsd"
+            target_os = "netbsd",
+            target_os = "openbsd"
         )),
         VolumeType::Cryptomator => cfg!(any(target_os = "linux", target_os = "macos")),
         _ => false,
@@ -215,6 +220,9 @@ struct Session {
     backend: VolumeType,
     source: PathBuf,
     source_identity: Identity,
+    #[cfg(target_os = "openbsd")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    openbsd_underlay: Option<Identity>,
     #[cfg(target_os = "freebsd")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     boot_id: Option<[u8; 16]>,
@@ -249,11 +257,13 @@ fn validate_private_directory(m: &fs::Metadata) -> AppResult<()> {
     Ok(())
 }
 
-fn runtime_path() -> PathBuf {
+fn runtime_path() -> AppResult<PathBuf> {
+    #[cfg(target_os = "openbsd")]
+    if crate::effective_uid() == 0 { return openbsd::runtime(); }
     // /tmp is a persistent location across CLI invocations on the supported OSs.
     // Boot cleanup may discard records; existing mounts then require explicit
     // native recovery rather than guessing ownership.
-    Path::new("/tmp").join(format!("lurker-folders-{}", crate::effective_uid()))
+    Ok(Path::new("/tmp").join(format!("lurker-folders-{}", crate::effective_uid())))
 }
 struct Runtime {
     path: PathBuf,
@@ -261,7 +271,7 @@ struct Runtime {
 }
 impl Runtime {
     fn lock() -> AppResult<Self> {
-        let path = runtime_path();
+        let path = runtime_path()?;
         secure_dir(&path)?;
         let lock = OpenOptions::new()
             .read(true)
@@ -687,7 +697,7 @@ fn unescape(value: &str) -> String {
         .replace("\\134", "\\")
 }
 fn mount_identity(path: &Path) -> AppResult<Option<String>> {
-    #[cfg(target_os = "netbsd")]
+    #[cfg(any(target_os = "netbsd", target_os = "openbsd"))]
     return crate::bsd::folder_mount_identity(path);
     #[cfg(target_os = "linux")]
     {
@@ -701,7 +711,7 @@ fn mount_identity(path: &Path) -> AppResult<Option<String>> {
         }
         Ok(None)
     }
-    #[cfg(not(any(target_os = "linux", target_os = "netbsd")))]
+    #[cfg(not(any(target_os = "linux", target_os = "netbsd", target_os = "openbsd")))]
     {
         let value = Command::new("/sbin/mount")
             .env("LC_ALL", "C")
@@ -788,6 +798,8 @@ fn mount_args(
     if cfg!(target_os = "macos") && kind == VolumeType::Cryfs {
         args.extend(["-o".into(), "backend=fskit".into()]);
     }
+    #[cfg(target_os = "openbsd")]
+    if kind == VolumeType::Cryfs { args.extend(["-o".into(), "allow_other".into()]); }
     args.extend([source.as_os_str().into(), mountpoint.as_os_str().into()]);
     if readonly && kind == VolumeType::Cryptomator {
         args.push("--readonly".into());
@@ -796,6 +808,8 @@ fn mount_args(
 }
 
 pub(crate) fn run(command: CommandAction, output: Output) -> AppResult<()> {
+    #[cfg(target_os = "openbsd")]
+    openbsd::validate_command(&command)?;
     let runtime = user_runtime()?;
     match command {
         CommandAction::Create(c) => create(&runtime, c, output),
@@ -809,11 +823,13 @@ pub(crate) fn run(command: CommandAction, output: Output) -> AppResult<()> {
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn unmount_source(command: UnmountCommand, output: Output) -> AppResult<()> {
+    #[cfg(target_os = "openbsd")]
+    openbsd::validate_command(&CommandAction::Unmount(command.clone()))?;
     unmount(&user_runtime()?, command, output, true)
 }
 
 fn user_runtime() -> AppResult<Runtime> {
-    if crate::effective_uid() == 0 {
+    if crate::effective_uid() == 0 && !cfg!(target_os = "openbsd") {
         return Err(AppError::new(
             "Directory encryption runs as your login user; do not use sudo.",
         ));
@@ -822,6 +838,13 @@ fn user_runtime() -> AppResult<Runtime> {
 }
 
 fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> {
+    #[cfg(target_os = "openbsd")]
+    { return openbsd::create(runtime, c, output); }
+    #[cfg(not(target_os = "openbsd"))]
+    create_common(runtime, c, output)
+}
+
+fn create_common(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> {
     if !supported(c.volume_type) {
         return Err(AppError::new(
             "This directory backend is not selected for this OS.",
@@ -840,6 +863,8 @@ fn create(runtime: &Runtime, c: CreateCommand, output: Output) -> AppResult<()> 
         ));
     }
     let executable = find_program(c.volume_type)?;
+    #[cfg(target_os = "openbsd")]
+    let executable = openbsd::validate_backend(&executable)?;
     let parent = fs::canonicalize(
         c.target
             .parent()
@@ -1048,6 +1073,8 @@ fn mount_inner(
         ));
     }
     let executable = find_program(c.volume_type)?;
+    #[cfg(target_os = "openbsd")]
+    let executable = openbsd::validate_backend(&executable)?;
     if fence::required(c.volume_type) {
         let capabilities = backend_command(c.volume_type, &executable).arg("--capabilities")
             .stdout(Stdio::piped()).output()
@@ -1080,6 +1107,9 @@ fn mount_inner(
             ));
         }
     }
+    #[cfg(target_os = "openbsd")]
+    openbsd::ensure_mountpoint(&c.mountpoint)?;
+    #[cfg(not(target_os = "openbsd"))]
     if !c.mountpoint.exists() {
         fs::DirBuilder::new()
             .mode(0o700)
@@ -1120,6 +1150,8 @@ fn mount_inner(
         backend: c.volume_type,
         source,
         source_identity,
+        #[cfg(target_os = "openbsd")]
+        openbsd_underlay: Some(openbsd::held_mountpoint(&mountpoint)?),
         #[cfg(target_os = "freebsd")]
         boot_id,
         mountpoint,
@@ -1135,8 +1167,13 @@ fn mount_inner(
         fence::arm(&session.mountpoint, file, session.fence.as_mut().unwrap())?;
         save(&dir, &session)?;
     }
-    let mut command = Command::new(std::env::current_exe()
-        .map_err(|e| AppError::io("Cannot locate folder supervisor", e))?);
+    let supervisor = std::env::current_exe()
+        .map_err(|e| AppError::io("Cannot locate folder supervisor", e))?;
+    #[cfg(target_os = "openbsd")]
+    let supervisor = crate::trusted_privileged_executable(&supervisor)?;
+    let mut command = Command::new(supervisor);
+    #[cfg(target_os = "openbsd")]
+    openbsd::configure_supervisor(&mut command, &executable)?;
     command.arg("--lurker-folder-supervisor").arg(&dir).arg(&executable)
         .arg(if initializing { "init" } else { "mount" })
         .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
@@ -1183,6 +1220,8 @@ fn mount_inner(
             if session.mount_identity.is_none() {
                 session.mount_identity = Some(identity);
                 session.mounted_directory = Some(Identity::read(&session.mountpoint)?);
+                #[cfg(target_os = "openbsd")]
+                if initializing { openbsd::initialize_owner(&session)?; }
                 save(&dir, &session)?;
             }
             // Java installs its close hook after native mount() returns. The
@@ -1228,7 +1267,12 @@ fn mount_inner(
     }
 }
 
-fn native_unmount(path: &Path, capture_busy: bool) -> AppResult<std::process::Output> {
+fn native_unmount(path: &Path, capture_busy: bool, expected: &str) -> AppResult<std::process::Output> {
+    #[cfg(target_os = "openbsd")]
+    { let _ = capture_busy; return openbsd::unmount(path, expected); }
+    #[cfg(not(target_os = "openbsd"))]
+    {
+    let _ = expected;
     #[cfg(target_os = "linux")]
     let mut command = {
         let program = [
@@ -1258,6 +1302,7 @@ fn native_unmount(path: &Path, capture_busy: bool) -> AppResult<std::process::Ou
         .stdout(Stdio::null())
         .output()
         .map_err(|e| AppError::io("Cannot unmount directory", e))
+    }
 }
 
 fn darwin_unmount_busy(stderr: &[u8]) -> bool {
@@ -1333,7 +1378,7 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
         let retry_busy = retry_available
             && (darwin_fuse_t_fskit_mount(&identity)
                 || (session.backend == VolumeType::Cryptomator && session.fence.is_some()));
-        let result = native_unmount(&session.mountpoint, retry_busy)?;
+        let result = native_unmount(&session.mountpoint, retry_busy, &identity)?;
         if result.status.success() {
             break;
         }
@@ -1406,11 +1451,12 @@ fn unmount(runtime: &Runtime, c: UnmountCommand, output: Output, source_only: bo
 }
 
 pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
-    if crate::effective_uid() == 0 {
+    if (crate::effective_uid() == 0 && !cfg!(target_os = "openbsd"))
+        || (cfg!(target_os = "openbsd") && crate::effective_uid() != 0) {
         return Ok(Vec::new());
     }
     let mut result = Vec::new();
-    for (dir, s) in session_snapshot(&runtime_path())? {
+    for (dir, s) in session_snapshot(&runtime_path()?)? {
         #[cfg(target_os = "freebsd")]
         if from_previous_freebsd_boot(&s)? {
             continue;
@@ -1423,7 +1469,7 @@ pub(crate) fn list_active_volumes() -> AppResult<Vec<ActiveVolume>> {
         };
         if mounted || running || s.fence.as_ref().is_some_and(|journal| journal.armed) {
             result.push(ActiveVolume {
-                privilege_mode: PrivilegeMode::Unprivileged,
+                privilege_mode: if cfg!(target_os = "openbsd") { PrivilegeMode::Privileged } else { PrivilegeMode::Unprivileged },
                 source_path: Some(s.source),
                 readonly: s.readonly,
                 mapper_name: format!(
@@ -1561,6 +1607,8 @@ mod tests {
                 device: 1,
                 inode: 2,
             },
+            #[cfg(target_os = "openbsd")]
+            openbsd_underlay: None,
             #[cfg(target_os = "freebsd")]
             boot_id: None,
             mountpoint: "mountpoint".into(),
@@ -1717,6 +1765,8 @@ mod tests {
                 device: 1,
                 inode: 2,
             },
+            #[cfg(target_os = "openbsd")]
+            openbsd_underlay: None,
             #[cfg(target_os = "freebsd")]
             boot_id: None,
             mountpoint: "mountpoint".into(),
