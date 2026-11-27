@@ -1,238 +1,100 @@
-# Native NetBSD LKL diagnostic build
+# Archived NetBSD LKL investigation — cut
 
-This is an ordinary native host-process filesystem driver investigation. It
-does not build a boot kernel, modify installed FUSE libraries, install a driver,
-enable a Lurker filesystem, or change the qualified package. Its files belong
-outside Lurker's private backend bundle.
+Status: the experimental route is cut from actionable plans under the user's
+non-invasive, mainstream-repository boundary. No build, test, mounted driver or
+Lurker integration is scheduled for this route. Source, uncommitted WIP, partial
+objects, failures and original recipes remain preserved. This document records
+their disposition rather than instructions to continue them.
 
-The first phase captures unmodified current-upstream diagnostics. Run as an
-ordinary NetBSD amd64 user on a work-specific filesystem with at least 6 GiB
-initially free, using the native compiler and GNU make:
+Novel means kernel code or behavior invented by Lurker. Applying established
+pre-made kernel-source patches remains allowed, including patches applied
+specifically for Lurker. Existing supported parameters and configuration,
+including selections before a build, are allowed. There is no blanket patch or
+userspace ban. The boundary applies to the kernel embedded in LKL as well as a
+host boot kernel. In particular, `MMU=n` matches upstream LKL's default and
+KASAN is an existing option; the locally invented ABI and lifecycle behavior
+below are separate from those choices.
 
-```sh
-python3.14 scripts/build-netbsd-lkl.py --work-dir /path/to/lkl-work \
-  --receipt /path/to/lkl-work/baseline.json --timeout 600
-python3.14 scripts/test-build-netbsd-lkl.py
-```
+## Completed work and its limits
 
-After a native build, set `LURKER_NETBSD_LKL_SOURCE` to its `linux-REVISION`
-directory when running the tests to also compile the actual generated UAPI
-layout assertions. These check stat ownership offsets, preserved ICMP padding,
-packet/signal structures and directory entries, with native aliases restored.
+The investigation used pinned upstream
+`d0f76a77e8c2ca68bd7d96190b8da09040eab072`, archive SHA-256
+`ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e168`, on the
+native NetBSD host as UID 1300. Source/cache verification covered 86,818 original
+files. Compiler, SDK, generated-header, source and artifact identities are retained.
 
-The source is pinned to `d0f76a77e8c2ca68bd7d96190b8da09040eab072` and archive
-SHA-256 `ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e168`.
-Both cached archives and every upstream file are verified before resuming a
-baseline. Existing receipts and logs are preserved. A deadline terminates the
-owned make process group, including its compiler children. Build failures are
-diagnostics, not qualified filesystem support.
+The first unmodified-kernel RAM-only boot attempt stalled at startup. Native
+timer controls and the installed `sigevent(3)` manual identified unsupported
+`SIGEV_THREAD` delivery. A local pthread timer adaptation subsequently added a
+`timer_quiesce` field to `arch/lkl/include/uapi/asm/host_ops.h` and a call in
+`arch/lkl/kernel/setup.c` after CPU/thread/clock shutdown and before memory
+release. These are locally designed embedded-kernel ABI/shutdown changes, not
+established pre-made upstream changes.
 
-After capturing the baseline, install the ordinary build dependencies `bison`,
-`gmake`, `gsed`, and `coreutils`. The `--adapted` flag applies the hash-pinned
-host patch and reuses the additive flush patch from
-`native/macos/lkl-darwin-flush.patch` without changing existing disk-registration
-semantics. It selects native ReFUSE API 38, GNU stat/sed aliases, BSD host mode,
-and no MMU/KASAN or native networking transport. It refuses non-regular images
-and requires `-f -s` if eventually qualified for execution. The patch currently
-does **not** implement the credential/errno gates below: do not mount its output.
+That modified kernel passed all 35 cases in the upstream RAM-only boot suite,
+followed by credential, set-ID, error-translation and native file-image transport
+experiments. One-shot write/flush failures demonstrated why a later successful
+sync, unmount or halt must not erase an earlier I/O error. These are preserved
+experimental observations, not eligible NetBSD filesystem support claims. No
+native FUSE filesystem was mounted and no driver or product/model route was
+installed or enabled.
 
-The private include overlay links to the actual `/usr/include/fuse*.h` headers.
-It provides native byte-swap aliases for the compiler's `modpost` program and an
-unmodified portable ELF file-format header from glibc 2.42, SHA-256
-`fd6e7f3e3c74ee9d64b9f92ce3cc31b34413ca2622a167320ea053ce9a68110f`.
-That header retains its LGPL 2.1-or-later notice and uses only `stdint.h`;
-no glibc implementation or runtime library is used. It supplies the
-cross-architecture relocation constants missing from NetBSD's native `elf.h`.
-The exact native SDK/header hashes are recorded with each adapted build.
-Upstream's header export uses private aliases to the interpreter running this
-builder and to GNU sed/stat; their native paths and hashes are recorded. No
-system executable or global alias is replaced. The overlay also maps the
-Linux-style `endian.h` include to native `sys/endian.h`.
-Native endian inlines are preloaded before LKL temporarily hides `__unused`
-while parsing its UAPI; header discovery uses the same include-overlay flags
-as host compilation. All compatibility files stay inside the build directory.
-NetBSD's native `si_*` signal-field and `ipi_spec_dst` aliases are saved and
-restored around that UAPI import as well. GNU sha1sum runs the upstream generated-header checks;
-the final configuration and generated input hashes are retained in the receipt.
-`--target boot` builds the pinned upstream RAM-only boot test executable. It
-does not run the test or mount any native filesystem; run it separately with
-an owned process-group deadline after verifying its native ELF provenance.
+Independent userspace work covered native SDK/mmap compatibility, caller
+snapshots, held credentials, sticky block errors, descriptor-release gates,
+global mount-identity comparison, an isolated ReFUSE library with a distinct
+SONAME, and a bounded read-only inventory worker. The last completed mixed
+suite passed 23 tests. Its kernel-dependent cases retain the scope limitation
+above; standalone userspace results do not qualify the unfinished driver.
+The ReFUSE bridge and observer never replaced installed system providers.
 
-The mmap helper never passes `MAP_FIXED`. It accepts only the exact requested
-address and releases only an alternate mapping returned by its own syscall.
-Native tests cover collision preservation, failure cleanup, invalid alignment,
-overflow and anonymous exact reuse. A shared-file fixed-base hint may be safely
-rejected; these tests do not establish MMU availability.
+## Cancelled and cut items
 
-Native ReFUSE API/flag adaptation, safe exact-address mmap hints, Linux-to-native
-errno conversion, independently authenticated request credentials, explicit
-block flush negotiation and native formatter compatibility remain required
-gates before even file-backed runtime controls. No privileged product use is
-approved by a successful compile. Preserve the installed providers and all
-unrelated storage. Any usermount or device permission grant needs separate,
-scoped native controls and restoration.
+| Item | Progress and final disposition |
+| --- | --- |
+| Custom `timer_quiesce` ABI and shutdown integration | Compiled and exercised historically. Further development, builds, kernel tests and dependent driver admission are cut. |
+| Local syscall-bounds repair in `arch/lkl/kernel/syscalls.c` | A RAM-only invalid-syscall control exposed a real table lookup before its bounds check. The crash/core/debugger evidence and proposed repair are preserved. Its rebuild was cancelled; no repaired library or boot executable completed or ran. |
+| New negative-syscall controls and producer changes | Preserved as uncommitted WIP. Required verification was cancelled; these are not ready or planned for execution. |
+| Proposed replacement drain through `page_free` or another lifecycle point | Source-only inference; never implemented or tested. Removed from actionable plans. Relocating the design is not an approved continuation. |
+| Native mounted LKL client, further experimental lifecycle work and dependent Lurker enablement | Not completed. The kernel-dependent continuation is cut; no mount or support claim follows from compilation or RAM tests. |
+| New upstream-acceptance project for these changes | Not planned. Publishing local experimental code would not establish mature upstream provenance. |
 
-The existing NetBSD ReFUSE exit/unmount and stock signal handlers enqueue a
-PUFFS unmount request that the running kernel processes with `MNT_FORCE`.
-Closing an attached PUFFS channel also forces its mount down. Those operations
-must be excluded while the mount exists. A runtime adapter must keep serving
-through a normal external unmount, verify global absence of the captured
-mount identity, and then close only its owned channel. The current diagnostic
-patch does not implement that lifecycle boundary; its output remains unsuitable
-for runtime mounting.
+Supervisor PID 18864 and its owned make process group 15917 were verified by
+UID, command and ancestry. The supervisor was stopped while TERM and then
+unconditional group KILL were sent to the reserved child group; it resumed to
+record terminal return code `-15`. That cancellation preceded the earlier
+non-interruption instruction and was never restarted. The latest explicit cut
+instruction was then checked against all owned jobs and descendants: zero
+matching builds, compilers or runtime jobs remained. No subagents were spawned.
 
-The stock POSIX `SIGEV_THREAD` timer path also blocks LKL boot on this host:
-NetBSD's installed `sigevent(3)` documents that notification mode as unsupported.
-Native timers expired without callbacks while matched signal notifications
-worked. `netbsd-timer.h` supplies a separate monotonic pthread worker for the
-current LKL callback signature. Its native control covers rearming, cancellation,
-self-free and explicit callback quiescence. `timer_free` never joins an IRQ/self
-callback; a post-CPU-shutdown drain is required before freeing LKL memory. The
-standalone header/control proof alone does not qualify LKL boot or storage.
-The adapted source adds an optional `timer_quiesce` host-operation hook after
-CPU/thread/clock shutdown and before `free_mem()`. The NetBSD worker is the only
-provider of that hook in this build; other host initializers leave it null.
-Its separately pinned header is copied into the isolated LKL source tree and
-verified again on cache reuse. These changes are inside the native process's
-LKL library, not the NetBSD boot kernel or installed runtime providers.
+Partial `syscalls.o` and `setup.o` are preserved. No new `liblkl.a`, `lkl.o` or
+boot output completed. Experimental source and WIP have not been deleted,
+reverted or executed to close this audit. The mixed suite and adapted/boot
+builder commands remain historical recipes, not an actionable validation plan.
 
-The timer-integrated native RAM-only boot suite passed all 35 upstream cases,
-including syscall threads and kernel shutdown. Separate native controls checked
-captured credentials, set-ID clearing, Linux errno conversion and timer drain
-before freeing LKL memory. Those results establish process primitives, not a
-mounted filesystem or Lurker support.
+## Preserved evidence and host state
 
-Stock ReFUSE does not register `node.fsync`; the puffs dispatcher returns success
-for that absent operation, and ReFUSE's `fs.sync` is a no-op. The separate
-`refuse-bridge.patch` forwards file and directory fsync requests, including data
-sync hints and native errors. A NULL path and NULL handle on `fsyncdir` is an
-explicit private contract for a whole-filesystem barrier. An unopened node can
-likewise have a NULL handle. The eventual driver must implement these cases;
-the raw upstream callbacks are insufficient. ReFUSE already installs a PID
-prehook for each request. The patch clears PID before querying that prehook so
-a failed caller query cannot reuse an earlier PID.
+Private receipts are under
+`target/goal-validation/native-fresh-20261127/hosts/netbsd/build/lkl-native/`:
 
-Build this isolated library as the ordinary user, with a new private output:
+- `new-scope-kernel-audit.json` and `latest-scope-source-addendum.json`: exact
+  file/provenance classifications and historical source assessment.
+- `bounds-build-cancel.json` and `bounds-boot-build.json`: cancellation, process
+  identities, terminal status and partial-build inputs.
+- `final-experimental-cut-verification.json` and
+  `final-experimental-cut-status.json`: latest zero-job check and cut plan.
+- `errno-invalid-syscall-failure.json` and `errno-invalid-syscall-gdb.txt`:
+  original crash/core identity and failing source location.
 
-```sh
-python3.14 scripts/build-netbsd-lkl.py --work-dir /path/to/lkl-work \
-  --receipt /path/to/lkl-work/refuse-build.json --timeout 180 \
-  --refuse-output /path/to/lkl-work/refuse-isolated
-```
+The identified work/cache qcow2 and its FFS mount remain solely for preserved
+source, cache and evidence. Original scratch disks and failed fixtures remain
+untouched. User-mount policy is zero; `/dev/putter` remains root:wheel 0600,
+rdev 45568. All three installed native provider hashes are unchanged. The
+separately qualified installed `8e09ac8` CGD/CryFS package and its receipts retain
+their own artifact identities and are not relabelled as LKL results.
 
-This reuses the pinned source/access patch from the independent host prerequisite
-builder and requires the qualified installed puffs provider. The resulting
-`librefuse-lkl.so.2` has a distinct SONAME and is never installed. Its exact
-source, ELF dependencies, build commands and hashes are retained. Set
-`LURKER_NETBSD_REFUSE_SOURCE` to `refuse-isolated/source/lib/librefuse` to run
-the native actual-source forwarding control along with the builder tests.
-That control substitutes the puffs caller and failed-mount seams; it does not mount. It
-checks registration, file/directory/data-only sync, native error propagation,
-the NULL-handle barrier, PID changes/query failure and foreign-user admission.
-The driver must pin and load this exact isolated library rather than the
-installed system SONAME. The diagnostic client remains unsuitable for mounting
-until its remaining credential, disk-I/O and no-force lifecycle gates pass.
-
-Diagnostic bridge ABI 2 calls the backend for every native open, passing a
-registered per-vnode capability on subsequent opens. The backend must preserve
-separate read/write descriptors and their verified opener credentials. First
-open clears the already-released dummy-create handle; noncreating open strips
-create/exclusive/truncate flags. Native VFS performs its existing-file truncate
-through setattr before open. Backend release runs only for the last native
-close, with native error propagation and retained state on failure. A mount
-failure returns to the driver rather than exiting with live LKL/source state.
-The bridge also exposes a mandatory owner-only/default-permission profile check;
-root, allow-other and allow-root profiles are outside this diagnostic contract.
-Its actual-source control checks repeated opens, failed-open atomicity, last
-close, release-error retention and append versus explicit offsets. The native
-PUFFS write callback already converts its append flag to the inode's current
-size. These are isolated library controls; the frontend still needs real
-overlap, append, permission and pathname-replacement tests before admission.
-
-`netbsd-disk.h` is the file-only native block-transport component. It admits a
-held caller-owned, private, single-link regular file with a sector-aligned size;
-it checks byte ranges and implements zero-data-buffer FLUSH with native `fsync`.
-Each disk atomically retains its first read/write/flush failure. Later successful
-requests and the final host barrier do not clear that error. The native control
-injects a single error at each native syscall seam and verifies that behavior,
-as well as overflow, capacity change and nonprivate-source rejection.
-
-A separate current-LKL process control used fresh images created by native
-`mke2fs`, with no native FUSE mount. The clean case negotiated and forwarded
-FLUSH, retained UID/GID 1300 ownership and completed ordinary LKL unmount/halt.
-One-shot write and flush failures both reached LKL fsync as EIO. In the flush
-case, later syncfs, unmount and halt all returned zero while the final transport
-status still reported the earlier EIO. These are injected syscall-boundary
-failures, not hardware-generated errors. They prove the sticky-error requirement;
-they do not establish Btrfs/XFS formatting, native mounted access or driver
-lifecycle support. The raw diagnostic client still does not use this component.
-
-`netbsd-caller.h` obtains bounded, birth/UID/GID/full-group-stable native
-`KERN_PROC2` snapshots. PID zero, dead callers, short results and live invalid
-queries cannot become authenticated requests. `netbsd-credentials.h` applies
-captured authority and a validated FUSE-context umask inside LKL, then verifies
-restoration of root IDs, empty supplementary groups and umask zero. Native VFS
-already masks creation modes on this ABI; context umask zero preserves those
-modes rather than applying LKL's default mask again.
-
-A restoration failure permanently poisons new operations. It does not exit or
-close source/channel resources. Only previously captured-authority barrier and
-release cleanup can recover enough state to close held handles; recovery never
-clears the failure. The native RAM-only control checks an actual dead opener's
-held authority, owner/group, root-chown denial, set-ID clearing, explicit/zero
-umasks and an injected restoration failure while its native source FD stays
-held. This component is not yet wired into the diagnostic frontend and does
-not establish mounted cleanup behavior.
-
-`netbsd-shutdown.h` gates final barrier, owned descriptor closure and library
-cleanup on global captured-mount absence and a successful LKL halt. Current
-upstream `arch/lkl/kernel/setup.c` returns a negative halt result before CPU,
-thread and timer quiescence. A failed halt therefore retains resources and
-requires a later retry; subsequent success never erases the earlier failure.
-Its native control retains actual descriptors through missing identity, a moved
-mount represented as globally present, inventory failure and three negative
-halt responses, then checks exactly-once release after a later zero response.
-The global FSID detector and actual mounted no-force lifecycle remain separate
-frontend gates. This helper neither detects nor unmounts a filesystem.
-
-`netbsd-mount.h` compares full native FSIDs with the exact fresh puffs type nonce,
-source and mount owner. It rejects prior or duplicate identities, never adopts
-a replacement pathname and searches for the recorded identity after moves. Its
-native control samples the host inventory and separately tests synthetic moved,
-replaced and inconsistent snapshots. It does not establish a mounted lifecycle.
-Run inventory queries outside a native host chroot. `MNT_NOWAIT` avoids stat RPCs
-but the native mount iterator still calls `vfs_busy`/`fstrans_start`; it can wait
-for a mount transaction. Therefore a serving PUFFS callback must not issue that
-query synchronously. A separately bounded native-only observer must query while
-the main thread keeps serving, and capture only after a real callback was served.
-That observer/cancellation boundary is still a required frontend gate.
-
-`mount-observer.c` and `netbsd-observer.h` provide a separate read-only native
-inventory process and a nonblocking parent-side poller. The observer has no LKL
-or FUSE linkage. Its bounded protocol checks the native record size and count;
-partial, malformed or failed snapshots cannot establish absence. Its private
-process group receives TERM, then unconditional KILL before the leader is reaped.
-A worker that still cannot be reaped remains owned and blocks another launch;
-no thread detaches and no query timeout authorizes storage release. The native
-control checks the actual four-mount inventory, malformed replies, a ready
-TERM-ignoring worker and clock failure cancellation.
-
-```sh
-python3.14 scripts/build-netbsd-lkl.py --work-dir /path/to/lkl-work \
-  --receipt /path/to/lkl-work/observer-build.json --timeout 60 \
-  --observer-output /path/to/lkl-work/observer-isolated
-```
-
-The build pins and copies its three source inputs, emits a separate native PIE
-executable and records its source/SDK/ELF hashes. It never installs. Set
-`LURKER_NETBSD_MOUNT_OBSERVER` to that exact executable while running the focused
-tests to exercise its actual bytes. The frontend must make all source/channel
-FDs close-on-exec and poll it while serving; that final wiring and actual mounted
-lifecycle remain unqualified.
-
-https://github.com/NetBSD/src/blob/4299530ca04c23eff6e740a3d97d29bca16c22fe/sys/kern/vfs_mount.c
+The applicable project boundary is recorded in
+`DIRECTIVES/LLM/DEVELOPMENT.md` and
+`DIRECTIVES/PLAN/NATIVE_FRESH_20261127/KERNEL_SCOPE_AUDIT.md`.
 
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
-https://man.netbsd.org/mmap.2
-https://github.com/bminor/glibc/blob/glibc-2.42/elf/elf.h
-https://github.com/NetBSD/src/blob/4299530ca04c23eff6e740a3d97d29bca16c22fe/sys/fs/puffs/puffs_msgif.c
+https://man.netbsd.org/sigevent.3

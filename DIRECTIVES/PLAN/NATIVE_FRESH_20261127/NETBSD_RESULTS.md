@@ -68,9 +68,10 @@ and is not claimed. These results are conditional on manual prerequisites.
 
 The temporary digest-pinned helper sudoers rule was removed and visudo passed;
 the base sudoers hash was unchanged. User-mount policy returned to zero and the
-native character device to root:wheel 0600 with the same rdev. Only base mounts
-remain, all eight CGD and four vnode units are unused, and no force import or
-custom kernel change was made. Owned failed /tmp GUI/session evidence was copied
+native character device to root:wheel 0600 with the same rdev. At completion of
+ordinary qualification only base mounts remained, all eight CGD and four vnode
+units were unused, and no force import or custom kernel change had been made.
+The later, separately classified LKL experiment is recorded below. Owned failed /tmp GUI/session evidence was copied
 and archive-verified before reboot; persistent failed containers, snapshots,
 credentials and parameter files remain private. The new round-owned qcow2 remains
 attached with closed encrypted test data; the original system disk was preserved.
@@ -109,6 +110,51 @@ itself (861 packaged payload files), matching hashes, root ownership and safe
 modes. Three successfully verified closed reboot containers were hashed before
 removal; failed fixtures and all parameter/receipt evidence were preserved. The
 host has 1.9 GiB free and no owned crypto processes remain.
+
+## Subsequent LKL investigation — terminal and cut
+
+A separate native LKL investigation followed ordinary qualification. It did not
+change the installed `8e09ac8` product or add a Btrfs/XFS support claim. Novel
+means kernel code or behavior invented by Lurker. Established pre-made patches,
+including kernel-source patches applied for Lurker, and existing supported
+parameters/configuration before a build remain allowed; userspace work is not
+blanket-excluded.
+
+The experiment used upstream LKL `d0f76a77...` with local native host adapters.
+After stock `SIGEV_THREAD` delivery blocked startup, local work added a
+`timer_quiesce` kernel ABI slot and shutdown call. The modified embedded kernel
+passed 35 RAM-only suite cases and dependent credential/transport controls.
+That ABI/shutdown behavior was invented locally and is not an eligible route
+under the user's non-invasive mainstream-repository requirement. Independent
+userspace controls and their exact identities remain separately recorded.
+No native LKL FUSE mount, driver installation or product enablement occurred.
+
+A later invalid-syscall control exposed a real out-of-bounds handler-table read.
+Its locally authored repair reached a kernel rebuild. Verified supervisor
+18864 and owned make group 15917 were cancelled with TERM then unconditional
+group KILL while ownership was reserved; the supervisor recorded terminal
+`-15`. No repaired library or boot executable completed or ran. Latest read-only
+checks found zero owned build/runtime jobs, group members or descendants, and
+no subagents were spawned.
+
+The custom ABI/shutdown work, syscall repair/build/tests, proposed `page_free`
+replacement or lifecycle relocation, dependent mounted-driver experiments and
+any project to obtain upstream acceptance are cut from actionable plans. The
+`page_free` idea remained source-only and was never implemented or tested.
+Experimental WIP, partial objects, crash/core, archives and receipts are
+preserved without further execution, deletion or reversion. Configuration/build
+edits are judged separately; `MMU=n` is an existing upstream default.
+
+The identified new FFS work/cache volume remains mounted solely for preserved
+source and evidence. User-mount policy remains zero and putter root:wheel 0600;
+the three installed native provider hashes are unchanged. Original scratch and
+failed fixtures remain preserved. This later build mount does not alter the
+ordinary qualification cleanup receipt above.
+
+Owned archive disposition is in `native/netbsd/lkl/README.md`. Exact private
+receipts are under `hosts/netbsd/build/lkl-native/`, especially
+`new-scope-kernel-audit.json`, `bounds-build-cancel.json`,
+`final-experimental-cut-verification.json` and `final-experimental-cut-status.json`.
 
 ## Earlier fresh investigations and artifact identities
 
@@ -276,8 +322,8 @@ hostid reference. The stock rc.d zfs service only attempts module unloading and
 has no pool export or shutdown hook. No forced import, custom hook, module source
 change or ineffective product prerequisite guard was applied. Failed encrypted
 ZFS fixtures remain intact. This cell is blocked for reboot qualification even
-though its ordinary file/device lifecycle passes; a base-module repair is deferred
-until the ordinary-route assessment is complete.
+though its ordinary file/device lifecycle passes. A locally invented base-module
+repair is cut from the plan; no such repair was started.
 
 Stable CryFS 1.0.3, pinned commit
 `5d0cc36785d93e12250696a3ffc928042f2e8d61`, was built with ordinary native
@@ -448,8 +494,9 @@ through ordinary package tools. Installed CLI/helper/desktop hashes are
 and `6b9832cd907889d8c51e6c6cf313ed5c7eb6b87d19d3b6d517aa69a6edda12d4`.
 The official CryFS engine remains byte-identical `e1b3f3c...`. Installed manifest
 hashes and root ownership were verified, including absence of bundled native
-FUSE providers. The complete actual-user container/backing matrix is running;
-earlier or isolated receipts do not supply these final artifact passes.
+FUSE providers. The completed actual-user container/backing matrix is reported
+in the final installed-artifact section above; earlier or isolated receipts do
+not supply those final artifact passes.
 
 A subsequent shared folder snapshot fix `c3dd43bf` addresses transient extra
 links observed during OpenBSD UFS record replacement. The exact concurrent
