@@ -49,7 +49,9 @@
     }
   ],
   "DragonFly_patches": [
-    "patches/0001-dragonfly-modpost-relocations.patch"
+    "patches/0001-dragonfly-modpost-relocations.patch",
+    "patches/0002-dragonfly-posix-host.patch",
+    "patches/0003-dragonfly-uapi-native-macros.patch"
   ],
   "native_build_prerequisites": [
     "GNU make",
@@ -69,5 +71,19 @@
   "kernel_driver_config": [
     "BTRFS_FS=y",
     "XFS_FS=y"
-  ]
+  ],
+  "DragonFly_source_files": [
+    {
+      "path": "dragonfly-timer.h",
+      "target": "tools/lkl/lib/dragonfly-timer.h",
+      "sha256": "9483fe195c2ead32361ee28d5c786f15e6112b636cd1c99f56df34bc673b3229"
+    }
+  ],
+  "host_features": {
+    "FUSE": 2,
+    "native_timers": "nonblocking cancellation; explicit host-op callback drain after CPU/clock shutdown and before freeing guest memory",
+    "native_thread_id": "pthread_getthreadid_np",
+    "host_network_adapters": false,
+    "syscall_hijack_library": false
+  }
 }

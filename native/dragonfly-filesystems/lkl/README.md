@@ -21,3 +21,20 @@ blocked CryFS integration are separate evidence.
 
 UFS2 is not enabled by this recipe. Its conditional Linux write implementation
 and a separate native UFS2 formatter need their own assessment and controls.
+
+The native host-glue diagnostic now compiles and passes the 35 upstream boot
+checks, the strict native UAPI layout/explicit shutdown-hook probe, and the
+monotonic timer lifecycle control. These tests do not mount host storage.
+Patch 0002 provides nonblocking runtime timer cancellation and an optional host
+callback that drains timers after CPU/clock shutdown, before guest memory is
+freed. It also selects filesystem-only host features and a non-executable stack.
+Patch 0003 prevents native aliases from changing imported Linux structure fields.
+The generated host headers and kernel-library object must come from the same
+patched tree; the old outer Makefile does not track incremental kernel changes.
+Preserve/rebuild its forwarded `tools/lkl/lib/lkl.o` when those inputs change.
+
+`tests/timer-control.c` checks cancellation, rearm, self-free and callback drain
+using the actual native timer adapter. `tests/host-contract.c` links the freshly
+built library and checks imported wire layouts and the shutdown-hook ordering.
+Run both on native DragonFly as the ordinary user. Full native filesystem,
+flush/error, ownership and permission controls remain required before admission.

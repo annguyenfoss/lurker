@@ -1,0 +1,142 @@
+--- tools/lkl/Makefile.autoconf
++++ tools/lkl/Makefile.autoconf
+@@ -25,6 +25,12 @@
+   $(call set_autoconf_var,BSD,y)
+ endef
+ 
++define dragonfly_host
++  $(call bsd_host)
++  $(call set_autoconf_var,DRAGONFLY,y)
++  LDFLAGS += -z noexecstack
++endef
++
+ define virtio_net_dpdk
+   $(call set_autoconf_var,VIRTIO_NET_DPDK,y)
+   RTE_SDK ?= $(OUTPUT)/dpdk-17.02
+@@ -46,7 +52,7 @@
+ 
+ define posix_host
+   $(call set_autoconf_var,POSIX,y)
+-  $(call set_autoconf_var,VIRTIO_NET,y)
++  $(if $(call is_defined,__DragonFly__),$(call dragonfly_host),$(call set_autoconf_var,VIRTIO_NET,y))
+   LDFLAGS += -pie
+   CFLAGS += -fPIC -pthread
+   SOSUF := .so
+--- tools/lkl/Targets
++++ tools/lkl/Targets
+@@ -12,5 +12,7 @@
+ 
+ progs-y += tests/boot
+ progs-y += tests/disk
++ifneq ($(LKL_HOST_CONFIG_DRAGONFLY),y)
+ progs-y += tests/net-test
++endif
+ 
+--- tools/lkl/include/lkl.h
++++ tools/lkl/include/lkl.h
+@@ -19,10 +19,17 @@
+  */
+ #pragma push_macro("__unused")
+ #undef __unused
++#ifdef __DragonFly__
++#pragma push_macro("sigev_signo")
++#undef sigev_signo
++#endif
+ 
+ #include <lkl/asm/syscalls.h>
+ 
+ #pragma pop_macro("__unused")
++#ifdef __DragonFly__
++#pragma pop_macro("sigev_signo")
++#endif
+ 
+ #ifdef __cplusplus
+ #undef class
+--- tools/lkl/lib/posix-host.c
++++ tools/lkl/lib/posix-host.c
+@@ -1,4 +1,7 @@
+ #include <pthread.h>
++#ifdef __DragonFly__
++#include <pthread_np.h>
++#endif
+ #include <stdlib.h>
+ #include <sys/time.h>
+ #include <time.h>
+@@ -258,6 +261,24 @@
+ 	return 1e9*ts.tv_sec + ts.tv_nsec;
+ }
+ 
++#ifdef __DragonFly__
++#include "dragonfly-timer.h"
++
++static void *timer_alloc(void (*fn)(void *), void *arg)
++{
++	return df_timer_alloc(fn, arg);
++}
++
++static int timer_set_oneshot(void *timer, unsigned long ns)
++{
++	return df_timer_set_oneshot(timer, ns);
++}
++
++static void timer_free(void *timer)
++{
++	df_timer_free(timer);
++}
++#else
+ static void *timer_alloc(void (*fn)(void *), void *arg)
+ {
+ 	int err;
+@@ -297,6 +318,8 @@
+ 	timer_delete(timer);
+ }
+ 
++#endif
++
+ static void panic(void)
+ {
+ 	assert(0);
+@@ -304,7 +327,9 @@
+ 
+ static long _gettid(void)
+ {
+-#ifdef	__FreeBSD__
++#ifdef __DragonFly__
++	return pthread_getthreadid_np();
++#elif defined(__FreeBSD__)
+ 	return (long)pthread_self();
+ #else
+ 	return syscall(SYS_gettid);
+@@ -335,6 +360,9 @@
+ 	.timer_alloc = timer_alloc,
+ 	.timer_set_oneshot = timer_set_oneshot,
+ 	.timer_free = timer_free,
++#ifdef __DragonFly__
++	.timer_quiesce = df_timers_quiesce,
++#endif
+ 	.print = print,
+ 	.mem_alloc = malloc,
+ 	.mem_free = free,
+--- arch/lkl/include/uapi/asm/host_ops.h
++++ arch/lkl/include/uapi/asm/host_ops.h
+@@ -119,6 +119,9 @@
+ 	int (*timer_set_oneshot)(void *timer, unsigned long delta);
+ 	void (*timer_free)(void *timer);
+ 
++	/* Optional: drain host timer callbacks after CPU/clock shutdown. */
++	void (*timer_quiesce)(void);
++
+ 	void* (*ioremap)(long addr, int size);
+ 	int (*iomem_access)(const volatile void *addr, void *val, int size,
+ 			    int write);
+--- arch/lkl/kernel/setup.c
++++ arch/lkl/kernel/setup.c
+@@ -134,6 +134,8 @@
+ 	threads_cleanup();
+ 	/* Shutdown the clockevents source. */
+ 	tick_suspend_local();
++	if (lkl_ops->timer_quiesce)
++		lkl_ops->timer_quiesce();
+ 	free_mem();
+ 	lkl_ops->thread_join(current_thread_info()->tid);
+ 

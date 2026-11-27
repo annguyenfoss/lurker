@@ -1,0 +1,15 @@
+--- tools/lkl/include/lkl.h
++++ tools/lkl/include/lkl.h
+@@ -2,6 +2,12 @@
+ #define _LKL_H
+ 
+ #include "lkl_autoconf.h"
++
++#ifdef __DragonFly__
++/* Define native aliases before hiding them during UAPI imports. */
++#include <sys/cdefs.h>
++#include <signal.h>
++#endif
+ 
+ #ifdef __cplusplus
+ extern "C" {
