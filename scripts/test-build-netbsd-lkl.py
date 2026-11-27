@@ -20,6 +20,53 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD" and os.environ.get("LURKER_NETBSD_LKL_SOURCE"), "built native LKL UAPI required")
+    def test_generated_native_uapi_matches_kernel_layout(self):
+        source = Path(os.environ["LURKER_NETBSD_LKL_SOURCE"]).resolve(strict=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            (work / "probe.c").write_text(r'''
+#define _NETBSD_SOURCE
+#include <sys/types.h>
+#include <sys/endian.h>
+#include <signal.h>
+#include <netinet/in.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <lkl.h>
+#include <lkl_host.h>
+#pragma push_macro("ipi_spec_dst")
+#undef ipi_spec_dst
+_Static_assert(sizeof(struct lkl_stat)==128,"asm-generic 64-bit stat size");
+_Static_assert(offsetof(struct lkl_stat,st_ino)==8,"stat ino offset");
+_Static_assert(offsetof(struct lkl_stat,st_mode)==16,"stat mode offset");
+_Static_assert(offsetof(struct lkl_stat,st_nlink)==20,"stat nlink offset");
+_Static_assert(offsetof(struct lkl_stat,st_uid)==24,"stat uid offset");
+_Static_assert(offsetof(struct lkl_stat,st_gid)==28,"stat gid offset");
+_Static_assert(offsetof(struct lkl_stat,st_size)==48,"stat size offset");
+_Static_assert(sizeof(struct lkl_icmphdr)==8,"ICMP UAPI size");
+_Static_assert(offsetof(struct lkl_icmphdr,un.frag.mtu)==6,"ICMP __unused field retained");
+_Static_assert(sizeof(struct lkl_in_pktinfo)==12,"in_pktinfo UAPI size");
+_Static_assert(offsetof(struct lkl_in_pktinfo,ipi_spec_dst)==4,"packet spec dst distinct");
+_Static_assert(offsetof(struct lkl_in_pktinfo,ipi_addr)==8,"packet addr offset");
+_Static_assert(sizeof(struct lkl_siginfo)==128,"Linux siginfo size");
+_Static_assert(offsetof(struct lkl_linux_dirent64,d_name)==19,"Linux dirent name offset");
+#pragma pop_macro("ipi_spec_dst")
+int main(void) {
+    siginfo_t native={0}; native.si_signo=SIGUSR1;
+    struct in_pktinfo packet={0}; packet.ipi_spec_dst.s_addr=7;
+    if(native.si_signo!=SIGUSR1 || packet.ipi_addr.s_addr!=7) return 1;
+    printf("native LKL strict layout passed uid=%u stat=128 uid@24 gid@28 ICMP=8 mtu@6 packet=12 siginfo=128 dirent-name@19; native aliases preserved\n",(unsigned)getuid());
+    return 0;
+}
+''')
+            subprocess.run(["/usr/bin/gcc", "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-Wno-unused-parameter",
+                            "-I", str(source.parent / "netbsd-include"), "-I", str(source / "tools/lkl/include"),
+                            "-o", str(work / "probe"), str(work / "probe.c")], check=True, timeout=30)
+            result = subprocess.run([str(work / "probe")], capture_output=True, text=True, check=True, timeout=10)
+            print(result.stdout, end="")
+
     @unittest.skipUnless(platform.system() == "NetBSD", "native NetBSD signal aliases")
     def test_native_signal_aliases_survive_lkl_header_import(self):
         patch = (BUILDER.ROOT / BUILDER.HOST_PATCH).read_text()

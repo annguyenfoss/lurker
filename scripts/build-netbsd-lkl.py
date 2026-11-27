@@ -219,6 +219,7 @@ def main():
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--adapted", action="store_true", help="Apply diagnostic-only native host inputs; no runtime qualification")
+    parser.add_argument("--target", choices=("lklfuse", "boot"), default="lklfuse")
     args = parser.parse_args()
     if platform.system() != "NetBSD" or platform.machine() not in ("amd64", "x86_64"):
         parser.error("Run natively on NetBSD amd64")
@@ -234,6 +235,7 @@ def main():
                "phase": "native-adapter-diagnostic" if args.adapted else "unmodified-baseline", "uid": os.getuid(),
                "uname": list(platform.uname()), "started": time.time(),
                "script_sha256": digest(__file__), "state": "preparing"}
+    receipt["target"] = args.target
     args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     try:
         source, count, identity = prepare(work, args.adapted)
@@ -279,7 +281,8 @@ def main():
                 stat_alias = source / "tools/lkl/bin/stat"
                 if stat_alias.is_file() and not stat_alias.is_symlink() and stat_alias.stat().st_size == 0:
                     stat_alias.unlink()
-            command = ["gmake", "-j1", "V=1", str(source / "tools/lkl/lklfuse")]
+            relative = "tools/lkl/tests/boot" if args.target == "boot" else "tools/lkl/lklfuse"
+            command = ["gmake", "-j1", "V=1", str(source / relative)]
             log = args.receipt.with_suffix(".log")
             receipt.update(command=command, log=str(log), state="building")
             args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")

@@ -15,6 +15,11 @@ python3.14 scripts/build-netbsd-lkl.py --work-dir /path/to/lkl-work \
 python3.14 scripts/test-build-netbsd-lkl.py
 ```
 
+After a native build, set `LURKER_NETBSD_LKL_SOURCE` to its `linux-REVISION`
+directory when running the tests to also compile the actual generated UAPI
+layout assertions. These check stat ownership offsets, preserved ICMP padding,
+packet/signal structures and directory entries, with native aliases restored.
+
 The source is pinned to `d0f76a77e8c2ca68bd7d96190b8da09040eab072` and archive
 SHA-256 `ef6e5b7cd66c023bc16193013fdacbc1285b9eb86df864b8c6cefe0ad4e0e168`.
 Both cached archives and every upstream file are verified before resuming a
@@ -49,6 +54,9 @@ as host compilation. All compatibility files stay inside the build directory.
 NetBSD's native `si_*` signal-field and `ipi_spec_dst` aliases are saved and
 restored around that UAPI import as well. GNU sha1sum runs the upstream generated-header checks;
 the final configuration and generated input hashes are retained in the receipt.
+`--target boot` builds the pinned upstream RAM-only boot test executable. It
+does not run the test or mount any native filesystem; run it separately with
+an owned process-group deadline after verifying its native ELF provenance.
 
 The mmap helper never passes `MAP_FIXED`. It accepts only the exact requested
 address and releases only an alternate mapping returned by its own syscall.
@@ -64,6 +72,16 @@ approved by a successful compile. Preserve the installed providers and all
 unrelated storage. Any usermount or device permission grant needs separate,
 scoped native controls and restoration.
 
+The existing NetBSD ReFUSE exit/unmount and stock signal handlers enqueue a
+PUFFS unmount request that the running kernel processes with `MNT_FORCE`.
+Closing an attached PUFFS channel also forces its mount down. Those operations
+must be excluded while the mount exists. A runtime adapter must keep serving
+through a normal external unmount, verify global absence of the captured
+mount identity, and then close only its owned channel. The current diagnostic
+patch does not implement that lifecycle boundary; its output remains unsuitable
+for runtime mounting.
+
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
 https://man.netbsd.org/mmap.2
 https://github.com/bminor/glibc/blob/glibc-2.42/elf/elf.h
+https://github.com/NetBSD/src/blob/4299530ca04c23eff6e740a3d97d29bca16c22fe/sys/fs/puffs/puffs_msgif.c
