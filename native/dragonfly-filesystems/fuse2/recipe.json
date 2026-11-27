@@ -94,5 +94,10 @@
     "V=1"
   ],
   "jobs": 1,
-  "scope": "Native ABI and static library compilation passed; final linked driver privilege/runtime remains unqualified."
+  "scope": "Native ABI and PIC static-library/ELF link passed; final linked driver privileged runtime remains unqualified.",
+  "build_environment": {
+    "CC": "gcc13",
+    "CFLAGS": "-O2 -pipe -fPIC -I/usr/local/include",
+    "LDFLAGS": "-L/usr/local/lib"
+  }
 }
