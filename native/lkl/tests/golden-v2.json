@@ -1,0 +1,137 @@
+{
+  "protocol": 2,
+  "endianness": "big",
+  "frame_bytes": 512,
+  "hex_file": "released-clean-v2.hex",
+  "scope": "Structural example only, never file-only completion authority",
+  "fields": {
+    "4": {
+      "format": "H",
+      "value": 2
+    },
+    "6": {
+      "format": "H",
+      "value": 32
+    },
+    "8": {
+      "format": "I",
+      "value": 512
+    },
+    "12": {
+      "format": "H",
+      "value": 6
+    },
+    "16": {
+      "format": "I",
+      "value": 127
+    },
+    "24": {
+      "format": "Q",
+      "value": 1023
+    },
+    "32": {
+      "format": "Q",
+      "value": 1023
+    },
+    "104": {
+      "format": "Q",
+      "value": 501
+    },
+    "112": {
+      "format": "Q",
+      "value": 1234
+    },
+    "120": {
+      "format": "Q",
+      "value": 1795750000
+    },
+    "128": {
+      "format": "Q",
+      "value": 123456
+    },
+    "136": {
+      "format": "Q",
+      "value": 1235
+    },
+    "144": {
+      "format": "Q",
+      "value": 1795750000
+    },
+    "152": {
+      "format": "Q",
+      "value": 234567
+    },
+    "160": {
+      "format": "Q",
+      "value": 16777234
+    },
+    "168": {
+      "format": "Q",
+      "value": 40000001
+    },
+    "176": {
+      "format": "Q",
+      "value": 16777234
+    },
+    "184": {
+      "format": "Q",
+      "value": 40000002
+    },
+    "192": {
+      "format": "Q",
+      "value": 536870912
+    },
+    "208": {
+      "format": "I",
+      "value": 1
+    },
+    "212": {
+      "format": "I",
+      "value": 3
+    },
+    "216": {
+      "format": "Q",
+      "value": 1311768467463790320
+    },
+    "224": {
+      "format": "Q",
+      "value": 1147797409030816545
+    },
+    "232": {
+      "format": "Q",
+      "value": 16777234
+    },
+    "240": {
+      "format": "Q",
+      "value": 40000003
+    },
+    "280": {
+      "format": "I",
+      "value": 1
+    },
+    "288": {
+      "format": "Q",
+      "value": 9
+    }
+  },
+  "byte_arrays": {
+    "40": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+    "72": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+    "88": "101112131415161718191a1b1c1d1e1f",
+    "248": "c0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf"
+  },
+  "all_other_bytes": 0,
+  "additional_vectors": [
+    {
+      "hex_file": "char-provider-v2.hex",
+      "base": "released-clean-v2.hex",
+      "overrides": {
+        "200": 42,
+        "208": 2,
+        "304": 512,
+        "308": 4096
+      },
+      "scope": "Structural CHAR_PROVIDER only; no Mac runtime admission"
+    }
+  ]
+}
