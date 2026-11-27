@@ -1,0 +1,79 @@
+--- a/tools/lkl/lib/virtio_blk.c
++++ b/tools/lkl/lib/virtio_blk.c
+@@ -28,7 +28,7 @@
+ 	struct virtio_blk_req_trailer *t;
+ 	struct lkl_blk_req lkl_req;
+ 
+-	if (req->buf_count < 3) {
++	if (req->buf_count < 2 || req->buf_count > VIRTIO_REQ_MAX_BUFS) {
+ 		lkl_printf("virtio_blk: no status buf\n");
+ 		goto out;
+ 	}
+@@ -37,9 +37,11 @@
+ 	t = req->buf[req->buf_count - 1].iov_base;
+ 	blk_dev = container_of(dev, struct virtio_blk_dev, dev);
+ 
++	if (!t || req->buf[req->buf_count - 1].iov_len != sizeof(*t))
++		goto out;
+ 	t->status = LKL_DEV_BLK_STATUS_IOERR;
+ 
+-	if (req->buf[0].iov_len != sizeof(*h)) {
++	if (!h || req->buf[0].iov_len != sizeof(*h)) {
+ 		lkl_printf("virtio_blk: bad header buf\n");
+ 		goto out;
+ 	}
+@@ -50,6 +52,13 @@
+ 	}
+ 
+ 	lkl_req.type = le32toh(h->type);
++	/* FLUSH carries only the header and writable status trailer. */
++	if (lkl_req.type == LKL_DEV_BLK_TYPE_FLUSH) {
++		if (req->buf_count != 2)
++			goto out;
++	} else if (req->buf_count < 3) {
++		goto out;
++	}
+ 	lkl_req.prio = le32toh(h->ioprio);
+ 	lkl_req.sector = le64toh(h->sector);
+ 	lkl_req.buf = &req->buf[1];
+@@ -68,7 +77,7 @@
+ };
+ 
+ 
+-int lkl_disk_add(struct lkl_disk *disk)
++static int disk_add(struct lkl_disk *disk, int flush_supported)
+ {
+ 	struct virtio_blk_dev *dev;
+ 	unsigned long long capacity;
+@@ -82,7 +91,8 @@
+ 
+ 	dev->dev.device_id = LKL_VIRTIO_ID_BLOCK;
+ 	dev->dev.vendor_id = 0;
+-	dev->dev.device_features = 0;
++	dev->dev.device_features = flush_supported ?
++		1ULL << LKL_VIRTIO_BLK_F_FLUSH : 0;
+ 	dev->dev.config_gen = 0;
+ 	dev->dev.config_data = &dev->config;
+ 	dev->dev.config_len = sizeof(dev->config);
+@@ -112,6 +122,21 @@
+ 	return ret;
+ }
+ 
++/* Preserve the old feature-zero constructor and public ABI. */
++int lkl_disk_add(struct lkl_disk *disk)
++{
++	return disk_add(disk, 0);
++}
++
++/* Only explicitly qualified custom callbacks may opt into FLUSH. */
++int lkl_disk_add_with_flush(struct lkl_disk *disk)
++{
++	if (!disk || !disk->ops || !disk->ops->request ||
++	    !disk->ops->get_capacity)
++		return -LKL_EINVAL;
++	return disk_add(disk, 1);
++}
++
+ int lkl_disk_remove(struct lkl_disk disk)
+ {
+ 	struct virtio_blk_dev *dev;
