@@ -178,8 +178,8 @@ No complete host qualification is claimed.
 The installed NTFS-3G and exfat-fuse packages provide writable candidates;
 libfsapfs and libfsxfs expose read-only readers. An ext4 formatter exists, but
 the OpenBSD ext2fs reader does not provide the required writable ext4 route.
-No native Btrfs, HAMMER2 or OpenZFS tools/drivers were found. CryFS is pending a native source assessment, not excluded because no package
-exists. Stable 1.0.3 was fetched at verified commit
+No native Btrfs, HAMMER2 or OpenZFS tools/drivers were found. The CryFS native
+source assessment proceeded despite package absence. Stable 1.0.3 was fetched at verified commit
 `5d0cc36785d93e12250696a3ffc928042f2e8d61` with only the common fsyncdir patch.
 Official native CMake 4.3.5, Ninja 1.11.1, Boost 1.91, range-v3 0.12 and spdlog
 1.17 dependencies were installed. Native configuration found base libfuse 2.8.0
@@ -204,8 +204,8 @@ Its exact diff was checked against pinned HEAD plus the common fsyncdir patch
 before compilation. Build/provider headers and the full control fixtures are
 retained in separate `logs/cryfs-*.tar.gz` archives. This proves a native engine
 route, not Lurker support. The installed fuse_mount(3) manual requires root for
-mount/unmount; trusted privileged integration, reproducible producer/staging
-and actual product cases remain required before enabling this OS. Failed
+mount/unmount; at that checkpoint trusted privileged integration, reproducible
+producer/staging and actual product cases remained required. Failed
 source/runtime receipts and fixtures remain preserved separately.
 The privileged route additionally requires confinement protocol 1. A negative
 native regression showed that pre-exec unveil does not constrain an executed
@@ -226,7 +226,7 @@ executes after confinement. Evidence is retained in
 `logs/cryfs-postexec-confined-native-proof.tar.gz`. A native producer trial
 compiled the engine but exposed a package-owner metadata parsing error; its
 failed result remains distinct from these native controls. Trusted product
-integration and final producer/package validation remain pending.
+integration and final producer/package validation remained pending at that checkpoint.
 
 The ownership gate extends that native protocol: after confinement, normal
 opens switch real/effective identity to the invoking account while retaining
@@ -258,7 +258,84 @@ FUSE_INIT from that newly opened device descriptor. No key, ciphertext or state
 I/O occurred in those windows. The private root initializer is explicitly
 excluded from that caller-I/O audit. Full receipts are retained in
 `logs/cryfs-caller-ownership-and-confinement-native-proof.tar.gz`. These remain
-native engine proofs; final factory and product integration are still pending.
+native engine proofs; the following factory and product gates supersede that
+earlier pending state without relabelling those diagnostic binaries.
+
+The final native factory completed from the committed caller-I/O patch
+`c8c36e0` and producer/stager registration `29d5d76`. Its clean engine SHA-256 is
+`15c4171b4a016c65172403df9801fa579b1e84ed34406238e2c029a8420704ee`.
+The factory SDK records the exact two patch hashes, native package closure and
+notices, root/directory/unveil-protocol1 runtime contract, and external base
+FUSE prerequisite. It contains no private FUSE library or RPATH. That exact
+factory engine passed all eight actual-engine confinement negatives and the
+complete three-cycle downloaded payload/append/new/hash lifecycle as UID1300.
+Kernel UID/GID and locked-unveil snapshots, ciphertext/state ownership,
+foreign-user list/read/write denials, and direct mount-window syscall audit all
+passed again. Evidence is `logs/cryfs-final-factory-native-proof.tar.gz`.
+
+The first actual product launch exposed a separate OpenBSD UFS session-record
+race: metadata on a held root-owned0600 regular descriptor briefly reported
+nlink2 during atomic rename. A native10,000-rename probe observed1,185,883 such
+samples with all other metadata valid. Commit `c3dd43b` retries only that same
+held descriptor, bounded to32 one-millisecond attempts; persistent hardlinks
+and wrong type/owner/mode remain refused. Native regressions cover the held old
+descriptor after replacement, transient2→1, and persistent2 rejection. Core
+tests passed79/0 with20ignored. The failed product records and private
+diagnostics remain separate in `logs/cryfs-primary-helper-startup-failure.tar.gz`
+and `logs/cryfs-diagnostic-product-and-linkcount-failures.tar.gz`.
+
+Normal CLI and helper primary CryFS routes then passed14 operations each with
+the final factory SDK. Both used actual UID1300 payload I/O across three mounts,
+all expected hashes, append/new-file writes, caller ownership for every new
+ciphertext node, foreign plaintext denial, credential/duplicate/busy guards and
+normal closes. Configured source close passed, with wrong source, foreign
+alias, wrong caller and changed source inode rejected. These source-overlay
+products were CLI SHA-256
+`49375c010bf9f2d4f58d45e776f0b0f9c53a42ed70aae9a8fc1e59b8f722c40f`
+and helper SHA-256
+`f67c482b397feef0b0cf59ff267ae0be2383f371bd07562bc8efdbd39a3cff2d`;
+their final receipts are `logs/cryfs-fixed-product-primary-proof.tar.gz`.
+
+The narrowed Auto-authorization policy preserves login-user routing for other
+directory engines. The corresponding native desktop suite passed43/0 with one
+explicit native callback ignored, then that actual callback passed separately
+as UID1300 in43.66s through the trusted helper: create, mount,1MiB write, normal
+close, reopen/hash comparison and normal close. The executed helper SHA-256 is
+`b07831aca77217719cafaa0eb7f239eb3a56b8c853b5eb6defa19bf83ffdde51`;
+CLI is `e5a10f1c932a7ad52adf62234923c68a75e760bfcc683d22c47a374dedb84013`.
+All eight CryFS form frames and native-formatted input equivalence were reviewed.
+Temporary authorization covered only two roles of this trusted helper;
+unrelated sudo remained denied and the original policy was restored byte for
+byte, SHA-256 `28f3746d63428eb2326ceac0febc23082b10dccb7b1a3a452db902c89ba44f41`.
+Receipts are `desktop/cryfs-actual-callback/` and the executed-source comparison
+is `build/cryfs-feature-executed-source-hashes.json`. The coherent core, CLI,
+model, desktop and documentation feature is committed as `123d177`; the tested
+preview differs only by recorded formatting/docs and target-inactive changes.
+This remains source-overlay evidence, not exact-commit installed qualification.
+
+Fresh CryFS directory-backing cases passed on independently identified UFS1,
+UFS2 and NTFS with the full actual-user payload lifecycle. The exFAT case failed
+its first plaintext mkdir: the hardened common new-block publisher requires
+`link()`, and native exFAT returns ENOSYS78. An isolated control on a verified
+clone of the preserved failed mapped image reproduced that exact link error
+while actual-user create/write/fsync/read/rename/unlink all worked. This is a
+product publication adaptation gap, not an unavailable native filesystem.
+Both failed product mounts were normally unmounted after matching recorded and
+current kernel fsids; the exact engine/monitor exited naturally, the outer
+CRYPTO transport closed normally, and vnd0 was released. No forced cleanup was
+used. The original mapped image is133,914,624bytes, SHA-256
+`584fbf2512bfaf4e11661fc7fb0ad4dbd65b689a7450eea1a008a798dde8d2b2`.
+Evidence is `logs/cryfs-backing-matrix-first-results.tar.gz` and
+`logs/cryfs-exfat-failure-and-native-cause.tar.gz`.
+
+A bounded source review found favorable root/parent reference flush ordering,
+but a bare exclusive-create/write/fsync fallback would expose a partially
+written valid block name to unlocked loads and scans. No common patch was
+changed. The call inventory, cross-process/cleanup concerns and native
+race/fault test plan are `build/cryfs-exfat-publication-review.txt`.
+The final exact-commit workspace/package refresh, installed complete matrix
+and final reboot gates remain pending. Native mount inventory is back to the
+system root alone. No complete host qualification is claimed.
 
 Other requested
 portable engines retain their explicit per-cell assessment in the ledger.
