@@ -143,16 +143,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
   </thead>
   <tbody align="center" valign="middle">
     <tr height="60">
-      <td align="left">P&#8203;E&#8203;F&#8203;S</td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-      <td><sup>—</sup></td>
-    </tr>
-    <tr height="60">
       <td align="left">g&#8203;o&#8203;c&#8203;r&#8203;y&#8203;p&#8203;t&#8203;f&#8203;s</td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
       <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
@@ -191,6 +181,16 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td>○</td>
       <td><sup>—</sup></td>
       <td>○</td>
+    </tr>
+    <tr height="60">
+      <td align="left">P&#8203;E&#8203;F&#8203;S</td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
+      <td><sup>—</sup></td>
     </tr>
     <tr height="60">
       <td align="left">EFS</td>
