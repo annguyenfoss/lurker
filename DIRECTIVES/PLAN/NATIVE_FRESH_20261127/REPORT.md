@@ -51,12 +51,19 @@ The exact versioned host driver has now been installed separately from Lurker;
 the owner reports its installed regular-file controls passing. The new native
 XFS formatter `7222a6b` also produced a fresh 512 MiB image with independently
 checked superblock checksums, followed by three writable payload opens. These
-latest installed/formatter receipts await root reconciliation. The Btrfs
-formatter candidate `e83ccaf` has passed source review for one controlled fresh
-file; real conversion remains a gate. Restricted FSKit entitlements still block
-that transport. Product dispatch, decrypted-device integration and native Create
-remain unqualified, existing XFS guards remain in force, and no additional USB
-operation has been performed.
+latest installed/formatter receipts have now been reconciled in
+`hosts/macos/validation/native-lkl-installed-v13/root-delta-audit.json`: 186
+indexed references, 177 archived files, fifteen writable opens and six cold
+superblock checksums match. The Btrfs formatter `e83ccaf` also completed one
+controlled fresh NTFS-to-Btrfs conversion and three writable payload opens.
+Its two initial cold-validator failures remain unchanged: one omitted the
+supported BIG_METADATA feature and another incorrectly equated filesystem and
+file extent sizes. Read-only validation of the retained conversion corrected
+those assumptions without rerunning conversion. Fixture ownership initialization
+does not establish product create-time initialization. Restricted FSKit
+entitlements still block that transport. Product dispatch, decrypted-device
+integration and native Create remain unqualified, existing XFS guards remain
+in force, and no additional USB operation has been performed.
 
 The Linux package audit found a separate existing-feature gap: installed
 `67894f6` supplies the privileged VeraCrypt creator but lacks the unprivileged
@@ -98,9 +105,20 @@ a transient host fault is removed. Its native Arch workspace and 101 Python
 checks passed, and the new package is installed. The owner reports actual
 encrypted XFS/Btrfs/ext4 faults now leave the same session and crypto mapping
 attached through two close refusals. Each failed ciphertext was archived before
-separately labeled explicit operator recovery. Genuine missing-ack crash
-recovery, healthy close, installed desktop checks and root receipt reconciliation
-remain gates before rollout to the other five distributions.
+separately labeled explicit operator recovery. Root subsequently checked all
+170 indexed references, three original failed-image archives and their 36
+members, 70 healthy-archive members, all 42 installed CLI operations, genuine
+missing-ack recovery and the native callback/window/missing-backend controls.
+The separate provenance supplement supplies eighteen controller files and 23
+cleanup references. Original XFS prepare/EXDEV and installer sources lack
+contemporaneous launch hashes; their labeled reconstructions do not receive
+exact-launch-byte credit. The original index and receipts remain unchanged.
+Build-volume cleanup and restored installed paths are corroborated in
+`hosts/archlinux/build/unprivileged-pilot/root-e927-receipts-audit.json`.
+The affected native package and runtime checks are now dispatched to Debian,
+Ubuntu, Fedora, openSUSE and Gentoo. Host loader/FUSE compatibility must be
+verified independently; unchanged privileged matrix/reboot results retain their
+original identities.
 
 Ubuntu's final report is `e68bb47`: both 130-cell source-kind ledgers contain
 54 passed, six stock-UFS1 unavailable and 70 platform-inapplicable cells. The
@@ -160,6 +178,10 @@ passed 150 tests, with 13 ignored; source and log hashes were independently
 corroborated. Existing Btrfs/XFS write guards remain unchanged. The external
 driver's flush, credential, errno and checked-drain contract must pass before
 filesystem admission and the corresponding user documentation are committed.
+Parser preparation `c414c21` additionally passed the native FreeBSD workspace:
+155 tests passed, with 13 ignored. Root verified all 509 regular source files,
+the exact two overlays and three raw logs. It validates complete protocol-1
+records only; persisted status-inode and session lifecycle hooks remain pending.
 
 The external-driver review found force-capable library cleanup on both FreeBSD
 FUSE 2 and macOS macFUSE 3; removing an explicit driver unmount call alone does
@@ -176,6 +198,18 @@ remain gates. macOS's later qualified adapter replaces force-capable cleanup
 and checks complete native credential snapshots; its versioned installed
 regular-file scope is recorded above. These native tool diagnostics do not
 remove the product's existing write guards.
+
+The later external FreeBSD prerequisite is committed at `13e2c39`. Its owner
+reports final11 regular/GELI-512 payload and transient-flush controls passing;
+the exact engine and twelve native traces remain separately archived. Root's
+source review found an additional shutdown gate: `lkl_sys_halt` can return an
+error before CPU/thread cleanup. FreeBSD, Darwin and DragonFly drivers must
+retain resources on that path and must not report successful teardown. Checked
+halt/retry corrections and targeted regressions are in progress. Existing
+normal-close receipts retain their original artifact identities. FreeBSD's
+published-signal control keeps service available and later exits zero with
+`drained` after normal unmount; Darwin and DragonFly instead latch signal failure.
+These different observed outcomes are not relabeled as equivalent tests.
 
 OpenBSD's exact `123d177` workspace passed 154 native tests, with 22 ignored,
 and all three products built. Native staging and package construction passed;

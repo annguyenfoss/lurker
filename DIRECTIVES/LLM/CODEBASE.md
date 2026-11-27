@@ -61,7 +61,7 @@ Follow `DIRECTIVES/LLM/DEVELOPMENT.md` for implementation, batched builds and te
 - `scripts/remote-test.py`: isolated exact-commit remote jobs with bounded summaries; see `docs/remote-testing.md`
 - `scripts/test-backends.py`: CLI conformance using private `/tmp` fixtures, PTY passwords and retained JSON evidence
 - `scripts/build-macos-dmg.py`: native release app bundle and drag-to-Applications DMG packaging; helper stays beside the desktop executable inside `Contents/MacOS`
-- `scripts/build-linux-userspace.py`: builds the private VeraCrypt and LKL helpers from verified source archives and patches without installation or elevation. The LKL build applies the pinned Linux stable patch before the Lurker integration patch. Integration patches live under `native/linux-userspace/patches`.
+- `scripts/build-linux-userspace.py`: builds only the private VeraCrypt userspace transport and creator from verified sources, without installation or elevation. `native/linux-userspace/build-host-filesystem.py` separately builds the administrator-installed LKL filesystem prerequisite, applying the pinned Linux stable and integration patches. Filesystem drivers and FUSE stay outside the application bundle.
 - `docs/linux-userspace.md`: stock VeraCrypt/FUSE distinction, Linux privileged/unprivileged comparison, security findings, implementation lessons, validation evidence and open hardening work
 
 ## Core Invariants
