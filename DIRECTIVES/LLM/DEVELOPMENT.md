@@ -71,6 +71,13 @@ The existing deferral of eligible kernel-build work until the ordinary-route
 assessment is finished remains in force; deferral is not permission to perform
 experimental kernel development later.
 
+When a scope audit finds already-completed or currently running out-of-scope
+work, report what was changed, how it was developed, current progress and what
+remains. Do not interrupt the agent or its running job solely because of that
+finding. Do not start additional out-of-scope work or automatically restart work
+that was already held or cancelled. Preserve its evidence, distinguish functional
+results from scope eligibility, and continue independent in-scope work.
+
 ## Remote execution boundary
 
 Use the workstation to edit, dispatch SSH jobs, and collect evidence. Run
