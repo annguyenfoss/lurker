@@ -59,3 +59,9 @@ whose UNIX socket paths fit Darwin's `sun_path` bound:
 clang -std=c11 -Wall -Wextra -Werror -O2 -I native/lkl native/macos/tests/lkl-guardian-control.c -o /private/owned/guardian-control
 /private/owned/guardian-control /private/owned/new-fixtures
 ```
+
+
+The next standalone service/dummy-worker controls are documented in
+`guardian-service.md`. Their production inheritance is worker channel 3 and
+source 4 only; the older 3/4/5 primitive fixture is not the production FD contract.
+The guardian exclusively owns the status writer and lock.
