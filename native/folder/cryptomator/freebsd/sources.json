@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "target": {
+    "os": "FreeBSD",
+    "architecture": "amd64",
+    "java_release": 25,
+    "fuse_api": 31
+  },
+  "archives": {
+    "jfuse-api": {
+      "url": "https://repo.maven.apache.org/maven2/org/cryptomator/jfuse-api/0.7.3/jfuse-api-0.7.3-sources.jar",
+      "sha256": "2e26b00f7722e3c218e19b0db677726856a47cabc1f104bfb35501094a102aca"
+    },
+    "jfuse-linux-amd64": {
+      "url": "https://repo.maven.apache.org/maven2/org/cryptomator/jfuse-linux-amd64/0.7.3/jfuse-linux-amd64-0.7.3-sources.jar",
+      "sha256": "2efb7996e1ef4da0515c51b31c4a215a10d1bb89bd02c437171b88cb88037549"
+    },
+    "fuse-nio-adapter": {
+      "url": "https://repo.maven.apache.org/maven2/org/cryptomator/fuse-nio-adapter/5.1.0/fuse-nio-adapter-5.1.0-sources.jar",
+      "sha256": "479f1aa10f00f08b83c970d855daaf38da8c027213e3c4a9d280c02e30be3a3d"
+    },
+    "jfuse-parent": {
+      "url": "https://repo.maven.apache.org/maven2/org/cryptomator/jfuse-parent/0.7.3/jfuse-parent-0.7.3.pom",
+      "sha256": "f841879ed4e9cd876bf49a0e5837f0cc49e15d1f277306ef5ac72ff9355e24c3"
+    },
+    "annotations": {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/annotations/26.0.2/annotations-26.0.2.jar",
+      "sha256": "2037be378980d3ba9333e97955f3b2cde392aa124d04ca73ce2eee6657199297"
+    },
+    "annotations-sources": {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/annotations/26.0.2/annotations-26.0.2-sources.jar",
+      "sha256": "a3bea3ada0af186437f8f3a089e6b0f52ac5aa068c1cb829058fb8a5069f6b0f"
+    }
+  },
+  "licenses": {
+    "jfuse": "LGPL-3.0-or-later",
+    "fuse_nio": "AGPL-3.0-only"
+  },
+  "admission": "source candidate only; native ABI/build gates precede any separately authorized mount; no product admission",
+  "native_dependencies": [
+    "FreeBSD libc",
+    "separately installed native libfuse3",
+    "native OpenJDK 25 or later"
+  ],
+  "policy": {
+    "bundle_fuse": false,
+    "modify_crypto_algorithms": false,
+    "masquerade_os": false,
+    "force_unmount": false,
+    "initial_loop": "single threaded",
+    "direct_io": true
+  },
+  "license_texts": {
+    "LGPL-3.0.txt": {
+      "url": "https://www.gnu.org/licenses/lgpl-3.0.txt",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    "GPL-3.0.txt": {
+      "repository_source": "LICENSE",
+      "sha256": "fb981668c18a279e285fc4d83fba1e836cc84dd4daa73c9697d3cfd2d8aca6e0"
+    }
+  }
+}
