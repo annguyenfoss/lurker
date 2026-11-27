@@ -93,17 +93,17 @@
     {
       "path": "dragonfly-credentials.h",
       "target": "tools/lkl/dragonfly-credentials.h",
-      "sha256": "9484ba789f9705fda8c62ea32e4542d5d2f0a1b19ecba4c8b723563327733961"
+      "sha256": "9ae52c2c0e90c0862bc935a81cd7d7baeff473e15aa7b2e08ee2dde33fe09887"
     },
     {
       "path": "dragonfly-handles.h",
       "target": "tools/lkl/dragonfly-handles.h",
-      "sha256": "3837f97d880bb4cfd5f1a2c397b9f9a925deb9a1ee892a24715845540223daa6"
+      "sha256": "c0f5b7808bceb753e7d3140fd2e4fee6374feab5b73424ac0e0877a071669f2b"
     },
     {
       "path": "dragonfly-lifecycle.h",
       "target": "tools/lkl/dragonfly-lifecycle.h",
-      "sha256": "87de3b3b2f86f52aa58d0de106534dc8fab670db971424524daa523f3d23dbfa"
+      "sha256": "37ae29dba627600e190bc102f8739bc60150a031004e26266e737e9b498a3974"
     },
     {
       "path": "dragonfly-channel.h",
@@ -130,9 +130,10 @@
     "mount_publication": "external trusted native controller after readiness pipe; requires administrator-owned target/alias ancestry",
     "mount_source": "exact protected symlink to the inherited /dev/fuse vnode",
     "kernel_mount_flags": "default_permissions|allow_other plus NOSUID|NODEV|NOEXEC",
-    "cleanup": "captured FSID/source/target globally absent, checked internal drain and no sticky I/O/transport failure",
+    "cleanup": "Native observer outside all served callbacks; exact captured FUSE FSID must first return fhstatfs EOPNOTSUPP, then empty global inventory plus ESTALE in qualified root/non-chroot/non-jail context; checked observer join, internal drain and sticky error checks.",
     "product_admission": false,
     "credential_failure": "Sticky poisoned state; no new filesystem requests until verified complete restoration; registered cleanup capabilities only; retain source/channel until global absence; final exit1 even after recovery.",
-    "halt_failure": "Negative halt retains channel/source; retry every50ms and retry verified credential restoration; only actual halt0 authorizes cleanup, with historical error retained."
+    "halt_failure": "Negative halt retains channel/source; retry every50ms and retry verified credential restoration; only actual halt0 authorizes cleanup, with historical error retained.",
+    "admin_context": "Protected diagnostic controller must launch outside chroot/jail; client checks jail.jailed=0 and invariant held root-directory identity. This does not qualify a general product supervisor."
   }
 }

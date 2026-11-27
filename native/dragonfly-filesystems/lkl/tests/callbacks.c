@@ -15,6 +15,10 @@ int main(int argc, char **argv)
     lklfuse.disk.fd=open(argv[1],O_RDWR|O_NOFOLLOW|O_CLOEXEC);assert(lklfuse.disk.fd>=0);
     assert(flock(lklfuse.disk.fd,LOCK_EX|LOCK_NB)==0);
     lklfuse.disk_id=lkl_disk_add(&lklfuse.disk);assert(lklfuse.disk_id>=0 && start_lkl()==0);
+    /* Fresh formatters create a root-owned filesystem root. Establish the
+     * caller-owned root explicitly; child ownership is still measured before
+     * any chown of the created child. */
+    assert(lkl_sys_chown("/",1300,1300)==0 && lkl_sys_chmod("/",0700)==0);
     struct fuse_file_info fi={.flags=O_CREAT|O_EXCL|O_RDWR};
     assert(df_create("/callback-held",0600,&fi)==0 && fi.fh!=0);
     uint64_t token=fi.fh;

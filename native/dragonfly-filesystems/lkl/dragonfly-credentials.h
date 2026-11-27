@@ -5,8 +5,6 @@
 #define LKLFUSE_DRAGONFLY_CREDENTIALS_H
 #include "dragonfly-errno.h"
 
-static void (*df_observe_native_mount)(void);
-
 struct df_request_identity {
     pid_t pid;
     uid_t uid;
@@ -96,7 +94,6 @@ static inline int df_finish_request(int result)
 static int df_validate_request(const struct fuse_context *context,
                                struct df_request_identity *identity)
 {
-    if (df_observe_native_mount) df_observe_native_mount();
     if (df_credentials_poisoned && df_leave_request() < 0) return -EIO;
     struct df_request_identity first, second;
     if (df_credential_snapshot(context, &first) < 0 ||

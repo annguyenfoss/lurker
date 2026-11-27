@@ -105,3 +105,22 @@ the actual argument pipeline and native constructor, plus rejection of an
 unrelated unknown option. The first reviewed024 attempt failed on the synthetic
 fsname before readiness/publication; its untouched fixture and failure receipt
 are retained.
+
+The native inventory runs only in a separate host observer, never in served
+callbacks. Stock DragonFly's NOWAIT mount scan skips unmounting entries, so an
+empty inventory alone cannot authorize cleanup. The observer first binds the
+exact FUSE/source/target FSID and requires its native `fhstatfs` to return the
+stock FUSE default `EOPNOTSUPP`. Later cleanup requires both empty inventory and
+that same typed FSID returning `ESTALE`. This relies on the reviewed stock
+mount-tree lookup and FUSE's default file-handle stub; it is not a generic
+synthetic-file-handle absence test. Query uncertainty retains the channel/source,
+and observer join must succeed before disposal.
+
+Protected diagnostic controllers must launch outside chroot and jail. The client
+checks root credentials, `jail.jailed=0`, and an unchanged held root-directory
+identity; those checks alone do not prove an arbitrary launch is outside chroot.
+A general product supervisor remains a separate gate. Native query-result and
+thread controls are in `tests/observer.c`; `tests/fsid-probe.c` is read-only.
+The separate test-only observer driver holds the actual DESTROY callback before
+its reply, allowing present/unmounting/absent native syscall observations without
+closing the source early. Actual mounted controls remain pending review.

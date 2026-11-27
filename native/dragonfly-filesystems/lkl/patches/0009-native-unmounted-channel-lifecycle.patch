@@ -1,6 +1,6 @@
 --- tools/lkl/lklfuse.c
 +++ tools/lkl/lklfuse.c
-@@ -7,6 +7,8 @@
+@@ -7,8 +7,11 @@
  #include <string.h>
  #include <errno.h>
  #include <unistd.h>
@@ -8,8 +8,11 @@
 +#include <sys/file.h>
  #include <sys/user.h>
  #include <sys/sysctl.h>
++#include <pthread.h>
  #define FUSE_USE_VERSION 26
-@@ -29,8 +31,13 @@
+ #include <fuse.h>
+ #include <fuse/fuse_opt.h>
+@@ -29,8 +32,13 @@
  	int part;
  	int ro;
  	int mb;
@@ -24,7 +27,7 @@
  };
  
  #define LKLFUSE_OPT(t, p, v) { t, offsetof(struct lklfuse, p), v }
-@@ -42,6 +49,10 @@
+@@ -42,6 +50,10 @@
  
  static struct fuse_opt lklfuse_opts[] = {
  	LKLFUSE_OPT("log=%s", log, 0),
@@ -35,7 +38,7 @@
  	LKLFUSE_OPT("type=%s", type, 0),
  	LKLFUSE_OPT("mb=%d", mb, 0),
  	LKLFUSE_OPT("opts=%s", opts, 0),
-@@ -77,8 +88,8 @@
+@@ -77,8 +89,8 @@
  {
  	switch (key) {
  	case FUSE_OPT_KEY_OPT:
@@ -46,7 +49,7 @@
  		return 1;
  
  	case FUSE_OPT_KEY_NONOPT:
-@@ -89,16 +100,12 @@
+@@ -89,16 +101,12 @@
  		return 1;
  
  	case KEY_HELP:
@@ -67,7 +70,7 @@
  
  	default:
  		fprintf(stderr, "internal error\n");
-@@ -479,6 +486,8 @@
+@@ -479,6 +487,8 @@
  }
  
  #include "dragonfly-handles.h"
@@ -76,14 +79,6 @@
  
  static struct fuse *active_fuse;
  static int orderly_destroy;
-@@ -486,6 +495,7 @@
- static void dragonfly_destroy(void *private_data)
- {
-     (void)private_data;
-+    df_native_observe();
-     orderly_destroy = 1;
-     if (active_fuse)
-         fuse_exit(active_fuse);
 @@ -576,6 +586,31 @@
      return 0;
  }
@@ -142,7 +137,7 @@
      if (halt < 0) {
          fprintf(stderr, "lklfuse: failed to halt: %s\n", lkl_strerror(halt));
          if (!ret) ret = halt;
-@@ -652,111 +692,133 @@
+@@ -652,111 +692,135 @@
      return ret;
  }
  
@@ -331,7 +326,7 @@
 +    active_fuse = filesystem;
 +    if (start_lkl() < 0) goto finish;
 +    started = 1;
-+    df_observe_native_mount = df_native_observe;
++    if (df_native_begin()) goto finish;
 +    sigset_t pending;
 +    if (df_signal_seen || sigpending(&pending) ||
 +        sigismember(&pending, SIGTERM) || sigismember(&pending, SIGINT) ||
@@ -356,14 +351,14 @@
 +            result = fuse_loop(filesystem);
 +            if (result < 0) lifecycle_error = 1;
 +        }
-+        df_native_observe();
 +        if (df_native_clear(1) == 0) break;
 +        /* Never drain/close an active, moved, replaced or uncertain mount. */
 +        fprintf(stderr, "lklfuse: retaining native channel/source pending global FSID absence\n");
 +        usleep(50000);
 +    }
++    df_native_end();
 +    if (!orderly_destroy || lifecycle_error || df_signal_seen ||
-+        df_native_uncertain || df_handles ||
++        df_native_uncertain || __atomic_load_n(&df_native_observer_error, __ATOMIC_ACQUIRE) || df_handles ||
 +        df_transport_error || !df_init_sent || df_credential_error || df_handle_error || df_halt_error) {
 +        fprintf(stderr, "lklfuse: incomplete native lifecycle or registered handles\n");
 +        result = -1;
@@ -371,6 +366,7 @@
 +finish:
 +    /* Before handoff no caller may publish. After handoff only the loop's
 +     * complete global absence proof reaches cleanup. Constructors never mount. */
++    df_native_end();
 +    if (started && stop_lkl() < 0) result = -1;
 +    if (filesystem) fuse_destroy(filesystem);
 +    else if (channel) fuse_chan_destroy(channel);
@@ -378,6 +374,7 @@
 +    if (lklfuse.disk.fd >= 0 && close(lklfuse.disk.fd)) {
 +        perror("lklfuse: close disk"); result = -1;
 +    }
++    if (df_native_context_fd >= 0 && close(df_native_context_fd)) result = -1;
 +    fuse_opt_free_args(&args);
 +    free(target);
 +    return result == 0 ? 0 : 1;

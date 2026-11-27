@@ -30,7 +30,6 @@ static struct df_handle *df_find_handle(uint64_t token, enum df_handle_kind kind
 static int df_enter_handle(const struct df_handle *handle, int allow_zero,
                            int cleanup)
 {
-    if (df_observe_native_mount) df_observe_native_mount();
     const struct fuse_context *context = fuse_get_context();
     if (cleanup || (context && context->pid == 0 && allow_zero))
         return df_apply_identity(&handle->opener);
@@ -135,7 +134,6 @@ DF_HELD(fallocate, (const char *path, int mode, off_t offset, off_t length, stru
 
 static int df_flush(const char *path, struct fuse_file_info *fi)
 {
-    if (df_observe_native_mount) df_observe_native_mount();
     struct df_handle *h = df_find_handle(fi->fh, DF_FILE);
     if (!h) return -EBADF;
     /* The pinned upstream flush is a no-op, not a durability operation.
@@ -183,7 +181,6 @@ static int df_write(const char *path, const char *buf, size_t size, off_t offset
 static int df_close_handle(const char *path, struct fuse_file_info *fi,
                            enum df_handle_kind kind)
 {
-    if (df_observe_native_mount) df_observe_native_mount();
     struct df_handle *h = df_find_handle(fi->fh, kind);
     if (!h) return -EBADF;
     /* close/closedir use only this held open capability, never a pathname or
