@@ -60,10 +60,10 @@ Native `fuse-ufs` was absent afterward; its earlier PID/birth, exit status and
 backtrace were not captured and are unproven. Old protected payload hashes were
 recorded before the failure; their post-failure integrity is **unproven**.
 
-The outer native mount remains ID119, source
+The preserved pre-close outer native mount was ID119, source
 `/dev/mapper/lurker_vault.img_b0a3d89e2c75`, type `fuse.ufs`. The inner mount
-remains ID221, type `fuse.fuse-nio-adapter`. Owned supervisor10791
-(start ticks1009902) and JVM10792 (1009903) remain UID1300. The test controller
+was ID221, type `fuse.fuse-nio-adapter`. Owned supervisor10791
+(start ticks1009902) and JVM10792 (1009903) were UID1300. The test controller
 is terminal; no further UFS2 test is running or planned.
 
 Off-host archive `ufs2-failure-before-close-v2.tar` is520,437,760 bytes, SHA256
@@ -80,10 +80,17 @@ This is stable-byte preservation after the backing daemon disappeared, not an
 atomic cold filesystem snapshot or a successful recovery. Exact process and
 archive verification are in `offhost-freeze-verification.json`.
 
-Coordinator review precedes the proposed one normal installed product close of
-the exact Cryptomator session. Any refusal remains retained. Only a clean inner
-close permits normal outer unmount and source-addressed LUKS closure. No manual
-recovery, ack bypass, forced cleanup or filesystem repair is authorized here.
-The remaining HAMMER2/exFAT/ZFS scopes wait for terminal cleanup/host safety;
-NTFS remains on its separate coordinator hold. The common CryFS source-only
-assessment remains frozen and unchanged.
+After explicit coordinator approval and verification of both PID birth times
+and mount IDs, one normal installed helper close returned `ok:true`. Inner221,
+JVM10792 and supervisor10791 disappeared. Normal native outer119 unmount then
+succeeded, followed by source-addressed installed CLI closure of the exact LUKS
+vault. The final inventories show no mount, mapper, loop or session-directory
+remnant. Receipts: `normal-close-ufs2.json` and
+`normal-close-ufs2-outer.json`. No backend signal, driver restart, ack rewrite,
+forced unmount or repair was used. This cleanup does not turn the failed
+namespace action into a pass or prove its protected payload after failure.
+
+Only after that terminal cleanup, PID13279/controller SHA`c487c62f…` started the
+twelve independent HAMMER2/exFAT/ZFS scopes in a new evidence directory. There
+is no UFS2 retry. NTFS remains on its separate coordinator hold. The common
+CryFS source-only assessment remains frozen and unchanged.
