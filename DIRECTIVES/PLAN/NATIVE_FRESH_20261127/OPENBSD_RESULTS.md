@@ -228,6 +228,38 @@ compiled the engine but exposed a package-owner metadata parsing error; its
 failed result remains distinct from these native controls. Trusted product
 integration and final producer/package validation remain pending.
 
+The ownership gate extends that native protocol: after confinement, normal
+opens switch real/effective identity to the invoking account while retaining
+saved root only for mount acquisition. Immediately around base `fuse_main`,
+the engine acquires the native mount as root; the first `Fuse::init` action
+permanently drops supplementary groups, GID and UID before filesystem setup.
+Initializers may remain UID0 only in private root staging. This preserves
+caller ownership for both initial publication and every later ciphertext/state
+file. No memory-lock requirement is weakened; an actual UID1300 mlock control
+succeeded on this host.
+
+The updated port SHA-256 is
+`18b6c821e121b5bcb52d433b6041587d1a414d42e94032d8405bb0fc94d35087`;
+its diagnostic native engine SHA-256 is
+`1936b528fa0970ca6401c6a7f3b44046ea751ee852c8bfea692b9ccd87aa623f`.
+Eight real-engine source/mountpoint replacement negatives passed, four as root
+and four with actual UID1300 filesystem I/O. A separate native control passed
+three complete mounted payload phases with actual UID1300 readers/writers;
+kernel snapshots confirmed UID/GID1300 and locked unveil on each normal open.
+All ciphertext and local-state nodes retained UID/GID1300 after write, append
+and final reopen. An unrelated UID32767 could neither list, read nor write the
+plaintext mount through traversable test ancestors. All four mounts, including
+the private initializer, closed normally with engine exit0.
+
+The inherited syscall/name traces showed one direct mount and no helper exec
+per normal open. Across the three observed root mount windows, pathname access
+covered only mountpoint metadata and `/dev/fuse0`; the only data read was
+FUSE_INIT from that newly opened device descriptor. No key, ciphertext or state
+I/O occurred in those windows. The private root initializer is explicitly
+excluded from that caller-I/O audit. Full receipts are retained in
+`logs/cryfs-caller-ownership-and-confinement-native-proof.tar.gz`. These remain
+native engine proofs; final factory and product integration are still pending.
+
 Other requested
 portable engines retain their explicit per-cell assessment in the ledger.
 
