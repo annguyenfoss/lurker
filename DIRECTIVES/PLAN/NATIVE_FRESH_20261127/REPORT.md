@@ -260,6 +260,19 @@ clarification about that architecture.
   recorded. The scratch disk is detached and the evidence/build disk retained.
   The private audit is `hosts/opensuse/validation/root-final678-seven-reboot-audit.json`.
   This proves those seven cases, not the remaining hosts or foreign-user denial.
+- Root also checked Debian's six file/directory reboot cases and physical LUKS2
+  sample: all five hashes survived the changed boot, normal closes succeeded,
+  and installed integrity, empty loop/process inventories and the preserved
+  official 6.12 default matched. The archive SHA-256 and three executed recipe
+  identities matched. The private audit is
+  `hosts/debian/validation/root-final678-seven-reboot-audit.json`. The later
+  reopener has no numeric caller-UID sample; its launch/account chain is being
+  reconciled separately from the earlier records' `runtime_uid` fields.
+- Fedora's new reboot exposed duplicated ZFS mount aliases after the fixture
+  bind was restored with shared propagation. The product refused close rather
+  than ignoring the extra root. Failed receipts remain separate; the owner is
+  correcting persistent fixture propagation and rerunning affected reboot
+  cases. Successful unchanged cases retain their original execution identities.
 - A Debian physical UFS2/CryFS failure reproduced in the native driver alone:
   create/fsync/stat succeeded but directory enumeration omitted the new entry.
   Fedora's prerequisite correction `9e27dcc` removes premature EOF at nonzero
@@ -312,11 +325,17 @@ clarification about that architecture.
   admitted under its existing driver options. Host installation remains pending
   corrected parent-operation authorization and explicit native permission
   options. Capability guards and fresh installed-artifact tests remain required.
-- FreeBSD's new real-user gate passed 25 routes with UID 1300 write/read and
-  unrelated-user denial through searchable plaintext ancestors, then stopped
-  on PEFS/HAMMER2 returning ENOENT for the intended user. The active fixtures
-  and failed receipt are preserved for a matched native control. Earlier root
-  payload success does not close this ordinary-user gap; no reboot is credited.
+- FreeBSD's new real-user gate ultimately passed all 33 fixture access checks
+  with UID 1300 write/read and unrelated-user denial through searchable
+  plaintext ancestors. PEFS/HAMMER2 failed with a target on ZFS but passed at
+  its original same-HAMMER2 target; the matched native PEFS control reproduced
+  the cross-filesystem-target limitation. Earlier root PDF payloads remain
+  labeled separately from the new caller nonce controls. The subsequent
+  ordinary shutdown stalled after reporting the physical VeraCrypt/ZFS pool
+  suspended with unrecoverable I/O. Root inspected the retained console, which
+  also reports swap exhaustion. Transport/shutdown ordering is an investigation
+  hypothesis; memory contribution is unproven. No reboot pass, forced recovery
+  or custom shutdown hook is credited.
 - OpenBSD's stable CryFS source port has passed the full native payload
   lifecycle. Post-exec engine confinement and pathname-replacement negatives
   passed; an earlier pre-exec confinement claim was explicitly retracted after
