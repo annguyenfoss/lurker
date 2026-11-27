@@ -17,6 +17,7 @@ def main():
     p.add_argument("--size-bytes",type=int,default=1073741824)
     p.add_argument("--skip-block",action="store_true")
     p.add_argument("--skip-directory",action="store_true")
+    p.add_argument("--ufs2-fuse",action="store_true",help="Qualify the administrator-installed UFS2 FUSE prerequisite on directory backings")
     a=p.parse_args()
     if os.geteuid()!=0 or os.uname().nodename!="opensuse-core-01":p.error("Run with sudo on opensuse-core-01")
     identity=subprocess.check_output(["lsblk","-dn","-o","SERIAL,SIZE,TYPE",str(a.device)],text=True).strip()
@@ -126,11 +127,18 @@ def main():
                     if fs in {'ufs1','ufs2'}:options+=['ufstype='+('44bsd' if fs=='ufs1' else 'ufs2')]
                     if fs=='apfs':options+=['readwrite']
                     if fs in {'ntfs','exfat'}:options+=['uid=1300','gid=1300','umask=0077']
-                    command(['mount','-i','-t',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs),'-o',','.join(options),partition,m]);mounted=True
+                    if fs=='ufs2' and a.ufs2_fuse:
+                        driver=Path('/usr/local/bin/fuse-ufs')
+                        for path in [driver,*driver.parents]:
+                            metadata=path.stat();assert metadata.st_uid==0 and not metadata.st_mode&0o022
+                        command([driver,'-o','rw,allow_other,fsname='+str(partition),partition,m])
+                        row['host_driver']={'binary':str(driver),'sha256':h.file_hash(driver)}
+                    else:command(['mount','-i','-t',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs),'-o',','.join(options),partition,m])
+                    mounted=True
                 actual=h.linux_mount_record(Path('/proc/self/mountinfo').read_text(),m);row['mount']=actual;row['identity_gate']=h.check_linux_filesystem(actual,fs)
                 row['superblock']=command(['blkid','-p',partition])
                 if fs in {'ufs1','ufs2'} and ('VERSION="'+('1' if fs=='ufs1' else '2')+'"') not in row['superblock']:raise RuntimeError('Independent backing UFS version mismatch')
-                row['driver']=command(['modinfo',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs)])
+                if not row.get('host_driver'):row['driver']=command(['modinfo',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs)])
                 if fs not in {'ntfs','exfat'}:os.chown(m,1300,1300);m.chmod(0o700)
                 for backend in ['gocryptfs','cryfs','cryptomator']:
                     argv=['sudo','-n','-u','adjutant','--','/usr/bin/python3',a.harness,'--binary',a.binary,'--backend',backend,'--filesystem',fs,'--commit',a.commit,'--root',m,'--mount-root',plain,'--payload-dir',a.payload,'--timeout','90']
