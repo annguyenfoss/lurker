@@ -682,3 +682,58 @@ does not establish completed recovery while these operations remain blocked.
 The recovery evidence is `/srv/lurker-fresh-20261127/lkl-v5-failure-recovery/`.
 No additional recovery action is being taken; later bounded controls use
 fresh, distinct paths and do not traverse the failed target.
+
+
+### Final external LKL prerequisite candidate, before product admission
+
+The final11 native client and rebuilt host library use the audited immutable
+kernel-object/header cache while preserving every relevant kernel/compiler
+input. The exact native executable is
+`a6450b6f08bf9ebff09d75f5ebb2c6695df79bf94f1b995f2af1bc9c859dbd9f`,
+with host patch
+`54598d98f4eb5170fa3478448e87130be0737cac1db7deb54a19cc21f7081781`.
+It is PIE with a non-executable stack. FUSE remains the administrator-installed
+`libfuse.so.2`; current provider provenance is recorded without freezing
+compatible future administrator updates.
+
+The client now constructs an unmounted native channel and completes its FUSE
+constructor and LKL startup before the native descriptor-handoff helper can
+publish a mount. Readiness follows a successful actual INIT reply and the
+exact native identity. Fresh unknown-option and invalid-filesystem controls
+return errors before helper/mount publication, with unchanged source hashes.
+A pending SIGTERM before execution/startup also returns an error after LKL
+startup without publishing a native mount. All twelve native producer/unit
+checks pass, including real libfuse channel delegation and single close,
+failed-send readiness, global moved-FSID/source/replacement absence refusal,
+and emulated restoration faults. The latter is a compiled-client syscall mock,
+not an injected real kernel credential failure. Restoration attempts every
+field, latches poison, keeps the process alive and blocks later emulated I/O.
+
+Both regular-file filesystems and both GELI-512 provider filesystems pass all
+three actual UID/EUID-1300 PDF/text phases, owner/mode updates, primary and
+supplementary-group controls, unrelated-user denials, native errno checks,
+active/final status reuse rejection and busy-close preservation. A SIGTERM
+while each published mount is owned retains the process, mount and ready
+record until ordinary unmount. All twelve raw/decoded native traces show
+regular-file `fsync` or GEOM `DIOCGFLUSH`, source closure before final status,
+and no driver unmount syscall or force flag. GELI retains AES-XTS256 and
+PBKDF2/600000 with selected 512-byte geometry.
+
+The one-shot barrier control fails exactly one native source fsync, disarms
+before close, and observes two later successful native fsync calls. Application
+fsync returns EIO, normal unmount succeeds, and the driver still exits 1 with
+the matching final error, never drained. The loader override runs only as
+UID/EUID 1300 in this diagnostic. Dead-origin/PID-zero genuine held-handle I/O
+remains unsupported and fails closed; cleanup-only release is separate.
+
+`validation/lkl-driver-final11/result.json` binds receipts and the two retained
+archives: full native evidence
+`162174db39958f763c613dfbe9dc379c6b01b1334c1a24cf59bf60a63b4e2586`
+and the qualified tool/recipe/metadata archive
+`b29e7a409b6c4b37d67aa4803f1d3d0bea65af2304765d495c59ba34741dcd91`.
+Restaging rechecks every original source input, compiler, binary and license;
+the exact tested engine bytes remain unchanged. These are external-prerequisite
+results. Lurker write guards are unchanged, and product source/backing/device
+and final package qualification remain outstanding. The earlier v5 failed
+startup and blocked recovery above remain failures, with no further recovery
+or reboot action.
