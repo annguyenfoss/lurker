@@ -34,6 +34,16 @@ Protect disks, file containers and directories with the CLI or native desktop ap
   </thead>
   <tbody align="center" valign="middle">
     <tr height="60">
+      <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
+      <td>WIP</td>
+      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
+      <td>○</td>
+    </tr>
+    <tr height="60">
       <td align="left">L&#8203;U&#8203;K&#8203;S&#8203;1</td>
       <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td>○</td>
@@ -111,16 +121,6 @@ Protect disks, file containers and directories with the CLI or native desktop ap
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
       <td><sup>—</sup></td>
-      <td>○</td>
-    </tr>
-    <tr height="60">
-      <td align="left">V&#8203;e&#8203;r&#8203;a&#8203;C&#8203;r&#8203;y&#8203;p&#8203;t</td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td><img src="extras/assets/status/avocado.png" width="24" align="absmiddle" alt="Included"></td>
-      <td>WIP</td>
-      <td><img src="extras/assets/status/onion.png" width="24" align="absmiddle" alt="Wrapper"></td>
       <td>○</td>
     </tr>
   </tbody>
