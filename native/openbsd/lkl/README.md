@@ -97,3 +97,48 @@ no host disk, links no FUSE library and must run as the ordinary qualification
 user. Host mounts must remain unchanged. This is a library/ABI/timer proof;
 filesystem callbacks, request credentials, barriers, normal-close handling and
 native formatters remain unqualified.
+
+The next approved primitive phase is recorded in `ADAPTER_CONTRACT.md`.
+`run-controls.py --output NEW_DIRECTORY --controls caller,abi,credential,disk,shutdown`
+runs five native controls against the exact qualified library/SDK, as UID1300.
+It writes source/controller/header/tool hashes before execution, clears the
+compiler/test environment, uses bounded process groups and preserves each first
+failure. Its diagnostic paths intentionally refer to this qualification's
+private build tree; it is not an installer or a general-purpose driver runner.
+
+The caller control matches native encoded THRID to process birth and complete
+credentials through two bounded live kernel snapshots, including thread death,
+wrong wire UID/GID and changed identity/group rejection. Supplementary groups
+at request-queue time are absent from the native FUSE wire format; the snapshots
+prove current stable groups, not unavailable historical state. A separate actual
+native actor control passed same-THRID/birth/UID-GID group mutation and real
+secondary-group-only list/read/write, with changed-group and UID32767 denials.
+Its compiled C runs only after permanent host UID1300 drop; scoped administrator
+Python prepares the native actors/fixtures. The controller and sources are
+retained with the host receipts.
+
+The RAM control verifies real/effective/saved/filesystem IDs, full groups and
+umask, denies foreign/root-owned operations, and verifies set-ID clearing.
+Credential restoration failure permanently poisons new operations. A reaped
+opener's registered token still grants only held-FD barrier/release, without
+path access or ambient root fallback. Reinitialization, duplicate FD adoption,
+wrong kind, unknown/replayed tokens and cross-thread credential access are
+refused. The injected restoration error is a syscall-boundary diagnostic fault,
+not a claim that native host credentials changed or a real kernel error arose.
+
+Held-file controls admit only private caller-owned regular files on native FFS,
+with exclusive flock, matching identity/size, read/write and close-on-exec flags,
+and no append flag. Bounds are checked across the entire vector before I/O.
+Actual native pread/pwrite/fsync boundaries cover single-shot EIO and short I/O;
+later successful operations/final barriers cannot clear the first failure.
+FLUSH is tested by calling this external disk-ops primitive directly. The frozen
+library still lacks the reviewed virtio FLUSH negotiation adaptation; no
+emulated disk is registered and no end-to-end filesystem barrier is qualified.
+
+The release-state control uses actual pipe descriptors with synthetic mount
+observations and injected drain/halt/barrier failures. It has no unmount call
+or force path. Captured/global native fsid detection and the actual FUSE event
+loop remain later frontend work; this state machine does not prove either.
+The native errno table reuses the reviewed DragonFly symbolic-boundary model;
+credential, held-file and release primitives adapt the reviewed BSD models with
+OpenBSD-specific APIs/guards. No shared product or other OS source is changed.

@@ -231,6 +231,28 @@ provider flush chains, safe normal close and native formatters remain separate
 unqualified gates. There was no LKL FUSE mount, formatter/device experiment,
 driver installation, shared product change or filesystem capability claim.
 
+The separately reviewed phases 1 and 2 then passed five native primitive
+controls as UID1300: encoded-THRID caller binding, API26/errno/open-flag audit,
+RAM credentials/poison/held cleanup, private regular-FFS-FD I/O, and release
+state. A sixth native actor control proved real secondary-group list/read/write
+and unrelated-user denial, plus live group mutation under unchanged THRID,
+process birth and wire UID/GID. It reports the supplementary-group wire timing
+limit explicitly. The final five-control batch uses a cleared environment and
+records source/controller/native-header/tool hashes before execution. First
+compiler failures, initial successes and the final batch remain distinct.
+
+The I/O controls inject EIO/short I/O at actual native pread/pwrite/fsync
+boundaries and retain the first error after later successful operations. They
+call the external disk-ops FLUSH primitive directly. The frozen library still
+has no adapted virtio FLUSH negotiation, no emulated disk was registered, and
+these controls do not qualify a filesystem barrier. Release tests use real
+pipe descriptors and synthetic identity observations: native fsid detection,
+actual FUSE interruption/normal-unmount service and real filesystem drain are
+still unimplemented. No formatter, mount, provider installation, raw-device
+admission or product capability follows. The detailed source/test boundary is
+`native/openbsd/lkl/README.md`; receipts are indexed separately at
+`build/lkl-native/primitives-index.json` under the host evidence root.
+
 Primary references:
 
 - https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
