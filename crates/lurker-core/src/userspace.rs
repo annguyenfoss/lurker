@@ -512,7 +512,7 @@ fn helper_paths(
         directory.join("lurker-fs")
     } else {
         host_candidates.iter().filter_map(|path| crate::trusted_privileged_executable(path).ok())
-            .next().ok_or_else(|| AppError::new("Host filesystem helper is missing. Ask your administrator to install the protocol-4 lurker-fs prerequisite separately from Lurker."))?
+            .next().ok_or_else(|| AppError::new("Host filesystem helper is missing. Ask your administrator to install the protocol-5 lurker-fs prerequisite separately from Lurker."))?
     };
     if !executable(&filesystem) {
         return Err(AppError::new(
@@ -1387,8 +1387,9 @@ fn create(runtime: &Runtime, tools: &Tools, c: CreateCommand, output: Output) ->
     }
     result?;
     output.msg2(&format!(
-        "Created {} (VeraCrypt, Btrfs, {}) without elevation",
+        "Created {} (VeraCrypt, {}, {}) without elevation",
         target.display(),
+        filesystem.as_str(),
         c.cipher
     ));
     Ok(())
