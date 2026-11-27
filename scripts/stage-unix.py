@@ -1144,6 +1144,15 @@ def desktop_authorization(selected, desktop):
             "qualification": "executable presence checked only; authorization policy and login-user desktop operation require native testing"}
 
 
+def stage_freebsd_host_setup(prefix, source):
+    # Dormant administrator materials only: never install an rc.d service or
+    # enable host policy as a packaging side effect.
+    destination = prefix / "share/lurker/host-setup/freebsd"
+    destination.mkdir(parents=True)
+    for name in ("README.md", "lurker_shutdown"):
+        (destination / name).write_bytes(source.read("native/freebsd/" + name))
+
+
 def stage(args):
     system = platform.system()
     if system not in SUPPORTED:
@@ -1225,6 +1234,8 @@ def stage(args):
         verify_files(prefix / "bin", {name: provenance["files"][name] for name in required})
         (share / "provenance/rust-binaries.json").write_text(json.dumps(provenance, indent=2) + "\n")
         (share / "licenses/LURKER-LICENSE").write_bytes(source.read("LICENSE"))
+        if system == "FreeBSD":
+            stage_freebsd_host_setup(prefix, source)
         if "rust_notices" in provenance:
             notices = args.binary_manifest.parent / "rust-notices"
             expected = provenance["rust_notices"]["files"]

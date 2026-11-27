@@ -1,0 +1,90 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
+# PROVIDE: lurker_shutdown
+# REQUIRE: DAEMON
+# BEFORE: LOGIN
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="lurker_shutdown"
+rcvar="lurker_shutdown_enable"
+start_cmd=":"
+stop_cmd="lurker_shutdown_stop"
+extra_commands="plan"
+plan_cmd="lurker_shutdown_plan"
+
+lurker_shutdown_trusted()
+{
+    local path canonical owner permissions
+    path="$1"
+    case "$path" in /*) ;; *) warn "Expected an absolute administrator path"; return 1 ;; esac
+    canonical=$(/bin/realpath "$path") || return 1
+    [ "$canonical" = "$path" ] || { warn "Administrator paths must be canonical: $path"; return 1; }
+    while :; do
+        [ ! -L "$path" ] || { warn "Administrator path is a symlink: $path"; return 1; }
+        owner=$(/usr/bin/stat -f %u "$path") || return 1
+        permissions=$(/usr/bin/stat -f %Lp "$path") || return 1
+        case "$permissions" in ''|*[!0-7]*) return 1 ;; esac
+        if [ "$owner" != 0 ] || [ $((0$permissions & 022)) -ne 0 ]; then
+            warn "Administrator path must be root-owned and not group/world writable: $path"
+            return 1
+        fi
+        [ "$path" = / ] && break
+        path=${path%/*}
+        [ -n "$path" ] || path=/
+    done
+}
+
+lurker_shutdown_validate()
+{
+    local account target extra uid size
+    lurker_shutdown_trusted "$lurker_shutdown_targets" || return 1
+    [ -f "$lurker_shutdown_targets" ] || { warn "Shutdown target list must be a regular file"; return 1; }
+    size=$(/usr/bin/stat -f %z "$lurker_shutdown_targets") || return 1
+    [ "$size" -le 65536 ] || { warn "Shutdown target list exceeds 64 KiB"; return 1; }
+    lurker_shutdown_trusted /usr/local/bin/lurker || return 1
+    [ -x /usr/local/bin/lurker ] || return 1
+    while IFS="$(printf '\t')" read -r account target extra || [ -n "$account$target$extra" ]; do
+        case "$account" in ''|\#*) continue ;; esac
+        case "$account" in -*|*[!A-Za-z0-9_.-]*) warn "Invalid shutdown account"; return 1 ;; esac
+        [ -z "$extra" ] || { warn "Expected account and mountpoint separated by one tab"; return 1; }
+        case "$target" in /) warn "The system root cannot be a shutdown target"; return 1 ;; /*) ;; *) warn "Shutdown mountpoints must be absolute"; return 1 ;; esac
+        uid=$(/usr/bin/id -u "$account") || return 1
+        if [ "$uid" != 0 ]; then
+            lurker_shutdown_trusted /usr/local/bin/sudo || return 1
+            [ -x /usr/local/bin/sudo ] || return 1
+        fi
+    done < "$lurker_shutdown_targets"
+}
+
+lurker_shutdown_plan()
+{
+    local account target extra
+    lurker_shutdown_validate || return 1
+    while IFS="$(printf '\t')" read -r account target extra || [ -n "$account$target$extra" ]; do
+        case "$account" in ''|\#*) continue ;; esac
+        printf '%s\t%s\n' "$account" "$target"
+    done < "$lurker_shutdown_targets"
+}
+
+lurker_shutdown_stop()
+{
+    local account target extra uid
+    # Validate the complete administrator list before the first close operation.
+    lurker_shutdown_validate || return 1
+    while IFS="$(printf '\t')" read -r account target extra || [ -n "$account$target$extra" ]; do
+        case "$account" in ''|\#*) continue ;; esac
+        uid=$(/usr/bin/id -u "$account") || return 1
+        if [ "$uid" = 0 ]; then
+            /usr/local/bin/lurker unmount --type auto --color=never "$target" || return 1
+        else
+            /usr/local/bin/sudo -n -u "$account" -- /usr/local/bin/lurker unmount --type auto --color=never "$target" || return 1
+        fi
+    done < "$lurker_shutdown_targets"
+}
+
+load_rc_config "$name"
+: ${lurker_shutdown_enable:=NO}
+: ${lurker_shutdown_targets:=/usr/local/etc/lurker/shutdown-targets}
+run_rc_command "$1"

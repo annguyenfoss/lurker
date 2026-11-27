@@ -390,6 +390,54 @@ After Java/font installation and recovery, the unchanged installed desktop
 again passes a real UID 1300 X11/software window probe, with children reaped,
 no loader overrides and a visually inspected fresh frame.
 
+### Native termination protocol and explicit opt-in service assessment
+
+A fresh native-only VeraCrypt/ZFS control isolates termination from Lurker.
+It uses the same qualified 1.26.31 engine (`92edaf...`), pinned source and the
+existing three reviewed patches; none changes shutdown. A unique 1 GiB file,
+direct engine/native ZFS commands, four engine opens and five actual UID 1300
+payload phases preserve all original/final hashes. The exact native handler
+and FUSE-service PIDs were distinguished by source-scoped process records and
+procstat file descriptors. TERM to only the handler makes it exit, while the
+transport, ZFS pool and caller-readable data remain live. Native verbose
+metadata reports an empty Mount Directory for the pool. An explicit native
+export/dismount, another reopen/read and normal export/dismount all pass.
+There was no SIGKILL, VM reboot, repair or forced cleanup in this control.
+
+This demonstrates a native termination/export gap distinct from Lurker's
+correct explicit normal close. It does not prove the exact signal sequence
+inside the earlier failed whole-VM shutdown. The single native service/handler
+RSS observations are 12496/10240 KiB; top/swap snapshots retain whole-guest
+resource evidence. The failed first private observer used an invalid mdconfig
+argument after attach; it closed normally before any pool creation and remains
+separate. The successful receipt is
+`validation/native-veracrypt-zfs-signal-control-v2-result.json`.
+
+An optional native rc.d service and administrator instructions are now supplied
+under `native/freebsd/`. Packaging includes only dormant text files under
+`share/lurker/host-setup/freebsd`, never an rc.d installation or enablement.
+Default enablement is NO. An administrator supplies an ordered account/tab/
+mountpoint list, reviews `oneplan`, and explicitly installs/enables it. The
+service validates the complete list and canonical root-controlled executable/
+config ancestor chains before any close, then uses only normal identity-checked
+product unmounts, dropping to each configured user for directory mounts.
+
+Manual native prototype qualification passes on one fresh managed VeraCrypt/ZFS
+fixture: three actual UID 1300 full-payload phases and normal service closes,
+a Unicode/spaced mountpoint, default-disabled no-op, bad-later-line prevalidation,
+and nonadministrator/writable/symlink-list rejection with unchanged registry and
+mounts. A real busy holder produces refusal with the mount preserved; releasing
+the holder permits normal close. Native rcorder includes the KEYWORD shutdown
+prototype before init's later process termination. It remains outside rc.d and
+disabled during these manual tests. A busy failure cannot veto OS shutdown;
+that limitation is explicit in the operator instructions.
+
+Native stager checks pass **57 tests, zero failures**, including umask 077 public
+modes and proof that these assets are dormant, pinned source files. Manual
+protocol evidence is `validation/freebsd-shutdown-service-control-result.json`.
+Actual ordinary reboot with explicit service activation is still pending; no
+manual test or optional-service result replaces the failed stock shutdown.
+
 Measured filesystem features below describe the created native profiles, not
 all capabilities available under other mount/format options. Both backend rows
 retain raw probes in `device/final-direct-d601bc5.json`.

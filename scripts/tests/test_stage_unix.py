@@ -24,6 +24,26 @@ class PackagingPolicy(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
 
+    def test_freebsd_shutdown_materials_are_pinned_public_and_dormant(self):
+        prefix = self.root / "prefix"
+        source = mock.Mock()
+        expected = {"native/freebsd/README.md": b"Explicit administrator setup.\n",
+                    "native/freebsd/lurker_shutdown": b"#!/bin/sh\n# Disabled by default.\n"}
+        source.read.side_effect = expected.__getitem__
+        previous = os.umask(0o077)
+        try:
+            stager.stage_freebsd_host_setup(prefix, source)
+            stager.normalize_payload_modes(prefix)
+        finally:
+            os.umask(previous)
+        for relative, data in expected.items():
+            installed = prefix / "share/lurker/host-setup/freebsd" / Path(relative).name
+            self.assertEqual(data, installed.read_bytes())
+            self.assertEqual(0o644, stat.S_IMODE(installed.stat().st_mode))
+            self.assertEqual(0o755, stat.S_IMODE(installed.parent.stat().st_mode))
+        self.assertEqual([mock.call(name) for name in expected], source.read.call_args_list)
+        self.assertFalse((prefix / "etc").exists())
+
     def test_external_symlink_is_rejected_before_copy(self):
         source = self.root / "source"
         source.mkdir()
