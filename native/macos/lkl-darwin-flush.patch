@@ -1,0 +1,63 @@
+--- a/tools/lkl/lib/virtio_blk.c
++++ b/tools/lkl/lib/virtio_blk.c
+@@ -28,7 +28,7 @@
+ 	struct virtio_blk_req_trailer *t;
+ 	struct lkl_blk_req lkl_req;
+ 
+-	if (req->buf_count < 3) {
++	if (req->buf_count < 2) {
+ 		lkl_printf("virtio_blk: no status buf\n");
+ 		goto out;
+ 	}
+@@ -50,6 +50,13 @@
+ 	}
+ 
+ 	lkl_req.type = le32toh(h->type);
++	/* A FLUSH has a header and status, without a data buffer. */
++	if (lkl_req.type == LKL_DEV_BLK_TYPE_FLUSH) {
++		if (req->buf_count != 2)
++			goto out;
++	} else if (req->buf_count < 3) {
++		goto out;
++	}
+ 	lkl_req.prio = le32toh(h->ioprio);
+ 	lkl_req.sector = le64toh(h->sector);
+ 	lkl_req.buf = &req->buf[1];
+@@ -68,7 +75,7 @@
+ };
+ 
+ 
+-int lkl_disk_add(struct lkl_disk *disk)
++static int disk_add(struct lkl_disk *disk, int flush_supported)
+ {
+ 	struct virtio_blk_dev *dev;
+ 	unsigned long long capacity;
+@@ -82,7 +89,8 @@
+ 
+ 	dev->dev.device_id = LKL_VIRTIO_ID_BLOCK;
+ 	dev->dev.vendor_id = 0;
+-	dev->dev.device_features = 0;
++	dev->dev.device_features = flush_supported ?
++		1ULL << LKL_VIRTIO_BLK_F_FLUSH : 0;
+ 	dev->dev.config_gen = 0;
+ 	dev->dev.config_data = &dev->config;
+ 	dev->dev.config_len = sizeof(dev->config);
+@@ -112,6 +120,18 @@
+ 	return ret;
+ }
+ 
++/* Existing callers keep their ABI; custom callbacks opt in explicitly. */
++int lkl_disk_add(struct lkl_disk *disk)
++{
++	return disk_add(disk, 0);
++}
++
++/* The caller guarantees its custom callback implements FLUSH and errors. */
++int lkl_disk_add_with_flush(struct lkl_disk *disk)
++{
++	return disk_add(disk, 1);
++}
++
+ int lkl_disk_remove(struct lkl_disk disk)
+ {
+ 	struct virtio_blk_dev *dev;
