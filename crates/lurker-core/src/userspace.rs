@@ -1,4 +1,4 @@
-//! Linux file containers served by unprivileged VeraCrypt and filesystem processes.
+//! Linux file containers served by private crypto and separately installed host filesystem processes.
 //! No command in this module invokes sudo, pkexec, mount, loop, or device-mapper.
 use crate::credentials::prompt_passphrase;
 use crate::linux::{absolute_path, read_mountinfo, MountInfo};
@@ -325,8 +325,164 @@ mod program_lookup_tests {
     }
 }
 
+#[cfg(test)]
+mod split_helper_tests {
+    use super::*;
+
+    #[test]
+    fn root_is_rejected_before_helper_resolution() {
+        assert!(require_login_user(0).is_err());
+        assert!(require_login_user(1300).is_ok());
+    }
+
+    #[test]
+    fn readiness_probes_bound_output_and_reject_old_protocols() {
+        let path = std::env::temp_dir().join(format!("lurker-probe-{}", std::process::id()));
+        for (body, valid) in [
+            ("printf 'lurker-userspace-4\\n'", true),
+            ("printf 'lurker-userspace-3\\n'", false),
+            ("exec /bin/sleep 10", false),
+            (
+                "while :; do printf xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done",
+                false,
+            ),
+        ] {
+            fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            assert_eq!(probe_helper(&path).is_ok(), valid);
+        }
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn independent_overrides_and_legacy_layout_are_login_user_inputs() {
+        let directory =
+            std::env::temp_dir().join(format!("lurker-split-helpers-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        for name in ["lurker-veracrypt", "lurker-fs", "external-fs"] {
+            fs::write(directory.join(name), b"#!/bin/sh\nexit 0\n").unwrap();
+            fs::set_permissions(directory.join(name), fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let crypto_dirs = [directory.clone()];
+        let (crypto, filesystem) =
+            helper_paths(&crypto_dirs, Some(directory.join("external-fs")), None, &[]).unwrap();
+        assert_eq!(crypto, directory.join("lurker-veracrypt"));
+        assert_eq!(filesystem, directory.join("external-fs"));
+        assert_eq!(
+            helper_paths(&crypto_dirs, None, Some(&directory), &[])
+                .unwrap()
+                .1,
+            directory.join("lurker-fs")
+        );
+        // Merely placing a filesystem binary next to private crypto does not install a host prerequisite.
+        assert!(helper_paths(&crypto_dirs, None, None, &[directory.join("lurker-fs")]).is_err());
+        assert!(helper_paths(&[], None, None, &[])
+            .unwrap_err()
+            .message
+            .contains("crypto helper"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+/// Check installed login-user prerequisites without creating state or opening storage.
+/// Root never resolves or executes user-configured helper probes.
+pub fn unprivileged_veracrypt_readiness() -> AppResult<()> {
+    require_login_user(crate::effective_uid())?;
+    Tools::resolve(true).map(|_| ())
+}
+
+fn require_login_user(uid: u32) -> AppResult<()> {
+    if uid == 0 {
+        return Err(AppError::new(
+            "Unprivileged helper readiness must be checked as your login user, without sudo.",
+        ));
+    }
+    Ok(())
+}
+
+fn helper_paths(
+    crypto_directories: &[PathBuf],
+    filesystem_override: Option<PathBuf>,
+    legacy_directory: Option<&Path>,
+    host_candidates: &[PathBuf],
+) -> AppResult<(PathBuf, PathBuf)> {
+    let crypto = crypto_directories.iter().map(|p| p.join("lurker-veracrypt"))
+        .find(|p| executable(p))
+        .ok_or_else(|| AppError::new("Private VeraCrypt crypto helper is missing. Install a Lurker package with unprivileged crypto support."))?;
+    let filesystem = if let Some(path) = filesystem_override {
+        path
+    } else if let Some(directory) = legacy_directory {
+        // Explicit development overrides are accepted only in the login-user route.
+        directory.join("lurker-fs")
+    } else {
+        host_candidates.iter().filter_map(|path| crate::trusted_privileged_executable(path).ok())
+            .next().ok_or_else(|| AppError::new("Host filesystem helper is missing. Ask your administrator to install the protocol-4 lurker-fs prerequisite separately from Lurker."))?
+    };
+    if !executable(&filesystem) {
+        return Err(AppError::new(
+            "Configured host filesystem helper is not executable.",
+        ));
+    }
+    Ok((crypto, filesystem))
+}
+
+fn probe_helper(program: &Path) -> AppResult<()> {
+    let mut child = Command::new(program)
+        .arg("--lurker-userspace-version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| AppError::io("Failed to inspect userspace helper", e))?;
+    let mut stdout = child.stdout.take().unwrap();
+    // Only this owned pipe is changed; a probe may neither block readiness nor
+    // allocate arbitrary output supplied by a development helper override.
+    let fd = stdout.as_raw_fd();
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(AppError::new(
+            "Cannot bound the userspace helper readiness probe.",
+        ));
+    }
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut bytes = Vec::new();
+    let valid = loop {
+        let mut buffer = [0u8; 256];
+        match stdout.read(&mut buffer) {
+            Ok(0) => match child.try_wait() {
+                Ok(Some(status)) => {
+                    break status.success() && bytes == format!("{HELPER_VERSION}\n").as_bytes()
+                }
+                Ok(None) => {}
+                Err(_) => break false,
+            },
+            Ok(count) => {
+                bytes.extend_from_slice(&buffer[..count]);
+                if bytes.len() > 256 {
+                    break false;
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(_) => break false,
+        }
+        if Instant::now() >= deadline {
+            break false;
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+    if !valid {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(AppError::new(format!("Incompatible or unresponsive userspace helper: {}. Install matching protocol-4 crypto and host filesystem components.", program.display())));
+    }
+    Ok(())
+}
+
 impl Tools {
     fn resolve(backends_needed: bool) -> AppResult<Self> {
+        require_login_user(crate::effective_uid())?;
         let fusermount = find_program("fusermount3")?;
         if !backends_needed {
             return Ok(Self {
@@ -335,8 +491,9 @@ impl Tools {
                 fusermount,
             });
         }
-        let directories = if let Some(path) = std::env::var_os("LURKER_USERSPACE_DIR") {
-            vec![PathBuf::from(path)]
+        let legacy = std::env::var_os("LURKER_USERSPACE_DIR").map(PathBuf::from);
+        let directories = if let Some(path) = &legacy {
+            vec![path.clone()]
         } else {
             let mut paths = Vec::new();
             if let Ok(exe) = std::env::current_exe() {
@@ -349,26 +506,26 @@ impl Tools {
             paths.push("/usr/lib/lurker/userspace".into());
             paths
         };
-        let dir = directories.into_iter().find(|p| executable(&p.join("lurker-veracrypt")) && executable(&p.join("lurker-fs")))
-            .ok_or_else(|| AppError::new("Unprivileged helpers are missing. Build them with python scripts/build-linux-userspace.py, or install a Lurker package with userspace support."))?;
+        let host_candidates = [
+            "/usr/local/libexec/lurker-fs",
+            "/usr/local/bin/lurker-fs",
+            "/usr/libexec/lurker-fs",
+            "/usr/bin/lurker-fs",
+        ]
+        .map(PathBuf::from);
+        let (crypto, filesystem) = helper_paths(
+            &directories,
+            std::env::var_os("LURKER_FILESYSTEM_HELPER").map(PathBuf::from),
+            legacy.as_deref(),
+            &host_candidates,
+        )?;
         let tools = Self {
-            crypto: dir.join("lurker-veracrypt"),
-            filesystem: dir.join("lurker-fs"),
+            crypto,
+            filesystem,
             fusermount,
         };
         for program in [&tools.crypto, &tools.filesystem] {
-            let output = Command::new(program)
-                .arg("--lurker-userspace-version")
-                .output()
-                .map_err(|e| AppError::io("Failed to inspect userspace helper", e))?;
-            if !output.status.success()
-                || String::from_utf8_lossy(&output.stdout).trim() != HELPER_VERSION
-            {
-                return Err(AppError::new(format!(
-                    "Incompatible userspace helper: {}. Rebuild the Linux helpers.",
-                    program.display()
-                )));
-            }
+            probe_helper(program)?;
         }
         Ok(tools)
     }

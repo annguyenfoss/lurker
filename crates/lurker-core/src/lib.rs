@@ -52,6 +52,9 @@ pub use model::{
     ColorMode, CreateCipher, PrivilegeMode, ResolvedTargetKind, SourceKind, VolumeType,
 };
 pub use output::{Output, OutputBuffer, OutputEntry, OutputLevel};
+#[cfg(target_os = "linux")]
+pub use userspace::unprivileged_veracrypt_readiness;
+
 pub use trust::{trusted_privileged_executable, trusted_system_executable};
 #[cfg(not(target_os = "macos"))]
 pub use trust::trusted_privileged_storage_source;
