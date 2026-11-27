@@ -1,0 +1,17 @@
+Upstream-source: https://github.com/realchonk/fuse-ufs
+Upstream-commit: ee5c4a447da98220a11edb69a225d51379afc4fb
+License: BSD-2-Clause
+Purpose: Continue multi-page FUSE directory reads instead of returning early EOF.
+Host prerequisite only; retain rename and backing-file barrier patches.
+Apply after FEDORA_FUSE_UFS_NOREPLACE.patch and FEDORA_FUSE_UFS_BARRIER.patch:
+  git apply --unidiff-zero FEDORA_FUSE_UFS_READDIR.patch
+
+diff --git a/fuse-ufs/src/fuse3.rs b/fuse-ufs/src/fuse3.rs
+index cf865c2..bea0d0d 100644
+--- a/fuse-ufs/src/fuse3.rs
++++ b/fuse-ufs/src/fuse3.rs
+@@ -88,2 +88,2 @@ impl Filesystem for Fs {
+-			if offset != 0 {
+-				return Ok(());
++			if offset < 0 {
++				return Err(IoError::from_raw_os_error(libc::EINVAL));
