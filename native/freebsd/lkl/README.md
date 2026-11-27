@@ -133,3 +133,58 @@ propagation, ready/drain/error and stale-lease behavior, caller-created inode
 ownership and modes, own-file updates, foreign-user denials, native errno
 behavior, complete payload reopen cycles and normal closure. Functional
 upstream direct-I/O results are retained separately from those gates.
+
+
+## Kernel-domain provenance and current scope hold
+
+The current goal permits only already published/tested mainstream kernel
+patches, including embedded LKL. In-process execution does not exempt this
+source from that restriction. New LKL builds, kernel-domain changes, admission
+and storage tests are held pending dependency classification. Existing artifacts
+and failed fixtures are preserved.
+
+The seven pinned FreeBSD port patches are published distribution inputs:
+
+| Target | Published port change |
+| --- | --- |
+| `arch/lkl/Kconfig` | PowerPC 64-bit/big-endian selection; inactive for amd64 |
+| `arch/lkl/Makefile` | Extend PIC format list to PowerPC |
+| `arch/lkl/include/uapi/asm/host_ops.h` | Increase saved jump-buffer storage from 32 to 128 words |
+| `tools/lkl/Makefile` | Clear outer LDFLAGS for nested kernel build/install |
+| `tools/lkl/Makefile.autoconf` | Extend native POSIX/FreeBSD host selection to PowerPC |
+| `tools/lkl/Targets` | Omit the archive-conversion utility targets |
+| `tools/lkl/lib/virtio_blk.c` | Correct 64-bit sector/capacity endian conversions |
+
+Official source/package publication is established; it does not by itself
+establish popularity or an independent runtime test for every patch. These are
+separate from the local `host-io.patch`, which modifies five targets:
+
+- `arch/lkl/scripts/headers_install.py`: a local kernel/header-build script
+  change forcing multiprocessing `fork` for the native Python 3.14 build.
+  The builder also performs the port's ordinary interpreter-shebang substitution.
+- `tools/lkl/lib/virtio_blk.c`: local virtual block-device FLUSH advertisement,
+  header/status-only request handling and a sticky I/O-error latch. These are
+  kernel-boundary contract changes even though compiled in the host library;
+  current durability/error controls depend on them.
+- `tools/lkl/lib/posix-host.c`: local native provider capacity and host fsync/
+  GEOM DIOCGFLUSH forwarding. Current raw-provider controls depend on this glue.
+- `tools/lkl/include/lkl_host.h`: local host-library flush/error-query declarations.
+- `tools/lkl/lklfuse.c`: native userspace FUSE/errno/credential/direct-I/O and
+  checked lifecycle/halt/status integration.
+
+No local modifications were made to `fs/btrfs`, `fs/xfs`, `kernel/` or `mm/`
+C sources. The kernel uses pinned upstream `defconfig` through the existing
+`KCONFIG?=defconfig`; its captured configuration hash is
+`2251866a011d7ad4ed9924e2fba26d0bc8f090766e24e14742faccff555fea0f`.
+It enables Btrfs and XFS and leaves UFS disabled. No tailored `.config` was
+written. This distinction is evidence, not permission to bypass the scope hold.
+
+A read-only comparison of all 63,047 pristine archive entries against the
+frozen final12 input manifest found exactly the eleven content changes above
+(the official/local sets overlap at virtio_blk), one equivalent PowerPC
+selftest symlink normalization, and extraction permission normalization
+0664→0644 / 0775→0755. No other source content changes or missing inputs were
+found. The detailed audit is in the round's FreeBSD evidence directory under
+`validation/kernel-domain-audit/`. Local changes are not being presented as
+already published/tested mainstream patches. Independent userspace guardian,
+codec and Cryptomator ABI/FFM work does not link or run LKL.

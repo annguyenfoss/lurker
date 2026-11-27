@@ -817,3 +817,32 @@ product admission. Its common v2 codec is being coordinated with macOS;
 FreeBSD native peer credentials and GEOM/FUSE callbacks remain separate.
 No encrypted provider is released solely from the file record, and no new
 write admission is enabled by this preparation.
+
+
+### Updated kernel-patch scope: source audit and admission hold
+
+All further LKL/kernel-domain builds, changes, admission and storage tests are
+held under the user's narrower scope: kernel patches must already be published
+and tested in mainstream use, including embedded LKL. Existing artifacts and
+failures remain preserved; in-process library execution is not an exemption.
+
+A read-only audit compared all 63,047 pinned pristine source entries to the
+frozen final12 input manifest. It found exactly eleven content-changed files:
+seven official FreeBSD port targets plus five local targets, overlapping at
+`tools/lkl/lib/virtio_blk.c`. An equivalent PowerPC selftest symlink was
+normalized, along with extraction permissions; there were no other content
+changes or missing inputs. `validation/kernel-domain-audit/classification.json`
+and `lkl-kernel-domain-source-audit-summary.json` retain exact file hashes,
+URLs, changes and publication limits. `native/freebsd/lkl/README.md` lists every
+official/local target and its effect.
+
+The local patch does include `arch/lkl/scripts/headers_install.py` (forced
+multiprocessing fork for Python 3.14). It also contains custom virtual block
+FLUSH advertisement/request handling/error latching, native provider/barrier
+host glue, host API declarations and the userspace FUSE client. Current final12
+raw-provider/durability/error controls depend on those local changes; they are
+not being credited as already published/tested mainstream patches. No local
+Btrfs/XFS filesystem, kernel/ or mm/ C changes were made, and `.config` came
+from pinned upstream defconfig, but these facts do not override the scope hold.
+Product write guards remain unchanged. Standalone userspace guardian/codec and
+Cryptomator native header/FFM controls are independent of LKL execution.
