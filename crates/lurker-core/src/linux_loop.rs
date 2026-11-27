@@ -9,6 +9,7 @@ use std::mem::{size_of, size_of_val, zeroed};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -371,6 +372,15 @@ pub(crate) struct LoopLease {
     child: Child,
     directory: PathBuf,
 }
+
+fn isolate_nonconsole_lease_group(command: &mut Command, elevated_by_sudo: bool) {
+    if elevated_by_sudo {
+        // This socket-only helper must not share the foreground command's job
+        // control group. Preserve its session/TTY for cached sudo authorization.
+        command.process_group(0);
+    }
+}
+
 impl LoopLease {
     pub(crate) fn start(ctx: &mut AppContext, source: &File, readonly: bool) -> AppResult<Self> {
         let helper = helper_program()?;
@@ -406,6 +416,7 @@ impl LoopLease {
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
+            isolate_nonconsole_lease_group(&mut command, crate::effective_uid() != 0);
             let child = command
                 .spawn()
                 .map_err(|e| AppError::io("Cannot start trusted loop helper", e))?;
@@ -576,6 +587,46 @@ fn helper_program() -> AppResult<PathBuf> {
 mod tests {
     use super::*;
     use std::os::fd::AsFd;
+
+    #[test]
+    fn sudo_lease_group_is_separate_without_changing_session() {
+        const PROBE: &str = "LURKER_TEST_LEASE_GROUP_PROBE";
+        if std::env::var_os(PROBE).is_some() {
+            let identity = unsafe { (libc::getpid(), libc::getpgrp(), libc::getsid(0)) };
+            println!(
+                "LEASE_GROUP_IDENTITY={}",
+                serde_json::to_string(&identity).unwrap()
+            );
+            return;
+        }
+        let parent_group = unsafe { libc::getpgrp() };
+        let parent_session = unsafe { libc::getsid(0) };
+        for sudo in [false, true] {
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "linux_loop::tests::sudo_lease_group_is_separate_without_changing_session",
+                    "--nocapture",
+                ])
+                .env(PROBE, "1");
+            isolate_nonconsole_lease_group(&mut command, sudo);
+            let output = command.output().unwrap();
+            assert!(output.status.success());
+            let text = String::from_utf8(output.stdout).unwrap();
+            let identity = text
+                .lines()
+                .find_map(|line| line.strip_prefix("LEASE_GROUP_IDENTITY="))
+                .unwrap();
+            let (pid, group, session): (libc::pid_t, libc::pid_t, libc::pid_t) =
+                serde_json::from_str(identity).unwrap();
+            assert_eq!(
+                session, parent_session,
+                "preserve cached authorization context"
+            );
+            assert_eq!(group, if sudo { pid } else { parent_group });
+        }
+    }
 
     fn fixture(name: &str) -> (PathBuf, File, Request) {
         let path = PathBuf::from(format!(
