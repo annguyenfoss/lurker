@@ -107,3 +107,25 @@ hashes, native package, screenshots and original failure archives. Its SHA-256 i
 additional separately copied files are directly hashed in the completion index.
 The indexed native package is retained locally. The three full negative archives
 and their before/after verification receipts are under `controllers/`.
+
+## Completion addendum — 2026-11-27 06:28 UTC
+
+Coordinator decision `7d0f183` resolves the Linux configuration and documented
+Kbuild header-selection scope as eligible established integration. The pending
+eligibility wording above and in the frozen original private index is historical
+and is superseded by this addendum. No runtime receipt or source identity changes.
+
+A fresh read-only process/mount check at 06:28:18 UTC found no owned build,
+test or Lurker jobs, no owned FUSE mounts and no GUI bind mount. Ubuntu is
+**completed and idle**. The last native integrity/cleanup run completed at
+05:47:40 UTC; this report's original commit `e5e0aa6` was made at 05:51:59 UTC.
+There is no remaining implementation/testing blocker or required agent deliverable
+for the nine qualified filesystem rows excluding stock UFS1, and no dependency
+on the coordinator, another agent or the user to finish this agent's work.
+Cross-host reconciliation is the coordinator's separate work. No new UFS1 work
+started, and the recorded stock-UFS1 limitation remains.
+
+The append-only private `completion-addendum-7d0f183.json` binds this live check,
+the exact coordinator decision and the unchanged original completion-index hash.
+Earlier disclosed evidence limits remain disclosed; no broad rerun or new pass
+is implied. Persistent evidence/cache volumes remain intentionally mounted.
