@@ -505,6 +505,59 @@ Version needs section '.gnu.version_r' contains 2 entries:
             with self.assertRaisesRegex(ValueError, r"exact \$ORIGIN"):
                 stager.verify_linux_private_libraries(self.root, "veracrypt-create")
 
+    def test_linux_host_fuse_is_external_abi_bound_and_accepts_admin_updates(self):
+        manifest, private_elf = self._linux_closure()
+        name = "libfuse3.so.4"
+        provider = Path("/usr/lib/x86_64-linux-gnu/libfuse3.so.4.0.1")
+        host = {"name": name, "soname": name, "path": str(provider.parent / name),
+                "machine": "Advanced Micro Devices X86-64", "build_sha256": "a" * 64,
+                "build_resolved_path": str(provider), "required_by": ["lurker-veracrypt-create"],
+                "producer_package": {"manager": "dpkg", "name": "libfuse3-4", "version": "fixture"}}
+        manifest["host_libraries"] = [host]
+        self._save_closure(manifest)
+        original_digest = stager.digest
+        def elf(path, tool):
+            if path == provider:return {"soname": [name], "needed": ["libc.so.6"], "search": [], "interpreters": []}
+            info = private_elf(path, tool)
+            if path.name == "lurker-veracrypt-create":info["needed"].append(name)
+            return info
+        with mock.patch.object(stager.platform, "machine", return_value="x86_64"), mock.patch.object(stager, "elf_info", side_effect=elf), mock.patch.object(stager, "administrator_file", return_value=provider), mock.patch.object(stager, "linux_host_library", return_value=provider), mock.patch.object(stager, "digest", side_effect=lambda path: "b" * 64 if path == provider else original_digest(path)):
+            stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+            observed = stager.verify_linux_host_libraries(self.root, "veracrypt-create", manifest, "/trusted/readelf")
+            self.assertEqual("b" * 64, observed[0]["sha256"])
+            self.assertEqual("a" * 64, observed[0]["build_sha256"])
+            for field, value in (("path", "/tmp/libfuse3.so.4"), ("soname", "libfuse3.so.3"), ("required_by", ["unrelated"]), ("machine", "AArch64")):
+                original = host[field]
+                host[field] = value
+                self._save_closure(manifest)
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, "ABI/provenance"):
+                    stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+                host[field] = original
+            self._save_closure(manifest)
+            with mock.patch.object(stager, "linux_host_library", return_value=Path("/usr/lib/different-provider")):
+                with self.assertRaisesRegex(ValueError, "different host FUSE"):
+                    stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+
+    def test_linux_private_closure_refuses_bundled_fuse_even_with_a_manifest(self):
+        manifest, elf = self._linux_closure()
+        manifest["libraries"][0]["name"] = "libfuse3.so.4"
+        self._save_closure(manifest)
+        with mock.patch.object(stager, "elf_info", side_effect=elf):
+            with self.assertRaisesRegex(ValueError, "forbidden"):
+                stager.verify_linux_private_libraries(self.root, "veracrypt-create")
+
+    def test_linux_host_fuse_resolution_uses_native_loader_cache_before_defaults(self):
+        name = "libfuse3.so.4"
+        cache, default = self.root / "cache", self.root / "default"
+        cache.mkdir();default.mkdir()
+        header = bytearray(20);header[:6] = b"\x7fELF\x02\x01";header[18:20] = (62).to_bytes(2, "little")
+        for path in (cache / name, default / name):path.write_bytes(header)
+        result = mock.Mock(returncode=0, stdout=name + " (libc6,x86-64) => " + str(cache / name) + "\n")
+        with mock.patch.object(stager.platform, "machine", return_value="x86_64"), mock.patch.object(stager.shutil, "which", return_value="/sbin/ldconfig"), mock.patch.object(stager.subprocess, "run", return_value=result), mock.patch.object(stager, "LINUX_HOST_LIBRARY_DIRS", (default,)), mock.patch.object(stager, "administrator_file", side_effect=lambda path: path.resolve()):
+            self.assertEqual(cache / name, stager.linux_host_library(name))
+            other_arch = bytearray(header);other_arch[18:20] = (183).to_bytes(2, "little");(cache / name).write_bytes(other_arch)
+            self.assertEqual(default / name, stager.linux_host_library(name))
+
     def test_bsd_veracrypt_requires_complete_wxwidgets_notices(self):
         engine = self.root / "lurker-veracrypt-bsd"
         engine.write_bytes(b"\x7fELFfixture")
@@ -650,13 +703,14 @@ Version needs section '.gnu.version_r' contains 2 entries:
         (directory / "licenses").mkdir()
         for name in ("lurker-veracrypt-create", "creator-source.json", "private-libraries.json", "lib/libexample.so.1", "licenses/example.txt"):
             (directory / name).write_text(name)
+        (directory / "private-libraries.json").write_text("{}")
         args.select = ["veracrypt"]
         args.backend = ["veracrypt-create=" + str(directory)]
-        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "validate_backend", return_value=directory), mock.patch.object(stager, "audit_dependencies", return_value=[]):
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "validate_backend", return_value=directory), mock.patch.object(stager, "audit_dependencies", return_value=[]), mock.patch.object(stager, "verify_linux_host_libraries", return_value=[]):
             self.assertEqual(0, stager.stage(args))
         self.assertEqual("lib/libexample.so.1", (args.output / "libexec/lurker/backends/lib/libexample.so.1").read_text())
-        self.assertEqual("private-libraries.json", (args.output / "libexec/lurker/backends/private-libraries.json").read_text())
-        self.assertEqual("private-libraries.json", (args.output / "share/lurker/provenance/veracrypt-create-libraries.json").read_text())
+        self.assertEqual("{}", (args.output / "libexec/lurker/backends/private-libraries.json").read_text())
+        self.assertEqual("{}", (args.output / "share/lurker/provenance/veracrypt-create-libraries.json").read_text())
 
     def test_userspace_package_keeps_creator_loader_inventory_beside_executables(self):
         args, source = self._stage_fixture()
@@ -665,12 +719,13 @@ Version needs section '.gnu.version_r' contains 2 entries:
         (directory / "licenses").mkdir()
         for name in (*stager.ENTRY["veracrypt-userspace"], "private-libraries.json", "lib/libexample.so.1", "licenses/example.txt"):
             (directory / name).write_text(name)
+        (directory / "private-libraries.json").write_text("{}")
         args.select = ["veracrypt"]
         args.backend = ["veracrypt-userspace=" + str(directory)]
-        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "validate_backend", return_value=directory), mock.patch.object(stager, "audit_dependencies", return_value=[]):
+        with mock.patch.object(stager, "Source", return_value=source), mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which", return_value="/trusted/tool"), mock.patch.object(stager, "validate_backend", return_value=directory), mock.patch.object(stager, "audit_dependencies", return_value=[]), mock.patch.object(stager, "verify_linux_host_libraries", return_value=[]):
             self.assertEqual(0, stager.stage(args))
         name = "libexec/lurker/backends/private-libraries.json"
-        self.assertEqual("private-libraries.json", (args.output / name).read_text())
+        self.assertEqual("{}", (args.output / name).read_text())
         manifest = json.loads((args.output / "share/lurker/manifest.json").read_text())
         self.assertEqual(stager.digest(args.output / name), manifest["files"][name]["sha256"])
 

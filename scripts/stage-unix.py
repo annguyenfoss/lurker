@@ -457,6 +457,11 @@ LINUX_SYSTEM_ELF = re.compile(r"^(?:ld(?:-linux[^/]*|64)?\.so(?:\..*)?|lib(?:c|m
 LINUX_CXX_RUNTIME_ELF = re.compile(r"^lib(?:stdc\+\+|gcc_s)\.so(?:\..*)?$")
 # FUSE and the BSD puffs framework are host facilities, including user libraries.
 HOST_FUSE_LIBRARY = re.compile(r"^lib(?:fuse(?:3|-t)?|osxfuse|refuse|puffs)(?:\.so(?:\.[0-9]+)*|(?:\.[0-9]+)*\.dylib)$")
+LINUX_HOST_FUSE = re.compile(r"^libfuse(?:3)?\.so\.[0-9]+(?:\.[0-9]+)*$")
+LINUX_HOST_LIBRARY_DIRS = tuple(Path(path) for path in (
+    "/lib", "/lib64", "/usr/lib", "/usr/lib64", "/usr/local/lib",
+    "/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
+    "/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu"))
 
 
 def verify_linux_static_wx(root, manifest, source):
@@ -499,6 +504,83 @@ def verify_linux_static_wx(root, manifest, source):
         fail("Linux static wxWidgets compiler flag provenance is missing")
 
 
+def linux_host_library(name):
+    """Resolve the native cache/default search without executing payload code."""
+    candidates = []
+    tool = shutil.which("ldconfig")
+    if tool:
+        result = subprocess.run([tool, "-p"], capture_output=True, text=True, timeout=30,
+                                env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+        if result.returncode:
+            fail("cannot inspect the native Linux loader cache")
+        candidates.extend(Path(value) for value in re.findall(
+            r"(?m)^\s*" + re.escape(name) + r"\s+[^\n]*?=>\s+(/\S+)\s*$", result.stdout))
+    candidates.extend(directory / name for directory in LINUX_HOST_LIBRARY_DIRS)
+    expected = {"x86_64": 62, "aarch64": 183}.get(architecture(platform.machine()))
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        with candidate.open("rb") as stream:
+            header = stream.read(20)
+        # ldconfig can list multiple architectures for the same SONAME.
+        if (len(header) != 20 or not header.startswith(b"\x7fELF") or header[4] != 2
+                or header[5] not in (1, 2)
+                or int.from_bytes(header[18:20], "little" if header[5] == 1 else "big") != expected):
+            continue
+        return administrator_file(candidate)
+    fail("unresolved native Linux host library: " + name)
+
+
+def verify_linux_host_libraries(root, kind, manifest, readelf):
+    entries = manifest.get("host_libraries", [])
+    if not isinstance(entries, list) or len(entries) > 8:
+        fail("Linux host library inventory is invalid")
+    references = {}
+    private = [item["name"] for item in manifest.get("libraries", [])]
+    for name in ENTRY[kind] + ["lib/" + name for name in private]:
+        info = elf_info(root / name, readelf)
+        if info is None:
+            fail("Linux private closure contains a non-ELF file: " + name)
+        for dependency in info["needed"]:
+            if LINUX_HOST_FUSE.fullmatch(dependency):
+                references.setdefault(dependency, set()).add(Path(name).name)
+    observed = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            fail("Linux host library record is invalid")
+        name = entry.get("name", "")
+        path = Path(entry.get("path", ""))
+        required = entry.get("required_by", [])
+        machine = entry.get("machine", "")
+        target = architecture(platform.machine())
+        machine_matches = isinstance(machine, str) and (
+            (target == "x86_64" and machine in {"Advanced Micro Devices X86-64", "AMD x86-64", "EM_X86_64 (0x3E)"})
+            or (target == "aarch64" and machine in {"AArch64", "EM_AARCH64 (0xB7)"}))
+        if (not LINUX_HOST_FUSE.fullmatch(name) or name in observed or entry.get("soname") != name
+                or path.name != name or path.parent not in LINUX_HOST_LIBRARY_DIRS
+                or str(path) != entry.get("path") or not machine_matches
+                or not re.fullmatch(r"[0-9a-f]{64}", entry.get("build_sha256", ""))
+                or not Path(entry.get("build_resolved_path", "")).is_absolute()
+                or not isinstance(required, list) or not required
+                or any(not isinstance(value, str) for value in required)
+                or len(required) != len(set(required)) or set(required) != references.get(name)):
+            fail("Linux host FUSE ABI/provenance or required-by inventory differs")
+        provider = administrator_file(path)
+        if provider.parent not in {directory.resolve() for directory in LINUX_HOST_LIBRARY_DIRS}:
+            fail("Linux host FUSE alias leaves native library directories")
+        info = elf_info(provider, readelf)
+        if info is None or info.get("soname") != [name] or info.get("interpreters"):
+            fail("Linux host FUSE SONAME/native ELF identity differs")
+        if linux_host_library(name) != provider:
+            fail("Linux loader selects a different host FUSE provider")
+        observed[name] = {"name": name, "soname": name, "path": str(path),
+                          "resolved_path": str(provider), "sha256": digest(provider),
+                          "build_sha256": entry["build_sha256"], "required_by": sorted(required)}
+    if set(observed) != set(references):
+        fail("Linux private closure is missing dependency " + ", ".join(sorted(set(references) - set(observed))))
+    return [observed[name] for name in sorted(observed)]
+
+
 def verify_linux_private_libraries(root, kind):
     manifest = json_file(root / "private-libraries.json")
     if manifest.get("schema") != 1 or not isinstance(manifest.get("files"), dict):
@@ -517,7 +599,7 @@ def verify_linux_private_libraries(root, kind):
     libraries = manifest.get("libraries", [])
     for library in libraries:
         name = str(relative(library["name"]))
-        if "/" in name or name in names or LINUX_SYSTEM_ELF.fullmatch(name):
+        if "/" in name or name in names or LINUX_SYSTEM_ELF.fullmatch(name) or HOST_FUSE_LIBRARY.fullmatch(name):
             fail("forbidden/duplicate Linux private library: " + name)
         names.add(name)
         path = root / "lib" / name
@@ -535,6 +617,7 @@ def verify_linux_private_libraries(root, kind):
             fail("Linux private library needs an exact $ORIGIN search path: " + name)
     if recorded != {"lib/" + name for name in names}:
         fail("Linux private library inventory differs from its library records")
+    host = {entry["name"] for entry in verify_linux_host_libraries(root, kind, manifest, readelf)}
     for name in ENTRY[kind] + ["lib/" + name for name in sorted(names)]:
         info = elf_info(root / name, readelf)
         if info is None:
@@ -542,7 +625,7 @@ def verify_linux_private_libraries(root, kind):
         if not name.startswith("lib/") and info["search"] != ["$ORIGIN/lib"]:
             fail("Linux helper needs an exact $ORIGIN/lib search path: " + name)
         for dependency in info["needed"]:
-            if not (LINUX_SYSTEM_ELF.fullmatch(dependency) or LINUX_CXX_RUNTIME_ELF.fullmatch(dependency)) and dependency not in names:
+            if not (LINUX_SYSTEM_ELF.fullmatch(dependency) or LINUX_CXX_RUNTIME_ELF.fullmatch(dependency)) and dependency not in names | host:
                 fail("Linux private closure is missing dependency " + dependency + " for " + name)
     return manifest
 
@@ -853,6 +936,8 @@ def audit_dependencies(prefix):
                 target = Path(name)
                 if not target.is_absolute():
                     fail("relative ELF dependency: " + name)
+            elif platform.system() == "Linux" and LINUX_HOST_FUSE.fullmatch(name):
+                target = linux_host_library(name)
             else:
                 target = next((d / name for d in search + defaults if (d / name).is_file()), cache.get(name))
             if target is None or not target.is_file():
@@ -1182,9 +1267,16 @@ def stage(args):
         host_fuse = ({"veracrypt-bsd": verify_bsd_host_fuse(artifacts["veracrypt-bsd"],
                          json_file(artifacts["veracrypt-bsd"] / "bsd-veracrypt-source.json"))}
                      if "veracrypt-bsd" in artifacts else {})
+        host_libraries = {}
+        for kind in ("veracrypt-create", "veracrypt-userspace"):
+            if kind in artifacts:
+                readelf = shutil.which("readelf") or shutil.which("llvm-readelf")
+                host_libraries[kind] = verify_linux_host_libraries(artifacts[kind], kind,
+                    json_file(artifacts[kind] / "private-libraries.json"), readelf)
         manifest = {"schema": 1, "source_commit": source.commit, "os": system, "architecture": platform.machine(),
                     "selected_backends": sorted(selected), "bundled_artifacts": sorted(artifacts),
                     "host_tools": requirements, "native_dependencies": dependencies, "host_fuse": host_fuse,
+                    "host_libraries": host_libraries,
                     "desktop_authorization": authorization,
                     "desktop_runtime": desktop_display_requirements(system, args.desktop),
                     "host_tool_requirements": {backend: TOOLS.get(system, {}).get(backend, []) for backend in sorted(selected)},
@@ -1200,6 +1292,8 @@ def stage(args):
                            if system == "FreeBSD" and selected & {"gocryptfs", "cryfs"} else [])
                         + (["Cryptomator's qualified Linux adapter requires libfuse3 and fusermount3"] if "cryptomator" in selected else [])
                         + (["VeraCrypt userspace/LKL requires the FUSE kernel interface and fusermount3"] if "veracrypt-userspace" in artifacts else [])
+                        + (["VeraCrypt's creator requires the declared native host FUSE userspace ABI; FUSE libraries remain external prerequisites"]
+                           if any(host_libraries.values()) else [])
                         + (["VeraCrypt requires the declared native host FUSE2 userspace library and kernel interface"] if "veracrypt-bsd" in artifacts else [])
                         + (["PEFS module must match the FreeBSD kernel"] if "pefs" in selected else [])
                         + (["LUKS1 requires the stock DragonFly dm_target_linear kernel module"] if system == "DragonFly" and "luks1" in selected else [])
