@@ -12,6 +12,11 @@ use std::path::Path;
 mod physical;
 pub(super) use physical::{ensure_physical_idle, physical_device};
 
+// Protocol preparation only. Writable LKL admission and lifecycle hooks remain
+// gated on the external driver's native qualification.
+#[allow(dead_code)]
+mod lkl;
+
 const MDCONFIG: &str = "/sbin/mdconfig";
 const GELI: &str = "/sbin/geli";
 const NEWFS: &str = "/sbin/newfs";
