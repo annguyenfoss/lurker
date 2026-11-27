@@ -1089,3 +1089,26 @@ remain unproven. `build/cryptomator-real-pilot-plan-1/plan.json` records a read-
 proposal, including a reviewed real-engine controller prerequisite; no pilot has
 been executed. The corrected Rust input3 is a separate queued/running gate and
 is not included among these results.
+
+
+### Corrected native Rust and real Java wire with fake resources
+
+- Purpose/input: root input3 `b36b68d7...`, base `e516ba8`, five-file overlay
+  `122121a8...`; only change from failed input2 is two None fields in a test
+  fixture. Its earlier workspace check exit0 is carried under input2 identity,
+  not relabeled as a new check. Native one-worker cache/flags remain unchanged.
+- Command/log: workspace tests, native fixture javac and only the designated
+  ignored `folder::managed::tests::native_java_managed_close_interop` in
+  `build/cryptomator-managed-core/native-v3/`; runner `42cb12fd...`.
+- Outcome: workspace 173 passed, zero failed, 14 ignored; javac exit0;
+  designated ignored interoperability test passes all four fake cases using
+  genuine Main/ManagedClose, native Unix peer credentials and native PID birth.
+  Normal, busy/retry and startup-failure cases close with bound live CLOSED,
+  independent stdout acknowledgement and natural JVM exit0. Sticky fake CryptoFS
+  remains live after repeated refusal, then test-only manual kill/reap is labeled
+  as cleanup, never a normal-close pass.
+- Evidence/cleanup: all 605 regular source hashes unchanged, three raw log hashes
+  verified, 12 per-case stdout/stderr/trace files retained. Archive `497fd360...`
+  passes full SHA/gzip verification. Terminal inventory contains no Cargo,
+  rustc, Maven or Java worker. No real provider, mount, channel, CryptoFS or
+  native unmount was exercised; core Cryptomator support stays disabled.
