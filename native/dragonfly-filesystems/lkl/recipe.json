@@ -52,7 +52,8 @@
     "patches/0001-dragonfly-modpost-relocations.patch",
     "patches/0002-dragonfly-posix-host.patch",
     "patches/0003-dragonfly-uapi-native-macros.patch",
-    "patches/0004-durable-block-flush.patch"
+    "patches/0004-durable-block-flush.patch",
+    "patches/0005-dragonfly-fuse-errno-boundary.patch"
   ],
   "native_build_prerequisites": [
     "GNU make",
@@ -78,6 +79,11 @@
       "path": "dragonfly-timer.h",
       "target": "tools/lkl/lib/dragonfly-timer.h",
       "sha256": "9483fe195c2ead32361ee28d5c786f15e6112b636cd1c99f56df34bc673b3229"
+    },
+    {
+      "path": "dragonfly-errno.h",
+      "target": "tools/lkl/dragonfly-errno.h",
+      "sha256": "7d99f890b9bcea5c5e356c48e84e8fdff8e921bf34acc8ab2f068e2ecd26144a"
     }
   ],
   "host_features": {

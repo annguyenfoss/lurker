@@ -1,0 +1,245 @@
+--- tools/lkl/lklfuse.c
++++ tools/lkl/lklfuse.c
+@@ -13,6 +13,7 @@
+ #include <fuse/fuse_lowlevel.h>
+ #include <lkl.h>
+ #include <lkl_host.h>
++#include "dragonfly-errno.h"
+ 
+ #define LKLFUSE_VERSION "0.1"
+ 
+@@ -131,7 +132,7 @@
+ 
+ 	ret = lkl_sys_fstat(fi->fh, &lkl_stat);
+ 	if (ret)
+-		return ret;
++		return df_lkl_result(ret, 0);
+ 
+ 	lklfuse_xlat_stat(&lkl_stat, st);
+ 	return 0;
+@@ -144,7 +145,7 @@
+ 
+ 	ret = lkl_sys_lstat(path, &lkl_stat);
+ 	if (ret)
+-		return ret;
++		return df_lkl_result(ret, 0);
+ 
+ 	lklfuse_xlat_stat(&lkl_stat, st);
+ 	return 0;
+@@ -156,7 +157,7 @@
+ 
+ 	ret = lkl_sys_readlink(path, buf, len);
+ 	if (ret < 0)
+-		return ret;
++		return df_lkl_result(ret, 0);
+ 
+ 	if ((size_t)ret == len)
+ 		ret = len - 1;
+@@ -168,54 +169,54 @@
+ 
+ static int lklfuse_mknod(const char *path, mode_t mode, dev_t dev)
+ {
+-	return lkl_sys_mknod(path, mode, dev);
++	return df_lkl_result(lkl_sys_mknod(path, mode, dev), 0);
+ }
+ 
+ static int lklfuse_mkdir(const char *path, mode_t mode)
+ {
+-	return lkl_sys_mkdir(path, mode);
++	return df_lkl_result(lkl_sys_mkdir(path, mode), 0);
+ }
+ 
+ static int lklfuse_unlink(const char *path)
+ {
+-	return lkl_sys_unlink(path);
++	return df_lkl_result(lkl_sys_unlink(path), 0);
+ }
+ 
+ static int lklfuse_rmdir(const char *path)
+ {
+-	return lkl_sys_rmdir(path);
++	return df_lkl_result(lkl_sys_rmdir(path), 0);
+ }
+ 
+ static int lklfuse_symlink(const char *oldname, const char *newname)
+ {
+-	return lkl_sys_symlink(oldname, newname);
++	return df_lkl_result(lkl_sys_symlink(oldname, newname), 0);
+ }
+ 
+ 
+ static int lklfuse_rename(const char *oldname, const char *newname)
+ {
+-	return lkl_sys_rename(oldname, newname);
++	return df_lkl_result(lkl_sys_rename(oldname, newname), 0);
+ }
+ 
+ static int lklfuse_link(const char *oldname, const char *newname)
+ {
+-	return lkl_sys_link(oldname, newname);
++	return df_lkl_result(lkl_sys_link(oldname, newname), 0);
+ }
+ 
+ static int lklfuse_chmod(const char *path, mode_t mode)
+ {
+-	return lkl_sys_chmod(path, mode);
++	return df_lkl_result(lkl_sys_chmod(path, mode), 0);
+ }
+ 
+ 
+ static int lklfuse_chown(const char *path, uid_t uid, gid_t gid)
+ {
+-	return lkl_sys_chown(path, uid, gid);
++	return df_lkl_result(lkl_sys_chown(path, uid, gid), 0);
+ }
+ 
+ static int lklfuse_truncate(const char *path, off_t off)
+ {
+-	return lkl_sys_truncate(path, off);
++	return df_lkl_result(lkl_sys_truncate(path, off), 0);
+ }
+ 
+ static int lklfuse_open3(const char *path, bool create, mode_t mode,
+@@ -238,7 +239,7 @@
+ 
+ 	ret = lkl_sys_open(path, flags, mode);
+ 	if (ret < 0)
+-		return ret;
++		return df_lkl_result(ret, 0);
+ 
+ 	fi->fh = ret;
+ 
+@@ -271,7 +272,7 @@
+ 		buf += ret;
+ 	} while (size > 0);
+ 
+-	return ret < 0 ? ret : orig_size - (ssize_t)size;
++	return df_lkl_result(ret < 0 ? ret : orig_size - (ssize_t)size, 0);
+ 
+ }
+ 
+@@ -290,7 +291,7 @@
+ 		buf += ret;
+ 	} while (size > 0);
+ 
+-	return ret < 0 ? ret : orig_size - (ssize_t)size;
++	return df_lkl_result(ret < 0 ? ret : orig_size - (ssize_t)size, 0);
+ }
+ 
+ 
+@@ -301,7 +302,7 @@
+ 
+ 	ret = lkl_sys_statfs(path, &lkl_statfs);
+ 	if (ret < 0)
+-		return ret;
++		return df_lkl_result(ret, 0);
+ 
+ 	stat->f_bsize = lkl_statfs.f_bsize;
+ 	stat->f_frsize = lkl_statfs.f_frsize;
+@@ -325,38 +326,38 @@
+ 
+ static int lklfuse_release(const char *path, struct fuse_file_info *fi)
+ {
+-	return lkl_sys_close(fi->fh);
++	return df_lkl_result(lkl_sys_close(fi->fh), 0);
+ }
+ 
+ static int lklfuse_fsync(const char *path, int datasync,
+ 		       struct fuse_file_info *fi)
+ {
+ 	if (datasync)
+-		return lkl_sys_fdatasync(fi->fh);
++		return df_lkl_result(lkl_sys_fdatasync(fi->fh), 0);
+ 	else
+-		return lkl_sys_fsync(fi->fh);
++		return df_lkl_result(lkl_sys_fsync(fi->fh), 0);
+ }
+ 
+ static int lklfuse_setxattr(const char *path, const char *name, const char *val,
+ 		   size_t size, int flags)
+ {
+-	return lkl_sys_setxattr(path, name, val, size, flags);
++	return df_lkl_result(lkl_sys_setxattr(path, name, val, size, flags), 1);
+ }
+ 
+ static int lklfuse_getxattr(const char *path, const char *name, char *val,
+ 			  size_t size)
+ {
+-	return lkl_sys_getxattr(path, name, val, size);
++	return df_lkl_result(lkl_sys_getxattr(path, name, val, size), 1);
+ }
+ 
+ static int lklfuse_listxattr(const char *path, char *list, size_t size)
+ {
+-	return lkl_sys_listxattr(path, list, size);
++	return df_lkl_result(lkl_sys_listxattr(path, list, size), 1);
+ }
+ 
+ static int lklfuse_removexattr(const char *path, const char *name)
+ {
+-	return lkl_sys_removexattr(path, name);
++	return df_lkl_result(lkl_sys_removexattr(path, name), 1);
+ }
+ 
+ static int lklfuse_opendir(const char *path, struct fuse_file_info *fi)
+@@ -366,7 +367,7 @@
+ 
+ 	dir = lkl_opendir(path, &err);
+ 	if (!dir)
+-		return err;
++		return df_lkl_result(err, 0);
+ 
+ 	fi->fh = (uintptr_t)dir;
+ 
+@@ -411,7 +412,7 @@
+ 	}
+ 
+ 	if (!de)
+-		return lkl_errdir(dir);
++		return df_lkl_result(lkl_errdir(dir), 0);
+ 
+ 	return 0;
+ }
+@@ -420,7 +421,7 @@
+ {
+ 	struct lkl_dir *dir = (struct lkl_dir *)(uintptr_t)fi->fh;
+ 
+-	return lkl_closedir(dir);
++	return df_lkl_result(lkl_closedir(dir), 0);
+ }
+ 
+ static int lklfuse_fsyncdir(const char *path, int datasync,
+@@ -430,14 +431,14 @@
+ 	int fd = lkl_dirfd(dir);
+ 
+ 	if (datasync)
+-		return lkl_sys_fdatasync(fd);
++		return df_lkl_result(lkl_sys_fdatasync(fd), 0);
+ 	else
+-		return lkl_sys_fsync(fd);
++		return df_lkl_result(lkl_sys_fsync(fd), 0);
+ }
+ 
+ static int lklfuse_access(const char *path, int mode)
+ {
+-	return lkl_sys_access(path, mode);
++	return df_lkl_result(lkl_sys_access(path, mode), 0);
+ }
+ 
+ static int lklfuse_utimens(const char *path, const struct timespec tv[2])
+@@ -449,13 +450,13 @@
+ 	ts[1].tv_sec = tv[0].tv_sec;
+ 	ts[1].tv_nsec = tv[0].tv_nsec;
+ 
+-	return lkl_sys_utimensat(-1, path, ts, LKL_AT_SYMLINK_NOFOLLOW);
++	return df_lkl_result(lkl_sys_utimensat(-1, path, ts, LKL_AT_SYMLINK_NOFOLLOW), 0);
+ }
+ 
+ static int lklfuse_fallocate(const char *path, int mode, off_t offset,
+ 			     off_t len, struct fuse_file_info *fi)
+ {
+-	return lkl_sys_fallocate(fi->fh, mode, offset, len);
++	return df_lkl_result(lkl_sys_fallocate(fi->fh, mode, offset, len), 0);
+ }
+ 
+ const struct fuse_operations lklfuse_ops = {

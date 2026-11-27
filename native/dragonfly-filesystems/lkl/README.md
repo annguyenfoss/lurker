@@ -49,3 +49,12 @@ native flushes. A separate fault image makes only a FLUSH request use an invalid
 native FD; the real backend fsync error propagates as Linux EIO from file fsync.
 Fault-case unmount errors are retained and reported. These are unprivileged
 internal-LKL diagnostic controls, not host FUSE or product lifecycle proof.
+
+Patch 0005 translates known LKL failures only at each FUSE callback's return
+boundary. The native table uses named generated Linux and native errno macros;
+internal syscall comparisons remain Linux values and positive results remain
+unchanged. ENODATA maps to ENOATTR only for xattr callbacks. Unknown errors are
+diagnosed and fail as EIO. The strict native `tests/errno-boundary.c` control
+verifies ENOTEMPTY=66, ENOSYS=78, EOPNOTSUPP=45 and ENOATTR=87, positive-result
+preservation and unknown-error diagnostics. Actual host-mounted negative probes
+remain required.
