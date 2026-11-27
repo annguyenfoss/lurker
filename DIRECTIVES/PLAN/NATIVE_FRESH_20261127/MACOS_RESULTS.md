@@ -96,8 +96,9 @@ normal closes/reopens, append and second-file results. Final validation is pendi
   before filesystem writes while cleaning up encryption normally. Native guard
   regression retained unchanged ciphertext and an empty unmounted target. XFS
   remains unavailable pending a trustworthy persistence-capable host driver.
-- Btrfs has no eligible native route identified; its existing VM compatibility
-  branch ran once in the reused initial sweep and is explicitly excluded.
+- Btrfs had no qualified native runtime route in the initial sweep; its existing
+  VM compatibility branch ran once and is explicitly excluded. The later native
+  LKL source assessment below identifies an eligible candidate, not a runtime pass.
   UFS1/HAMMER2 native create/read-write routes remain unavailable. GELI/PEFS,
   CGD and OpenBSD softraid formats have no corresponding macOS native facility.
 
@@ -106,13 +107,17 @@ can destroy key material; it is ineligible. The native `open_ext4_for_mac` FSKit
 candidate offers LUKS import, not this round's complete create workflow.
 LUKSbox uses its own `.lbx` format and cannot substitute for LUKS1/LUKS2.
 
-The later xlinuxfs assessment found GPL-2.0 native FSKit ext4/XFS/Btrfs source
-(`f9da28e8cfdf6a4574a31e8baa9ba1811ef4c2e4`) using in-process LKL. Its
-repository publishes no release artifacts and actual system mounts require a
-restricted FSKit provisioning profile. Buran has no matching FSKit profile; an
-unsigned build cannot establish a native mount. This is a blocked source-build
-candidate, not evidence that no native FSKit project exists. The separate
-btrfs4mac project explicitly supports reading only.
+The pinned public xlinuxfs source
+(`f9da28e8cfdf6a4574a31e8baa9ba1811ef4c2e4`, GPL-2.0) includes a companion
+Darwin LKL port (`c4d0895ead9badb52f7bbffe3d529c61c8fc9485`), a self-contained
+Mach-O arm64/x86_64 build profile, local file I/O and bridge tests for read/write
+ext4, XFS and Btrfs. This is a credible eligible native candidate; source
+availability and architecture are not established blockers. Buran lacks the
+restricted provisioning profile needed to load its FSKit extension. Native
+library/bridge build proof and a separately installed mounted driver remain
+distinct qualification gates; neither has a Buran acceptance pass at this
+checkpoint. UFS1 is disabled in the fixed profile and needs additional source
+integration and validation. The separate btrfs4mac project supports reading only.
 
 Six VeraCrypt Auto conformance profiles (AES/Serpent/Twofish, password and binary
 keyfile) each passed 20 checks, totaling 120, including wrong credentials,
