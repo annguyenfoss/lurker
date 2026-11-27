@@ -41,8 +41,11 @@ error overwrite and actually exits 1; the parent still refuses success.
 Remaining gates include the long-lived supervisor loop and startup context,
 worker/driver integration, exact executable/source identity capture, native mount
 identity callbacks, production caller/core/session capability fencing and the
-three-filesystem I/O/halt controls. The embedded-LKL dependency is separately held
-under the kernel-patch scope; plain POSIX primitive results do not clear that hold.
+three-filesystem I/O/halt controls. The LKL-dependent work remains at its previous coordination checkpoint; plain
+POSIX primitive results do not admit that route. Any plan to invent kernel
+shutdown, thread-join, syscall or credential behavior is cut. These userspace
+checks must use existing native and upstream interfaces; they do not justify
+creating a new kernel interface when a dependency fails.
 
 Run only on a native Mac as the login user, using a new owned 0700 fixture root
 whose UNIX socket paths fit Darwin's `sun_path` bound:

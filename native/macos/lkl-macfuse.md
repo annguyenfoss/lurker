@@ -6,16 +6,24 @@ refusal remains in place until a replacement mounted route passes qualification.
 An in-process native library using local I/O is eligible; the older Btrfs
 VM/network-export routes remain excluded.
 
-The new kernel-patch scope holds this dependent runtime route. In-process LKL
-still contains an embedded kernel: its kernel implementation, headers, scheduler,
-syscall dispatch and kernel link policy require eligible already published/tested
-upstream or mainstream provenance. The custom namespace export-list patch below
-changes the kernel partial link and is not exempt because its file is Python.
-The pinned Darwin vendor fork is public, but mainstream adoption of its kernel
-port changes has not been established. Preserve the historical builds/controls;
-do not rebuild or execute this dependent route as new acceptance, or enable
-product dispatch, while that boundary is unresolved. Plain native POSIX guardian
-and codec work is independent and contains no embedded kernel.
+The kernel boundary excludes Lurker's own invented kernel code or behavior,
+including an embedded kernel. Pre-made upstream patches and existing supported
+configuration remain possible routes. The Mac work did not author kernel C,
+syscall dispatch, scheduler, kernel credentials or a new kernel lifecycle API.
+The host virtio FLUSH transport, documented Mach-O visibility change and external
+FUSE/guardian code are ordinary userspace/build integration; they are not kernel
+inventions merely because the driver contains LKL. The pre-made Darwin vendor
+port is separately assessed for provenance, maturity and ordinary installation.
+Its availability does not establish mainstream suitability or product support.
+
+No Mac LKL/guardian/formatter job was active at the final scope audit. Stop or
+cut any proposed Lurker-authored kernel implementation, new kernel ABI/lifecycle
+hook, speculative halt/thread-join change or syscall-bounds import. Do not use
+this round to develop a new Darwin kernel port if the existing route fails.
+Previously held work is not automatically restarted. Preserve its completed
+functional observations and failed experiments under their original identities;
+source, build and test success do not by themselves establish scope eligibility.
+Plain native POSIX guardian and codec work contains no embedded kernel.
 
 ## Exact source and build
 
@@ -108,8 +116,8 @@ FSKit extension acceptance. The frozen `025f558` package results remain unchange
 ## Kernel and native host symbol boundary
 
 The historical candidate applied `lkl-darwin-symbols.patch` alongside the flush
-patch. Its kernel partial-link modification is now held under the scope above;
-it is not an instruction to run another build. The upstream Darwin recipe made
+patch. The previously held qualification has not automatically restarted;
+this historical account is not an instruction to run another build. The upstream Darwin recipe made
 only memcpy/memset/memmove private.
 Its combined kernel object also exported formatting and string functions,
 including snprintf/vsnprintf, which could capture native host calls. A native
@@ -121,8 +129,9 @@ external/private symbol visibility and retains the existing LKL API and boot-glu
 references. It does not change compiled kernel source, syscall behavior, calling
 conventions, API signatures or structures. Apple's established export-list
 procedure is relevant provenance; local authorship or a kernel-object target
-alone does not establish experimental kernel development. The dependent route
-remains held for coordinated review rather than automatically restarting.
+alone does not establish experimental kernel development. The prior hold
+remains a coordination checkpoint; it is not proof of a prohibited kernel
+implementation change or permission to restart it automatically.
 
 https://developer.apple.com/library/archive/documentation/Performance/Conceptual/CodeFootprint/Articles/ReducingExports.html
 https://github.com/apple-oss-distributions/ld64/blob/main/doc/man/man1/ld-classic.1
