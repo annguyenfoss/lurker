@@ -115,6 +115,9 @@ fn run_helper_checked(
     // Unprivileged mode must not require Linux's separate VeraCrypt transport.
     let unprivileged =
         !directory_backend && command.privilege_mode() == lurker_core::PrivilegeMode::Unprivileged;
+    // Closing an owned userspace session needs its existing processes and
+    // fusermount, even if package helpers have since been removed.
+    let check_userspace_ready = unprivileged && !matches!(&command, CommandAction::Unmount(_));
     let privileged_tools = !cfg!(target_os = "macos")
         && !directory_backend
         && command.privilege_mode() == lurker_core::PrivilegeMode::Privileged;
@@ -149,9 +152,12 @@ fn run_helper_checked(
         || raid1c
         || cryptomator_fence
     {
-        let result = Command::new(helper_path)
-            .arg("capabilities")
-            .stdin(Stdio::null())
+        let mut query = Command::new(helper_path);
+        query.arg("capabilities");
+        if check_userspace_ready {
+            query.arg("--userspace-readiness");
+        }
+        let result = query.stdin(Stdio::null())
             .output()
             .map_err(|error| format!("Failed to check helper capabilities: {error}"))?;
         let capabilities: serde_json::Value =
@@ -183,6 +189,13 @@ fn run_helper_checked(
                 || capabilities["userspace_backend_protocol"] != 4)
         {
             return Err("Installed lurker-helper does not support the durable userspace backend protocol. Update the helper and native components together.".into());
+        }
+        if check_userspace_ready && capabilities["userspace_backend_ready"] == false {
+            return Err(capabilities["userspace_backend_error"]
+                .as_str()
+                .filter(|error| !error.trim().is_empty())
+                .unwrap_or("Unprivileged VeraCrypt prerequisites are unavailable. Install its crypto support and host filesystem driver.")
+                .to_owned());
         }
         if (keyfile && capabilities["keyfile_authentication"] != true)
             || (keyslots && capabilities["luks_keyslots"] != true)
@@ -690,7 +703,7 @@ fi
             &helper,
             r#"#!/bin/sh
 if [ "$1" = capabilities ]; then
-  printf '%s\n' '{"protocol_version":3,"directory_backends":true,"folder_supervision_protocol":1,"unprivileged_veracrypt":false}'
+  printf '%s\n' '{"protocol_version":3,"directory_backends":true,"folder_supervision_protocol":1,"unprivileged_veracrypt":false,"userspace_backend_ready":false}'
 else
   cat >/dev/null
   printf '%s\n' '{"ok":true,"logs":[],"error":null}'
@@ -769,6 +782,103 @@ fi
             .unwrap_err()
             .contains("durable userspace backend protocol"));
         assert!(!directory.join("helper.ran").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn userspace_readiness_precedes_secrets_but_does_not_block_owned_close() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-userspace-readiness-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        fs::write(&helper, r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  if [ "${2-}" = --userspace-readiness ]; then : > "${0}.readiness"; fi
+  printf '%s\n' '{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":4,"userspace_backend_ready":false,"userspace_backend_error":"Install the host filesystem driver."}'
+else
+  cat > "${0}.request"
+  printf '%s\n' '{"ok":true,"logs":[],"error":null}'
+fi
+"#).unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let mount = CommandAction::Mount(lurker_core::MountCommand {
+            privilege_mode: PrivilegeMode::Unprivileged,
+            source: directory.join("vault"),
+            peer_sources: Vec::new(),
+            allow_degraded: false,
+            mountpoint: directory.join("mount"),
+            tag: None,
+            volume_type: VolumeType::Veracrypt,
+            passphrase: Some("fixture password".into()),
+            keyfile: None,
+            readonly: false,
+        });
+        assert_eq!(run_helper(&helper, mount).unwrap_err(), "Install the host filesystem driver.");
+        assert!(directory.join("helper.readiness").exists());
+        assert!(!directory.join("helper.request").exists());
+        fs::remove_file(directory.join("helper.readiness")).unwrap();
+        let close = CommandAction::Unmount(UnmountCommand {
+            privilege_mode: PrivilegeMode::Unprivileged,
+            target: directory.join("mount"),
+            tag: None,
+            volume_type: VolumeType::Veracrypt,
+        });
+        assert!(run_helper(&helper, close).unwrap().ok);
+        assert!(!directory.join("helper.readiness").exists());
+        assert!(directory.join("helper.request").exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn userspace_ready_and_legacy_protocol_four_helpers_receive_requests() {
+        let _guard = HELPER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let directory = std::env::temp_dir().join(format!(
+            "lurker-userspace-ready-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let helper = directory.join("helper");
+        for capabilities in [
+            r#"{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":4,"userspace_backend_ready":true}"#,
+            r#"{"protocol_version":3,"unprivileged_veracrypt":true,"userspace_backend_protocol":4}"#,
+        ] {
+            let script = r#"#!/bin/sh
+if [ "$1" = capabilities ]; then
+  [ "${2-}" = --userspace-readiness ] || exit 64
+  printf '%s\n' '__CAPABILITIES__'
+else
+  cat > "${0}.request"
+  printf '%s\n' '{"ok":true,"logs":[],"error":null}'
+fi
+"#.replace("__CAPABILITIES__", capabilities);
+            fs::write(&helper, script).unwrap();
+            fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+            let mount = CommandAction::Mount(lurker_core::MountCommand {
+                privilege_mode: PrivilegeMode::Unprivileged,
+                source: directory.join("vault"),
+                peer_sources: Vec::new(),
+                allow_degraded: false,
+                mountpoint: directory.join("mount"),
+                tag: None,
+                volume_type: VolumeType::Veracrypt,
+                passphrase: Some("fixture password".into()),
+                keyfile: None,
+                readonly: false,
+            });
+            assert!(run_helper(&helper, mount).unwrap().ok);
+            assert!(fs::read_to_string(directory.join("helper.request"))
+                .unwrap().contains("fixture password"));
+            fs::remove_file(directory.join("helper.request")).unwrap();
+        }
         fs::remove_dir_all(directory).unwrap();
     }
 

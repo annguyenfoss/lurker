@@ -26,6 +26,13 @@ fn run() -> i32 {
 
     match action.as_deref() {
         Some("capabilities") => {
+            let check_userspace = match args.next().as_deref() {
+                None => false,
+                Some("--userspace-readiness") if args.next().is_none() => true,
+                _ => return 64,
+            };
+            let (userspace_ready, userspace_error) =
+                userspace_readiness(check_userspace && !as_root);
             println!(
                 "{}",
                 serde_json::json!({
@@ -40,6 +47,8 @@ fn run() -> i32 {
                     "trusted_privileged_tools": !cfg!(target_os = "macos"),
                     "unprivileged_veracrypt": cfg!(target_os = "linux"),
                     "userspace_backend_protocol": if cfg!(target_os = "linux") { Some(4) } else { None },
+                    "userspace_backend_ready": userspace_ready,
+                    "userspace_backend_error": userspace_error,
                     "linux_loop_lease_protocol": if cfg!(target_os = "linux") { Some(1) } else { None },
                     "keyfile_authentication": true,
                     "luks_keyslots": cfg!(target_os = "linux"),
@@ -83,6 +92,37 @@ fn run() -> i32 {
             eprintln!("usage: lurker-helper [--as-root] run | list-native | capabilities");
             64
         }
+    }
+}
+
+fn userspace_readiness(requested: bool) -> (Option<bool>, Option<String>) {
+    #[cfg(target_os = "linux")]
+    {
+        login_user_readiness(requested, is_root(), || {
+            lurker_core::unprivileged_veracrypt_readiness().map_err(|error| error.message)
+        })
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = requested;
+        (None, None)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn login_user_readiness(
+    requested: bool,
+    root: bool,
+    probe: impl FnOnce() -> Result<(), String>,
+) -> (Option<bool>, Option<String>) {
+    // Protocol support is independent of installed dependencies. Never execute
+    // user-configured probes in the administrator role or for unrelated queries.
+    if !requested || root {
+        return (None, None);
+    }
+    match probe() {
+        Ok(()) => (Some(true), None),
+        Err(error) => (Some(false), Some(error)),
     }
 }
 
@@ -360,6 +400,25 @@ fn operation_error(message: impl Into<String>) -> OperationResponse {
 mod tests {
     use super::*;
     use std::os::unix::process::ExitStatusExt;
+
+    #[test]
+    fn root_and_unrequested_capabilities_never_probe_userspace_helpers() {
+        for (requested, root) in [(false, false), (false, true), (true, true)] {
+            assert_eq!(
+                login_user_readiness(requested, root, || panic!("must not execute a probe")),
+                (None, None)
+            );
+        }
+    }
+
+    #[test]
+    fn login_user_readiness_reports_dependencies_separately_from_protocol() {
+        assert_eq!(login_user_readiness(true, false, || Ok(())), (Some(true), None));
+        assert_eq!(
+            login_user_readiness(true, false, || Err("Install the host filesystem driver.".into())),
+            (Some(false), Some("Install the host filesystem driver.".into()))
+        );
+    }
 
     #[test]
     fn dismissing_polkit_is_a_final_error_instead_of_a_sudo_fallback() {
