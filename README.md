@@ -178,7 +178,7 @@ Protect disks, file containers and directories with the CLI or native desktop ap
   </tbody>
 </table>
 
-### Individual-file encryption — CLI
+### Individual-file encryption
 
 <table width="100%">
   <thead>
