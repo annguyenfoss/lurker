@@ -91,3 +91,13 @@ no transport error is normalized to success. A real native mount/unmount control
 now records unmount=0, driver exit=0, checked internal drain and absent mount and
 process. It retains the observed UID-zero child ownership failure. The separate
 FUSE2 INIT response-size mismatch remains unqualified at this point.
+
+Patch 0010 validates native backing capacity. Regular files require a positive
+512-byte-unit size. Character devices additionally require native DIOCGPART
+512-byte sectors, consistent media blocks/bytes and an agreeing SEEK_END result.
+Other nodes and unsupported or uncertain geometry fail before block-device
+publication. Capacity failures return an I/O error rather than an allocation
+error. Native `tests/capacity.c` controls aligned regular files and rejection of
+irregular sizes, /dev/null and invalid FDs. Its optional `--inspect` mode opens
+read-only and reports the held FD's capacity/device identity; raw/mapped-device
+qualification remains a separate privileged control.

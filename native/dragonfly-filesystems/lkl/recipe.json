@@ -55,7 +55,8 @@
     "patches/0004-durable-block-flush.patch",
     "patches/0005-dragonfly-fuse-errno-boundary.patch",
     "patches/0006-checked-filesystem-drain.patch",
-    "patches/0007-native-orderly-fuse-destroy.patch"
+    "patches/0007-native-orderly-fuse-destroy.patch",
+    "patches/0010-native-capacity-proof.patch"
   ],
   "native_build_prerequisites": [
     "GNU make",
