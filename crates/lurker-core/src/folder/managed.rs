@@ -1141,3 +1141,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(all(test, target_os = "freebsd"))]
+#[path = "managed_real.rs"]
+mod real;
