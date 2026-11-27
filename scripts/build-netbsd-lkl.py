@@ -204,11 +204,15 @@ def run_build(command, cwd, environment, log, timeout):
                 os.killpg(child.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
+            # Do not poll/wait here: the unreaped session leader reserves its
+            # PID/PGID while descendants receive a brief termination grace.
+            # A leader can exit before a compiler child that ignores TERM.
+            time.sleep(0.2)
             try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
                 os.killpg(child.pid, signal.SIGKILL)
-                child.wait()
+            except ProcessLookupError:
+                pass
+            child.wait(timeout=10)
             return {"pid": child.pid, "returncode": child.returncode, "timed_out": True}
 
 

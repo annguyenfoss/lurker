@@ -277,6 +277,20 @@ int main(void) {
             time.sleep(2.1)
             self.assertFalse(marker.exists())
 
+    def test_timeout_kills_term_ignoring_child_after_leader_exits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            marker, ready = work / "escaped-child", work / "ready"
+            child = ("import signal,time,pathlib;signal.signal(signal.SIGTERM,signal.SIG_IGN);"
+                     "pathlib.Path(%r).touch();time.sleep(2);pathlib.Path(%r).touch()") % (str(ready), str(marker))
+            parent = "import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',%r]);time.sleep(30)" % child
+            result = BUILDER.run_build([sys.executable, "-c", parent], work, os.environ.copy(), work / "build.log", 1)
+            self.assertTrue(result["timed_out"])
+            self.assertTrue(ready.exists(), "The grandchild must have installed its TERM handler")
+            import time
+            time.sleep(2.1)
+            self.assertFalse(marker.exists())
+
     def test_reviewed_patch_rejects_changed_context_and_unapproved_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
