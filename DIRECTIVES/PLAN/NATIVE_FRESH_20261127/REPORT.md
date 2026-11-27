@@ -180,8 +180,16 @@ actual-caller payload hashes, kernel credential/confinement samples, foreign
 denials and recorded normal closes/recovery, plus the retained 512 MiB failed
 whole-scratch image hash in
 `hosts/openbsd/validation/root-installed8c-cryfs-physical-audit.json`.
-Credential conformance and ordinary reboot qualification remain active; these milestones
-do not establish whole-round completion.
+Nine installed CLI conformance suites subsequently passed 113 cases, with no
+failed or skipped case in the selected runs. Root checked their exact binary
+identities, case outcomes, native RAID harness identity and all 102 retained
+command logs in
+`hosts/openbsd/validation/root-installed8c-conformance-audit.json`. Initial
+fixture-root setup failures remain separately archived. The first four-backend
+reboot preparation stopped before reboot because its harness omitted VeraCrypt's
+auxiliary mount from the inventory guard; this is not reboot-persistence proof.
+Ordinary reboot qualification remains active, and these milestones do not
+establish whole-round completion.
 
 CryFS exFAT failures on OpenBSD and NetBSD are now matched to native hardlink
 `ENOSYS`, while ordinary file create/write/fsync/read/rename/unlink work. This
