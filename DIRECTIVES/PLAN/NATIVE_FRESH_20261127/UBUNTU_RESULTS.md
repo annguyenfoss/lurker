@@ -248,3 +248,17 @@ with 497 entries checked before removal of the duplicate and a compatibility
 symlink retained. Only obsolete ca7/576 product executable copies were reclaimed:
 all six matched preserved complete archives and had no running users, releasing
 1,055,459,976 bytes. Their historical package archives and metadata remain intact.
+
+The native Debian package SHA-256 is
+`21dc7691ab777ce062ab104ef3ce47a97bed0337572f51947c14733e175803b7`.
+Dpkg installed version `0.1.0+native20261127.67894f6` successfully, with all
+1,105 installed manifest entries verified and both public launchers resolving
+to the correct administrator-controlled products. Actual installed-package
+checks passed strict helper binary-keyfile lifecycles for all three disk
+methods, the public CLI VeraCrypt password/full-payload lifecycle, a real public
+desktop window, and gocryptfs/LUKS default GUI-to-helper callbacks. These are
+separate from the earlier private-prefix receipts. The resource pilot now uses
+`/usr/lib/lurker`; all six Btrfs fixtures have completed their payload cycles
+and are mounted while daemon/kernel memory is sampled. After normal pilot
+closure, LUKS1/VeraCrypt/CryFS/Cryptomator installed default callbacks will
+complete the six-backend callback gate before any reboot cohort is armed.
