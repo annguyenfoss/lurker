@@ -42,6 +42,16 @@ that eligibility boundary. Its native `direct_io` controls establish feasibility
 actual Lurker container, device and directory-backing flows still require
 qualification. Keep this filesystem driver external to the Lurker package.
 
+Audit the actual host FUSE library's unmount, destroy and channel cleanup paths;
+Linux library behavior does not establish BSD or macOS behavior. A normal-close
+result must not hide a force-unmount fallback. Bind the native mount instance,
+serve initialization before requiring an asynchronously created mount to appear,
+and bound startup monitoring and cancellation. Release encrypted storage only
+after the recorded mount is absent, filesystem/provider flushes and driver
+shutdown complete, and any persisted acknowledgement matches the owned session,
+source, status inode, process birth and boot identity. Preserve failed startup,
+busy mounts and recovery attempts separately from successful normal closes.
+
 Lurker wraps system encryption and ordinary OS format/mount/unmount facilities.
 Bundle eligible independent encryption engines privately, subject to the existing
 trusted-elevation rules. Install tightly coupled drivers and FUSE on the host;

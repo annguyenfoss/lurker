@@ -125,6 +125,21 @@ corroborated. Existing Btrfs/XFS write guards remain unchanged. The external
 driver's flush, credential, errno and checked-drain contract must pass before
 filesystem admission and the corresponding user documentation are committed.
 
+The external-driver review found force-capable library cleanup on both FreeBSD
+FUSE 2 and macOS macFUSE 3; removing an explicit driver unmount call alone does
+not establish normal-close behavior. FreeBSD diagnostic v5 also checked mount
+identity before the asynchronous mount helper completed, leaving an uninitialized
+scratch mount before LKL opened its source. Its image and process/mount evidence
+are retained. Normal recovery blocked, and a narrowly authorized exact-FSID
+forced recovery attempt also blocked; neither is a successful close. No reset
+or reboot has been performed for this failure. The owner reports corrected
+diagnostic v6-NX XFS/Btrfs request and GELI-512 lifecycle controls passing, with
+six traces showing source-fd fsync, source close before final acknowledgement
+and no unmount syscall. Final factory, GEOM flush and injected-error verification
+remain gates. macOS is correcting native credential-snapshot stability and
+force-capable cleanup before its external adapter is installed. These native
+tool diagnostics do not remove the product's existing write guards.
+
 OpenBSD's exact `123d177` workspace passed 154 native tests, with 22 ignored,
 and all three products built. Native staging and package construction passed;
 the first wrapper attempt exhausted space and is retained separately from the
