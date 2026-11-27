@@ -25,6 +25,9 @@
 #include <limits.h>
 #include <spawn.h>
 #include <signal.h>
+#include <poll.h>
+#include <stddef.h>
+#include <time.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -316,6 +319,232 @@ static inline int lfbg_worker_fds_prepare(void) {
     for (int fd = 3; fd <= 4; ++fd) {
         int flags = fcntl(fd, F_GETFD);
         if (flags < 0 || fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0) return -1;
+    }
+    return 0;
+}
+
+enum lfbg_peer_kind { LFBG_PUBLIC_LIVE = 1, LFBG_OWNED_PROGRESS = 2 };
+struct lfbg_stream {
+    int fd, authenticated, closed, error;
+    enum lfbg_peer_kind kind;
+    struct lfbg_process expected;
+};
+/* Set on BOTH endpoints before any peer can write, including before spawn.
+ * Credentials are per write, not per partial read or logical 512-byte frame.
+ */
+static inline int lfbg_enable_credentials(int fd) {
+    int one = 1;
+    if (lfbg_connected_stream(fd) < 0) return -1;
+    return setsockopt(fd, SOL_LOCAL, LOCAL_CREDS_PERSISTENT, &one, sizeof(one));
+}
+static inline int lfbg_peer_current(const struct lfbg_process *expected,
+                                    enum lfbg_peer_kind kind) {
+    if (!expected || !expected->pid || expected->pid > LFG_MAX_PID) {
+        errno = EINVAL; return -1;
+    }
+    struct lfbg_process captured;
+    struct kinfo_proc native;
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, (pid_t)expected->pid};
+    size_t length = sizeof(native);
+    if (kind != LFBG_PUBLIC_LIVE && kind != LFBG_OWNED_PROGRESS) {
+        errno = EINVAL; return -1;
+    }
+    if (lfbg_process_capture((pid_t)expected->pid, &captured) < 0) return -1;
+    if (!lfbg_process_same(expected, &captured)) { errno = ESTALE; return -1; }
+    memset(&native, 0, sizeof(native));
+    if (sysctl(mib, 4, &native, &length, NULL, 0) < 0) return -1;
+    if (length != sizeof(native) || native.ki_pid != (pid_t)expected->pid ||
+        native.ki_start.tv_sec != (time_t)expected->birth_sec ||
+        native.ki_start.tv_usec != (suseconds_t)expected->birth_usec ||
+        native.ki_ruid != expected->real_uid || native.ki_uid != expected->effective_uid) {
+        errno = ESTALE; return -1;
+    }
+    if (kind == LFBG_OWNED_PROGRESS) {
+        /* The child's still-present zombie identity is useful ONLY before
+         * owned waitpid. Drain channel/EOF before reaping; never infer exit. */
+        if (native.ki_ppid != getpid()) { errno = EPERM; return -1; }
+    } else if (native.ki_stat == SZOMB || native.ki_stat == SIDL ||
+               (native.ki_flag & P_WEXIT)) { errno = ESRCH; return -1; }
+    return 0;
+}
+static inline int lfbg_stream_init(struct lfbg_stream *out, int fd,
+                                   const struct lfbg_process *peer,
+                                   enum lfbg_peer_kind kind) {
+    int enabled = 0;
+    socklen_t length = sizeof(enabled);
+    if (!out || !peer || (kind != LFBG_PUBLIC_LIVE && kind != LFBG_OWNED_PROGRESS)) {
+        errno = EINVAL; return -1;
+    }
+    if (lfbg_connected_stream(fd) < 0 ||
+        getsockopt(fd, SOL_LOCAL, LOCAL_CREDS_PERSISTENT, &enabled, &length) < 0)
+        return -1;
+    if (length != sizeof(enabled) || enabled != 1) { errno = EPERM; return -1; }
+    if (lfbg_peer_current(peer, kind) < 0) return -1;
+    *out = (struct lfbg_stream){.fd=fd, .kind=kind, .expected=*peer};
+    return 0;
+}
+static inline int lfbg_stream_fail(struct lfbg_stream *stream, int error) {
+    if (!stream->error) stream->error = error > 0 ? error : EIO;
+    errno = stream->error;
+    return -1;
+}
+static inline int lfbg_now_ms(int64_t *out) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) return -1;
+    if (now.tv_sec < 0 || (uint64_t)now.tv_sec > (uint64_t)INT64_MAX / 1000) {
+        errno = EOVERFLOW; return -1;
+    }
+    *out = (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    return 0;
+}
+static inline int lfbg_deadline(uint32_t milliseconds, int64_t *out) {
+    int64_t now;
+    if (!milliseconds || milliseconds > 30000) { errno = EINVAL; return -1; }
+    if (lfbg_now_ms(&now) < 0) return -1;
+    if (now > INT64_MAX - milliseconds) { errno = EOVERFLOW; return -1; }
+    *out = now + milliseconds; return 0;
+}
+static inline int lfbg_stream_poll(struct lfbg_stream *s, short events,
+                                   int64_t deadline) {
+    for (;;) {
+        int64_t now;
+        if (s->error) { errno = s->error; return -1; }
+        if (lfbg_peer_current(&s->expected, s->kind) < 0)
+            return lfbg_stream_fail(s, errno);
+        if (lfbg_now_ms(&now) < 0) return lfbg_stream_fail(s, errno);
+        if (now >= deadline) return lfbg_stream_fail(s, ETIMEDOUT);
+        int64_t remaining = deadline - now;
+        if (remaining > 30000) return lfbg_stream_fail(s, EINVAL);
+        struct pollfd fd = {.fd=s->fd, .events=events};
+        int rc = poll(&fd, 1, (int)remaining);
+        if (rc < 0 && errno == EINTR) continue;
+        if (rc < 0) return lfbg_stream_fail(s, errno);
+        if (!rc) return lfbg_stream_fail(s, ETIMEDOUT);
+        if (fd.revents & POLLNVAL) return lfbg_stream_fail(s, EBADF);
+        return 0;
+    }
+}
+/* Reject all descriptors/unknown ancillary data. Close even rejected received
+ * rights before returning, including a truncated control message. */
+static inline int lfbg_credentials(struct lfbg_stream *s, struct msghdr *msg) {
+    int bad = 0, seen = 0;
+    for (struct cmsghdr *c=CMSG_FIRSTHDR(msg); c; c=CMSG_NXTHDR(msg,c)) {
+        size_t remaining = msg->msg_controllen -
+            (size_t)((char *)c - (char *)msg->msg_control);
+        if (c->cmsg_len < CMSG_LEN(0) || c->cmsg_len > remaining) {
+            bad = EPROTO; break;
+        }
+        if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS) {
+            size_t bytes = c->cmsg_len - CMSG_LEN(0);
+            for (size_t i=0; i + sizeof(int) <= bytes; i += sizeof(int)) {
+                int fd; memcpy(&fd, (char *)CMSG_DATA(c)+i, sizeof(fd));
+                if (fd >= 0) (void)close(fd);
+            }
+            bad = EPROTO; continue;
+        }
+        if (c->cmsg_level != SOL_SOCKET || c->cmsg_type != SCM_CREDS2 ||
+            c->cmsg_len < CMSG_LEN(offsetof(struct sockcred2,sc_groups))) {
+            bad = EPROTO; continue;
+        }
+        struct sockcred2 *cred = (struct sockcred2 *)CMSG_DATA(c);
+        if (cred->sc_version != 0 || cred->sc_ngroups < 0 || cred->sc_ngroups > 1024 ||
+            c->cmsg_len != CMSG_LEN(offsetof(struct sockcred2,sc_groups) +
+                                    sizeof(gid_t)*(size_t)cred->sc_ngroups) ||
+            cred->sc_pid != (pid_t)s->expected.pid ||
+            cred->sc_uid != s->expected.real_uid ||
+            cred->sc_euid != s->expected.effective_uid) bad = EPERM;
+        else seen = 1;
+    }
+    if (msg->msg_flags & (MSG_TRUNC | MSG_CTRUNC)) bad = EPROTO;
+    if (!bad && !s->authenticated && !seen) bad = EPERM;
+    if (bad) return lfbg_stream_fail(s,bad);
+    if (lfbg_peer_current(&s->expected,s->kind) < 0) return lfbg_stream_fail(s,errno);
+    if (seen) s->authenticated = 1;
+    return 0;
+}
+/* Return 1 only for a fully decoded frame, 0 for boundary EOF, -1 otherwise.
+ * EOF is not child-exit or completion authority. Output stays unchanged on
+ * EOF/error; partial/error streams are poisoned and cannot be reused.
+ */
+static inline int lfbg_receive_until(struct lfbg_stream *s,
+                                     struct lfg_message *out, int64_t deadline) {
+    uint8_t bytes[LFG_FRAME_SIZE]; size_t offset=0;
+    if (!out || s->closed) { errno=EPROTO; return -1; }
+    while (offset < sizeof(bytes)) {
+        if (lfbg_stream_poll(s,POLLIN,deadline) < 0) return -1;
+        union { struct cmsghdr align;
+            unsigned char bytes[CMSG_SPACE(SOCKCRED2SIZE(1024))]; } control;
+        struct iovec io={bytes+offset,sizeof(bytes)-offset};
+        struct msghdr msg={.msg_iov=&io,.msg_iovlen=1,
+            .msg_control=control.bytes,.msg_controllen=sizeof(control.bytes)};
+        ssize_t n=recvmsg(s->fd,&msg,MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
+        if (n<0 && (errno==EINTR || errno==EAGAIN || errno==EWOULDBLOCK)) continue;
+        if (n<0) return lfbg_stream_fail(s,errno);
+        if (!n) {
+            if ((msg.msg_controllen || (msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC))) &&
+                lfbg_credentials(s,&msg) < 0) return -1;
+            if (lfbg_peer_current(&s->expected,s->kind) < 0)
+                return lfbg_stream_fail(s,errno);
+            s->closed=1;
+            if (offset) return lfbg_stream_fail(s,EPROTO);
+            return 0;
+        }
+        if (lfbg_credentials(s,&msg) < 0) return -1;
+        offset+=(size_t)n;
+    }
+    struct lfg_message decoded;
+    if (lfg_decode(&decoded,bytes,sizeof(bytes)) != LFG_OK)
+        return lfbg_stream_fail(s,EPROTO);
+    *out=decoded; return 1;
+}
+static inline int lfbg_send_until(struct lfbg_stream *s,
+                                  const struct lfg_message *message,int64_t deadline) {
+    uint8_t bytes[LFG_FRAME_SIZE]; size_t offset=0;
+    if (s->closed || lfg_encode(bytes,sizeof(bytes),message) != LFG_OK) {
+        errno=EPROTO; return -1;
+    }
+    while (offset<sizeof(bytes)) {
+        if (lfbg_stream_poll(s,POLLOUT,deadline) < 0) return -1;
+        ssize_t n=send(s->fd,bytes+offset,sizeof(bytes)-offset,MSG_DONTWAIT|MSG_NOSIGNAL);
+        if (n<0 && (errno==EINTR || errno==EAGAIN || errno==EWOULDBLOCK)) continue;
+        if (n<=0) return lfbg_stream_fail(s,n<0?errno:EIO);
+        if (lfbg_peer_current(&s->expected,s->kind) < 0) return lfbg_stream_fail(s,errno);
+        offset+=(size_t)n;
+    }
+    return 0;
+}
+/* Client creates a new nonce for every exchange; server replies may be replayed
+ * only after correlation to that exchange and the entire immutable binding.
+ */
+static inline int lfbg_rpc_request(const struct lfg_message *identity,uint32_t kind,
+                                   struct lfg_message *out) {
+    if (!identity || !out) { errno=EINVAL;return -1; }
+    struct lfg_message request=*identity;
+    if (kind!=LFG_QUERY && kind!=LFG_CLOSE && kind!=LFG_RETIRE) { errno=EINVAL;return -1; }
+    request.kind=kind; request.state=LFG_REQUEST; request.flags=0;
+    request.completed_checks=request.error=request.latched_error=request.error_stage=0;
+    request.wait_kind=request.wait_value=0; request.sequence=0;
+    arc4random_buf(request.request_nonce,sizeof(request.request_nonce));
+    if (!lfg_nonzero(request.request_nonce,sizeof(request.request_nonce)) ||
+        lfg_validate(&request)!=LFG_OK) { errno=EPROTO;return -1; }
+    *out=request;return 0;
+}
+static inline int lfbg_rpc_match(const struct lfg_message *identity,
+                                 const struct lfg_message *request,
+                                 const struct lfg_message *reply) {
+    if (!identity || !request || !reply ||
+        (request->kind!=LFG_QUERY && request->kind!=LFG_CLOSE && request->kind!=LFG_RETIRE) ||
+        lfg_validate(request)!=LFG_OK || lfg_validate(reply)!=LFG_OK ||
+        reply->kind!=LFG_REPLY || !lfg_same_binding(identity,request) ||
+        !lfg_same_binding(identity,reply) ||
+        memcmp(identity->native_id,request->native_id,sizeof(request->native_id)) ||
+        memcmp(identity->native_id,reply->native_id,sizeof(reply->native_id)) ||
+        memcmp(request->request_nonce,reply->request_nonce,sizeof(reply->request_nonce))) {
+        errno=ESTALE;return -1;
+    }
+    if ((reply->state==LFG_RELEASED_CLEAN || reply->state==LFG_RETIRED) &&
+        !lfg_nonzero((const uint8_t *)identity->native_id,sizeof(identity->native_id))) {
+        errno=ESTALE;return -1;
     }
     return 0;
 }

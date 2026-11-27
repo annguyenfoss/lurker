@@ -135,13 +135,19 @@ behavior, complete payload reopen cycles and normal closure. Functional
 upstream direct-I/O results are retained separately from those gates.
 
 
-## Kernel-domain provenance and current scope hold
+## Kernel-domain provenance and historical scope hold
 
-The current goal permits only already published/tested mainstream kernel
-patches, including embedded LKL. In-process execution does not exempt this
-source from that restriction. New LKL builds, kernel-domain changes, admission
-and storage tests are held pending dependency classification. Existing artifacts
-and failed fixtures are preserved.
+The initial scope audit held new LKL builds and admission pending dependency
+classification. Existing artifacts and failed fixtures were preserved.
+The final policy in `DIRECTIVES/LLM/DEVELOPMENT.md` permits established patches,
+documented toolchain adaptations and ordinary userspace integration, while
+excluding kernel behavior invented by Lurker, including inside embedded LKL.
+The coordinator's subsequent `audits/established-integration-10fbc99/` source
+review classifies these seven Ports patches as established, the Python fork
+context as documented migration guidance, and the local host virtual-block,
+FUSE and native-barrier glue as users of existing kernel interfaces. Eligibility
+does not establish safe runtime admission: guardian integration and affected
+product qualification remain incomplete, and no held job restarts automatically.
 
 The seven pinned FreeBSD port patches are published distribution inputs:
 
@@ -177,7 +183,7 @@ C sources. The kernel uses pinned upstream `defconfig` through the existing
 `KCONFIG?=defconfig`; its captured configuration hash is
 `2251866a011d7ad4ed9924e2fba26d0bc8f090766e24e14742faccff555fea0f`.
 It enables Btrfs and XFS and leaves UFS disabled. No tailored `.config` was
-written. This distinction is evidence, not permission to bypass the scope hold.
+written. The native guards remain enabled pending runtime qualification.
 
 A read-only comparison of all 63,047 pristine archive entries against the
 frozen final12 input manifest found exactly the eleven content changes above
@@ -236,3 +242,36 @@ owner are compared across spawn. Native v3 passes 41 parent checks plus dummy
 worker assertions, including a reported metadata change and actual-close then
 reported EIO. Earlier v1/v2 scopes remain historical; only v3 uses this return
 contract. No root credential transition or driver integration is enabled.
+
+### Credential-bearing stream primitives
+
+`lfbg_stream` supplies bounded 512-byte common-codec framing for an already
+captured expected native peer. Enable `LOCAL_CREDS_PERSISTENT` on both endpoints
+before any write or worker spawn. Each native `SCM_CREDS2` write must match the
+expected PID, real/effective UID and a fresh PID/birth/boot snapshot. Partial
+reads may continue one authenticated write; credentials are not assumed to
+arrive again for each read. Ancillary descriptors, unknown/truncated controls,
+partial EOF, malformed frames and fixed monotonic deadline expiry fail closed.
+Received rejected descriptors are closed. Output is unchanged on failure.
+
+Public requests require a live peer. Private progress additionally requires the
+same owned child's native parent identity, and permits its still-unreaped
+zombie identity so queued READY/DRAINED frames and EOF can be drained before
+`waitpid`. Reaped or missing identities fail; EOF never proves successful exit.
+The common runtime still owns the actual wait result and completion policy.
+Fresh random request nonces and exact immutable/native binding checks correlate
+replies; neither decoded clean bytes nor a status file authorize detach.
+
+The strict native user-only IPC v2 gate passes 663 checks across 10 cases,
+including duplex/fragmented frames, queued zombie progress, wrong writer,
+descriptor rejection, partial timeout/EOF and stale reply correlation. Existing
+29 identity and 41 spawn checks pass with the same header. The first IPC attempt
+failed compilation at a codec argument-order mistake; its immutable failure is
+retained separately. Evidence is `build/guardian-platform-ipc-v1/` and `-v2/` in
+the round's FreeBSD bucket; all dummy children are reaped.
+
+These are transport primitives, not a complete service. Public accept-side peer
+discovery, socket directory/endpoint custody, guardian-only status persistence,
+service deadlines, native teardown callbacks and driver integration remain
+unimplemented or unqualified. No LKL, FUSE, provider ioctl, mount or encryption
+operation runs in these controls; no production completion authority is enabled.

@@ -1112,3 +1112,22 @@ is not included among these results.
   passes full SHA/gzip verification. Terminal inventory contains no Cargo,
   rustc, Maven or Java worker. No real provider, mount, channel, CryptoFS or
   native unmount was exercised; core Cryptomator support stays disabled.
+
+
+### Native guardian credential stream controls
+
+- Purpose/input: independent user-only SCM_CREDS2 stream/RPC primitives; frozen
+  v2 archive `04c0ca18...`, header `e606ce24...`, no LKL/FUSE/native storage.
+- Command/log: strict C11 `cc -Wall -Wextra -Werror -O2`, six raw stages under
+  `build/guardian-platform-ipc-v2/`. Initial v1 compilation failed at an incorrect
+  common-codec argument order; `guardian-platform-ipc-v1/` preserves that failure.
+- Outcome: native 29 identity, 41 spawn and 663 framing checks across ten cases
+  pass. Queued complete progress and EOF remain attributable to the same owned
+  unreaped zombie; actual wait still follows reception. Missing/reaped/public
+  zombie, wrong grandchild writer, partial timeout/EOF, invalid frame, received
+  descriptors and stale nonce/native/source binding are rejected. No decoded
+  frame or file independently authorizes completion.
+- Cleanup/limits: six raw log hashes and exact frozen source match; dummy children
+  reaped, terminal inventory has no guardian process. Public accepted-peer
+  discovery, status persistence, service and native teardown integration remain
+  pending; no driver restart or crypto teardown authority is enabled.
