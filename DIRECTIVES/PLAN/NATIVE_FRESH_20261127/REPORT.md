@@ -159,8 +159,13 @@ preservation of all twelve original receipts and separate corrected copies:
 only that provenance field changes, with all payloads, actions and outcomes
 unchanged. The correction is audited in
 `hosts/openbsd/validation/root-physical-metadata-correction-audit.json`; it adds
-no new storage execution or per-case device poll. CryFS physical backings, credential
-conformance and ordinary reboot qualification remain active; these milestones
+no new storage execution or per-case device poll. CryFS physical backings now
+have the same three passes and exFAT publication failure. Root verified their
+actual-caller payload hashes, kernel credential/confinement samples, foreign
+denials and recorded normal closes/recovery, plus the retained 512 MiB failed
+whole-scratch image hash in
+`hosts/openbsd/validation/root-installed8c-cryfs-physical-audit.json`.
+Credential conformance and ordinary reboot qualification remain active; these milestones
 do not establish whole-round completion.
 
 CryFS exFAT failures on OpenBSD and NetBSD are now matched to native hardlink
