@@ -6,9 +6,10 @@ exFAT, plus CryFS directory backing on UFS1, UFS2 and NTFS. CryFS over exFAT is 
 product publication adaptation gap: the required hardlink operation returns
 ENOSYS. The 130-cell ledger separately records 64 unavailable and 50
 not-applicable combinations. Container and new-device results have separate
-receipts; this is not a complete host pass. A further native OpenBSD LKL
-filesystem-prerequisite assessment is source-only and has no new capability or
-runtime credit.
+receipts; this is not a complete host pass. The native OpenBSD LKL
+source assessment identifies a plausible Btrfs/XFS host-tool port with concrete
+ABI, timer, request-credential, durability and lifecycle gates. It adds no
+capability or runtime credit; see `OPENBSD_LKL_ASSESSMENT.md`.
 
 The final Rust source is `8c6f2b688cfc0eec6f06208daf8f991fbee56d64`.
 Its fresh native workspace check, all three product builds and workspace tests
