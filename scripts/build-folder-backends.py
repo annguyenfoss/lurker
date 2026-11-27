@@ -34,6 +34,7 @@ PLATFORM_PATCHES = {
                          "native/folder/cryfs/macos-exclusive-publication.patch"]},
     "FreeBSD": {"gocryptfs": ["native/folder/gocryptfs/freebsd-futimes.patch"]},
     "NetBSD": {"cryfs": ["native/folder/cryfs/netbsd-platform.patch"]},
+    "OpenBSD": {"cryfs": ["native/folder/cryfs/openbsd-platform.patch"]},
 }
 DARWIN_GO_FUSE = ("https://github.com/hanwen/go-fuse.git", "2d50fff207d78c197869fa492eff3a79bc1d8408")
 DARWIN_GO_FUSE_PATCH = "native/macos/gocryptfs-fuse-t.patch"
@@ -45,6 +46,13 @@ NETBSD_NOTICE_INPUTS = {
                       "d678c20826e1392578508e1c78649a1e3c31bda05ef4388d967dbd654461b140"),
     "fmtlib-12.2.0": ("https://raw.githubusercontent.com/fmtlib/fmt/12.2.0/LICENSE",
                       "a65fcc5a1095fc33cc37e4fff69366e49d7e92f613558a2b95ed1b70e33758b4"),
+}
+OPENBSD_NOTICE_INPUTS = {
+    "boost-license": ("https://raw.githubusercontent.com/boostorg/boost/boost-1.91.0/LICENSE_1_0.txt",
+                      "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"),
+    "spdlog-1.17.0": NETBSD_NOTICE_INPUTS["spdlog-1.17.0"],
+    "fmt-11.2.0": ("https://raw.githubusercontent.com/fmtlib/fmt/11.2.0/LICENSE",
+                   "07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8"),
 }
 
 
@@ -395,21 +403,110 @@ def build_netbsd_cryfs(src: Path, jobs: int, log, env) -> tuple[Path, dict]:
     }}
 
 
-def pinned_netbsd_notice(name: str, cache: Path, destination: Path) -> dict:
-    url, expected = NETBSD_NOTICE_INPUTS[name]
+def pinned_native_notice(name: str, inputs: dict, cache: Path, destination: Path) -> dict:
+    url, expected = inputs[name]
     cache.mkdir(parents=True, exist_ok=True)
     path = cache / (expected + ".txt")
     if not path.exists():
         with urllib.request.urlopen(url, timeout=60) as response:
             data = response.read(1024 * 1024 + 1)
         if len(data) > 1024 * 1024 or hashlib.sha256(data).hexdigest() != expected:
-            raise RuntimeError("NetBSD native package notice checksum differs: " + name)
+            raise RuntimeError("Native package notice checksum differs: " + name)
         path.write_bytes(data)
     if path.is_symlink() or sha256(path) != expected:
-        raise RuntimeError("NetBSD native package notice cache differs: " + name)
+        raise RuntimeError("Native package notice cache differs: " + name)
     destination.parent.mkdir(parents=True, exist_ok=True)
     copy_notice(path, destination)
     return {"source": url, "sha256": expected, "notice": str(destination.name)}
+
+
+def pinned_netbsd_notice(name: str, cache: Path, destination: Path) -> dict:
+    return pinned_native_notice(name, NETBSD_NOTICE_INPUTS, cache, destination)
+
+
+def build_openbsd_cryfs(src: Path, jobs: int, log, env) -> tuple[Path, dict]:
+    for tool in ("cmake", "ninja", "c++", "pkg-config", "pkg_info", "ldd", "readelf"):
+        if not shutil.which(tool):
+            raise RuntimeError("Missing OpenBSD CryFS build prerequisite: " + tool)
+    run(["pkg-config", "--exists", "fuse"], src, log, env)
+    abi = capture(["pkg-config", "--modversion", "fuse"], src)
+    if not abi.startswith("2."):
+        raise RuntimeError("OpenBSD CryFS requires the native base FUSE2 ABI")
+    build = src / "build/OpenBSD"
+    configure = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_TESTING=OFF",
+                 "-DCRYFS_UPDATE_CHECKS=OFF", "-DDISABLE_OPENMP=ON", "-DCMAKE_SKIP_RPATH=TRUE",
+                 "-DCMAKE_CXX_FLAGS=-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED",
+                 "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
+    run(["cmake", "-S", str(src), "-B", str(build), *configure], src, log, env)
+    run(["cmake", "--build", str(build), "--target", "src/cryfs-cli/cryfs",
+         "--parallel", str(jobs)], src, log, env)
+    return build / "src/cryfs-cli/cryfs", {"native_build": {
+        "provider": "OpenBSD packages and base FUSE", "configure": configure,
+        "compiler": capture(["c++", "--version"], src).splitlines()[0],
+        "fuse_provider": "OpenBSD base FUSE", "fuse_abi": abi, "privilege": "root",
+    }, "runtime": {"privilege": "root", "source_kind": "directory", "native_unveil_protocol": 1}}
+
+
+def openbsd_runtime_packages(binary: Path, src: Path, licenses: Path,
+                             include=Path("/usr/include/fuse")) -> tuple[str, list[dict], dict]:
+    linked = capture(["ldd", str(binary)], src)
+    libraries = []
+    fuse = []
+    for line in linked.splitlines():
+        fields = line.split()
+        if len(fields) >= 7 and fields[2] == "rlib":
+            path = fields[-1]
+            if path.startswith("/usr/local/"):
+                libraries.append(path)
+            if path.startswith("/usr/lib/libfuse.so."):
+                fuse.append(Path(path))
+    if "not found" in linked or len(fuse) != 1 or not libraries:
+        raise RuntimeError("OpenBSD CryFS requires resolved native packages and base FUSE")
+    provider = fuse[0].resolve(strict=True)
+    soname = re.findall(r"\(SONAME\).*?\[([^]]+)\]", capture(["readelf", "-d", str(provider)], src))
+    needed = re.findall(r"\(NEEDED\).*?\[([^]]+)\]", capture(["readelf", "-d", str(binary)], src))
+    if (provider.parent != Path("/usr/lib") or len(soname) != 1
+            or not re.fullmatch(r"libfuse\.so\.[1-9][0-9]*\.[0-9]+", soname[0])
+            or [name for name in needed if name.startswith("libfuse")] != soname
+            or (Path("/usr/lib") / soname[0]).resolve(strict=True) != provider):
+        raise RuntimeError("OpenBSD host FUSE SONAME/engine ABI differs")
+    host_fuse = {"api": "fuse2", "library": soname[0], "path": str(Path("/usr/lib") / soname[0]),
+                 "sha256": sha256(provider)}
+    packages = {}
+    headers = ["/usr/local/include/boost/version.hpp", "/usr/local/include/range/v3/all.hpp"]
+    for path in [*libraries, *headers]:
+        owner = capture(["pkg_info", "-q", "-E", path], src)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]*", owner):
+            raise RuntimeError("Ambiguous OpenBSD native package owner: " + path)
+        if owner not in packages:
+            info = capture(["pkg_info", "-f", owner], src)
+            if re.findall(r"^@name (\S+)$", info, re.M) != [owner]:
+                raise RuntimeError("OpenBSD native package identity differs: " + owner)
+            family, _, version = owner.rpartition("-")
+            if family in {"boost", "range-v3"}:
+                notice, license_name = "boost-license", "BSL-1.0"
+            else:
+                notice = family + "-" + re.sub(r"(?:p[0-9]+)?(?:v[0-9]+)?$", "", version)
+                if notice not in OPENBSD_NOTICE_INPUTS:
+                    raise RuntimeError("Unreviewed OpenBSD native package license/version: " + owner)
+                license_name = "MIT"
+            copied = pinned_native_notice(notice, OPENBSD_NOTICE_INPUTS, src.parent / "native-notices",
+                                           licenses / owner / "LICENSE")
+            origin = re.search(r"^@comment pkgpath=(\S+)", info, re.M)
+            if not origin:
+                raise RuntimeError("OpenBSD native package origin is missing: " + owner)
+            packages[owner] = {"name": family, "version": version, "package": owner,
+                               "origin": origin.group(1), "license": license_name,
+                               "upstream_notice": copied, "libraries": [], "headers": []}
+        packages[owner]["libraries" if path in libraries else "headers"].append(path)
+    for name in ("fuse.h", "fuse_common.h", "fuse_opt.h"):
+        notice, marker, _ = (include / name).read_bytes().partition(b"#ifndef")
+        if not marker or b"Copyright" not in notice or b"Permission to use, copy" not in notice:
+            raise RuntimeError("OpenBSD base FUSE header license notice is missing: " + name)
+        destination = licenses / "OpenBSD-base-FUSE" / (name + ".notice")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(notice)
+    return linked, [packages[key] for key in sorted(packages)], host_fuse
 
 
 def netbsd_runtime_packages(binary: Path, src: Path, licenses: Path, include=Path("/usr/include")) -> tuple[str, list[dict]]:
@@ -506,6 +603,12 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             run([str(output / name), "--version"], src, log, env)
             toolchain = capture(["cmake", "--version"], src).splitlines()[0]
             license_paths = [src / "LICENSE.txt"]
+        elif build_system == "OpenBSD":
+            binary, native_manifest = build_openbsd_cryfs(src, jobs, log, env)
+            shutil.copy2(binary, output / name)
+            run([str(output / name), "--version"], src, log, env)
+            toolchain = capture(["cmake", "--version"], src).splitlines()[0]
+            license_paths = [src / "LICENSE.txt"]
         else:
             if not shutil.which("uv"):
                 raise RuntimeError("uv and native CMake/compiler/FUSE development files are build prerequisites")
@@ -577,6 +680,9 @@ def build(name: str, cache: Path, output: Path, jobs: int) -> dict:
             native_dependencies, dependencies = freebsd_runtime_packages(output / name, src, license_dir / "native")
         elif build_system == "NetBSD":
             native_dependencies, dependencies = netbsd_runtime_packages(output / name, src, license_dir / "native")
+        elif build_system == "OpenBSD":
+            native_dependencies, dependencies, native_manifest["host_fuse"] = openbsd_runtime_packages(
+                output / name, src, license_dir / "native")
         else:
             shutil.copy2(ROOT / "native/folder/cryfs/conan.lock", license_dir / "conan.lock")
             dependencies = json.loads((license_dir / "conan.lock").read_text())

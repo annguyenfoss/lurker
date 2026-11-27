@@ -309,5 +309,60 @@ class NetBSDNativeTests(unittest.TestCase):
         self.assertEqual(BUILD.selected_patches("cryfs", "NetBSD"), ["native/folder/cryfs/fsyncdir.patch", "native/folder/cryfs/netbsd-platform.patch"])
         self.assertEqual(BUILD.selected_patches("cryfs", "FreeBSD"), ["native/folder/cryfs/fsyncdir.patch"])
 
+class OpenBSDNativeTests(unittest.TestCase):
+    def test_native_recipe_preserves_real_base_fuse_and_root_mount_contract(self):
+        calls = []
+        def capture(argv, cwd):
+            return "2.8.0" if argv[:2] == ["pkg-config", "--modversion"] else "OpenBSD clang 22"
+        with patch.object(BUILD.shutil, "which", return_value="/trusted/tool"), patch.object(BUILD, "capture", side_effect=capture), patch.object(BUILD, "run", side_effect=lambda argv, *rest: calls.append(argv)):
+            binary, manifest = BUILD.build_openbsd_cryfs(Path("/native/source"), 1, None, {})
+        self.assertEqual(Path("/native/source/build/OpenBSD/src/cryfs-cli/cryfs"), binary)
+        self.assertEqual("root", manifest["native_build"]["privilege"])
+        self.assertEqual("OpenBSD base FUSE", manifest["native_build"]["fuse_provider"])
+        self.assertEqual({"privilege": "root", "source_kind": "directory", "native_unveil_protocol": 1}, manifest["runtime"])
+        self.assertIn("-DCMAKE_SKIP_RPATH=TRUE", calls[1])
+        self.assertIn("-DCRYFS_UPDATE_CHECKS=OFF", calls[1])
+        self.assertNotIn("-D__linux__", " ".join(calls[1]))
+        self.assertEqual(["native/folder/cryfs/fsyncdir.patch", "native/folder/cryfs/openbsd-platform.patch"], BUILD.selected_patches("cryfs", "OpenBSD"))
+        self.assertEqual(["native/folder/cryfs/fsyncdir.patch"], BUILD.selected_patches("cryfs", "FreeBSD"))
+
+    def test_native_package_closure_retains_base_isc_and_pinned_pkg_notices(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            include = root / "include"
+            include.mkdir()
+            for name in ("fuse.h", "fuse_common.h", "fuse_opt.h"):
+                (include / name).write_bytes(b"/* Copyright fixture. Permission to use, copy granted. */\n#ifndef FIXTURE\n")
+            libraries = ["/usr/local/lib/libboost_filesystem-mt.so.27.0", "/usr/local/lib/libspdlog.so.2.1", "/usr/local/lib/libfmt.so.2.1"]
+            linked = "\n".join("0 1 rlib 0 1 0 " + path for path in [*libraries, "/usr/lib/libfuse.so.4.0"])
+            owners = {libraries[0]: "boost-1.91.0p1v0", libraries[1]: "spdlog-1.17.0", libraries[2]: "fmt-11.2.0p0", "/usr/local/include/boost/version.hpp": "boost-1.91.0p1v0", "/usr/local/include/range/v3/all.hpp": "range-v3-0.12.0p0"}
+            def capture(argv, cwd):
+                if argv[0] == "ldd":return linked
+                if argv[0] == "readelf":return "(NEEDED) [libfuse.so.4.0]" if argv[-1].endswith("cryfs") else "(SONAME) [libfuse.so.4.0]"
+                if argv[1:3] == ["-q", "-E"]:return owners[argv[3]]
+                if argv[1] == "-E":return argv[2] + ": " + owners[argv[2]] + "\nPackage description\n"
+                return "Information for inst:" + argv[2] + "\n\nPacking-list:\n@name " + argv[2] + "\n@comment pkgpath=devel/fixture ftp=yes\n"
+            def notice(name, inputs, cache, destination):
+                self.assertIn(name, inputs)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(name)
+                return {"source": "fixture", "sha256": "0" * 64}
+            with patch.object(BUILD, "capture", side_effect=capture), patch.object(Path, "resolve", return_value=Path("/usr/lib/libfuse.so.4.0")), patch.object(BUILD, "sha256", return_value="a" * 64), patch.object(BUILD, "pinned_native_notice", side_effect=notice):
+                observed, packages, host = BUILD.openbsd_runtime_packages(root / "cryfs", root, root / "notices", include)
+            self.assertEqual(linked, observed)
+            self.assertEqual(4, len(packages))
+            self.assertEqual(3, sum(bool(p["libraries"]) for p in packages))
+            self.assertEqual(2, sum(bool(p["headers"]) for p in packages))
+            self.assertEqual("/usr/lib/libfuse.so.4.0", host["path"])
+            self.assertEqual("a" * 64, host["sha256"])
+            self.assertEqual(3, len(list((root / "notices/OpenBSD-base-FUSE").glob("*.notice"))))
+            self.assertFalse((root / "notices/libfuse.so.4.0").exists())
+
+    def test_native_build_rejects_nonbase_fuse_before_package_publication(self):
+        with patch.object(BUILD, "capture", return_value="0 1 rlib 0 1 0 /usr/local/lib/libfuse.so.2"):
+            with self.assertRaisesRegex(RuntimeError, "base FUSE"):
+                BUILD.openbsd_runtime_packages(Path("/fixture/cryfs"), Path("/fixture"), Path("/fixture/notices"))
+
+
 if __name__ == "__main__":
     unittest.main()

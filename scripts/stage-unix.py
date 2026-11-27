@@ -23,7 +23,7 @@ SUPPORTED = {"Linux", "FreeBSD", "DragonFly", "NetBSD", "OpenBSD"}
 ALLOW = {
     "luks": {"Linux"}, "luks1": {"Linux", "DragonFly"},
     "veracrypt": {"Linux", "FreeBSD", "DragonFly", "OpenBSD"},
-    "gocryptfs": {"Linux", "FreeBSD"}, "cryfs": {"Linux", "FreeBSD", "NetBSD"},
+    "gocryptfs": {"Linux", "FreeBSD"}, "cryfs": {"Linux", "FreeBSD", "NetBSD", "OpenBSD"},
     "cryptomator": {"Linux"}, "geli": {"FreeBSD"}, "pefs": {"FreeBSD"},
     "cgd": {"NetBSD"}, "softraid": {"OpenBSD"}, "raid1c": {"OpenBSD"},
 }
@@ -50,7 +50,8 @@ TOOLS = {
     "NetBSD": {"cgd": ["cgdconfig", "vnconfig", "newfs", "mount", "umount"],
                "cryfs": ["umount"]},
     "OpenBSD": {"softraid": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"],
-                "raid1c": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"]},
+                "raid1c": ["bioctl", "vnconfig", "disklabel", "newfs", "mount", "umount"],
+                "cryfs": ["umount"]},
     "DragonFly": {"luks1": ["cryptsetup", "vnconfig", "dmsetup", "kldload", "newfs", "mount", "umount"],
                   "veracrypt": ["vnconfig", "dmsetup", "kldload", "fstyp", "newfs_hammer2",
                                 "newfs_msdos", "mount_msdos", "umount"]},
@@ -300,7 +301,7 @@ def administrator_file(path):
         current = current.parent if component == ".." else current / component
 
 
-def verify_bsd_host_fuse(root, manifest):
+def verify_bsd_host_fuse(root, manifest, binary_name="lurker-veracrypt-bsd"):
     host = manifest.get("host_fuse", {})
     system = platform.system()
     library = host.get("library", "")
@@ -309,7 +310,7 @@ def verify_bsd_host_fuse(root, manifest):
     if (host.get("api") != "fuse2" or not re.fullmatch(pattern, library)
             or host.get("path") != str(directory / library)
             or not re.fullmatch(r"[0-9a-f]{64}", host.get("sha256", ""))):
-        fail("BSD VeraCrypt requires native host FUSE ABI provenance")
+        fail("BSD private engine requires native host FUSE ABI provenance")
     provider = administrator_file(Path(host["path"]))
     if provider.parent != directory:
         fail("host FUSE alias must stay in the native library directory")
@@ -317,7 +318,7 @@ def verify_bsd_host_fuse(root, manifest):
     if not readelf:
         fail("readelf is required to validate the native host FUSE ABI")
     info = elf_info(provider, readelf)
-    engine = elf_info(root / "lurker-veracrypt-bsd", readelf)
+    engine = elf_info(root / binary_name, readelf)
     if (not info or info.get("soname") != [library] or not engine
             or [name for name in engine.get("needed", []) if name.startswith("libfuse")] != [library]):
         fail("native host FUSE SONAME/engine ABI differs")
@@ -356,6 +357,17 @@ def verify_netbsd_cryfs(root, manifest):
     symbols = {line.split()[-1].split("@", 1)[0] for line in text.splitlines() if line.split()}
     if "__fuse_main" not in symbols or any("fuse_main_real" in name for name in symbols):
         fail("NetBSD CryFS has an incompatible FUSE entry point")
+
+
+def verify_openbsd_cryfs(root, manifest):
+    native = manifest.get("native_build", {})
+    runtime = manifest.get("runtime", {})
+    if (native.get("fuse_provider") != "OpenBSD base FUSE" or native.get("privilege") != "root"
+            or runtime.get("privilege") != "root" or runtime.get("source_kind") != "directory"
+            or type(runtime.get("native_unveil_protocol")) is not int
+            or runtime.get("native_unveil_protocol") != 1):
+        fail("OpenBSD CryFS requires the qualified administrator/base-FUSE contract")
+    verify_bsd_host_fuse(root, manifest, "cryfs")
 
 
 def verify_cryptomator_sources(root, source):
@@ -648,6 +660,8 @@ def validate_backend(kind, directory, source):
         verify_folder_patches(kind, manifest, source)
         if kind == "cryfs" and platform.system() == "NetBSD":
             verify_netbsd_cryfs(root, manifest)
+        if kind == "cryfs" and platform.system() == "OpenBSD":
+            verify_openbsd_cryfs(root, manifest)
         license_files = manifest.get("license_files")
         if not license_files:
             fail("folder artifact license inventory is missing")
@@ -1117,6 +1131,8 @@ def desktop_display_requirements(system, desktop):
 
 def desktop_authorization(selected, desktop):
     privileged = set(selected) & {"luks", "luks1", "veracrypt", "geli", "cgd", "softraid", "raid1c", "pefs"}
+    if platform.system() == "OpenBSD" and "cryfs" in selected:
+        privileged.add("cryfs")
     if not desktop or not privileged:
         return None
     search = os.environ.get("PATH", "") + ":/usr/local/bin:/usr/pkg/bin:/usr/local/sbin:/usr/pkg/sbin"
@@ -1264,9 +1280,13 @@ def stage(args):
                         target.mkdir(exist_ok=True)
                         copied_file(name, target / name)
         dependencies = audit_dependencies(prefix)
-        host_fuse = ({"veracrypt-bsd": verify_bsd_host_fuse(artifacts["veracrypt-bsd"],
-                         json_file(artifacts["veracrypt-bsd"] / "bsd-veracrypt-source.json"))}
-                     if "veracrypt-bsd" in artifacts else {})
+        host_fuse = {}
+        if "veracrypt-bsd" in artifacts:
+            host_fuse["veracrypt-bsd"] = verify_bsd_host_fuse(artifacts["veracrypt-bsd"],
+                json_file(artifacts["veracrypt-bsd"] / "bsd-veracrypt-source.json"))
+        if "cryfs" in artifacts and system == "OpenBSD":
+            host_fuse["cryfs"] = verify_bsd_host_fuse(artifacts["cryfs"],
+                json_file(artifacts["cryfs"] / "cryfs.json"), "cryfs")
         host_libraries = {}
         for kind in ("veracrypt-create", "veracrypt-userspace"):
             if kind in artifacts:
@@ -1284,7 +1304,8 @@ def stage(args):
                         + (["Desktop requires a working native display session plus matching winit display/keyboard libraries, including xkbcommon; verify an actual window separately from ELF metadata"] if args.desktop else [])
                         + (["Desktop native operations require host pkexec or sudo and working administrator policy for the installed lurker-helper"] if authorization else [])
                         + ((["CryFS requires NetBSD base ReFUSE/puffs, /dev/putter access and native user-mount authorization"]
-                            if system == "NetBSD" else ["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and "
+                            if system == "NetBSD" else ["CryFS requires administrator mounting with OpenBSD base FUSE2; the userspace library remains a host prerequisite"]
+                            if system == "OpenBSD" else ["CryFS 1.x requires FUSE ABI 2 (libfuse.so.2 and "
                             + ("mount_fusefs)" if system == "FreeBSD" else "fusermount)")])
                            if "cryfs" in selected else [])
                         + (["gocryptfs requires FUSE; Linux accepts fusermount3 or fusermount, FreeBSD uses mount_fusefs"] if "gocryptfs" in selected else [])

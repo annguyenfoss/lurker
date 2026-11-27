@@ -290,6 +290,13 @@ Version needs section '.gnu.version_r' contains 2 entries:
             stager.verify_folder_patches("cryfs", {"patches": netbsd_hashes}, source)
             with self.assertRaisesRegex(ValueError, "patch provenance"):
                 stager.verify_folder_patches("cryfs", {"patches": {common: hashes[common]}}, source)
+        openbsd = [common, "native/folder/cryfs/openbsd-platform.patch"]
+        openbsd_hashes = {name: stager.digest(stager.ROOT / name) for name in openbsd}
+        with mock.patch.object(stager.platform, "system", return_value="OpenBSD"):
+            stager.verify_folder_patches("cryfs", {"patches": openbsd_hashes}, source)
+            with self.assertRaisesRegex(ValueError, "patch provenance"):
+                stager.verify_folder_patches("cryfs", {"patches": {common: hashes[common]}}, source)
+
 
     def test_freebsd_gocryptfs_requires_its_platform_patch(self):
         name = "native/folder/gocryptfs/freebsd-futimes.patch"
@@ -641,6 +648,32 @@ Version needs section '.gnu.version_r' contains 2 entries:
             with self.assertRaisesRegex(ValueError, "administrator-controlled"):
                 stager.administrator_file(alias)
 
+    def test_openbsd_cryfs_staging_requires_root_contract_and_host_provider(self):
+        manifest = {"native_build": {"fuse_provider": "OpenBSD base FUSE", "privilege": "root"},
+                    "runtime": {"privilege": "root", "source_kind": "directory", "native_unveil_protocol": 1}}
+        with mock.patch.object(stager, "verify_bsd_host_fuse") as verify:
+            stager.verify_openbsd_cryfs(self.root, manifest)
+            verify.assert_called_once_with(self.root, manifest, "cryfs")
+        with self.assertRaisesRegex(ValueError, "administrator/base-FUSE"):
+            stager.verify_openbsd_cryfs(self.root, {"native_build": {"fuse_provider": "OpenBSD base FUSE", "privilege": "user"}})
+
+    def test_openbsd_cryfs_only_desktop_requires_native_authorization(self):
+        with mock.patch.object(stager.platform, "system", return_value="OpenBSD"), mock.patch.object(stager.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(ValueError, "administrator policy"):
+                stager.desktop_authorization({"cryfs"}, True)
+        with mock.patch.object(stager.platform, "system", return_value="OpenBSD"), mock.patch.object(stager.shutil, "which", side_effect=lambda name, **kw: "/usr/local/bin/sudo" if name == "sudo" else None):
+            self.assertEqual(["cryfs"], stager.desktop_authorization({"cryfs"}, True)["required_for"])
+        with mock.patch.object(stager.platform, "system", return_value="NetBSD"):
+            self.assertIsNone(stager.desktop_authorization({"cryfs"}, True))
+
+    def test_openbsd_fuse_audit_inspects_the_selected_cryfs_executable(self):
+        manifest = {"host_fuse": {"api": "fuse2", "library": "libfuse.so.4.0", "path": "/usr/lib/libfuse.so.4.0", "sha256": "a" * 64}}
+        with mock.patch.object(stager.platform, "system", return_value="OpenBSD"), mock.patch.object(stager, "administrator_file", return_value=Path("/usr/lib/libfuse.so.4.0")), mock.patch.object(stager.shutil, "which", return_value="/usr/bin/readelf"), mock.patch.object(stager, "elf_info", side_effect=[{"soname": ["libfuse.so.4.0"]}, {"needed": ["libfuse.so.4.0"]}]) as inspect, mock.patch.object(stager, "digest", return_value="b" * 64):
+            result = stager.verify_bsd_host_fuse(self.root, manifest, "cryfs")
+            self.assertEqual(self.root / "cryfs", inspect.call_args.args[0])
+            self.assertEqual("b" * 64, result["sha256"])
+            self.assertEqual("a" * 64, result["build_sha256"])
+
     def test_rust_notices_follow_the_build_receipt_and_verify_registry_bytes(self):
         source = mock.Mock(root=self.root / "project", commit="a" * 40)
         source.root.mkdir()
@@ -954,7 +987,7 @@ Version needs section '.gnu.version_r' contains 2 entries:
                 self.assertIsNone(stager.desktop_display_requirements(system, False))
 
     def test_login_user_folder_or_cli_only_does_not_require_desktop_elevation(self):
-        with mock.patch.object(stager.shutil, "which") as lookup:
+        with mock.patch.object(stager.platform, "system", return_value="Linux"), mock.patch.object(stager.shutil, "which") as lookup:
             self.assertIsNone(stager.desktop_authorization({"gocryptfs", "cryfs", "cryptomator"}, True))
             self.assertIsNone(stager.desktop_authorization({"luks", "geli", "cgd", "softraid", "raid1c"}, False))
         lookup.assert_not_called()
