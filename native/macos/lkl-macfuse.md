@@ -6,9 +6,11 @@ refusal remains in place until a replacement mounted route passes qualification.
 An in-process native library using local I/O is eligible; the older Btrfs
 VM/network-export routes remain excluded.
 
-The kernel boundary excludes Lurker's own invented kernel code or behavior,
-including an embedded kernel. Pre-made upstream patches and existing supported
-configuration remain possible routes. The Mac work did not author kernel C,
+Novel means kernel code or behavior invented by Lurker, including an embedded
+kernel. Applying established pre-made patches is allowed and is not novel, even
+when a kernel-source patch is applied specifically for Lurker. Existing supported
+parameters and configuration, including before a build, are allowed. The Mac work
+did not author kernel C,
 syscall dispatch, scheduler, kernel credentials or a new kernel lifecycle API.
 The host virtio FLUSH transport, documented Mach-O visibility change and external
 FUSE/guardian code are ordinary userspace/build integration; they are not kernel
@@ -117,8 +119,8 @@ FSKit extension acceptance. The frozen `025f558` package results remain unchange
 
 The historical candidate applied `lkl-darwin-symbols.patch` alongside the flush
 patch. The previously held qualification has not automatically restarted;
-this historical account is not an instruction to run another build. The upstream Darwin recipe made
-only memcpy/memset/memmove private.
+this historical account is not an instruction to run another build. The upstream
+Darwin recipe made only memcpy/memset/memmove private.
 Its combined kernel object also exported formatting and string functions,
 including snprintf/vsnprintf, which could capture native host calls. A native
 adapter review candidate crashed in that kernel formatting implementation before

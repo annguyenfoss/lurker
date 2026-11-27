@@ -41,8 +41,8 @@ error overwrite and actually exits 1; the parent still refuses success.
 Remaining gates include the long-lived supervisor loop and startup context,
 worker/driver integration, exact executable/source identity capture, native mount
 identity callbacks, production caller/core/session capability fencing and the
-three-filesystem I/O/halt controls. The LKL-dependent work remains at its previous coordination checkpoint; plain
-POSIX primitive results do not admit that route. Any plan to invent kernel
+three-filesystem I/O/halt controls. The LKL-dependent work remains at its previous
+coordination checkpoint; plain POSIX primitive results do not admit that route. Any plan to invent kernel
 shutdown, thread-join, syscall or credential behavior is cut. These userspace
 checks must use existing native and upstream interfaces; they do not justify
 creating a new kernel interface when a dependency fails.
