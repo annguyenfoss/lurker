@@ -1,5 +1,11 @@
 # Native OpenBSD LKL diagnostic
 
+The current route is held under the clarified prohibition on bespoke kernel
+changes. Read `KERNEL_PROVENANCE_AUDIT.md`: both recorded libraries depend on
+local kernel shutdown/UAPI changes. The commands and results below are retained
+as historical diagnostics, not authorization to rebuild/test/admit this route.
+Only independent host-only work may continue without a new eligible basis.
+
 This work produces an external host-tool candidate. It does not install a
 filesystem driver, mount LKL, modify the kernel or enable a Lurker filesystem.
 Read `DIRECTIVES/PLAN/NATIVE_FRESH_20261127/OPENBSD_LKL_ASSESSMENT.md` first.

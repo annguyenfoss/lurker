@@ -1,5 +1,12 @@
 # OpenBSD native LKL prerequisite — source-only assessment
 
+The clarified user rule excludes bespoke kernel-source changes, including LKL
+kernel code inside a native process. The later local shutdown-hook/UAPI build
+therefore cannot support new route admission. It is held, with all historical
+receipts preserved. Exact provenance and dependency classification are in
+`native/openbsd/lkl/KERNEL_PROVENANCE_AUDIT.md`. The source-only assessment and
+subsequent native diagnostics below retain their original chronological scope.
+
 A native OpenBSD port is a plausible ordinary host-tool candidate for Btrfs and
 XFS. Package absence and missing in-kernel drivers do not establish that these
 filesystems are impossible on OpenBSD. No LKL compilation, RAM boot, mount,
