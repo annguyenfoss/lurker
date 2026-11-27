@@ -1,6 +1,111 @@
 # NetBSD fresh qualification — 2026-11-27
 
-Status: final candidate `8e09ac8779bfd022bff05a8753d351db5611a552` is frozen for native workspace, refreshed package and actual-user CGD/CryFS backing-filesystem qualification. Prior-round receipts are not fresh passes.
+Status: ordinary native qualification is complete on exact installed source
+`8e09ac8779bfd022bff05a8753d351db5611a552`. The 130-cell applicability ledger
+contains 12 passed, 2 blocked, 56 unavailable and 60 OS-bound not-applicable cells.
+The blocked cells are CGD/ZFS mounted-reboot persistence and CryFS on exFAT.
+Prior-round receipts are not fresh passes.
+
+## Final installed-artifact result
+
+The actual installed package passed all 14 CGD container/GPT payload lifecycles
+and 12 of 14 CryFS backing lifecycles. Every successful final payload writer was
+actual UID 1300, with downloaded Bitcoin/Ethereum/Transformer PDFs and text,
+normal close/reopen, append/new-file and final digest verification. Actual
+UID 32767 was denied plaintext listing, reading, directory creation and opening
+an existing payload file for writing through traversable test ancestors. Native
+mount, filesystem/driver and GPT identities are retained. Directory rows refer
+to the backing filesystem; they do not select an inner CryFS filesystem.
+
+| Filesystem | CGD container + GPT | CryFS container + GPT backing |
+| --- | --- | --- |
+| FFSv1/UFS1 | Passed both | Passed both |
+| FFSv2/UFS2 | Passed both | Passed both |
+| ext4 | Passed both | Passed both |
+| HAMMER2 | Passed both | Passed both |
+| NTFS | Passed both | Passed both |
+| exFAT | Passed both | Blocked both: native hardlink ENOSYS |
+| ZFS | Payload passed both; mounted reboot blocked | Payload passed both |
+| Btrfs | Native Create + Read/Write driver unavailable | Native backing unavailable |
+| XFS | Native Create + Read/Write driver unavailable | Native backing unavailable |
+| APFS | Native formatter/writable driver unavailable | Native backing unavailable |
+
+The exFAT product engine diagnostic is `publish new encrypted block: Function
+not implemented`; the independent native hardlink operation returned ENOSYS
+(errno 78). The common durability and exclusive-publication patch was preserved.
+The first exFAT attempt also lost a receipt write on the backing filesystem;
+its metadata and logs were preserved before a fresh attempt moved only test
+artifacts to host FFS and captured the actual product failure. The original
+writer's runtime UID was not independently logged; the controlled retry recorded
+UID/EUID 1300. No existing payload was chowned to make a test pass. A transient
+NTFS outer close returned busy; normal cleanup succeeded, and a separate complete
+ordinary-user append/reopen/hash continuation supplied the missing CGD proof.
+The failed exFAT GPT partition was streamed off-host, decompressed-length and
+SHA-256 verified against its native receipt, and retained with mandatory CGD
+parameters and case evidence before scratch reuse.
+
+Native workspace checks passed 131 tests with five ignored. Actual installed
+helper JSON passed the physical CGD/NTFS and directory CryFS lifecycles as the
+ordinary login user, including wrong password, duplicate and busy-close checks.
+The real Slint callback passed 1/1 through that installed helper as UID 1300;
+it did not invoke the CLI. The actual installed desktop opened and its collected
+window was inspected. Fresh explicit and Auto CGD conformance passed 12/12 each;
+CryFS credential/file-persistence subsets passed 12/12 each. The original CryFS
+SQLite WAL `SQLITE_IOERR_SHMMAP` failure remains an upstream ReFUSE shared-memory
+mapping limitation, not a passed application-workload gate.
+
+Five final installed fixtures passed an ordinary mounted reboot: CGD NTFS,
+ext4 and HAMMER2 containers, a fresh-GUID physical UFS2 partition, and product
+CryFS on native FFS. All pre/post downloaded-payload hashes matched as UID 1300.
+The system wedge changed from dk2 to dk1; GPT identity resolution and mandatory
+parameter hashes continued to match. Package/engine and all three corrected
+native-provider hashes were unchanged after boot. The stock `kern.sbmax=4194304`
+setting persisted. CryFS reopen explicitly reapplied administrator grants:
+`vfs.generic.usermount` had reset to zero and was manually enabled; putter group
+1300/mode 0660 was also reapplied. Node metadata immediately before that latter
+reapplication was not captured, so automatic device-grant availability is unknown
+and is not claimed. These results are conditional on manual prerequisites.
+
+The temporary digest-pinned helper sudoers rule was removed and visudo passed;
+the base sudoers hash was unchanged. User-mount policy returned to zero and the
+native character device to root:wheel 0600 with the same rdev. Only base mounts
+remain, all eight CGD and four vnode units are unused, and no force import or
+custom kernel change was made. Owned failed /tmp GUI/session evidence was copied
+and archive-verified before reboot; persistent failed containers, snapshots,
+credentials and parameter files remain private. The new round-owned qcow2 remains
+attached with closed encrypted test data; the original system disk was preserved.
+
+Quick feature observations apply to the tested native profiles: FFSv1/v2 mounted
+with `log`; HAMMER2/ZFS showed their native CoW filesystem types. Other active
+journaling behavior remains unknown. Owner selection and private caller admission
+passed all seven filesystems. File chmod 0600 was effective on FFSv1/v2, ext4,
+HAMMER2 and ZFS; NTFS/exFAT expose fixed caller-owned mode 0700 through their
+mount masks rather than arbitrary chmod changes. Native named-user ACL setters
+returned unsupported in all seven tested profiles; basic getfacl output alone
+was not counted as extended ACL support. Commands and observations are in the
+device receipts.
+
+The remaining portable methods have concrete ordinary-source barriers: native
+LUKS lacks a dm crypt target/module; a pinned gocryptfs build fails on missing
+NetBSD go-fuse transport/layout/syscall definitions; locked jFUSE rejects NetBSD
+as UNKNOWN and lacks native ABI bindings; and pinned VeraCrypt fails native
+platform selection/build and has no NetBSD device adapter. Administrative
+privilege does not supply these missing integrations. These are unqualified
+current routes, not claims that future ports are impossible. OS-specific hdiutil,
+diskutil, GELI, PEFS and softraid methods remain outside the NetBSD native scope.
+ZFS's stock mounted-reboot hostid/import bug is separately retained; ordinary
+close/reopen passes, persisted hostid did not solve the module bug, and no force
+import was used.
+
+Private final receipts are under `hosts/netbsd/validation/` (matrix, container
+continuations, helper/GUI, installed-provider controls, reboot and integrity),
+`hosts/netbsd/device/final-installed8e/` (per-device dispatch and retained failed
+partition), and `hosts/netbsd/cases/applicability-final.json` (all 130 cells).
+The executed harness hashes and exact source/package manifests are under
+`hosts/netbsd/build/`. These are relative to the round's private evidence root.
+
+## Earlier fresh investigations and artifact identities
+
 
 The assigned host is `adjutant@netbsd-core-01`, running NetBSD 11.1 amd64,
 GENERIC dated 2026-11-02. The current formal release and release-specific
