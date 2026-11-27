@@ -386,8 +386,11 @@ clarification about that architecture.
 - OpenBSD's preview desktop suite now passes 43 tests with no failures. Root
   checked the native source-format equivalence and 100%/120% create/manage
   frames; the new test now renders the initial lazy form before changing its
-  format. The actual CryFS desktop callback is still required before the
-  coherent core/model/UI feature commit.
+  format. The actual CryFS callback passed as UID 1300 with normal close and
+  exact sudo-policy restoration. Coherent commit `123d177` includes the native
+  core, CLI, capability model, desktop and documentation. Its exact-commit Linux
+  workspace check/test passed 173 tests (`7e931fd`); the native OpenBSD package
+  refresh and installed/full-host qualification remain separate gates.
 - New NetBSD installed-product containers pass seven CGD and six CryFS backing
   rows as the actual caller. CryFS on exFAT fails with a captured native
   `publish new encrypted block: Function not implemented` diagnostic, matching
