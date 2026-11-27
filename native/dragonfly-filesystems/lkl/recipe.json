@@ -93,12 +93,12 @@
     {
       "path": "dragonfly-credentials.h",
       "target": "tools/lkl/dragonfly-credentials.h",
-      "sha256": "87db06e3127f8bb48bc92079f31d4dae80ed2105079dba8381576d1f45b51738"
+      "sha256": "9484ba789f9705fda8c62ea32e4542d5d2f0a1b19ecba4c8b723563327733961"
     },
     {
       "path": "dragonfly-handles.h",
       "target": "tools/lkl/dragonfly-handles.h",
-      "sha256": "2bb7e24b7ac2383d0a51c97b2cad49fa977b4ce5a36978edbca0335f013f60da"
+      "sha256": "3837f97d880bb4cfd5f1a2c397b9f9a925deb9a1ee892a24715845540223daa6"
     },
     {
       "path": "dragonfly-lifecycle.h",
@@ -131,6 +131,7 @@
     "mount_source": "exact protected symlink to the inherited /dev/fuse vnode",
     "kernel_mount_flags": "default_permissions|allow_other plus NOSUID|NODEV|NOEXEC",
     "cleanup": "captured FSID/source/target globally absent, checked internal drain and no sticky I/O/transport failure",
-    "product_admission": false
+    "product_admission": false,
+    "credential_failure": "Sticky poisoned state; no new filesystem requests until verified complete restoration; registered cleanup capabilities only; retain source/channel until global absence; final exit1 even after recovery."
   }
 }

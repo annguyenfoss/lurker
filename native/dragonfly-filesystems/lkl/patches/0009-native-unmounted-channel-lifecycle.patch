@@ -84,7 +84,20 @@
      orderly_destroy = 1;
      if (active_fuse)
          fuse_exit(active_fuse);
-@@ -654,109 +664,118 @@
+@@ -634,7 +644,12 @@
+ 
+ static int stop_lkl(void)
+ {
++    int credential = df_leave_request();
++    /* Unprivileged sync is safe for this sole owned LKL filesystem even if
++     * namespace privileges cannot be restored. Drain errors still propagate. */
++    lkl_sys_sync();
+     int ret = drain_filesystem();
++    if (credential < 0 && ret == 0) ret = -LKL_EIO;
+     if (ret < 0)
+         fprintf(stderr, "lklfuse: failed to drain filesystem: %s\n", lkl_strerror(ret));
+     int halt = lkl_sys_halt();
+@@ -654,109 +669,118 @@
  
  int main(int argc, char **argv)
  {
@@ -291,7 +304,7 @@
 +    }
 +    if (!orderly_destroy || lifecycle_error || df_signal_seen ||
 +        df_native_uncertain || df_handles ||
-+        df_transport_error || !df_init_sent) {
++        df_transport_error || !df_init_sent || df_credential_error || df_handle_error) {
 +        fprintf(stderr, "lklfuse: incomplete native lifecycle or registered handles\n");
 +        result = -1;
 +    } else result = 0;

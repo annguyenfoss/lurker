@@ -35,7 +35,7 @@ int main(void)
         assert(found == 1);
     }
     assert(lkl_sys_open("/missing/child", LKL_O_RDONLY, 0) == -LKL_ENOENT);
-    df_leave_request();
+    assert(df_leave_request() == 0);
     assert(lkl_sys_getuid() == 0 && lkl_sys_geteuid() == 0 &&
            lkl_sys_getgid() == 0 && lkl_sys_getegid() == 0 &&
            lkl_sys_getgroups(0, NULL) == 0);

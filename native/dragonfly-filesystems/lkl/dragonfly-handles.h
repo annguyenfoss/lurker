@@ -16,6 +16,7 @@ struct df_handle {
     struct df_handle *next;
 };
 static struct df_handle *df_handles;
+static int df_handle_error;
 static uint64_t df_next_token = 1;
 
 static struct df_handle *df_find_handle(uint64_t token, enum df_handle_kind kind)
@@ -53,6 +54,19 @@ static int df_open_handle(const char *path, mode_t mode,
     if (kind == DF_DIRECTORY) ret = lklfuse_opendir(path, &inner);
     else if (create) ret = lklfuse_create(path, mode, &inner);
     else ret = lklfuse_open(path, &inner);
+    int restoration = df_leave_request();
+    if (ret == 0 && restoration < 0) {
+        /* The kernel never adopted this handle after a failed CREATE/OPEN.
+         * Dispose only its exact held descriptor, with no pathname access. */
+        int cleanup = kind == DF_DIRECTORY ?
+            lkl_closedir((struct lkl_dir *)(uintptr_t)inner.fh) : lkl_sys_close(inner.fh);
+        if (cleanup < 0) {
+            df_handle_error = 1;
+            fprintf(stderr, "lklfuse: unadopted handle cleanup failed: %d\n", cleanup);
+        }
+        free(handle);
+        return -EIO;
+    }
     if (!ret) {
         handle->token = df_next_token++;
         handle->raw = inner.fh;
@@ -64,7 +78,7 @@ static int df_open_handle(const char *path, mode_t mode,
         inner.fh = handle->token;
         *fi = inner;
     } else free(handle);
-    df_leave_request();
+    if (restoration < 0) return -EIO;
     return ret;
 }
 static int df_open(const char *path, struct fuse_file_info *fi)
@@ -79,8 +93,7 @@ static int df_##name signature { \
     int ret = df_enter_request(fuse_get_context()); \
     if (ret < 0) return ret; \
     ret = lklfuse_##name arguments; \
-    df_leave_request(); \
-    return ret; \
+    return df_finish_request(ret); \
 }
 DF_PATH(getattr, (const char *path, struct stat *st), (path, st))
 DF_PATH(readlink, (const char *path, char *buf, size_t size), (path, buf, size))
@@ -112,15 +125,24 @@ static int df_##name signature { \
     struct fuse_file_info inner = *fi; \
     inner.fh = handle->raw; \
     ret = lklfuse_##name arguments; \
-    df_leave_request(); \
-    return ret; \
+    return df_finish_request(ret); \
 }
 DF_HELD(fsync, (const char *path, int data, struct fuse_file_info *fi), (path, data, &inner), DF_FILE, 1, 0)
-DF_HELD(flush, (const char *path, struct fuse_file_info *fi), (path, &inner), DF_FILE, 1, 1)
 DF_HELD(readdir, (const char *path, void *buf, fuse_fill_dir_t fill, off_t offset, struct fuse_file_info *fi), (path, buf, fill, offset, &inner), DF_DIRECTORY, 1, 0)
 DF_HELD(fsyncdir, (const char *path, int data, struct fuse_file_info *fi), (path, data, &inner), DF_DIRECTORY, 1, 0)
 DF_HELD(fallocate, (const char *path, int mode, off_t offset, off_t length, struct fuse_file_info *fi), (path, mode, offset, length, &inner), DF_FILE, 0, 0)
 #undef DF_HELD
+
+static int df_flush(const char *path, struct fuse_file_info *fi)
+{
+    if (df_observe_native_mount) df_observe_native_mount();
+    struct df_handle *h = df_find_handle(fi->fh, DF_FILE);
+    if (!h) return -EBADF;
+    /* The pinned upstream flush is a no-op, not a durability operation.
+     * Cleanup uses only the registered capability and changes no credentials. */
+    struct fuse_file_info inner = *fi; inner.fh = h->raw;
+    return lklfuse_flush(path, &inner);
+}
 
 static int df_fgetattr(const char *path, struct stat *st, struct fuse_file_info *fi)
 {
@@ -133,7 +155,7 @@ static int df_fgetattr(const char *path, struct stat *st, struct fuse_file_info 
     inner.fh = h->kind == DF_DIRECTORY ?
         (uint64_t)lkl_dirfd((struct lkl_dir *)(uintptr_t)h->raw) : h->raw;
     ret = lklfuse_fgetattr(path, st, &inner);
-    df_leave_request(); return ret;
+    return df_finish_request(ret);
 }
 
 static int df_read(const char *path, char *buf, size_t size, off_t offset,
@@ -145,7 +167,7 @@ static int df_read(const char *path, char *buf, size_t size, off_t offset,
     if (ret < 0) return ret;
     struct fuse_file_info inner = *fi; inner.fh = h->raw;
     ret = lklfuse_read(path, buf, size, offset, &inner);
-    df_leave_request(); return ret;
+    return df_finish_request(ret);
 }
 static int df_write(const char *path, const char *buf, size_t size, off_t offset,
                      struct fuse_file_info *fi)
@@ -156,24 +178,27 @@ static int df_write(const char *path, const char *buf, size_t size, off_t offset
     if (ret < 0) return ret;
     struct fuse_file_info inner = *fi; inner.fh = h->raw;
     ret = lklfuse_write(path, buf, size, offset, &inner);
-    df_leave_request(); return ret;
+    return df_finish_request(ret);
 }
 static int df_close_handle(const char *path, struct fuse_file_info *fi,
                            enum df_handle_kind kind)
 {
+    if (df_observe_native_mount) df_observe_native_mount();
     struct df_handle *h = df_find_handle(fi->fh, kind);
     if (!h) return -EBADF;
-    int ret = df_enter_handle(h, 1, 1);
-    if (ret < 0) return ret;
+    /* close/closedir use only this held open capability, never a pathname or
+     * ambient-root authorization. They remain available after credential poison. */
     struct fuse_file_info inner = *fi; inner.fh = h->raw;
-    ret = kind == DF_DIRECTORY ? lklfuse_releasedir(path, &inner) :
-                                lklfuse_release(path, &inner);
+    int ret = kind == DF_DIRECTORY ? lklfuse_releasedir(path, &inner) :
+                                    lklfuse_release(path, &inner);
+    if (ret < 0) df_handle_error = 1;
     struct df_handle **link = &df_handles;
     while (*link != h) link = &(*link)->next;
     *link = h->next;
     memset(h, 0, sizeof(*h)); free(h); fi->fh = 0;
-    df_leave_request(); return ret;
+    return ret;
 }
+
 static int df_release(const char *path, struct fuse_file_info *fi)
 { return df_close_handle(path, fi, DF_FILE); }
 static int df_releasedir(const char *path, struct fuse_file_info *fi)

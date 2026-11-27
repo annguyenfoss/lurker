@@ -59,24 +59,45 @@ static int df_same_credentials(const struct df_request_identity *a,
            !memcmp(a->groups, b->groups, a->count * sizeof(a->groups[0]));
 }
 
-/* Restore every field even after a partially applied request identity. */
-static void df_leave_request(void)
+/* A failed restoration poisons further work, but never exits a mounted
+ * process. Only a verified complete restoration can clear current poison;
+ * the historical failure remains sticky through final shutdown. */
+static int df_credential_error, df_credentials_poisoned;
+static int df_leave_request(void)
 {
     int uid = lkl_sys_setresuid(0, 0, 0);
     int groups = lkl_sys_setgroups(0, NULL);
     int gid = lkl_sys_setresgid(0, 0, 0);
     int mask = lkl_sys_umask(0);
-    if (uid < 0 || groups < 0 || gid < 0 || mask < 0) {
-        fprintf(stderr, "lklfuse: cannot restore namespace credentials: %d/%d/%d/%d\n",
-                uid, groups, gid, mask);
-        _exit(1);
+    lkl_uid_t ruid=(lkl_uid_t)-1, euid=ruid, suid=ruid;
+    lkl_gid_t rgid=(lkl_gid_t)-1, egid=rgid, sgid=rgid;
+    int got_uid = lkl_sys_getresuid(&ruid, &euid, &suid);
+    int got_gid = lkl_sys_getresgid(&rgid, &egid, &sgid);
+    int verified = uid == 0 && groups == 0 && gid == 0 && mask >= 0 &&
+        got_uid == 0 && got_gid == 0 && !ruid && !euid && !suid &&
+        !rgid && !egid && !sgid && lkl_sys_getgroups(0, NULL) == 0 &&
+        lkl_sys_setfsuid((lkl_uid_t)-1) == 0 &&
+        lkl_sys_setfsgid((lkl_gid_t)-1) == 0 && lkl_sys_umask(0) == 0;
+    if (!verified) {
+        if (!df_credentials_poisoned)
+            fprintf(stderr, "lklfuse: poisoned credentials after restoration failure: %d/%d/%d/%d\n",
+                    uid, groups, gid, mask);
+        df_credential_error = df_credentials_poisoned = 1;
+        return -EIO;
     }
+    df_credentials_poisoned = 0;
+    return 0;
+}
+static inline int df_finish_request(int result)
+{
+    return df_leave_request() < 0 ? -EIO : result;
 }
 
 static int df_validate_request(const struct fuse_context *context,
                                struct df_request_identity *identity)
 {
     if (df_observe_native_mount) df_observe_native_mount();
+    if (df_credentials_poisoned && df_leave_request() < 0) return -EIO;
     struct df_request_identity first, second;
     if (df_credential_snapshot(context, &first) < 0 ||
         df_credential_snapshot(context, &second) < 0 ||
@@ -88,6 +109,7 @@ static int df_validate_request(const struct fuse_context *context,
 
 static int df_apply_identity(const struct df_request_identity *identity)
 {
+    if (df_credentials_poisoned && df_leave_request() < 0) return -EIO;
     lkl_gid_t groups[NGROUPS];
     for (int i = 0; i < identity->count; i++)
         groups[i] = identity->groups[i];
@@ -100,7 +122,7 @@ static int df_apply_identity(const struct df_request_identity *identity)
         if (mask < 0) ret = mask;
     }
     if (ret < 0) {
-        df_leave_request();
+        if (df_leave_request() < 0) return -EIO;
         return df_lkl_result(ret, 0);
     }
     return 0;

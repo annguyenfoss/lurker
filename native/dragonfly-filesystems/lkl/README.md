@@ -36,8 +36,13 @@ and fail as EIO.
 Pathname and metadata operations require two complete, stable native process
 snapshots agreeing on PID, birth, live state, effective UID/GID and the complete
 group vector. The context umask is explicit; inherited groups are cleared before
-applying a request. Every exit restores namespace UID/GID zero, no supplementary
-groups and umask zero. Invalid, mismatched, dead and PID-zero pathname identities
+applying a request. Every callback verifies restored real/effective/saved UID/GID,
+FSUID/FSGID zero, no supplementary groups and umask zero. Failed restoration
+poisons further filesystem requests until complete restoration is verified; it
+never exits a published process. The failure stays sticky after recovery and
+forces final exit1. Registered close/release and the upstream no-op flush remain
+cleanup-only capabilities, with no pathname or ambient-root authorization.
+Invalid, mismatched, dead and PID-zero pathname identities
 fail closed. No caller umask is inferred from kinfo_proc.
 
 DragonFly sends actual cached WRITE requests with PID zero. Registered opaque
@@ -72,7 +77,11 @@ normalized to success. Explicit DESTROY and checked global absence govern close.
 
 Native unprivileged controls cover UAPI/timers/boot, symbolic errno, real fsync
 failure forwarding, driver internal drain, capacity validation, complete
-credential apply/restore and native channel attachment/error restoration. A
+credential apply/restore and native channel attachment/error restoration.
+Standalone actual callbacks additionally prove PID-zero held I/O, set-ID clearing,
+genuine restoration EPERM, unchanged data while poisoned, registered cleanup and
+verified recovery with historical failure retained. Fault activation exists only
+in separately compiled test translation units, never a production option. A
 native ELF with the scoped PIC FUSE2 archive links successfully. The new mounted
 client remains unqualified pending root review/trusted copy, actual native INIT,
 caller/foreign permissions, ownership/mode/time/set-ID checks, opener-death and
