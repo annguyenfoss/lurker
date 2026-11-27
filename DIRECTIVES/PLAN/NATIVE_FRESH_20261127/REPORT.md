@@ -11,10 +11,28 @@ under target/goal-validation/native-fresh-20261127/.
 The chronological milestones below retain their original candidate and scope.
 Recorded candidate qualification reports cover all six Linux distributions,
 macOS, DragonFly and NetBSD within their stated driver/source scopes. The native
-LKL eligibility clarification has reopened ordinary driver assessment on several
-hosts. OpenBSD's recorded installed-package round is now reconciled within its
-partial ledger; its newly assessed native LKL route and the FreeBSD adapter
-remain active. Whole-round completion is unproven.
+LKL eligibility clarification reopened ordinary driver assessment on several
+hosts. Under the user's final scope policy `10fbc99`, the locally invented
+NetBSD/OpenBSD/DragonFly kernel ABI/shutdown routes and dependent plans are now
+cut, with source and results preserved. All eleven owners acknowledged the
+policy. Established patches and reproducible configured kernel builds remain
+allowed. The detailed disposition is `KERNEL_SCOPE_AUDIT.md`.
+
+The coordinator's source review resolves Linux's existing configuration and
+generic-header selections, FreeBSD's Python build adaptation and host-tool
+integration, and macOS's documented linker export-list procedure as in scope.
+The Darwin vendor port's maturity and all remaining product lifecycle gates
+remain separate. No new storage pass or guard removal follows from that review.
+All six Linux e927 affected follow-ups have completed under their original
+identities; Fedora's ordinary RPM installation remains blocked by signature
+policy despite verified-prefix runtime passes.
+
+FreeBSD Cryptomator candidate `2424fb3` has native ABI/compiler/provider-only
+proofs, not a mounted vault pass. Pre-mount review found that its cleanup reaches
+libfuse3's force-unmount implementation; userspace lifecycle correction is required
+before mounted qualification. The earlier failed-FUSE cleanup and provider-stat
+waits remain nonterminal. Independent userspace guardian work and operational
+recovery planning continue. Whole-round completion is unproven.
 
 Nine host owners now provide private `completion-evidence-index.json` files
 mapping the acceptance requirements to exact receipts and limitations. Root's

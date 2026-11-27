@@ -38,6 +38,19 @@ does not enable a new UFS1 driver. The LKL source and stable patch pins are in
 `scripts/build-linux-userspace.py`. Upstream source:
 https://github.com/lkl/linux
 
+The integration's kernel configuration changes select existing upstream
+`CONFIG_FILE_LOCKING`, `CONFIG_EXFAT_FS`, `CONFIG_NTFS3_FS`,
+`CONFIG_NTFS3_LZX_XPRESS` and `CONFIG_NTFS3_FS_POSIX_ACL` options. Its
+`generic-y += ring_buffer.h` line uses the documented Kbuild mechanism to
+select the unmodified generic header supplied by the pinned stable patch.
+These exact configuration/build changes are in `patches/lkl.patch`; no new
+kernel shutdown hook or syscall implementation is introduced. Competent users
+can review those selections and reproduce the build above. The source-scope
+review is recorded in
+`DIRECTIVES/PLAN/NATIVE_FRESH_20261127/KERNEL_SCOPE_AUDIT.md`.
+
+https://docs.kernel.org/6.12/kbuild/makefiles.html#generic-y
+
 The host-only `host-io-error.patch` is applied after the unchanged integration
 patch and pinned stable update. It latches failed requests per disk, checks the
 latch after kernel halt and before host disk cleanup, and reports known failures

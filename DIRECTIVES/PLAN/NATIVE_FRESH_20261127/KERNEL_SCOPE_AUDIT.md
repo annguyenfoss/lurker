@@ -52,13 +52,61 @@ Existing supported settings and established patches are acceptable; maintaining
 our own kernel interface or pursuing its upstream acceptance is outside this
 project. Keep independent userspace work and native supported routes separate.
 
-## Provenance or effect still requiring assessment
+## Resolved source-scope findings
+
+The coordinator's read-only review under final policy `10fbc99` resolves the
+following changes as eligible integration, without creating new runtime passes:
+
+- **Linux FS5:** the five local defconfig selections enable existing upstream
+  options: FILE_LOCKING, EXFAT_FS, NTFS3_FS, NTFS3_LZX_XPRESS and
+  NTFS3_FS_POSIX_ACL. The `generic-y += ring_buffer.h` addition selects the
+  unmodified upstream generic header through the documented Kbuild mechanism.
+  The pinned official 6.12.118 stable patch supplies that same header and makes
+  the identical selection for twenty other architectures. This is established
+  configuration/build integration, not an invented kernel implementation.
+  Host virtual-block/FUSE error handling is separate userspace integration.
+- **FreeBSD LKL:** the seven official Ports patches are established inputs.
+  The only semantic local header-generator change explicitly selects Python's
+  `fork` pool context, following CPython's migration guidance after the 3.14
+  default changed. It changes the build process, not generated kernel ABI or
+  kernel behavior. Local virtual-block FLUSH/error handling, native barriers
+  and FUSE-client lifecycle use existing kernel interfaces; they add no local
+  kernel host-operations ABI or shutdown hook. Their userspace integration is
+  in scope; reliable completion and product qualification remain open.
+- **macOS symbol visibility:** the local change uses Apple's documented linker
+  export-list procedure, retaining existing LKL APIs and boot references. It
+  does not invent kernel implementation or interfaces. The third-party Darwin
+  port was pre-existing; its maturity and distribution suitability remain a
+  separate assessment, not proof of Lurker-invented code.
+
+These findings supersede earlier categorical conclusions based solely on local
+configuration changes, build-script location or a kernel-object link target.
+Original audits, source identities and functional receipts remain frozen. No
+held job automatically restarts, product guard is removed, or cut BSD timer-hook
+work becomes eligible through this review.
+
+Primary guidance and source:
+
+- https://docs.kernel.org/6.12/kbuild/makefiles.html#generic-y
+- https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/Kconfig
+- https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/exfat/Kconfig
+- https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/ntfs3/Kconfig
+- https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.12.118.xz
+- https://docs.python.org/3.14/whatsnew/3.14.html#multiprocessing
+- https://developer.apple.com/library/archive/documentation/Performance/Conceptual/CodeFootprint/Articles/ReducingExports.html
+- https://github.com/apple-oss-distributions/ld64/blob/main/doc/man/man1/ld-classic.1
+
+Private source captures, hashes, patch inventories and read-only comparisons are
+in `audits/established-integration-10fbc99/root-scope-reassessment.json` under the
+round's evidence root. This is scope evidence, not a complete product audit.
+
+## Remaining prerequisite and product assessment
 
 | Area | Existing work and remaining question |
 | --- | --- |
-| Linux unprivileged FS5, all six distributions | The reused LKL kernel includes local configuration selections and an `asm/Kbuild` generic-header addition. Host transport/FUSE safety changes are separate. The builds and affected runtime checks completed, but the retained evidence does not yet establish the relevant upstream guidance for every delta. Configuration/build edits are not automatically novel kernel development. |
-| macOS LKL | Reuses a pre-existing public Darwin port. The local symbol-visibility change is in its Python linker build script, not kernel C or syscall ABI. Official Apple export-list guidance has been retained for review. Judge that established linker procedure and the vendor port's maturity on evidence; do not classify either solely by filename or local application. |
-| FreeBSD LKL | Uses seven recorded official Ports patches plus local host transport/client changes and a Python header-generator fork-context adjustment. No locally changed filesystem/core-kernel C was found. The toolchain/build procedure and host transport changes still need individual classification. |
+| Linux unprivileged FS5, all six distributions | Source-scope question resolved above. Preserve exact six-host functional evidence; final package/requirement reconciliation remains separate. Fedora's ordinary unsigned-RPM installation remains blocked by signature policy. |
+| macOS LKL | Local linker/host integration is in scope. Establish vendor-port maturity/maintenance and ordinary installation suitability; complete live completion, ownership, crypto-view and applicable device qualification before product admission. |
+| FreeBSD LKL | Source integration is in scope. Complete userspace guardian/session integration, exact lifecycle/geometry proofs and installed product qualification before lifting existing guards. |
 | Conditional Linux UFS1 configurations | Existing write-enabled modules/configurations were reused on some hosts. Exact established configuration provenance remains relevant; no new Arch/Ubuntu UFS1 kernel work has started. |
 | Deferred NetBSD ZFS and OpenBSD HAMMER2 work | An existing upstream fix or established current-OS port may be used. Inventing a host-ID kernel repair or a new kernel-port adaptation is not authorized. These deferred kernel tasks have not started. |
 
