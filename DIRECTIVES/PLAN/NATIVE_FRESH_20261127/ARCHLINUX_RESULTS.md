@@ -162,3 +162,40 @@ https://github.com/kusumi/hammer2-utils remains at
 copyright. The cached source archive's Git commit metadata and built formatter
 match the installed binary; fresh upstream HEAD queries confirm those source
 identities. Prior runtime receipts do not count as new qualification.
+
+
+The complete 576505d container follow-up now passes all 54 applicable positive
+cells across the nine writable filesystems. The six UFS1 cells remain blocked
+by the unchanged stock read-only driver; its three inner create paths reject
+that downgrade and release their resources. Three exFAT retention-wrapper
+checks stopped before invoking a backend because the initial mask synthesized
+mode 0700 for private files. Separate reruns with explicit `fmask=0177,dmask=0077`
+passed all three folder engines. These were harness setup failures, with the
+original receipts and closed backing images retained.
+
+The additional Btrfs cipher/credential sweep passed 18 cases across all three
+native disk methods, AES/Serpent/Twofish, password/binary keyfile and Auto reopen.
+Native CLI/helper frontend checks passed. Kernel and folder conformance suites
+each passed 36 cases. Actual desktop winit/software rendering passed, and six
+strict-JSON helper fixtures are prepared for the pending reboot gate.
+
+A new one-GiB qcow2 scratch disk was attached with serial
+`lurker-fresh-archlinux`; every destructive operation checks its serial, size,
+type, device number, mounts and children. All 27 physical inner cases passed:
+nine writable filesystems times LUKS2, LUKS1 and VeraCrypt. The native physical
+folder-backing sweep has passed 15 engine cases on ext4, Btrfs, XFS, APFS and
+UFS2. Its initial HAMMER2 metadata probe stopped before backend execution because
+blkid lacks that signature; `file` and the header independently identified
+HAMMER2. The complete quiescent disk was exported and byte-verified before
+correcting that private harness check and continuing. Remaining physical
+backings, factor cases, stock-UFS1 negatives and reboot persistence are pending.
+
+A separately identified loop-lease follow-up, commit `67894f6`, isolates only
+sudo-elevated socket helpers into their own process group while preserving their
+session and controlling terminal. The exact overlay passed 88 Arch core tests
+(two ignored), native password frontend checks and a seven-action keyfile
+payload lifecycle. Ubuntu reproduced the native password frontend failure with
+576505d and passed the unchanged frontend harness plus keyfile lifecycle with
+this overlay. Its 168 process samples show the same session, a separate lease
+process group and no stopped processes. Existing 576505d storage receipts keep
+their original binary identities; they do not claim to test the follow-up.
