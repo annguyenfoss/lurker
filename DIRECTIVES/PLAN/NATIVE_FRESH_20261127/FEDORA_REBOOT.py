@@ -44,8 +44,10 @@ def main():
         old = row.get('receipt', {})
         if old.get('status') != 'passed': return
         privileged = row['route'] == 'privileged'
+        directory = row['route'] == 'directory-on-filesystem'
+        keyfile = Path(old['keyfile']) if old.get('keyfile') else None
         new = dict(backend=row['backend'], filesystem=row['filesystem'], route=row['route'],
-                   source=old['source'], creation_commit=old['commit'], creation_binary_sha256=old['binary_sha256'], runtime_commit=a.runtime_commit, status='running', operations=[])
+                   source=old['source'], credential=old.get('credential', 'password'), creation_commit=old['commit'], creation_binary_sha256=old['binary_sha256'], runtime_commit=a.runtime_commit, status='running', operations=[])
         result['cases'].append(new); save()
         mountpoint = Path(old['mountpoint'])
         credential_path = Path(old['fixture']) / '.generated-test-credential'
@@ -54,7 +56,8 @@ def main():
         prefix = ['/usr/bin/sudo', '-n'] if privileged else []
         def cli(action, operand):
             log = a.output / (str(len(result['cases'])) + '-' + str(len(new['operations'])) + '-' + action + '.log')
-            r = h.terminal([*prefix, str(a.binary), action, '--type', 'auto', '--color=never', *map(str, operand)], password, 180, log)
+            credential_args = ['--key-file', str(keyfile)] if action == 'mount' and keyfile else []
+            r = h.terminal([*prefix, str(a.binary), action, '--type', 'auto', '--color=never', *credential_args, *map(str, operand)], password, 180, log)
             new['operations'].append(dict(action=action, log=str(log), **r)); save()
             if r['exit_code'] or r['timed_out']: raise RuntimeError('CLI ' + action + ' failed')
         def payload(phase, wanted):
@@ -66,12 +69,17 @@ def main():
             if process.returncode: raise RuntimeError(process.stderr[-1200:])
             return json.loads(process.stdout)
         try:
-            password = native(['cat', credential_path]) if privileged else credential_path.read_text()
+            if keyfile:
+                if h.file_hash(keyfile) != old['keyfile_sha256']:
+                    raise RuntimeError('Retained binary keyfile identity differs')
+                new['keyfile_sha256'] = old['keyfile_sha256']
+            else:
+                password = native(['cat', credential_path]) if privileged else credential_path.read_text()
             creation_identity = (old['commit'], old['binary_sha256'])
             if creation_identity not in [(a.runtime_commit, result['binary_sha256']), *prior]:
                 raise RuntimeError('Creation/runtime artifact transition was not explicitly identified')
             cli('mount', [old['source'], mountpoint])
-            identity_path = mountpoint if privileged else Path(old['source'])
+            identity_path = Path(old['source']) if directory else mountpoint
             identity = h.linux_mount_record(Path('/proc/self/mountinfo').read_text(), identity_path)
             new['native_filesystem'] = identity
             new['filesystem_identity_gate'] = h.check_linux_filesystem(identity, row['filesystem'])
@@ -100,7 +108,7 @@ def main():
 
     save()
     for row in matrix['cases']:
-        if row['route'] == 'privileged': case(row)
+        if row['route'] in {'privileged', 'login-user'}: case(row)
     for backing in matrix.get('backing_records', []):
         fs = backing['filesystem']; image = Path(backing['image']); mount = Path(backing['mountpoint'])
         try:
