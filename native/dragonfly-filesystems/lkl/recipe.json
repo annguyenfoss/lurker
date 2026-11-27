@@ -132,6 +132,7 @@
     "kernel_mount_flags": "default_permissions|allow_other plus NOSUID|NODEV|NOEXEC",
     "cleanup": "captured FSID/source/target globally absent, checked internal drain and no sticky I/O/transport failure",
     "product_admission": false,
-    "credential_failure": "Sticky poisoned state; no new filesystem requests until verified complete restoration; registered cleanup capabilities only; retain source/channel until global absence; final exit1 even after recovery."
+    "credential_failure": "Sticky poisoned state; no new filesystem requests until verified complete restoration; registered cleanup capabilities only; retain source/channel until global absence; final exit1 even after recovery.",
+    "halt_failure": "Negative halt retains channel/source; retry every50ms and retry verified credential restoration; only actual halt0 authorizes cleanup, with historical error retained."
   }
 }

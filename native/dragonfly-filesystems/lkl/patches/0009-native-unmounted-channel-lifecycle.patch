@@ -84,7 +84,48 @@
      orderly_destroy = 1;
      if (active_fuse)
          fuse_exit(active_fuse);
-@@ -634,7 +644,12 @@
+@@ -576,6 +586,31 @@
+     return 0;
+ }
+ 
++/* A negative halt returns before the pinned kernel's CPU/thread cleanup.
++ * It cannot authorize closing any host descriptor. Keep both resources and
++ * historical failure while retrying at a bounded interval. */
++static int df_halt_error, df_halt_pending;
++static long df_halt_once(void)
++{
++    long ret = lkl_sys_halt();
++    if (ret < 0) {
++        if (!df_halt_error)
++            fprintf(stderr, "lklfuse: halt pending; retaining channel/source: %s\n", lkl_strerror(ret));
++        df_halt_error = df_halt_pending = 1;
++    } else df_halt_pending = 0;
++    return ret;
++}
++static int df_wait_for_halt(void)
++{
++    while (df_halt_once() < 0) {
++        usleep(50000);
++        /* A failed credential restoration can be transient. This may permit
++         * a later halt; its historical failure remains a final error. */
++        df_leave_request();
++    }
++    return df_halt_error ? -LKL_EIO : 0;
++}
++
+ static int start_lkl(void)
+ {
+ 	long ret;
+@@ -626,7 +661,7 @@
+             fprintf(stderr, "lklfuse: root descriptor cleanup failed: %s\n", lkl_strerror(cleanup));
+         original_root = -1;
+     }
+-	lkl_sys_halt();
++	if (df_wait_for_halt() < 0 && ret == 0) ret = -LKL_EIO;
+ 
+ out:
+ 	return ret;
+@@ -634,10 +669,15 @@
  
  static int stop_lkl(void)
  {
@@ -96,8 +137,12 @@
 +    if (credential < 0 && ret == 0) ret = -LKL_EIO;
      if (ret < 0)
          fprintf(stderr, "lklfuse: failed to drain filesystem: %s\n", lkl_strerror(ret));
-     int halt = lkl_sys_halt();
-@@ -654,109 +669,118 @@
+-    int halt = lkl_sys_halt();
++    int halt = df_wait_for_halt();
+     if (halt < 0) {
+         fprintf(stderr, "lklfuse: failed to halt: %s\n", lkl_strerror(halt));
+         if (!ret) ret = halt;
+@@ -654,109 +694,118 @@
  
  int main(int argc, char **argv)
  {
@@ -304,7 +349,7 @@
 +    }
 +    if (!orderly_destroy || lifecycle_error || df_signal_seen ||
 +        df_native_uncertain || df_handles ||
-+        df_transport_error || !df_init_sent || df_credential_error || df_handle_error) {
++        df_transport_error || !df_init_sent || df_credential_error || df_handle_error || df_halt_error) {
 +        fprintf(stderr, "lklfuse: incomplete native lifecycle or registered handles\n");
 +        result = -1;
 +    } else result = 0;

@@ -87,3 +87,12 @@ client remains unqualified pending root review/trusted copy, actual native INIT,
 caller/foreign permissions, ownership/mode/time/set-ID checks, opener-death and
 inherited-descriptor controls, full payload/reopen and physical geometry tests.
 No Lurker product or matrix pass follows from these construction receipts.
+
+The pinned kernel returns a negative halt before CPU/thread/timer cleanup. Both
+startup-error and ordinary shutdown therefore retain the channel and backing FD
+while retrying at50ms intervals. Only an actual halt0 permits disposal; a prior
+negative result remains a final error. `tests/halt.c` proves a real reboot EPERM
+leaves the kernel running, native channel attached and source flock held, then
+verified root restoration permits halt0. The separate test-only halt driver can
+pause the retry for a controlled mounted retention test; that privileged test
+remains pending.
