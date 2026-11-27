@@ -199,3 +199,40 @@ payload lifecycle. Ubuntu reproduced the native password frontend failure with
 this overlay. Its 168 process samples show the same session, a separate lease
 process group and no stopped processes. Existing 576505d storage receipts keep
 their original binary identities; they do not claim to test the follow-up.
+
+
+The 576505d physical baseline is now complete for the nine writable filesystem
+rows: 27 encrypted inner cases and 27 directory-engine cases on native physical
+backings passed. The whole-disk exFAT formatter created a recursive MBR entry;
+the strict child guard stopped the following setup before mutation. The exact
+owned partition geometry, absent holders/mounts and completed preceding case
+were verified before clearing that scratch layout. ZFS then passed separately.
+Stock UFS1's physical native backing mounted read-only and was rejected before
+any folder backend ran; its complete raw image is retained and byte-verified.
+
+The private folder wrapper embedded complete operation and hash receipts but
+initially left successful console logs inside the subsequently reformatted
+backing. This affects the prior 24 successful physical folder cases. Their
+structured runtime receipts remain evidence; ZFS's 21 console logs were recovered
+before its backing was cleared. Future affected gates copy logs outside the
+backing before reformatting. No failed physical ciphertext was overwritten
+without a complete verified snapshot.
+
+Final Linux runtime source is now `67894f68525c55d5cbb48c743e1a98a308bd970f`,
+with the targeted follow-up scope in LINUX_FOLLOWUP.md. Exact workspace run
+`20261127T000844Z-4b4285b2` passed check/test/build: 168 passed, zero failed,
+15 ignored. Native packaging currently stops at the host-FUSE closure policy:
+the historical VeraCrypt closure included libfuse3.so.4 privately. The assigned
+producer/consumer repair is pending; that block is not a runtime pass. Existing
+576505d package and matrix identities are retained.
+
+The UFS2 prerequisite now includes the pagination patch from `9e27dcc`, after
+the prior no-replace and barrier patches. Arch reproduced the old driver's
+204-of-512 listing and missing newly created entry. The rebuilt driver passed
+28 library tests and returned all 512 entries, then 513 including the new entry,
+with consistent repeated enumeration and normal unmount. Its SHA-256 is
+`e6af0568c2039eb9d078e24f046384bf0b3d5f37ed693e22e3908d50b9cdbc9a`.
+All 12 affected UFS2 container/device product cases will run on the final package.
+The earlier six prepared helper fixtures were fully archived and byte-verified;
+three closed encrypted images were reclaimed before preparing a fresh final
+reboot cohort. They are marked retired before reboot, not reboot passes.
