@@ -6,6 +6,7 @@ An artifact from this script is not permission to use it for privileged mounts.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,10 @@ HOST_PATCH = "native/netbsd/lkl/host.patch"
 HOST_PATCH_SHA256 = "8fd825c96c6fb0c16db834d3e406a367fcf5eaf1610696d1d39d8b392b333780"
 TIMER_HEADER = "native/netbsd/lkl/netbsd-timer.h"
 TIMER_HEADER_SHA256 = "8b302afe51ba85e2a83b9fd22df81257358b5731e725ace276a137a127355197"
+REFUSE_PATCH = "native/netbsd/lkl/refuse-bridge.patch"
+REFUSE_PATCH_SHA256 = "a41d4d06add1f3be118702e402ae1cdf00e7702145a34881cc3272a7cb445c41"
+REFUSE_SOURCE_SHA256 = "2b42f71579ad9473b8eada3cc921dccad694b648b97fc7150d09cf819b34438a"
+PUFFS_PROVIDER_SHA256 = "8705ccd3ff268666b0973905b44648ef014efcca10051355677f02b0f5a64099"
 FLUSH_PATCH = "native/macos/lkl-darwin-flush.patch"
 FLUSH_PATCH_SHA256 = "0dd2c89942ede5a2c373191601054dcd9b2e4e17c4e1b1c568d02a2bfc8fcf8b"
 ELF_HEADER_URL = "https://raw.githubusercontent.com/bminor/glibc/glibc-2.42/elf/elf.h"
@@ -240,6 +245,85 @@ def run_build(command, cwd, environment, log, timeout):
             return {"pid": child.pid, "returncode": child.returncode, "timed_out": True}
 
 
+def build_refuse_bridge(cache, output, timeout):
+    """Build a separately named, uninstalled library for this diagnostic only."""
+    if output.exists() or output.is_symlink():
+        raise RuntimeError("Use a new isolated ReFUSE output path")
+    parent = output.parent
+    metadata = parent.stat()
+    if parent.resolve() != parent or metadata.st_uid != os.geteuid() or metadata.st_mode & 0o022:
+        raise RuntimeError("ReFUSE output parent must be real, caller-owned and private")
+    patch = ROOT / REFUSE_PATCH
+    if patch.is_symlink() or digest(patch) != REFUSE_PATCH_SHA256:
+        raise RuntimeError("Diagnostic ReFUSE patch checksum differs")
+    # Reuse the independently pinned native source acquisition/access patch.
+    # This does not run that builder's installation or replace its output.
+    spec = importlib.util.spec_from_file_location("native_fuse_inputs", ROOT / "scripts/build-netbsd-fuse-prerequisite.py")
+    base = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(base)
+    if base.PATCH.is_symlink() or digest(base.PATCH) != base.PATCH_SHA256:
+        raise RuntimeError("Native access prerequisite patch checksum differs")
+    if digest("/usr/lib/libpuffs.so.2.0") != PUFFS_PROVIDER_SHA256:
+        raise RuntimeError("This diagnostic requires the exact qualified native puffs provider")
+    cache.mkdir(parents=True, exist_ok=True)
+    original = base.acquire(cache)
+    output.mkdir(mode=0o700)
+    source = output / "source"
+    shutil.copytree(original, source)
+    for name, expected in base.SOURCE_SHA256.items():
+        if digest(source / name) != expected:
+            raise RuntimeError("Copied native ReFUSE input differs: " + name)
+    commands = []
+    deadline = time.monotonic() + timeout
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("LD_")}
+    environment.update(PATH="/usr/pkg/bin:/usr/bin:/bin", LC_ALL="C")
+
+    def run(command):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("Isolated ReFUSE build deadline reached")
+        result = run_build(command, source, environment,
+                           output / ("command-%02d.log" % len(commands)), remaining)
+        commands.append({"command": command, **result})
+        if result["returncode"]:
+            raise RuntimeError("Isolated ReFUSE command failed; preserve its logs")
+
+    for current in (base.PATCH, patch):
+        run(["/usr/bin/patch", "--batch", "--forward", "--fuzz=0", "-p1", "-i", str(current)])
+        if current == base.PATCH:
+            for name, expected in base.PATCHED_SHA256.items():
+                if digest(source / name) != expected:
+                    raise RuntimeError("Native access prerequisite output differs: " + name)
+    root = source / "lib/librefuse"
+    if digest(root / "refuse.c") != REFUSE_SOURCE_SHA256:
+        raise RuntimeError("Diagnostic ReFUSE output differs")
+    objects = output / "objects"
+    objects.mkdir()
+    compiled = []
+    for name in base.LIBRARIES[2][2]:
+        target = objects / (name.replace("/", "-") + ".o")
+        run(["/usr/bin/cc", "-O2", "-g", "-fPIC", "-D_KERNTYPES", "-D_REENTRANT",
+             "-I" + str(root), "-I" + str(source / "lib/libpuffs"),
+             "-c", str(root / name), "-o", str(target)])
+        compiled.append(str(target))
+    library = output / "librefuse-lkl.so.2"
+    run(["/usr/bin/cc", "-shared", "-Wl,-soname,librefuse-lkl.so.2", "-o", str(library),
+         *compiled, "-lpuffs", "-lpthread", "-lutil"])
+    (output / "librefuse-lkl.so").symlink_to(library.name)
+    probe = ("import ctypes;lib=ctypes.CDLL(" + repr(str(library)) + ");"
+             "fn=lib.refuse_lkl_bridge_version;fn.restype=ctypes.c_uint;assert fn()==1")
+    run([sys.executable, "-c", probe])
+    manifest = {"kind": "uninstalled-netbsd-lkl-refuse-diagnostic", "uid": os.getuid(),
+                "base_revision": base.REVISION, "base_patch_sha256": base.PATCH_SHA256,
+                "bridge_patch_sha256": REFUSE_PATCH_SHA256, "bridge_source_sha256": REFUSE_SOURCE_SHA256,
+                "library_path": str(library), "library_sha256": digest(library),
+                "puffs_provider_sha256": PUFFS_PROVIDER_SHA256, "commands": commands,
+                "dependencies": subprocess.check_output(["/usr/bin/ldd", str(library)], text=True, env=environment),
+                "elf": subprocess.check_output(["/usr/bin/readelf", "-h", "-d", str(library)], text=True, env=environment)}
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, required=True)
@@ -248,6 +332,8 @@ def main():
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--adapted", action="store_true", help="Apply diagnostic-only native host inputs; no runtime qualification")
     parser.add_argument("--target", choices=("lklfuse", "boot"), default="lklfuse")
+    parser.add_argument("--refuse-output", type=Path, help="Build only the isolated diagnostic ReFUSE bridge; never install")
+    parser.add_argument("--refuse-cache", type=Path, help="Pinned native source cache for --refuse-output")
     args = parser.parse_args()
     if platform.system() != "NetBSD" or platform.machine() not in ("amd64", "x86_64"):
         parser.error("Run natively on NetBSD amd64")
@@ -266,6 +352,14 @@ def main():
     receipt["target"] = args.target
     args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     try:
+        if args.refuse_output:
+            receipt["phase"] = "isolated-refuse-diagnostic"
+            receipt["bridge"] = build_refuse_bridge(
+                (args.refuse_cache or work / "refuse-cache").absolute(),
+                args.refuse_output.absolute(), args.timeout)
+            receipt["state"] = "terminal"
+            receipt["returncode"] = 0
+            return 0
         source, count, identity = prepare(work, args.adapted)
         receipt.update(source=str(source), verified_upstream_files=count, adapter_identity=identity)
         if args.prepare_only:

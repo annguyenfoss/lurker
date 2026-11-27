@@ -96,6 +96,43 @@ Its separately pinned header is copied into the isolated LKL source tree and
 verified again on cache reuse. These changes are inside the native process's
 LKL library, not the NetBSD boot kernel or installed runtime providers.
 
+The timer-integrated native RAM-only boot suite passed all 35 upstream cases,
+including syscall threads and kernel shutdown. Separate native controls checked
+captured credentials, set-ID clearing, Linux errno conversion and timer drain
+before freeing LKL memory. Those results establish process primitives, not a
+mounted filesystem or Lurker support.
+
+Stock ReFUSE does not register `node.fsync`; the puffs dispatcher returns success
+for that absent operation, and ReFUSE's `fs.sync` is a no-op. The separate
+`refuse-bridge.patch` forwards file and directory fsync requests, including data
+sync hints and native errors. A NULL path and NULL handle on `fsyncdir` is an
+explicit private contract for a whole-filesystem barrier. An unopened node can
+likewise have a NULL handle. The eventual driver must implement these cases;
+the raw upstream callbacks are insufficient. ReFUSE already installs a PID
+prehook for each request. The patch clears PID before querying that prehook so
+a failed caller query cannot reuse an earlier PID.
+
+Build this isolated library as the ordinary user, with a new private output:
+
+```sh
+python3.14 scripts/build-netbsd-lkl.py --work-dir /path/to/lkl-work \
+  --receipt /path/to/lkl-work/refuse-build.json --timeout 180 \
+  --refuse-output /path/to/lkl-work/refuse-isolated
+```
+
+This reuses the pinned source/access patch from the independent host prerequisite
+builder and requires the qualified installed puffs provider. The resulting
+`librefuse-lkl.so.2` has a distinct SONAME and is never installed. Its exact
+source, ELF dependencies, build commands and hashes are retained. Set
+`LURKER_NETBSD_REFUSE_SOURCE` to `refuse-isolated/source/lib/librefuse` to run
+the native actual-source forwarding control along with the builder tests.
+That control substitutes only the puffs caller seam; it does not mount. It
+checks registration, file/directory/data-only sync, native error propagation,
+the NULL-handle barrier, PID changes/query failure and foreign-user admission.
+The driver must pin and load this exact isolated library rather than the
+installed system SONAME. The diagnostic client remains unsuitable for mounting
+until its remaining credential, disk-I/O and no-force lifecycle gates pass.
+
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
 https://man.netbsd.org/mmap.2
 https://github.com/bminor/glibc/blob/glibc-2.42/elf/elf.h

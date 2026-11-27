@@ -1,0 +1,76 @@
+--- a/lib/librefuse/refuse.c
++++ b/lib/librefuse/refuse.c
+@@ -254,7 +254,10 @@
+ 	struct fuse_context	*fusectx;
+ 
+ 	fusectx = fuse_get_context();
+-	puffs_cc_getcaller(pcc, &fusectx->pid, NULL);
++	/* A failed query must never reuse a previous request's PID. */
++	fusectx->pid = 0;
++	if (pcc != NULL && puffs_cc_getcaller(pcc, &fusectx->pid, NULL) != 0)
++		fusectx->pid = 0;
+ }
+ 
+ /***************** end of pthread context routines ************************/
+@@ -910,6 +913,30 @@
+ 	return ret;
+ }
+ 
++/* Diagnostic LKL bridge: forward the actual native fsync request. */
++static int
++puffs_fuse_node_fsync(struct puffs_usermount *pu, void *opc,
++    const struct puffs_cred *pcr, int flags, off_t low, off_t high)
++{
++	struct puffs_node *pn = opc;
++	struct refusenode *rn = pn->pn_data;
++	struct fuse *fuse = puffs_getspecific(pu);
++	struct fuse_file_info *fi = rn->flags & RN_OPEN ? &rn->file_info : NULL;
++	int ret;
++	(void)low;
++	(void)high;
++	if (set_fuse_context_uid_gid(pcr) != 0)
++		return EACCES;
++	if (pn->pn_va.va_type == VDIR)
++		ret = fuse_fs_fsyncdir(fuse->fs, PNPATH(pn),
++		    !!(flags & PUFFS_FSYNC_DATAONLY), fi);
++	else
++		ret = fuse_fs_fsync(fuse->fs, PNPATH(pn),
++		    !!(flags & PUFFS_FSYNC_DATAONLY), fi);
++	/* PUFFS expects a positive native errno; FUSE returns its negative. */
++	return ret > 0 ? EIO : -ret;
++}
++
+ /* read some more from the file */
+ /* ARGSUSED5 */
+ static int
+@@ -1074,9 +1101,14 @@
+ puffs_fuse_fs_sync(struct puffs_usermount *pu, int flags,
+             const struct puffs_cred *cr)
+ {
++	struct fuse *fuse = puffs_getspecific(pu);
++	int ret;
++	(void)flags;
+ 	if (set_fuse_context_uid_gid(cr) != 0)
+ 		return EACCES;
+-        return 0;
++	/* Private bridge contract: NULL path/handle requests a whole-FS barrier. */
++	ret = fuse_fs_fsyncdir(fuse->fs, NULL, 0, NULL);
++	return ret > 0 ? EIO : -ret;
+ }
+ 
+ /* ARGSUSED2 */
+@@ -1332,6 +1364,7 @@
+         PUFFSOP_SET(pops, puffs_fuse, node, close);
+         PUFFSOP_SET(pops, puffs_fuse, node, read);
+         PUFFSOP_SET(pops, puffs_fuse, node, write);
++        PUFFSOP_SET(pops, puffs_fuse, node, fsync);
+         PUFFSOP_SET(pops, puffs_fuse, node, reclaim);
+ 
+ 	puffs_flags = PUFFS_FLAG_BUILDPATH
+@@ -1491,3 +1524,6 @@
+ {
+ 	return 2;
+ }
++
++/* This library is scoped to the diagnostic driver, never the system SONAME. */
++unsigned int refuse_lkl_bridge_version(void) { return 1; }

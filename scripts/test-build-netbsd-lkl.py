@@ -20,6 +20,35 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    def test_isolated_refuse_output_cannot_replace_existing_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output"
+            output.mkdir()
+            (output / "preserve").write_text("existing diagnostic")
+            with self.assertRaisesRegex(RuntimeError, "new isolated ReFUSE output"):
+                BUILDER.build_refuse_bridge(Path(tmp) / "cache", output, 10)
+            self.assertEqual((output / "preserve").read_text(), "existing diagnostic")
+
+    @unittest.skipUnless(platform.system() == "NetBSD" and os.environ.get("LURKER_NETBSD_REFUSE_SOURCE"), "isolated native ReFUSE source required")
+    def test_actual_refuse_sync_forwarding_and_request_pid(self):
+        root = Path(os.environ["LURKER_NETBSD_REFUSE_SOURCE"]).resolve(strict=True)
+        self.assertEqual(BUILDER.digest(root / "refuse.c"), BUILDER.REFUSE_SOURCE_SHA256)
+        spec = importlib.util.spec_from_file_location("native_fuse", BUILDER.ROOT / "scripts/build-netbsd-fuse-prerequisite.py")
+        base = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(base)
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "control"
+            control = BUILDER.ROOT / "native/netbsd/lkl/refuse-bridge-control.c"
+            command = ["/usr/bin/cc", "-O2", "-g", "-D_KERNTYPES", "-D_REENTRANT",
+                       "-I" + str(root), "-I" + str(root.parent / "libpuffs"),
+                       '-DREFUSE_IMPLEMENTATION_PATH="' + str(root / "refuse.c") + '"', str(control)]
+            command.extend(str(root / name) for name in base.LIBRARIES[2][2] if name != "refuse.c")
+            command.extend(["-lpuffs", "-lpthread", "-lutil", "-o", str(binary)])
+            subprocess.run(command, check=True, timeout=30)
+            result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            print(result.stdout, end="")
+
     @unittest.skipUnless(platform.system() == "NetBSD", "native NetBSD pthread timers")
     def test_monotonic_timer_rearm_self_free_and_quiescence(self):
         with tempfile.TemporaryDirectory() as tmp:
