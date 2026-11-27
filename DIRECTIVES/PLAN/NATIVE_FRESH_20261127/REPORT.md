@@ -236,6 +236,58 @@ clarification about that architecture.
 
 ## Work still required
 
+### Latest follow-up evidence
+
+- Linux `67894f6` corrects the non-console sudo loop helper's process group while
+  preserving its session. Native GNU-sudo and sudo-rs password/keyfile flows
+  passed; Ubuntu's 168 process samples showed no stopped tasks. The targeted
+  installed-artifact gates and explicit carry-forward rules are in
+  `LINUX_FOLLOWUP.md`. Historical `576505d` rows retain their original identities.
+- The newer Linux packaging audit exposed a real policy contradiction: the old
+  creator closure bundled FUSE. Producer `7d8f9a4` and consumer `fa063ac` now
+  validate it as a host dependency instead. Native SONAME 4 exports and an
+  openSUSE SONAME 3 creator rebuild passed the corrected checks. Final package
+  inventories and runtime gates continue; earlier package-install success did
+  not establish compliance with the host-only FUSE requirement.
+- A Debian physical UFS2/CryFS failure reproduced in the native driver alone:
+  create/fsync/stat succeeded but directory enumeration omitted the new entry.
+  Fedora's prerequisite correction `9e27dcc` removes premature EOF at nonzero
+  directory offsets. Native old/new controls, unit tests and barrier/rename
+  regressions passed on the six hosts. All twelve affected UFS2 source-kind and
+  backend rows are being rerun on the new installed artifacts; Debian's twelve
+  have passed. The filesystem driver remains external to Lurker.
+- DragonFly desktop physical forms are committed at `35af4c7`. Native workspace
+  tests, sixteen layout frames, both real UID 1300 helper callbacks and an
+  actual native window passed. An initial background test launcher inherited
+  ignored signals; its failure and the corrected launcher rerun are separate.
+  Root inspected the callback counts, helper identities and 120% bottom frames.
+- macOS publisher correction `12a3f93` preserves validated native AppleDouble
+  companions with anchored, exclusive, durable publication. Its affected
+  regressions passed. New freeze `025f558` passed workspace checks and rebuilt
+  the DMG; the extracted package has passed 280 conformance checks and all
+  thirty selected native filesystem cells. The corrected app-layout callbacks
+  and remaining virtual-partition/helper gates remain separately identified.
+  The earlier VeraCrypt callback failure came from placing the test executable
+  outside the app bundle, not a demonstrated product discovery defect.
+- NetBSD's earlier fourteen CGD matrix payloads used UID 0; `SUDO_UID=1300`
+  selected ownership, not the writer's credentials. Actual ordinary-user helper
+  coverage was narrower. New owner/foreign-user controls exposed real native
+  NTFS/exFAT permission bugs, including foreign reads despite private reported
+  modes. A same-mode refresh was rejected as insufficient. An isolated native
+  userland-library correction now passes owner access and unrelated-user
+  list/read/write denial, including the full CryFS payload lifecycle. It changes
+  access-mode ABI translation, cached attributes and ReFUSE owner admission;
+  no kernel or cache flags are changed. Reviewed host installation, capability
+  guards and fresh installed-artifact tests remain required.
+- OpenBSD's stable CryFS source port has passed the full native payload
+  lifecycle. Post-exec engine confinement and pathname-replacement negatives
+  passed; an earlier pre-exec confinement claim was explicitly retracted after
+  a negative test proved that exec clears it. Caller ownership and limited
+  mount-time privilege are still being integrated and qualified before product
+  enablement. DragonFly CryFS also has a root-only native payload control, but
+  ordinary-user memory locking and FUSE mounting remain concrete privilege
+  barriers; a root diagnostic does not establish product support.
+
 Host owners are performing current update inventories, builds, applicable
 container combinations, native controls and device preparation. Initial product
 builds use `8adcdcf` or the recorded later script-only revision; record harness
