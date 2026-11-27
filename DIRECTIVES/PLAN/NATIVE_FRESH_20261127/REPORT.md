@@ -42,10 +42,21 @@ verified callbacks into FLUSH and handles its two-buffer request. Native bridge
 controls on ext4 and imported Btrfs/XFS passed four payload opens and actual
 host-fsync/error-forwarding checks. Baseline callbacks issued no host fsync and
 hid injected EIO; those failures remain preserved. Imported seeds establish
-driver I/O only. Native Mac formatting and a mounted macFUSE adapter still
-require separate proof; restricted FSKit entitlements remain a blocker for that
-transport. Existing XFS guards remain in force. No new route is yet a product
-pass, and no additional USB operation has been performed.
+driver I/O only. The subsequent native macFUSE adapter and Darwin symbol
+isolation are committed at `d32ca84` and `536b80d`. Root checked 905 artifact
+references, nine writable payload opens across ext4/Btrfs/XFS, native caller
+credentials and denials, normal close, signal retention and sticky I/O failure
+in `hosts/macos/validation/native-lkl-adapter/root-v13-driver-install-review.json`.
+The exact versioned host driver has now been installed separately from Lurker;
+the owner reports its installed regular-file controls passing. The new native
+XFS formatter `7222a6b` also produced a fresh 512 MiB image with independently
+checked superblock checksums, followed by three writable payload opens. These
+latest installed/formatter receipts await root reconciliation. The Btrfs
+formatter candidate `e83ccaf` has passed source review for one controlled fresh
+file; real conversion remains a gate. Restricted FSKit entitlements still block
+that transport. Product dispatch, decrypted-device integration and native Create
+remain unqualified, existing XFS guards remain in force, and no additional USB
+operation has been performed.
 
 The Linux package audit found a separate existing-feature gap: installed
 `67894f6` supplies the privileged VeraCrypt creator but lacks the unprivileged
@@ -76,11 +87,20 @@ treated the driver's refusal as a crash, replayed its journal, returned success
 and detached crypto. Root checked the response/logs and retained encrypted image
 in `hosts/archlinux/build/unprivileged-pilot/root-sticky-xfs-product616-finding-audit.json`.
 The native XFS driver itself refused its drain; automatic recovery hid that
-refusal. This blocks cross-distribution rollout. The pending correction pairs
-unchanged private crypto protocol 4 with host filesystem protocol 5, preserving
-explicit I/O/shutdown failures and permitting automatic crash recovery only
-when no acknowledgement exists. Fresh native source and installed fault
-regressions are required before this correction is qualified.
+refusal. Correction `9a22827` pairs unchanged private crypto protocol 4 with host
+filesystem protocol 5, preserving explicit I/O/shutdown failures and permitting
+automatic crash recovery only when no acknowledgement exists. Its exact frozen
+native Debian workspace passed 186 tests, with 15 ignored; root checked source,
+artifact and capability receipts in
+`hosts/debian/build/userspace-io-failure-preview/root-io-failure-audit.json`.
+External-driver correction `e927e40` keeps read/write/flush errors latched after
+a transient host fault is removed. Its native Arch workspace and 101 Python
+checks passed, and the new package is installed. The owner reports actual
+encrypted XFS/Btrfs/ext4 faults now leave the same session and crypto mapping
+attached through two close refusals. Each failed ciphertext was archived before
+separately labeled explicit operator recovery. Genuine missing-ack crash
+recovery, healthy close, installed desktop checks and root receipt reconciliation
+remain gates before rollout to the other five distributions.
 
 Ubuntu's final report is `e68bb47`: both 130-cell source-kind ledgers contain
 54 passed, six stock-UFS1 unavailable and 70 platform-inapplicable cells. The
@@ -152,9 +172,10 @@ or reboot has been performed for this failure. The owner reports corrected
 diagnostic v6-NX XFS/Btrfs request and GELI-512 lifecycle controls passing, with
 six traces showing source-fd fsync, source close before final acknowledgement
 and no unmount syscall. Final factory, GEOM flush and injected-error verification
-remain gates. macOS is correcting native credential-snapshot stability and
-force-capable cleanup before its external adapter is installed. These native
-tool diagnostics do not remove the product's existing write guards.
+remain gates. macOS's later qualified adapter replaces force-capable cleanup
+and checks complete native credential snapshots; its versioned installed
+regular-file scope is recorded above. These native tool diagnostics do not
+remove the product's existing write guards.
 
 OpenBSD's exact `123d177` workspace passed 154 native tests, with 22 ignored,
 and all three products built. Native staging and package construction passed;
