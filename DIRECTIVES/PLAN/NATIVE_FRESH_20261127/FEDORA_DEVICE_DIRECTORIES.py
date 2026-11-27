@@ -13,6 +13,7 @@ def main():
     p.add_argument("--filesystems",default="ext4,btrfs,xfs,apfs,ufs1,ufs2,hammer2,ntfs,exfat,zfs")
     p.add_argument("--serial",required=True,help="Observed guest serial recorded with the new domain attachment")
     p.add_argument("--size-bytes",type=int,default=1073741824)
+    p.add_argument("--ufs2-fuse",action="store_true",help="Qualify the explicit host FUSE-UFS2 prerequisite route")
     a=p.parse_args()
     supplied_device=str(a.device)
     a.device=a.device.resolve(strict=True)
@@ -62,13 +63,19 @@ def main():
                 if fs in {'ufs1','ufs2'}:options+=['ufstype='+('44bsd' if fs=='ufs1' else 'ufs2')]
                 if fs=='apfs':options+=['readwrite']
                 if fs in {'ntfs','exfat'}:options+=['uid=1300','gid=1300','umask=0077']
-                command(['mount','-i','-t',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs),'-o',','.join(options),partition,m]);mounted=True
+                if fs=='ufs2' and a.ufs2_fuse:
+                    command(['/usr/local/bin/fuse-ufs','-o','rw,allow_other,fsname='+str(partition),partition,m]);mounted=True
+                else:
+                    command(['mount','-i','-t',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs),'-o',','.join(options),partition,m]);mounted=True
             actual=h.linux_mount_record(Path('/proc/self/mountinfo').read_text(),m);row['mount']=actual;row['identity_gate']=h.check_linux_filesystem(actual,fs)
             probe=subprocess.run(['blkid','-p',str(partition)],capture_output=True,text=True,timeout=30)
             row['superblock']=probe.stdout
             row['superblock_probe_code']=probe.returncode
             if fs in {'ufs1','ufs2'} and ('VERSION="'+('1' if fs=='ufs1' else '2')+'"') not in row['superblock']:raise RuntimeError('Independent backing UFS version mismatch')
-            row['driver']=command(['modinfo',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs)])
+            if fs=='ufs2' and a.ufs2_fuse:
+                row['driver']={'kind':'host-fuse-ufs','path':'/usr/local/bin/fuse-ufs','sha256':h.file_hash(Path('/usr/local/bin/fuse-ufs'))}
+            else:
+                row['driver']=command(['modinfo',{'ufs1':'ufs','ufs2':'ufs','ntfs':'ntfs3'}.get(fs,fs)])
             if fs not in {'ntfs','exfat'}:os.chown(m,1300,1300);m.chmod(0o700)
             for backend in ['gocryptfs','cryfs','cryptomator']:
                 argv=['sudo','-n','-u','adjutant','--','/usr/bin/python3',a.harness,'--binary',a.binary,'--backend',backend,'--filesystem',fs,'--commit',a.commit,'--root',m,'--mount-root',plain,'--payload-dir',a.payload,'--timeout','90']
