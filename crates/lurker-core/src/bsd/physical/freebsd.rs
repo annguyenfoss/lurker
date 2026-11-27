@@ -68,7 +68,7 @@ pub(super) fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         verify_session(&session)?;
         ensure_idle(&session.source)?;
         let backing = session.backing.as_deref().unwrap();
-        native::format(backing, c.cipher, &credential)?;
+        native::format_with_filesystem(backing, c.cipher, &credential, c.filesystem)?;
         session.mapped = Some(native::unlock(backing, false, &credential)?);
         initialize_acquired_mapping(&registry, &session, |mapped| {
             filesystems::format(mapped, c.filesystem)

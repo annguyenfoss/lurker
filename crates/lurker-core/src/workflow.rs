@@ -1,6 +1,6 @@
-// Native BSD profiles live at the OS adapter boundary (bsd/): GELI AES-XTS256
-// with PBKDF2/600000, CGD AES-XTS512/Argon2id, softraid native CRYPTO /
-// two-member RAID1C, and DragonFly LUKS1 XTS512/PBKDF2-SHA256.
+// Native BSD adapters use fixed profiles: the GELI selector below, CGD
+// AES-XTS512/Argon2id, softraid native CRYPTO / two-member RAID1C, and
+// DragonFly LUKS1 XTS512/PBKDF2-SHA256.
 // They never inherit Linux LUKS2 flags.
 // Directory engines use fixed upstream authenticated formats: gocryptfs
 // AES-GCM/EME+scryptN16, CryFS AES-GCM/16KiB, Cryptomator format8 SIV_GCM.
@@ -10,6 +10,25 @@
 // authorized invoking user. Unlocking existing filesystems preserves ownership.
 use crate::model::CreateCipher;
 use std::ffi::OsString;
+
+#[cfg(any(target_os = "freebsd", test))]
+pub(crate) const FREEBSD_GELI_PASSPHRASE_ITERATIONS: &str = "600000";
+
+/// GELI specifies the AES component key size, not the combined XTS key size.
+/// The native LKL filesystem driver requires 512-byte decrypted providers;
+/// other selections retain the default 4096-byte encrypted sectors.
+#[cfg(any(target_os = "freebsd", test))]
+pub(crate) fn freebsd_geli_format_args(
+    filesystem: Option<crate::CreateFilesystem>,
+) -> Vec<OsString> {
+    let sector = match filesystem {
+        Some(crate::CreateFilesystem::Btrfs | crate::CreateFilesystem::Xfs) => "512",
+        _ => "4096",
+    };
+    ["init", "-B", "none", "-e", "AES-XTS", "-l", "256", "-s", sector]
+        .map(OsString::from)
+        .into()
+}
 
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 struct CreateCipherProfile {
@@ -319,6 +338,49 @@ fn macos_filesystem(
             "Filesystem {} is not available through the native macOS container formatter.",
             other.as_str()
         ))),
+    }
+}
+
+#[cfg(test)]
+mod freebsd_profile_tests {
+    use super::*;
+    use crate::CreateFilesystem;
+
+    #[test]
+    fn lkl_filesystems_only_change_geli_sector_geometry() {
+        let default = freebsd_geli_format_args(None);
+        for filesystem in [CreateFilesystem::Btrfs, CreateFilesystem::Xfs] {
+            let mut selected = freebsd_geli_format_args(Some(filesystem));
+            assert_eq!(selected.last().unwrap(), "512");
+            *selected.last_mut().unwrap() = "4096".into();
+            assert_eq!(selected, default);
+        }
+        assert_eq!(FREEBSD_GELI_PASSPHRASE_ITERATIONS, "600000");
+        assert_eq!(
+            default,
+            ["init", "-B", "none", "-e", "AES-XTS", "-l", "256", "-s", "4096"]
+                .map(OsString::from)
+        );
+    }
+
+    #[test]
+    fn other_filesystems_keep_default_geli_geometry() {
+        for filesystem in [
+            CreateFilesystem::Ufs1,
+            CreateFilesystem::Ufs2,
+            CreateFilesystem::Ext4,
+            CreateFilesystem::Ntfs,
+            CreateFilesystem::Exfat,
+            CreateFilesystem::Hammer2,
+            CreateFilesystem::Zfs,
+            CreateFilesystem::Apfs,
+            CreateFilesystem::Fat32,
+        ] {
+            assert_eq!(
+                freebsd_geli_format_args(Some(filesystem)),
+                freebsd_geli_format_args(None)
+            );
+        }
     }
 }
 

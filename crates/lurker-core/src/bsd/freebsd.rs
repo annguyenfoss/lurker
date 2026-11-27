@@ -1,7 +1,7 @@
 //! FreeBSD's native GELI adapter for leased vnode images and inspected GEOM providers.
 //! The shared BSD lifecycle owns publication, mount identity and recovery.
-use super::{Credential, Registry, Session, args, exec};
-use crate::{AppError, AppResult, CreateCipher, VolumeType};
+use super::{args, exec, Credential, Registry, Session};
+use crate::{AppError, AppResult, CreateCipher, CreateFilesystem, VolumeType};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
@@ -16,12 +16,7 @@ const MDCONFIG: &str = "/sbin/mdconfig";
 const GELI: &str = "/sbin/geli";
 const NEWFS: &str = "/sbin/newfs";
 
-/// Unlike cryptsetup, GELI names the AES component key size here: AES-XTS
-/// accepts 128 or 256, not cryptsetup's combined XTS key size of 512.
-const FORMAT_ARGS: &[&str] = &[
-    "init", "-B", "none", "-e", "AES-XTS", "-l", "256", "-s", "4096",
-];
-const PASSPHRASE_ITERATIONS: &str = "600000";
+const PASSPHRASE_ITERATIONS: &str = crate::workflow::FREEBSD_GELI_PASSPHRASE_ITERATIONS;
 const BACKING_SECTORS: &[u32] = &[512, 1024, 2048, 4096, 8192, 16384, 32768, 65536];
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
@@ -412,13 +407,22 @@ fn mapping_matches(listing: &str, unit: &str) -> bool {
 }
 
 pub(super) fn format(device: &str, cipher: CreateCipher, credential: &Credential) -> AppResult<()> {
+    format_with_filesystem(device, cipher, credential, None)
+}
+
+pub(super) fn format_with_filesystem(
+    device: &str,
+    cipher: CreateCipher,
+    credential: &Credential,
+    filesystem: Option<CreateFilesystem>,
+) -> AppResult<()> {
     provider_unit(device)?;
     if cipher != CreateCipher::Aes {
         return Err(AppError::new(
             "FreeBSD GELI uses the AES-XTS profile; Serpent and Twofish are unavailable.",
         ));
     }
-    let mut argv = args(FORMAT_ARGS);
+    let mut argv = crate::workflow::freebsd_geli_format_args(filesystem);
     let input = match credential {
         Credential::Password(password) => {
             argv.extend(args(&["-i", PASSPHRASE_ITERATIONS, "-J", "-"]));
@@ -516,7 +520,7 @@ mod tests {
     #[test]
     #[ignore = "requires root and real disposable FreeBSD GELI and md attachments"]
     fn cleanup_reconciles_completed_native_detaches_with_saved_intent() {
-        use super::super::{Identity, cleanup, require_root, unique_id};
+        use super::super::{cleanup, require_root, unique_id, Identity};
         use std::os::unix::fs::DirBuilderExt;
 
         require_root().unwrap();

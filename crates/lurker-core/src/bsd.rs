@@ -714,7 +714,7 @@ fn create(c: CreateCommand, output: Output) -> AppResult<()> {
         }
         #[cfg(target_os = "freebsd")]
         {
-            native::format(backing, c.cipher, &credential)?;
+            native::format_with_filesystem(backing, c.cipher, &credential, c.filesystem)?;
             session.mapped = Some(native::unlock(backing, false, &credential)?);
         }
         #[cfg(target_os = "dragonfly")]
