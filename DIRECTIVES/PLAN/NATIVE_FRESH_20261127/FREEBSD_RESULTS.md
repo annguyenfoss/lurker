@@ -1205,3 +1205,38 @@ is not included among these results.
   helper, sourcekit and manifest metadata/bytes remain unchanged. Assembly
   process is terminal; no Java, build, test, vault, mount or native channel
   operation ran. Real controller/source review and mounted gates remain pending.
+
+
+### Real controller freeze2: compile and names only
+
+- Purpose/input: root-reviewed two-file source archive `df552901...`, controller
+  `b0d112c8...` plus appended FreeBSD test-module declaration `85ca2e19...`.
+  Derive a new source copy from the exact 605-file inputs3 workspace, preserving
+  that source and results. Root later committed the same controller as `60871d5`.
+- Refusals retained: the local inventory guard first expected two tar members;
+  actual archive contains two sources plus its manifest, corrected before native
+  dispatch. Native attempt1 then refuses its blanket 2GiB space guard: root/tmp
+  have 849,813,504 bytes free. No compilation or source copy started in attempt1.
+- Command/log: new attempt2 routes all source/output/cache/TMP/TEMP/XDG writes to
+  the buildpool with over 43GB available, invoking the same installed toolchain
+  directly. Root/tmp remain separately reported read-only tool inputs, not
+  relabeled as meeting the output floor. `cargo test -p lurker-core --lib
+  --no-run --locked --offline` and direct executable `--list --ignored` exit0.
+- Outcome/evidence: all 606 source hashes match and original 605 are unchanged;
+  15 ignored test names are listed, including real pilot and payload helpers.
+  No test is executed. Binary `79ceaf5d...` is copied into the isolated work
+  directory; archive `779bf2a2...` SHA/gzip verified with both raw stdout/stderr
+  pairs and terminal inventory in `build/cryptomator-real-compile-freeze2-v2/`.
+- Limits/cleanup: no Java/FUSE/channel/mount/payload/storage/installation or
+  reboot operation. Compiler/listing processes are terminal. Actual pilot stays
+  held for source/runtime review and measured root-space recovery.
+
+A bounded read-only inventory under `build/root-space-inventory-1/` records
+project cache metadata, exact native pkg cachedir and idle FD checks. The old
+compiler cache already points to preserved buildpool storage; it offers no new
+root reclaim. Native pkg cache has 79 root-owned regular archives (526MB
+allocated), insufficient alone. Explicitly reviewed Rustup inspection finds
+178 regular files (811MB allocated), no active toolchain process/FD/mapping.
+A verified-copy/compatibility-symlink proposal for Rustup plus archival pkg-cache
+reclaim is submitted; no file has been moved or removed. Historical failed
+fixtures, source originals and results remain unselected and unchanged.
