@@ -249,13 +249,25 @@ clarification about that architecture.
   openSUSE SONAME 3 creator rebuild passed the corrected checks. Final package
   inventories and runtime gates continue; earlier package-install success did
   not establish compliance with the host-only FUSE requirement.
+- Root independently audited openSUSE's seven `67894f6` ordinary-reboot cases:
+  six file/directory backends and one physical VeraCrypt/btrfs volume. The
+  original payload, five appended hashes after reopen and reboot, new fsynced
+  post-reboot files, successful normal helper closes, changed boot identity and
+  unchanged stock kernel all matched. Exact executed recipe hashes match the
+  receipts; their payload workers inherit the required effective UID 1300.
+  Installed CLI/helper hashes match the RPM inventory before and after reboot.
+  The creator resolves host `libfuse3.so.3`; no private FUSE or LKL helper is
+  recorded. The scratch disk is detached and the evidence/build disk retained.
+  The private audit is `hosts/opensuse/validation/root-final678-seven-reboot-audit.json`.
+  This proves those seven cases, not the remaining hosts or foreign-user denial.
 - A Debian physical UFS2/CryFS failure reproduced in the native driver alone:
   create/fsync/stat succeeded but directory enumeration omitted the new entry.
   Fedora's prerequisite correction `9e27dcc` removes premature EOF at nonzero
   directory offsets. Native old/new controls, unit tests and barrier/rename
-  regressions passed on the six hosts. All twelve affected UFS2 source-kind and
-  backend rows are being rerun on the new installed artifacts; Debian's twelve
-  have passed. The filesystem driver remains external to Lurker.
+  regressions passed on the six hosts. All six owners now report the twelve
+  affected UFS2 source-kind and backend rows passed on their new artifacts;
+  receipt reconciliation and remaining reboot gates continue. The filesystem
+  driver remains external to Lurker.
 - DragonFly desktop physical forms are committed at `35af4c7`. Native workspace
   tests, sixteen layout frames, both real UID 1300 helper callbacks and an
   actual native window passed. An initial background test launcher inherited
@@ -269,6 +281,12 @@ clarification about that architecture.
   and remaining virtual-partition/helper gates remain separately identified.
   The earlier VeraCrypt callback failure came from placing the test executable
   outside the app bundle, not a demonstrated product discovery defect.
+- macOS's three renewed ZFS directory cases passed their payload lifecycles but
+  initially failed cleanup because Spotlight retained mappings. Scoped forced
+  detach recovered only those identified fixtures; it is recovery evidence.
+  The owner reports fresh no-index/non-browsable reruns passed with normal
+  unmount/export. Root is reconciling the replacement receipts and final
+  attachment inventory. The earlier cleanup failures remain recorded.
 - NetBSD's earlier fourteen CGD matrix payloads used UID 0; `SUDO_UID=1300`
   selected ownership, not the writer's credentials. Actual ordinary-user helper
   coverage was narrower. New owner/foreign-user controls exposed real native
@@ -277,14 +295,25 @@ clarification about that architecture.
   userland-library correction now passes owner access and unrelated-user
   list/read/write denial, including the full CryFS payload lifecycle. It changes
   access-mode ABI translation, cached attributes and ReFUSE owner admission;
-  no kernel or cache flags are changed. Reviewed host installation, capability
-  guards and fresh installed-artifact tests remain required.
+  no kernel or cache flags are changed. The pinned external prerequisite recipe
+  is committed at `a90fcfd`. A further ext4 control found foreign mkdir still
+  admitted under its existing driver options. Host installation remains pending
+  corrected parent-operation authorization and explicit native permission
+  options. Capability guards and fresh installed-artifact tests remain required.
+- FreeBSD's new real-user gate passed 25 routes with UID 1300 write/read and
+  unrelated-user denial through searchable plaintext ancestors, then stopped
+  on PEFS/HAMMER2 returning ENOENT for the intended user. The active fixtures
+  and failed receipt are preserved for a matched native control. Earlier root
+  payload success does not close this ordinary-user gap; no reboot is credited.
 - OpenBSD's stable CryFS source port has passed the full native payload
   lifecycle. Post-exec engine confinement and pathname-replacement negatives
   passed; an earlier pre-exec confinement claim was explicitly retracted after
-  a negative test proved that exec clears it. Caller ownership and limited
-  mount-time privilege are still being integrated and qualified before product
-  enablement. DragonFly CryFS also has a root-only native payload control, but
+  a negative test proved that exec clears it. Native port `c8c36e0` subsequently
+  passed caller-owned ciphertext/state, foreign-user denial and eight source/
+  mountpoint redirection negatives, with privilege confined to native mount
+  setup. The final factory rebuild and shared core/CLI/desktop product gates
+  remain separate requirements before product enablement. DragonFly CryFS also
+  has a root-only native payload control, but
   ordinary-user memory locking and FUSE mounting remain concrete privilege
   barriers; a root diagnostic does not establish product support.
 
