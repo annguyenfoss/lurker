@@ -20,6 +20,30 @@ An established alternative is required before dependent routes can be admitted;
 removing or relocating a hook without an established safe replacement is not a
 validated solution.
 
+### Degree of novelty and packaging assessment
+
+The three ports adapt the same lifecycle design; they are not three unrelated
+kernel inventions. Each adds a function pointer to LKL's host-operations ABI
+and calls it during kernel shutdown, after thread/clock shutdown and before
+freeing kernel memory. Native timer code waits for outstanding callbacks at
+that new point. Waiting for callbacks is a conventional synchronization idea;
+the new ABI and its placement in this kernel are locally designed behavior,
+not an existing configuration choice. They require matching kernel/host builds
+and carry deadlock, shutdown-hang and callback-after-free concerns that local
+boot tests alone do not settle. No filesystem algorithm or host BSD boot-kernel
+change is involved, but the embedded kernel dependency remains substantive.
+
+NetBSD additionally has a small, conventional bounds-check ordering repair in
+preserved WIP: validate the syscall number before indexing its handler table.
+It is less novel than the shutdown hook, but it is still a locally authored
+kernel repair; its rebuild was cancelled and no repaired binary was qualified.
+
+Under the user's mainstream-repository benchmark, none of these dependent
+routes is ready for distribution on the strength of these local patches.
+Existing supported settings and established patches are acceptable; maintaining
+our own kernel interface or pursuing its upstream acceptance is outside this
+project. Keep independent userspace work and native supported routes separate.
+
 ## Provenance or effect still requiring assessment
 
 | Area | Existing work and remaining question |

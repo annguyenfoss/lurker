@@ -44,6 +44,17 @@ experimental kernel developer. Judge a change by its provenance, maturity and
 technical effect, not whether it is needed specifically to make Lurker work.
 The phrase "Lurker-specific kernel patch" is not a reliable scope distinction.
 
+The distribution goal is ordinary downloadable software suitable for mainstream
+Linux distribution and BSD repositories. Prefer setup that a technically
+competent user of that OS can reproduce with established tools and instructions.
+Selecting existing supported parameters and configuration options is generally
+in scope. Do not make installation depend on maintaining our own kernel variant,
+inventing kernel behavior, or getting a new kernel interface accepted upstream.
+Patch size alone does not establish suitability: a few lines can change an ABI
+or shutdown ordering and create a lasting maintenance obligation. Routine Lurker
+userspace fixes remain in scope; an established external filesystem capability
+must supply the kernel behavior they use.
+
 - **Allowed:** apply pre-made patches, or follow established patch/configuration
   guidance, for specific well-known upstream or mainstream kernel, driver or
   OS projects. Applying such a change for Lurker is still in scope. Building
