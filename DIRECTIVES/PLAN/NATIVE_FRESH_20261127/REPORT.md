@@ -66,9 +66,13 @@ CryFS exFAT failures on OpenBSD and NetBSD are now matched to native hardlink
 is a bundled publication adaptation gap. The existing common patch is unchanged:
 a bare exclusive-create fallback can expose partial valid block names to
 unlocked readers and scans. Native locking semantics are under bounded
-investigation before any alternative is selected. FreeBSD NTFS/exFAT publication,
-its native Cryptomator ABI integration, and the separate LKL eligibility question
-also remain open. No new custom kernel/module experiment has begun.
+investigation before any alternative is selected. FreeBSD NTFS/exFAT publication
+and native Cryptomator ABI integration also remain open. The earlier optional
+LKL eligibility hold is resolved under the native-process boundary in BRIEF.md:
+the separately installed FreeBSD port uses local host I/O/FUSE without a VM or
+network transport. Its positive `direct_io` controls require product adapter
+work and qualification; they are not product passes. No new custom
+kernel/module experiment has begun.
 
 ## Verified initial milestones
 

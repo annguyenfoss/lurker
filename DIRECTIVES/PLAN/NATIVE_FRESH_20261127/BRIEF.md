@@ -35,6 +35,13 @@ not compatibility layers nested inside a test. macOS FUSE-T is preferred where
 applicable. Its existing host-local transport must be identified explicitly;
 do not introduce a network filesystem to substitute for a filesystem driver.
 
+A separately installed native driver may incorporate filesystem code from
+another OS when it executes as a native host process using local host I/O and
+FUSE, without a VM or network transport. FreeBSD's official `lklfuse` port fits
+that eligibility boundary. Its native `direct_io` controls establish feasibility;
+actual Lurker container, device and directory-backing flows still require
+qualification. Keep this filesystem driver external to the Lurker package.
+
 Lurker wraps system encryption and ordinary OS format/mount/unmount facilities.
 Bundle eligible independent encryption engines privately, subject to the existing
 trusted-elevation rules. Install tightly coupled drivers and FUSE on the host;
