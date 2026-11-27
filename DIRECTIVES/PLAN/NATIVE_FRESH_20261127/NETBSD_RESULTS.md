@@ -71,7 +71,8 @@ the base sudoers hash was unchanged. User-mount policy returned to zero and the
 native character device to root:wheel 0600 with the same rdev. At completion of
 ordinary qualification only base mounts remained, all eight CGD and four vnode
 units were unused, and no force import or custom kernel change had been made.
-The later, separately classified LKL experiment is recorded below. Owned failed /tmp GUI/session evidence was copied
+The later, separately classified LKL experiment is recorded below. Owned failed
+/tmp GUI/session evidence was copied
 and archive-verified before reboot; persistent failed containers, snapshots,
 credentials and parameter files remain private. The new round-owned qcow2 remains
 attached with closed encrypted test data; the original system disk was preserved.
@@ -117,8 +118,10 @@ A separate native LKL investigation followed ordinary qualification. It did not
 change the installed `8e09ac8` product or add a Btrfs/XFS support claim. Novel
 means kernel code or behavior invented by Lurker. Established pre-made patches,
 including kernel-source patches applied for Lurker, and existing supported
-parameters/configuration before a build remain allowed; userspace work is not
-blanket-excluded.
+parameters/configuration before a build remain allowed. Reproducible customized
+kernel builds using established inputs are allowed with recorded configuration
+differences, patch provenance and build steps; neither customized builds nor
+ordinary userspace work are blanket-excluded.
 
 The experiment used upstream LKL `d0f76a77...` with local native host adapters.
 After stock `SIGEV_THREAD` delivery blocked startup, local work added a

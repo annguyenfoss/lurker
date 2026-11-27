@@ -9,8 +9,11 @@ their disposition rather than instructions to continue them.
 Novel means kernel code or behavior invented by Lurker. Applying established
 pre-made kernel-source patches remains allowed, including patches applied
 specifically for Lurker. Existing supported parameters and configuration,
-including selections before a build, are allowed. There is no blanket patch or
-userspace ban. The boundary applies to the kernel embedded in LKL as well as a
+including selections before a build, are allowed. Reproducible customized kernel
+builds using those selections and established patches/guidance are also allowed;
+their configuration differences, provenance and build steps must be recorded.
+There is no blanket patch, customized-build or userspace ban. The boundary
+applies to the kernel embedded in LKL as well as a
 host boot kernel. In particular, `MMU=n` matches upstream LKL's default and
 KASAN is an existing option; the locally invented ABI and lifecycle behavior
 below are separate from those choices.
