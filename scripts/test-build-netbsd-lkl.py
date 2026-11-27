@@ -20,6 +20,21 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD" and os.environ.get("LURKER_NETBSD_LKL_SOURCE"), "built native LKL UAPI required")
+    def test_native_file_transport_retains_transient_io_failures(self):
+        source = Path(os.environ["LURKER_NETBSD_LKL_SOURCE"]).resolve(strict=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "disk-control"
+            control = BUILDER.ROOT / "native/netbsd/lkl/disk-control.c"
+            subprocess.run(["/usr/bin/cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror",
+                            "-isystem", str(source / "tools/lkl/include"),
+                            "-isystem", str(source / "tools/lkl/include/lkl"),
+                            str(control), "-o", str(binary)], check=True, timeout=30)
+            result = subprocess.run([str(binary), str(Path(tmp) / "fresh-image")],
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            print(result.stdout, end="")
+
     def test_isolated_refuse_output_cannot_replace_existing_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "output"

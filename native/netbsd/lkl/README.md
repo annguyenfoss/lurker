@@ -133,6 +133,24 @@ The driver must pin and load this exact isolated library rather than the
 installed system SONAME. The diagnostic client remains unsuitable for mounting
 until its remaining credential, disk-I/O and no-force lifecycle gates pass.
 
+`netbsd-disk.h` is the file-only native block-transport component. It admits a
+held caller-owned, private, single-link regular file with a sector-aligned size;
+it checks byte ranges and implements zero-data-buffer FLUSH with native `fsync`.
+Each disk atomically retains its first read/write/flush failure. Later successful
+requests and the final host barrier do not clear that error. The native control
+injects a single error at each native syscall seam and verifies that behavior,
+as well as overflow, capacity change and nonprivate-source rejection.
+
+A separate current-LKL process control used fresh images created by native
+`mke2fs`, with no native FUSE mount. The clean case negotiated and forwarded
+FLUSH, retained UID/GID 1300 ownership and completed ordinary LKL unmount/halt.
+One-shot write and flush failures both reached LKL fsync as EIO. In the flush
+case, later syncfs, unmount and halt all returned zero while the final transport
+status still reported the earlier EIO. These are injected syscall-boundary
+failures, not hardware-generated errors. They prove the sticky-error requirement;
+they do not establish Btrfs/XFS formatting, native mounted access or driver
+lifecycle support. The raw diagnostic client still does not use this component.
+
 https://github.com/lkl/linux/tree/d0f76a77e8c2ca68bd7d96190b8da09040eab072
 https://man.netbsd.org/mmap.2
 https://github.com/bminor/glibc/blob/glibc-2.42/elf/elf.h
