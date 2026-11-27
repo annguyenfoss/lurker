@@ -1,9 +1,11 @@
 # macOS fresh native qualification checkpoint
 
-Status: in progress. These are newly executed observations, not a release pass.
-Buran was not rebooted. The three representative physical USB samples passed;
-the renewed frozen package passed its 280 conformance checks; explicit native
-filesystem and installed-artifact validation are still running. Private evidence is under
+Status: scoped native qualification complete for frozen candidate `025f558`.
+Thirty eligible native filesystem/backend cells passed; the other 100 planned
+cells have explicit blocked, unavailable or not-applicable reasons. This is not
+blanket filesystem or release qualification. Buran was not rebooted. Three
+representative physical USB samples retain their original staged identities;
+the renewed package passed 280 conformance checks and final installed validation. Private evidence is under
 `target/goal-validation/native-fresh-20261127/hosts/macos/`; the corresponding
 remote root is `/tmp/lurker-native-fresh-20261127-macos`.
 
@@ -305,13 +307,101 @@ hardware serial reader passed against the Toshiba, and the software renderer
 produced eight create/open frames at 100% and 120%; scrolled action buttons are
 visible without horizontal overflow. The package is ad-hoc signed, not notarized.
 
-The final 30 eligible filesystem cells, installed CLI/helper/desktop and guarded
-virtual-partition controls are running against this new package. Their per-case
-exit gates are authoritative; earlier controllers that returned zero despite
-failed individual cases are not acceptance evidence. Final ledger reconciliation
-and owned cleanup remain pending. No further Toshiba sample is needed for this
-publisher change; the three physical samples retain their original artifacts.
-Buran's reboot persistence remains unexercised by instruction.
+## Final accepted evidence
+
+The independent final index `validation/renewed-case-index.json` binds the exact
+`025f558` commit, DMG hash, extracted application, administrator-owned production
+installation, separate test-layout clone, CLI/helper hashes, executed harnesses,
+common payload and native mount/driver/superblock identities. All 30 selected
+cells passed four payload opens each, totaling 120 opens. Each verifies the
+three PDFs, text append, second file, normal crypto closes and Buran's extra
+reopen. The selected routes are:
+
+| Filesystem | Native inner filesystems | Directory backings |
+| --- | --- | --- |
+| APFS | Apple image, APFS encryption, VeraCrypt | gocryptfs, CryFS, Cryptomator |
+| exFAT | Apple image, VeraCrypt | gocryptfs/Cryptomator on Apple FSKit; CryFS on the separate native macFUSE exFAT driver |
+| ext4 | Apple image, VeraCrypt with local FSKit | all three on separately installed native macFUSE ext4 |
+| NTFS | Apple image, VeraCrypt with native NTFS FSKit | all three on native NTFS3G/macFUSE with private masks |
+| UFS2 | VeraCrypt native regular-file view | all three on the repaired native UFS2 regular-file driver, within its recorded workload limits |
+| ZFS | Apple image, VeraCrypt with native OpenZFS | all three with native OpenZFS |
+
+The installed package passed all six default Slint callbacks through the actual
+production helper. The default and manual partition forms also passed software
+rendering at 100% and 120%. Guarded virtual-partition CLI and desktop controls
+passed, including native authorization on root-restricted nodes; all physical
+operations used administrator-controlled private engines. The three explicit
+Apple foreign-filesystem helper cases each passed 13 requests and four payload
+opens: 39 requests and 12 opens, including wrong credential, overwrite,
+duplicate and busy-close refusals. Fresh Apple/VeraCrypt XFS create guards
+refused before prompting or allocating a target.
+
+Final production component SHA-256 values:
+
+- CLI: `4054078be9a26388be0d5c7ccfadb9b4a3e610eefc691e40cfdbf95c4974dc54`
+- Helper: `8f3e15db8c8772e93fba8e2bc8dc9c05e2ac123ac8cce8238bae6cc253199204`
+- Desktop: `18376f69c3cf07f2e053ff721772d7fcc35a5700ebec7f4f8ed326efd9ed16b0`
+
+The frozen desktop test executable is separately identified as
+`f2487e1305dcf3a41fc19ba91a7566b560f4303010a0e535d26d3cc84292548a`;
+it is not substituted for the production desktop binary. Its bundle ancestry
+and runtime provenance match the production layout. The production bundle's
+240 files and deep/strict signatures were rechecked after native tests.
+
+`applicability.json` reconciles all 130 cells: **30 passed, 21 blocked,
+20 unavailable, 59 not applicable**. The 21 blockers comprise 20 native
+filesystem-route cells (Btrfs/XFS/UFS1/HAMMER2 across the five relevant engine
+families) and Apple UFS2's block-device sync limitation. LUKS1/2 account for
+20 unavailable native create/write routes. The 59 not-applicable cells are
+APFS encryption's nine non-APFS selections and five BSD native facilities
+absent on macOS, each across ten filesystems. No VM, network transport,
+read-only route or prior-round pass fills these gaps.
+
+## Cleanup and retained recovery evidence
+
+Independent reconciliation caught an outer backing-fixture cleanup defect that
+the first directory controller's successful payload status did not gate:
+Spotlight retained handles on three scratch ZFS pools after vaults closed.
+Their exact pool/vdev GUIDs, raw-image paths and Spotlight-only holders were
+recorded. Normal unmount/export and scoped indexing controls refused; only
+those three owned filesystem mounts were force-detached, followed by normal
+pool export. This is recovery of failed fixtures, never a normal-cleanup pass.
+The original receipts remain unchanged and are explicitly excluded by the
+final index. No global Spotlight service or unrelated volume was stopped.
+
+A fresh ZFS backing fixture used a legacy mount, `cachefile=none`, native
+browse/device publication disabled, a private 0700 root and a no-index marker
+before crypto operations. All three complete vault lifecycles passed again,
+followed by **normal umount and normal zpool export**. Its receipt is
+`cases/renewed-zfs-clean2-directory-zfs-fh9dcbji/receipt.json`; the exact three
+per-backend results and command logs are retained beside it. A subsequent
+read-only archival remount recovered the original receipt bytes and also
+closed/exported normally; that archival read is not an extra write-workload pass.
+Four older unmounted ext4 test-image attachments were detached normally, and
+the old exFAT control mount also closed normally after a scoped no-index marker.
+
+The final audit `validation/renewed-cleanup-audit.json` passed: **zero owned
+mounts, hdi images, filesystem sessions or crypto/filesystem workers remain**.
+The installed bundle still matches all 240 hashes and signatures. Buran's boot
+identity remains `1795714904`; reboot persistence is unexercised by instruction.
+All failed images, source/build records and earlier artifact identities remain
+available. The complete local collection manifest binds 1,166 files; complete
+package logs cover both 280-check DMG attempts. Root's independent package and
+ZFS/cleanup audits accompany the evidence.
+
+The physical APFS and Cryptomator samples used the staged CLI
+`a38bd2f6ec10effe3f720f05f95fb40ca329053c502ee40652e90def83f9e5d2`
+(`ced26af+9a5ca4d+folder-overlay`), with four and three basic payload opens
+respectively. The physical VeraCrypt sample used CLI
+`bb4accda1dceaec64f7d68f8027318d35a05670178e279e3495282876a9f3ce8`,
+with four opens and executed-source hashes in the device frontend manifest.
+They are representative same-round staged hardware results, not new `025f558`
+USB passes. The publisher-only app change was followed by fresh guarded virtual
+partition tests, not another Toshiba mutation. The USB remains connected with
+encrypted APFS locked and the exFAT/VeraCrypt samples unmounted. Its final
+identity/partition inventory is retained. Native authorization evidence is
+specific to Buran's available passwordless route; another host's interactive
+flow is not qualified here.
 
 Primary eligibility sources:
 https://github.com/macos-fuse-t/fuse-t
