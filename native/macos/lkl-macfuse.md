@@ -127,49 +127,108 @@ capability, four-process payload and injected-flush-error controls all passed
 again against this exact archive. These remain library controls, independently
 of native formatter, installed-driver or encryption-product acceptance.
 
-## Remaining mounted macFUSE adapter plan
+## External macFUSE driver candidate
 
-No replacement driver is installed by this recipe yet. Buran's xlinuxfs FSKit
-extension still lacks the restricted provisioning profile. Do not bypass that
-entitlement. The separate macFUSE route can avoid that transport requirement.
+`lklfuse-darwin.patch` adds a separate host-driver source to the pinned LKL
+checkout. `scripts/build-macos-lkl-filesystem-driver.py` builds it in a fresh
+private directory, verifies the explicit archive hash and both kernel export
+sets, records headers/toolchain/linkage, and refuses root execution. It has no
+installation or elevation mode. Filesystem code remains outside Lurker bundles;
+the product XFS guard is unchanged. No replacement driver is installed yet.
 
-The installed root-owned `/usr/local/lib/libfuse3.4.dylib` contains an arm64 slice
-and links macFUSE's MFMount framework; its FUSE 3 headers accept API 35. This is
-distinct from FUSE-T's static library. The companion `tools/lkl/lklfuse.c` uses
-FUSE 3 API 35; a native compile probe found Darwin stat timestamp names and
-Linux-only open flags need adaptation. It is not a drop-in Mac driver. Using
-FUSE 2 would require a separate callback ABI port and is not established here.
+Example build, with administrator-reviewed input locations and archive hash:
 
-Before installation, review the adapter diff against these gates:
+```sh
+python scripts/build-macos-lkl-filesystem-driver.py \
+  --lkl-source /path/to/pinned/lkl \
+  --library /path/to/liblkl.a \
+  --library-sha256 1902814d17f275f72da97ff4c0fcbf75cc74fe7aebab6fb3f35f3a06ed5c02f0 \
+  --include-dir /path/to/matching/include \
+  --output-dir /path/to/new/private/output
+```
 
-1. Use explicit native macFUSE 3 headers/linkage and the pinned Darwin archive.
-   Map Darwin timestamp structures and supported open flags deliberately.
-   Convert every Linux errno through native constants, including ENOTEMPTY,
-   ENOSYS, EOPNOTSUPP/ENOTSUP and xattr errors. EIO's shared numeric value is not
-   evidence for those mappings. Probe missing/duplicate/unsupported/nonempty,
-   busy and denied operations independently.
-2. Propagate each request's `fuse_get_context` credentials and supplementary
-   groups into a serialized LKL request context, restoring them on every exit.
-   Never serve requests with emulated root credentials by default or change host
-   process credentials to obtain backing access. Test new-child uid/gid/mode,
-   updates, setgid inheritance and foreign denial through searchable parents.
-   Mount-owner admission or synthesized stat ownership cannot replace this.
-3. Open file backings as the login user where native permissions allow. Keep
-   administrator-executed driver code, ancestors and dependencies root-owned and
-   unwritable by users. No elevation of a private encryption engine or a
-   user-writable driver; no generic privileged arbitrary-device shortcut.
-4. Expose per-file and directory fsync with propagated errors. Do not reuse
-   `lkfs_sync`'s unconditional success as a durability result. Drain and unmount
-   LKL while the backing remains available, and retain it on busy/error.
-   Test exclusive backing claims, symlinks, duplicate mounts, busy close, normal
-   worker exit and backing reopen before considering product integration.
-5. Prove a host-visible local macFUSE mount with actual driver PID, binary/hash,
-   source/backing identity, mode and no network/guest transport. Run common
-   payload and refusal controls there before replacing the product XFS guard.
+The candidate uses macFUSE 3's official API 35 compatibility callbacks, with
+`FUSE_DARWIN_ENABLE_EXTENSIONS=0`, native arm64 linkage and compiler-checked
+signatures. It does not cast Linux callbacks into Darwin extension signatures.
+The generic upstream source was not a drop-in port: native compilation exposed
+Darwin timestamp, open-flag and callback-ABI differences. FUSE 2 is not qualified
+by this implementation. Explicit Darwin flags and Linux-to-Darwin errno mapping
+remain separate; raw Linux errors are translated once at the outward boundary.
 
-The proposed later owned changes are `native/macos/lklfuse-darwin.patch` and
-`scripts/build-macos-lkl-filesystem-driver.py`. They build/install a separate
-host prerequisite, never add filesystem code to the Lurker bundle.
+Requests serialize all emulated credential changes and restore real/effective/
+saved IDs, fsuid/fsgid, groups and umask on success and failure. Creation uses the
+request's uid/gid/umask; filesystem permission checks use those credentials.
+Buran's native `fuse_getgroups` returns ENOSYS. Its fallback takes two complete
+`KERN_PROC_PID` snapshots and requires consistent birth time, live process
+state, real/saved/effective IDs, primary group and full exported group vector.
+Zombie, exiting, disappeared, changed and overflowing identities fail closed.
+The exported kernel advisory groups are used; account-directory membership is
+never inferred. On this host that kernel vector has 16 groups, while the
+account-directory `getgroups` view can have 18. Extended directory memberships
+and a working native `fuse_getgroups` branch are not acceptance claims.
+
+PID-zero/dead requests cannot perform path or data operations. Mount-root
+metadata may use the mount owner; already-held fsync/flush/release capabilities
+retain their opener identity so dead clients can release resources. Handles are
+opaque tokens checked before raw LKL descriptors. Native controls exercised
+mode/umask/ownership, setgid inheritance, a second uid's permitted operations
+and denial through searchable parents, stale handles, actual errno values,
+512-entry directory cookies, exclusive-rename races and duplicate backing
+claims. Auxiliary direct-callback tests label synthetic request envelopes and
+real native kernel/VFS operations separately from actual mounted requests.
+
+The driver currently accepts only caller-owned, singly linked regular-file
+backings with no group/other write access, opened without following symlinks,
+identity-checked and exclusively locked. It refuses root and credential
+mismatches. Device backings and product dispatch are not admitted. The native
+mount uses local macFUSE, nodev/nosuid/noexec and nobrowse. No VM or network
+filesystem participates. Imported Btrfs/XFS seeds prove driver I/O only.
+
+Normal close requires real FUSE DESTROY, global absence of the captured native
+FSID, and the original mountpoint directory identity. A native-only observer
+waits for INIT without blocking it; it never calls LKL. Channel cleanup occurs
+only after that gate and before draining the inner filesystem. There is no
+`fuse_unmount` call: the exact macFUSE library can force an exited session's
+unmount. Source review followed `fuse_destroy` through session destruction to
+MFChannel closure, device-FD close/XPC cancellation; it does not request a
+pathname unmount. The library's void cleanup API does not expose its channel
+close result. Checked inner/backing operations provide the drain result.
+
+The inner root descriptor is captured while healthy, retained on failed sync,
+and closed after successful sync before non-forced LKL unmount. Filesystem sync,
+internal unmount, device claim release, native backing fsync and final close are
+checked. Per-file/directory sync errors remain sticky. Every failed native host
+block request also latches an error, including background writeback: later
+successful sync/unmount cannot produce a successful exit. Native INT/TERM/HUP/
+PIPE dispositions and signal masks are owned explicitly after channel INIT;
+signals keep service available for ordinary OS unmount and produce failure after
+close. Failed drain retains its worker/backing instead of forcing release.
+
+The final private arm64 candidate passed four mounted opens on ext4, Btrfs and
+XFS with common payload write/append/verify, permission/refusal controls, busy
+close and normal teardown. Exactly one native backing fsync EIO was injected
+and disarmed before close on independent fixtures. ext4/Btrfs subsequently
+synced and unmounted successfully but exited with failure from the permanent
+host-error latch. XFS continued reporting EIO and retained its backing without
+success acknowledgement. Its scoped terminal recovery is recorded separately;
+it is not a normal-cleanup pass. Earlier candidate crashes, signal failures and
+fault-interposer recursion are retained under their original identities.
+
+Private receipts and exact component hashes live under
+`target/goal-validation/native-fresh-20261127/hosts/macos/validation/native-lkl-adapter/`.
+These do not replace the frozen `025f558` app/package results. Trusted installation
+and installed-driver tests remain separate gates. Use administrator-controlled
+versioned host locations and dependencies, verify copied bytes before use, and
+execute as the login user. Never elevate the private build or install this code
+inside the app. The FSKit restricted entitlement remains a genuine blocker for
+that transport and is not bypassed by this separate macFUSE route.
+
+Cleanup source pins for macFUSE 5.5.0: Library 3
+`85f89460c4962ae94a84e25037326b22efb7f0e0`, Mount framework
+`395aa1b3bb90e907c10d1cae03dcee314a2d2a8a`.
+
+https://github.com/macfuse/library/tree/85f89460c4962ae94a84e25037326b22efb7f0e0
+https://github.com/macfuse/mount/tree/395aa1b3bb90e907c10d1cae03dcee314a2d2a8a
 
 ## Native creation candidates
 

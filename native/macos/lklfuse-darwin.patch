@@ -1,0 +1,1620 @@
+diff --git a/tools/lkl/lklfuse-darwin.c b/tools/lkl/lklfuse-darwin.c
+new file mode 100644
+--- /dev/null
++++ b/tools/lkl/lklfuse-darwin.c
+@@ -0,0 +1,1615 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/* Native Darwin adapter derived from tools/lkl/lklfuse.c (LKL project).
++ * macFUSE 3 official vanilla callback ABI; no callback casts or bundled driver.
++ * All Linux syscall results remain raw until the outward wrapper boundary. */
++#define _DARWIN_C_SOURCE
++#define FUSE_USE_VERSION 35
++#define FUSE_DARWIN_ENABLE_EXTENSIONS 0
++#include <dirent.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <fuse3/fuse.h>
++#include <fuse3/fuse_lowlevel.h>
++#include <lkl.h>
++#include <lkl_host.h>
++#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/file.h>
++#include <sys/mount.h>
++#include <sys/stat.h>
++#include <sys/xattr.h>
++#include <time.h>
++#include <unistd.h>
++/* Linux 6.12 UAPI values absent from the exported fixed-profile headers. */
++#define LKL_XATTR_CREATE 1
++#define LKL_XATTR_REPLACE 2
++#define LKL_UTIME_NOW ((1L << 30) - 1)
++#define LKL_UTIME_OMIT ((1L << 30) - 2)
++extern int lkl_disk_add_with_flush(struct lkl_disk *disk);
++/* LKL returns Linux errno numbers, not the host's POSIX error numbers. */
++static inline int host_errno(int error) {
++  switch (error) {
++  case 0:
++    return 0;
++#define MAP_ERROR(name)                                                        \
++  case LKL_##name:                                                             \
++    return name
++    MAP_ERROR(EPERM);
++    MAP_ERROR(ENOENT);
++    MAP_ERROR(ESRCH);
++    MAP_ERROR(EINTR);
++    MAP_ERROR(EIO);
++    MAP_ERROR(ENXIO);
++    MAP_ERROR(E2BIG);
++    MAP_ERROR(ENOEXEC);
++    MAP_ERROR(EBADF);
++    MAP_ERROR(ECHILD);
++    MAP_ERROR(EAGAIN);
++    MAP_ERROR(ENOMEM);
++    MAP_ERROR(EACCES);
++    MAP_ERROR(EFAULT);
++    MAP_ERROR(ENOTBLK);
++    MAP_ERROR(EBUSY);
++    MAP_ERROR(EEXIST);
++    MAP_ERROR(EXDEV);
++    MAP_ERROR(ENODEV);
++    MAP_ERROR(ENOTDIR);
++    MAP_ERROR(EISDIR);
++    MAP_ERROR(EINVAL);
++    MAP_ERROR(ENFILE);
++    MAP_ERROR(EMFILE);
++    MAP_ERROR(ENOTTY);
++    MAP_ERROR(ETXTBSY);
++    MAP_ERROR(EFBIG);
++    MAP_ERROR(ENOSPC);
++    MAP_ERROR(ESPIPE);
++    MAP_ERROR(EROFS);
++    MAP_ERROR(EMLINK);
++    MAP_ERROR(EPIPE);
++    MAP_ERROR(EDOM);
++    MAP_ERROR(ERANGE);
++    MAP_ERROR(EDEADLK);
++    MAP_ERROR(ENAMETOOLONG);
++    MAP_ERROR(ENOLCK);
++    MAP_ERROR(ENOSYS);
++    MAP_ERROR(ENOTEMPTY);
++    MAP_ERROR(ELOOP);
++    MAP_ERROR(ENOMSG);
++    MAP_ERROR(EIDRM);
++    MAP_ERROR(ENOSTR);
++    MAP_ERROR(ETIME);
++    MAP_ERROR(ENOSR);
++    MAP_ERROR(EREMOTE);
++    MAP_ERROR(ENOLINK);
++    MAP_ERROR(EPROTO);
++    MAP_ERROR(EMULTIHOP);
++    MAP_ERROR(EBADMSG);
++    MAP_ERROR(EOVERFLOW);
++    MAP_ERROR(EILSEQ);
++    MAP_ERROR(EUSERS);
++    MAP_ERROR(ENOTSOCK);
++    MAP_ERROR(EMSGSIZE);
++    MAP_ERROR(ENOBUFS);
++    MAP_ERROR(ETIMEDOUT);
++    MAP_ERROR(ECONNREFUSED);
++    MAP_ERROR(ESTALE);
++    MAP_ERROR(EDQUOT);
++    MAP_ERROR(ECANCELED);
++    MAP_ERROR(EOWNERDEAD);
++    MAP_ERROR(ENOTRECOVERABLE);
++#undef MAP_ERROR
++  case LKL_ENODATA:
++    return ENODATA;
++  case LKL_EOPNOTSUPP:
++    return ENOTSUP;
++  case LKL_ENOMEDIUM:
++    return ENXIO;
++  case LKL_ENOKEY:
++  case LKL_EKEYEXPIRED:
++  case LKL_EKEYREVOKED:
++  case LKL_EKEYREJECTED:
++    return EACCES;
++  default:
++    return EIO;
++  }
++}
++
++/* All request paths and credential transitions are serialized, including
++ * cleanup. */
++#include <limits.h>
++#include <pthread.h>
++#include <signal.h>
++#include <sys/sysctl.h>
++/* KERN_PROC_PID supplies the complete kernel advisory credential vector,
++ * not membership inferred from account directories. Two bounded snapshots bind
++ * birth, process state and all exported credentials before granting a request.
++ * Any change fails closed; a later FUSE request may retry with a new envelope.
++ */
++static int kernel_snapshot(pid_t pid, struct kinfo_proc *kp) {
++  size_t size = sizeof *kp;
++  int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, pid};
++  memset(kp, 0, sizeof *kp);
++  if (pid <= 0)
++    return -ESRCH;
++  if (sysctl(mib, 4, kp, &size, NULL, 0) < 0)
++    return -errno;
++  if (size != sizeof *kp || kp->kp_proc.p_pid != pid)
++    return -ESRCH;
++  if ((kp->kp_proc.p_stat != SRUN && kp->kp_proc.p_stat != SSLEEP &&
++       kp->kp_proc.p_stat != SSTOP) ||
++      (kp->kp_proc.p_flag & P_WEXIT))
++    return -ESRCH;
++  if (kp->kp_proc.p_starttime.tv_sec <= 0 ||
++      kp->kp_proc.p_starttime.tv_usec < 0 ||
++      kp->kp_proc.p_starttime.tv_usec >= 1000000)
++    return -ESRCH;
++  int n = kp->kp_eproc.e_ucred.cr_ngroups;
++  if (n < 1 || n > NGROUPS)
++    return -EOVERFLOW;
++  return 0;
++}
++static int same_kernel_credentials(const struct kinfo_proc *a,
++                                   const struct kinfo_proc *b) {
++  int n = a->kp_eproc.e_ucred.cr_ngroups;
++  return a->kp_proc.p_pid == b->kp_proc.p_pid &&
++         a->kp_proc.p_stat == b->kp_proc.p_stat &&
++         a->kp_proc.p_starttime.tv_sec == b->kp_proc.p_starttime.tv_sec &&
++         a->kp_proc.p_starttime.tv_usec == b->kp_proc.p_starttime.tv_usec &&
++         !(a->kp_proc.p_flag & P_WEXIT) && !(b->kp_proc.p_flag & P_WEXIT) &&
++         a->kp_eproc.e_ucred.cr_uid == b->kp_eproc.e_ucred.cr_uid &&
++         n == b->kp_eproc.e_ucred.cr_ngroups && n >= 1 && n <= NGROUPS &&
++         a->kp_eproc.e_pcred.p_ruid == b->kp_eproc.e_pcred.p_ruid &&
++         a->kp_eproc.e_pcred.p_svuid == b->kp_eproc.e_pcred.p_svuid &&
++         a->kp_eproc.e_pcred.p_rgid == b->kp_eproc.e_pcred.p_rgid &&
++         a->kp_eproc.e_pcred.p_svgid == b->kp_eproc.e_pcred.p_svgid &&
++         !memcmp(a->kp_eproc.e_ucred.cr_groups, b->kp_eproc.e_ucred.cr_groups,
++                 (size_t)n * sizeof(gid_t));
++}
++static int kernel_request_groups(pid_t pid, uid_t uid, gid_t gid, gid_t out[],
++                                 int cap) {
++  struct kinfo_proc first, last;
++  int rc = kernel_snapshot(pid, &first);
++  if (rc)
++    return rc;
++  int n = first.kp_eproc.e_ucred.cr_ngroups;
++  if (first.kp_eproc.e_ucred.cr_uid != uid ||
++      first.kp_eproc.e_ucred.cr_groups[0] != gid)
++    return -EACCES;
++  if (n > cap)
++    return -E2BIG;
++  gid_t pending[NGROUPS];
++  memcpy(pending, first.kp_eproc.e_ucred.cr_groups, (size_t)n * sizeof(gid_t));
++  rc = kernel_snapshot(pid, &last);
++  if (rc)
++    return rc;
++  if (!same_kernel_credentials(&first, &last))
++    return -EAGAIN;
++  memcpy(out, pending, (size_t)n * sizeof(gid_t));
++  return n;
++}
++#define GROUP_LIMIT 1024
++struct request_identity {
++  uid_t uid;
++  gid_t gid;
++  mode_t mask;
++  int identity_source;
++  int ngroups;
++  lkl_gid_t groups[GROUP_LIMIT];
++  pid_t pid;
++};
++struct held_handle {
++  uint64_t token;
++  long raw;
++  int directory;
++  int writable;
++  struct request_identity opener;
++  struct held_handle *next;
++};
++static pthread_mutex_t request_lock = PTHREAD_MUTEX_INITIALIZER;
++static struct held_handle *handles;
++static uint64_t next_token = 1;
++static int credential_poison, sticky_io_error;
++static int native_initialized, native_protocol_destroy, native_library_cleanup;
++static volatile sig_atomic_t native_signal;
++static int native_signal_setup_error;
++static int native_reassert_signals(void);
++static struct request_identity mount_identity;
++struct guard {
++  lkl_uid_t ruid, euid, suid, fsuid;
++  lkl_gid_t rgid, egid, sgid, fsgid;
++  int ngroups;
++  lkl_gid_t groups[GROUP_LIMIT];
++  mode_t mask;
++  struct request_identity request;
++  struct held_handle *held;
++  struct fuse_file_info raw_fi;
++  int changed;
++};
++static int save_credentials(struct guard *g) {
++  long rc = lkl_sys_getresuid(&g->ruid, &g->euid, &g->suid);
++  if (rc < 0)
++    return (int)rc;
++  rc = lkl_sys_getresgid(&g->rgid, &g->egid, &g->sgid);
++  if (rc < 0)
++    return (int)rc;
++  rc = lkl_sys_getgroups(GROUP_LIMIT, g->groups);
++  if (rc < 0)
++    return (int)rc;
++  g->ngroups = (int)rc;
++  g->fsuid = (lkl_uid_t)lkl_sys_setfsuid((lkl_uid_t)-1);
++  g->fsgid = (lkl_gid_t)lkl_sys_setfsgid((lkl_gid_t)-1);
++  g->mask = (mode_t)lkl_sys_umask(0);
++  lkl_sys_umask(g->mask);
++  return 0;
++}
++static int restore_credentials(struct guard *g) {
++  int bad = 0;
++  if (lkl_sys_setresuid(g->ruid, g->euid, g->suid) < 0)
++    bad = 1;
++  if (lkl_sys_setresgid(g->rgid, g->egid, g->sgid) < 0)
++    bad = 1;
++  if (lkl_sys_setgroups(g->ngroups, g->groups) < 0)
++    bad = 1;
++  lkl_sys_setfsuid(g->fsuid);
++  lkl_sys_setfsgid(g->fsgid);
++  lkl_sys_umask(g->mask);
++  if ((lkl_uid_t)lkl_sys_setfsuid((lkl_uid_t)-1) != g->fsuid ||
++      (lkl_gid_t)lkl_sys_setfsgid((lkl_gid_t)-1) != g->fsgid)
++    bad = 1;
++  lkl_uid_t r, e, s;
++  lkl_gid_t gr, ge, gs;
++  lkl_gid_t groups[GROUP_LIMIT];
++  if (lkl_sys_getresuid(&r, &e, &s) < 0 || r != g->ruid || e != g->euid ||
++      s != g->suid)
++    bad = 1;
++  if (lkl_sys_getresgid(&gr, &ge, &gs) < 0 || gr != g->rgid || ge != g->egid ||
++      gs != g->sgid)
++    bad = 1;
++  long n = lkl_sys_getgroups(GROUP_LIMIT, groups);
++  if (n != g->ngroups || n < 0 ||
++      memcmp(groups, g->groups, (size_t)(n < 0 ? 0 : n) * sizeof(*groups)))
++    bad = 1;
++  mode_t m = lkl_sys_umask(g->mask);
++  if (m != g->mask)
++    bad = 1;
++  if (bad)
++    credential_poison = 1;
++  return bad ? -LKL_EIO : 0;
++}
++static struct held_handle *find_handle(uint64_t token, int directory) {
++  for (struct held_handle *h = handles; h; h = h->next)
++    if (h->token == token && (directory < 0 || h->directory == directory))
++      return h;
++  return NULL;
++}
++/* cleanup=1 accepts an existing capability even if its requesting process died.
++ * root_metadata permits only mount-root metadata or held-fd fstat, never data.
++ * Every data/path mutation otherwise requires a live, nonzero request PID. */
++static int begin_request(struct guard *g, struct fuse_file_info *fi,
++                         int directory, int cleanup, int root_metadata) {
++  memset(g, 0, sizeof(*g));
++  pthread_mutex_lock(&request_lock);
++  if (credential_poison || native_signal_setup_error) {
++    pthread_mutex_unlock(&request_lock);
++    return EIO;
++  }
++  if (fi) {
++    g->held = find_handle(fi->fh, directory);
++    if (!g->held) {
++      pthread_mutex_unlock(&request_lock);
++      return EBADF;
++    }
++    g->raw_fi = *fi;
++    g->raw_fi.fh = (uint64_t)g->held->raw;
++  }
++  struct fuse_context *ctx = fuse_get_context();
++  int dead = !ctx || ctx->pid <= 0;
++  if (!dead && kill(ctx->pid, 0) < 0 && errno == ESRCH)
++    dead = 1;
++  if (cleanup && g->held) {
++    g->request = g->held->opener;
++    g->request.identity_source = 4;
++  } else if (dead) {
++    if (root_metadata)
++      g->request = mount_identity;
++    else {
++      pthread_mutex_unlock(&request_lock);
++      return ESRCH;
++    }
++  } else {
++    if (ctx->uid == (uid_t)-1 || ctx->gid == (gid_t)-1) {
++      pthread_mutex_unlock(&request_lock);
++      return EOVERFLOW;
++    }
++    g->request.uid = ctx->uid;
++    g->request.gid = ctx->gid;
++    g->request.mask = ctx->umask;
++    g->request.pid = ctx->pid;
++    gid_t groups[GROUP_LIMIT];
++    int n = fuse_getgroups(GROUP_LIMIT, groups);
++    g->request.identity_source = 1;
++    if (n == -ENOSYS) {
++      n = kernel_request_groups(ctx->pid, ctx->uid, ctx->gid, groups,
++                                GROUP_LIMIT);
++      g->request.identity_source = 2;
++    }
++    if (n < 0) {
++      pthread_mutex_unlock(&request_lock);
++      return -n;
++    }
++    if (n > GROUP_LIMIT) {
++      pthread_mutex_unlock(&request_lock);
++      return E2BIG;
++    }
++    g->request.ngroups = n;
++    for (int i = 0; i < n; i++)
++      g->request.groups[i] = (lkl_gid_t)groups[i];
++  }
++  int rc = save_credentials(g);
++  if (rc < 0) {
++    pthread_mutex_unlock(&request_lock);
++    return host_errno(-rc);
++  }
++  g->changed = 1;
++  rc = (int)lkl_sys_setgroups(g->request.ngroups, g->request.groups);
++  if (rc >= 0)
++    rc = (int)lkl_sys_setresgid((lkl_gid_t)-1, g->request.gid, (lkl_gid_t)-1);
++  if (rc >= 0)
++    rc = (int)lkl_sys_setresuid((lkl_uid_t)-1, g->request.uid, (lkl_uid_t)-1);
++  lkl_sys_setfsuid(g->request.uid);
++  lkl_sys_setfsgid(g->request.gid);
++  lkl_sys_umask(g->request.mask);
++  if (rc >= 0 &&
++      ((lkl_uid_t)lkl_sys_setfsuid((lkl_uid_t)-1) != g->request.uid ||
++       (lkl_gid_t)lkl_sys_setfsgid((lkl_gid_t)-1) != g->request.gid))
++    rc = -LKL_EPERM;
++  if (rc < 0) {
++    restore_credentials(g);
++    pthread_mutex_unlock(&request_lock);
++    return host_errno(-rc);
++  }
++  return 0;
++}
++static long finish_request(struct guard *g, const char *op, long raw) {
++  int restore = restore_credentials(g);
++  int error = raw < 0 ? host_errno((int)-raw) : 0;
++  if (raw == -LKL_ENODATA &&
++      (!strcmp(op, "getxattr") || !strcmp(op, "setxattr") ||
++       !strcmp(op, "removexattr")))
++    error = ENOATTR;
++  long outward = restore < 0 ? -EIO : (raw < 0 ? -error : raw);
++  fprintf(stderr,
++          "REQUEST op=%s pid=%d uid=%u gid=%u groups=%d identity_source=%d "
++          "mask=%03o raw=%ld outward=%ld restored=%d\n",
++          op, g->request.pid, g->request.uid, g->request.gid,
++          g->request.ngroups, g->request.identity_source, g->request.mask, raw,
++          outward, restore == 0);
++  pthread_mutex_unlock(&request_lock);
++  return outward;
++}
++static long add_handle(struct guard *g, struct fuse_file_info *fi, long fd,
++                       int directory) {
++  struct held_handle *h = calloc(1, sizeof(*h));
++  if (!h) {
++    lkl_sys_close(fd);
++    return -LKL_ENOMEM;
++  }
++  if (!next_token) {
++    free(h);
++    lkl_sys_close(fd);
++    return -LKL_EOVERFLOW;
++  }
++  h->token = next_token++;
++  h->raw = fd;
++  h->directory = directory;
++  h->writable = (fi->flags & O_ACCMODE) != O_RDONLY;
++  h->opener = g->request;
++  h->next = handles;
++  handles = h;
++  fi->fh = h->token;
++  fi->direct_io = 1;
++  fi->keep_cache = 0;
++  return 0;
++}
++static void remove_handle(struct held_handle *h) {
++  struct held_handle **p = &handles;
++  while (*p && *p != h)
++    p = &(*p)->next;
++  if (*p)
++    *p = h->next;
++  free(h);
++}
++
++static void raw_xlat_stat(const struct lkl_stat *in, struct stat *st) {
++  memset(st, 0, sizeof(*st));
++  st->st_dev = in->st_dev;
++  st->st_ino = in->st_ino;
++  st->st_mode = in->st_mode;
++  st->st_nlink = in->st_nlink;
++  st->st_uid = in->st_uid;
++  st->st_gid = in->st_gid;
++  st->st_rdev = in->st_rdev;
++  st->st_size = in->st_size;
++  st->st_blksize = in->st_blksize;
++  st->st_blocks = in->st_blocks;
++  st->st_atimespec.tv_sec = in->lkl_st_atime;
++  st->st_atimespec.tv_nsec = in->st_atime_nsec;
++  st->st_mtimespec.tv_sec = in->lkl_st_mtime;
++  st->st_mtimespec.tv_nsec = in->st_mtime_nsec;
++  st->st_ctimespec.tv_sec = in->lkl_st_ctime;
++  st->st_ctimespec.tv_nsec = in->st_ctime_nsec;
++}
++
++static int raw_getattr(const char *path, struct stat *st,
++                       struct fuse_file_info *fi) {
++  long ret;
++  struct lkl_stat lkl_stat;
++
++  /*
++   * With nullpath_ok, path will be provided only if the struct
++   * fuse_file_info argument is NULL.
++   */
++  if (fi)
++    ret = lkl_sys_fstat(fi->fh, &lkl_stat);
++  else
++    ret = lkl_sys_lstat(path, &lkl_stat);
++  if (!ret)
++    raw_xlat_stat(&lkl_stat, st);
++
++  return ret;
++}
++
++static int raw_readlink(const char *path, char *buf, size_t len) {
++  long ret;
++
++  ret = lkl_sys_readlink(path, buf, len);
++  if (ret < 0)
++    return ret;
++
++  if ((size_t)ret == len)
++    ret = len - 1;
++
++  buf[ret] = 0;
++
++  return 0;
++}
++
++static int raw_mknod(const char *path, mode_t mode, dev_t dev) {
++  if (!S_ISREG(mode) && !S_ISFIFO(mode))
++    return -LKL_EOPNOTSUPP;
++  return lkl_sys_mknod(path, mode, 0);
++}
++
++static int raw_mkdir(const char *path, mode_t mode) {
++  return lkl_sys_mkdir(path, mode);
++}
++
++static int raw_unlink(const char *path) { return lkl_sys_unlink(path); }
++
++static int raw_rmdir(const char *path) { return lkl_sys_rmdir(path); }
++
++static int raw_symlink(const char *oldname, const char *newname) {
++  return lkl_sys_symlink(oldname, newname);
++}
++
++static int raw_rename(const char *oldname, const char *newname,
++                      unsigned int flags) {
++  unsigned int linux_flags = 0;
++  if (flags & ~(RENAME_NOREPLACE | RENAME_EXCHANGE))
++    return -LKL_EINVAL;
++  if (flags & RENAME_NOREPLACE)
++    linux_flags |= LKL_RENAME_NOREPLACE;
++  if (flags & RENAME_EXCHANGE)
++    linux_flags |= LKL_RENAME_EXCHANGE;
++  return lkl_sys_renameat2(LKL_AT_FDCWD, oldname, LKL_AT_FDCWD, newname,
++                           linux_flags);
++}
++
++static int raw_link(const char *oldname, const char *newname) {
++  return lkl_sys_link(oldname, newname);
++}
++
++static int raw_chmod(const char *path, mode_t mode, struct fuse_file_info *fi) {
++  int ret;
++
++  if (fi)
++    ret = lkl_sys_fchmod(fi->fh, mode);
++  else
++    ret = lkl_sys_fchmodat(LKL_AT_FDCWD, path, mode);
++
++  return ret;
++}
++
++static int raw_chown(const char *path, uid_t uid, gid_t gid,
++                     struct fuse_file_info *fi) {
++  int ret;
++
++  if (fi)
++    ret = lkl_sys_fchown(fi->fh, uid, gid);
++  else
++    ret =
++        lkl_sys_fchownat(LKL_AT_FDCWD, path, uid, gid, LKL_AT_SYMLINK_NOFOLLOW);
++  return ret;
++}
++
++static int raw_truncate(const char *path, off_t off,
++                        struct fuse_file_info *fi) {
++  int ret;
++
++  if (fi)
++    ret = lkl_sys_ftruncate(fi->fh, off);
++  else
++    ret = lkl_sys_truncate(path, off);
++
++  return ret;
++}
++
++#ifdef __FreeBSD__
++#define O_LARGEFILE 0
++#define O_NOATIME 0
++#define O_TMPFILE 0
++#endif
++
++static int raw_open3(const char *path, bool create, mode_t mode,
++                     struct fuse_file_info *fi) {
++  long ret;
++  int flags;
++  if (fi->flags &
++      ~(O_ACCMODE | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC | O_APPEND |
++        O_NONBLOCK | O_DSYNC | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC | O_SYNC))
++    return -LKL_EOPNOTSUPP;
++
++  if ((fi->flags & O_ACCMODE) == O_RDONLY)
++    flags = LKL_O_RDONLY;
++  else if ((fi->flags & O_ACCMODE) == O_WRONLY)
++    flags = LKL_O_WRONLY;
++  else if ((fi->flags & O_ACCMODE) == O_RDWR)
++    flags = LKL_O_RDWR;
++  else
++    return -LKL_EINVAL;
++
++  /*
++   * XXX see rules in fuse3/fuse.h:
++   * Creation (O_CREAT, O_EXCL, O_NOCTTY) flags will be filtered out /
++   * handled by FUSE kernel...
++   */
++  if (create)
++    flags |= LKL_O_CREAT | LKL_O_EXCL;
++  if (fi->flags & O_TRUNC)
++    flags |= LKL_O_TRUNC;
++  if (fi->flags & O_APPEND)
++    flags |= LKL_O_APPEND;
++  if (fi->flags & O_NONBLOCK)
++    flags |= LKL_O_NONBLOCK;
++  if (fi->flags & O_DSYNC)
++    flags |= LKL_O_DSYNC;
++
++  if (fi->flags & O_DIRECTORY)
++    flags |= LKL_O_DIRECTORY;
++  if (fi->flags & O_NOFOLLOW)
++    flags |= LKL_O_NOFOLLOW;
++
++  if (fi->flags & O_CLOEXEC)
++    flags |= LKL_O_CLOEXEC;
++  if (fi->flags & O_SYNC)
++    flags |= LKL_O_SYNC;
++
++  ret = lkl_sys_open(path, flags, mode);
++  if (ret < 0)
++    return ret;
++
++  fi->fh = ret;
++
++  return 0;
++}
++
++static int raw_create(const char *path, mode_t mode,
++                      struct fuse_file_info *fi) {
++  return raw_open3(path, true, mode, fi);
++}
++
++static int raw_open(const char *path, struct fuse_file_info *fi) {
++  return raw_open3(path, false, 0, fi);
++}
++
++static int raw_read(const char *path, char *buf, size_t size, off_t offset,
++                    struct fuse_file_info *fi) {
++  long ret;
++  ssize_t orig_size = size;
++
++  do {
++    ret = lkl_sys_pread64(fi->fh, buf, size, offset);
++    if (ret <= 0)
++      break;
++    size -= ret;
++    offset += ret;
++    buf += ret;
++  } while (size > 0);
++
++  return ret < 0 ? ret : orig_size - (ssize_t)size;
++}
++
++static int raw_write(const char *path, const char *buf, size_t size,
++                     off_t offset, struct fuse_file_info *fi) {
++  long ret;
++  ssize_t orig_size = size;
++
++  do {
++    ret = lkl_sys_pwrite64(fi->fh, buf, size, offset);
++    if (ret <= 0)
++      break;
++    size -= ret;
++    offset += ret;
++    buf += ret;
++  } while (size > 0);
++
++  return ret < 0 ? ret : orig_size - (ssize_t)size;
++}
++
++static int raw_statfs(const char *path, struct statvfs *stat) {
++  long ret;
++  struct lkl_statfs lkl_statfs;
++
++  ret = lkl_sys_statfs(path, &lkl_statfs);
++  if (ret < 0)
++    return ret;
++
++  stat->f_bsize = lkl_statfs.f_bsize;
++  stat->f_frsize = lkl_statfs.f_frsize;
++  stat->f_blocks = lkl_statfs.f_blocks;
++  stat->f_bfree = lkl_statfs.f_bfree;
++  stat->f_bavail = lkl_statfs.f_bavail;
++  stat->f_files = lkl_statfs.f_files;
++  stat->f_ffree = lkl_statfs.f_ffree;
++  stat->f_favail = stat->f_ffree;
++  stat->f_fsid = *(unsigned long *)&lkl_statfs.f_fsid.val[0];
++  stat->f_flag = lkl_statfs.f_flags;
++  stat->f_namemax = lkl_statfs.f_namelen;
++
++  return 0;
++}
++
++static int raw_fsync(const char *path, int datasync,
++                     struct fuse_file_info *fi) {
++  if (datasync)
++    return lkl_sys_fdatasync(fi->fh);
++  else
++    return lkl_sys_fsync(fi->fh);
++}
++
++static int attribute_name(const char *name, char result[256]) {
++  if (!name || strlen(name) > 250)
++    return -LKL_ERANGE;
++  snprintf(result, 256, "user.%s", name);
++  return 0;
++}
++static int raw_setxattr(const char *path, const char *name, const char *val,
++                        size_t size, int flags) {
++  char key[256];
++  int rc = attribute_name(name, key);
++  if (rc < 0)
++    return rc;
++  if (flags & ~(XATTR_CREATE | XATTR_REPLACE))
++    return -LKL_EINVAL;
++  int lf = (flags & XATTR_CREATE ? LKL_XATTR_CREATE : 0) |
++           (flags & XATTR_REPLACE ? LKL_XATTR_REPLACE : 0);
++  return lkl_sys_lsetxattr(path, key, val, size, lf);
++}
++static int raw_getxattr(const char *path, const char *name, char *val,
++                        size_t size) {
++  char key[256];
++  int rc = attribute_name(name, key);
++  if (rc < 0)
++    return rc;
++  return lkl_sys_lgetxattr(path, key, val, size);
++}
++static int raw_listxattr(const char *path, char *list, size_t size) {
++  long n = lkl_sys_llistxattr(path, NULL, 0);
++  if (n <= 0)
++    return (int)n;
++  if (n > 65536)
++    return -LKL_E2BIG;
++  char *raw = malloc(n);
++  if (!raw)
++    return -LKL_ENOMEM;
++  long got = lkl_sys_llistxattr(path, raw, n);
++  if (got < 0) {
++    free(raw);
++    return (int)got;
++  }
++  size_t used = 0;
++  for (long pos = 0; pos < got;) {
++    size_t left = got - pos;
++    char *zero = memchr(raw + pos, 0, left);
++    if (!zero) {
++      free(raw);
++      return -LKL_EIO;
++    }
++    size_t len = zero - (raw + pos) + 1;
++    if (len > 5 && !strncmp(raw + pos, "user.", 5)) {
++      if (size && used + len - 5 > size) {
++        free(raw);
++        return -LKL_ERANGE;
++      }
++      if (size)
++        memcpy(list + used, raw + pos + 5, len - 5);
++      used += len - 5;
++    }
++    pos += len;
++  }
++  free(raw);
++  return (int)used;
++}
++static int raw_removexattr(const char *path, const char *name) {
++  char key[256];
++  int rc = attribute_name(name, key);
++  if (rc < 0)
++    return rc;
++  return lkl_sys_lremovexattr(path, key);
++}
++
++static int raw_opendir(const char *path, struct fuse_file_info *fi) {
++  long fd = lkl_sys_open(path, LKL_O_RDONLY | LKL_O_DIRECTORY, 0);
++  if (fd < 0)
++    return (int)fd;
++  fi->fh = fd;
++  return 0;
++}
++static int raw_readdir(const char *path, void *buf, fuse_fill_dir_t fill,
++                       off_t off, struct fuse_file_info *fi,
++                       enum fuse_readdir_flags flags) {
++  (void)path;
++  (void)flags;
++  long rc = lkl_sys_lseek(fi->fh, off, LKL_SEEK_SET);
++  if (rc < 0)
++    return (int)rc;
++  char block[65536];
++  for (;;) {
++    long n = lkl_sys_getdents64(fi->fh, (struct lkl_linux_dirent64 *)block,
++                                sizeof block);
++    if (n <= 0)
++      return (int)n;
++    for (long pos = 0; pos < n;) {
++      struct lkl_linux_dirent64 *de = (void *)(block + pos);
++      if (de->d_reclen < offsetof(struct lkl_linux_dirent64, d_name) + 1 ||
++          de->d_reclen > n - pos ||
++          !memchr(de->d_name, 0,
++                  de->d_reclen -
++                      (int)offsetof(struct lkl_linux_dirent64, d_name)))
++        return -LKL_EIO;
++      struct stat st = {0};
++      st.st_ino = de->d_ino;
++      st.st_mode = de->d_type << 12;
++      if (fill(buf, de->d_name, &st, de->d_off, 0))
++        return 0;
++      pos += de->d_reclen;
++    }
++  }
++}
++static int raw_fsyncdir(const char *path, int datasync,
++                        struct fuse_file_info *fi) {
++  (void)path;
++  (void)datasync;
++  return lkl_sys_fsync(fi->fh);
++}
++
++static int raw_access(const char *path, int mode) {
++  return lkl_sys_faccessat2(LKL_AT_FDCWD, path, mode, LKL_AT_EACCESS);
++}
++
++static int raw_utimens(const char *path, const struct timespec tv[2],
++                       struct fuse_file_info *fi) {
++  int ret;
++  struct __lkl__kernel_timespec ts[2] = {
++      {.tv_sec = tv[0].tv_sec,
++       .tv_nsec = tv[0].tv_nsec == UTIME_NOW    ? LKL_UTIME_NOW
++                  : tv[0].tv_nsec == UTIME_OMIT ? LKL_UTIME_OMIT
++                                                : tv[0].tv_nsec},
++      {.tv_sec = tv[1].tv_sec,
++       .tv_nsec = tv[1].tv_nsec == UTIME_NOW    ? LKL_UTIME_NOW
++                  : tv[1].tv_nsec == UTIME_OMIT ? LKL_UTIME_OMIT
++                                                : tv[1].tv_nsec},
++  };
++
++  if (fi)
++    ret = lkl_sys_utimensat(fi->fh, NULL, ts, 0);
++  else
++    ret = lkl_sys_utimensat(-1, path, ts, LKL_AT_SYMLINK_NOFOLLOW);
++
++  return ret;
++}
++
++static int raw_fallocate(const char *path, int mode, off_t offset, off_t len,
++                         struct fuse_file_info *fi) {
++  (void)path;
++  (void)mode;
++  (void)offset;
++  (void)len;
++  (void)fi;
++  return -LKL_EOPNOTSUPP;
++}
++
++static off_t raw_lseek(const char *path, off_t off, int whence,
++                       struct fuse_file_info *fi) {
++  if (whence == SEEK_DATA)
++    whence = LKL_SEEK_DATA;
++  else if (whence == SEEK_HOLE)
++    whence = LKL_SEEK_HOLE;
++  return lkl_sys_lseek(fi->fh, off, whence);
++}
++
++#define WRAP(type, name, decl, args, fi, kind, cleanup, rootmeta)              \
++  static type native_##name decl {                                             \
++    struct guard g;                                                            \
++    int e = begin_request(&g, fi, kind, cleanup, rootmeta);                    \
++    if (e) {                                                                   \
++      fprintf(stderr, "REQUEST_REJECT op=%s host=%d\n", #name, e);             \
++      return (type) - e;                                                       \
++    }                                                                          \
++    struct fuse_file_info *rfi = (fi) ? &g.raw_fi : NULL;                      \
++    (void)rfi;                                                                 \
++    long raw = raw_##name args;                                                \
++    if (raw < 0 && (!strcmp(#name, "fsync") || !strcmp(#name, "fsyncdir")))    \
++      sticky_io_error = 1;                                                     \
++    return (type)finish_request(&g, #name, raw);                               \
++  }
++WRAP(int, getattr,
++     (const char *path, struct stat *st, struct fuse_file_info *fi),
++     (path, st, rfi), fi, -1, 0, (fi || (path && !strcmp(path, "/"))))
++WRAP(int, readlink, (const char *path, char *buf, size_t len), (path, buf, len),
++     NULL, -1, 0, 0)
++WRAP(int, mknod, (const char *path, mode_t mode, dev_t dev), (path, mode, dev),
++     NULL, -1, 0, 0)
++WRAP(int, mkdir, (const char *path, mode_t mode), (path, mode), NULL, -1, 0, 0)
++WRAP(int, unlink, (const char *path), (path), NULL, -1, 0, 0)
++WRAP(int, rmdir, (const char *path), (path), NULL, -1, 0, 0)
++WRAP(int, symlink, (const char *oldname, const char *newname),
++     (oldname, newname), NULL, -1, 0, 0)
++WRAP(int, rename,
++     (const char *oldname, const char *newname, unsigned int flags),
++     (oldname, newname, flags), NULL, -1, 0, 0)
++WRAP(int, link, (const char *oldname, const char *newname), (oldname, newname),
++     NULL, -1, 0, 0)
++WRAP(int, chmod, (const char *path, mode_t mode, struct fuse_file_info *fi),
++     (path, mode, rfi), fi, -1, 0, 0)
++WRAP(int, chown,
++     (const char *path, uid_t uid, gid_t gid, struct fuse_file_info *fi),
++     (path, uid, gid, rfi), fi, -1, 0, 0)
++WRAP(int, truncate, (const char *path, off_t off, struct fuse_file_info *fi),
++     (path, off, rfi), fi, -1, 0, 0)
++WRAP(int, utimens,
++     (const char *path, const struct timespec tv[2], struct fuse_file_info *fi),
++     (path, tv, rfi), fi, -1, 0, 0)
++WRAP(int, read,
++     (const char *path, char *buf, size_t size, off_t off,
++      struct fuse_file_info *fi),
++     (path, buf, size, off, rfi), fi, 0, 0, 0)
++WRAP(int, write,
++     (const char *path, const char *buf, size_t size, off_t off,
++      struct fuse_file_info *fi),
++     (path, buf, size, off, rfi), fi, 0, 0, 0)
++WRAP(int, fsync, (const char *path, int data, struct fuse_file_info *fi),
++     (path, data, rfi), fi, 0, 1, 0)
++WRAP(int, statfs, (const char *path, struct statvfs *st), (path, st), NULL, -1,
++     0, 1)
++WRAP(int, setxattr,
++     (const char *path, const char *name, const char *val, size_t size,
++      int flags),
++     (path, name, val, size, flags), NULL, -1, 0, 0)
++WRAP(int, getxattr,
++     (const char *path, const char *name, char *val, size_t size),
++     (path, name, val, size), NULL, -1, 0, 0)
++WRAP(int, listxattr, (const char *path, char *list, size_t size),
++     (path, list, size), NULL, -1, 0, 0)
++WRAP(int, removexattr, (const char *path, const char *name), (path, name), NULL,
++     -1, 0, 0)
++WRAP(int, access, (const char *path, int mode), (path, mode), NULL, -1, 0, 0)
++WRAP(int, readdir,
++     (const char *path, void *buf, fuse_fill_dir_t fill, off_t off,
++      struct fuse_file_info *fi, enum fuse_readdir_flags flags),
++     (path, buf, fill, off, rfi, flags), fi, 1, 0, 0)
++WRAP(int, fsyncdir, (const char *path, int data, struct fuse_file_info *fi),
++     (path, data, rfi), fi, 1, 1, 0)
++WRAP(int, fallocate,
++     (const char *path, int mode, off_t off, off_t len,
++      struct fuse_file_info *fi),
++     (path, mode, off, len, rfi), fi, 0, 0, 0)
++WRAP(off_t, lseek,
++     (const char *path, off_t off, int whence, struct fuse_file_info *fi),
++     (path, off, whence, rfi), fi, 0, 0, 0)
++
++static ssize_t native_copy_file_range(const char *a, struct fuse_file_info *ai,
++                                      off_t ao, const char *b,
++                                      struct fuse_file_info *bi, off_t bo,
++                                      size_t len, int flags) {
++  struct guard g;
++  int e = begin_request(&g, ai, 0, 0, 0);
++  if (e)
++    return -e;
++  long raw = find_handle(bi->fh, 0) ? -LKL_ENOSYS : -LKL_EBADF;
++  return finish_request(&g, "copy_file_range", raw);
++}
++static int native_open_common(const char *path, mode_t mode,
++                              struct fuse_file_info *fi, int create, int dir) {
++  struct guard g;
++  int e = begin_request(&g, NULL, -1, 0, 0);
++  if (e)
++    return -e;
++  struct fuse_file_info ri = *fi;
++  long raw = dir      ? raw_opendir(path, &ri)
++             : create ? raw_create(path, mode, &ri)
++                      : raw_open(path, &ri);
++  if (!raw)
++    raw = add_handle(&g, fi, (long)ri.fh, dir);
++  return (int)finish_request(&g,
++                             dir      ? "opendir"
++                             : create ? "create"
++                                      : "open",
++                             raw);
++}
++static int native_open(const char *p, struct fuse_file_info *fi) {
++  return native_open_common(p, 0, fi, 0, 0);
++}
++static int native_create(const char *p, mode_t m, struct fuse_file_info *fi) {
++  return native_open_common(p, m, fi, 1, 0);
++}
++static int native_opendir(const char *p, struct fuse_file_info *fi) {
++  return native_open_common(p, 0, fi, 0, 1);
++}
++static int native_flush(const char *p, struct fuse_file_info *fi) {
++  struct guard g;
++  int e = begin_request(&g, fi, 0, 1, 0);
++  if (e)
++    return -e;
++  long raw = g.held->writable ? lkl_sys_fsync(g.held->raw) : 0;
++  if (raw < 0)
++    sticky_io_error = 1;
++  return (int)finish_request(&g, "flush", raw);
++}
++static int native_release_common(const char *p, struct fuse_file_info *fi,
++                                 int dir) {
++  struct guard g;
++  int e = begin_request(&g, fi, dir, 1, 0);
++  if (e)
++    return -e;
++  long sync = g.held->writable && !dir ? lkl_sys_fsync(g.held->raw) : 0;
++  long close = lkl_sys_close(g.held->raw);
++  if (sync < 0)
++    sticky_io_error = 1;
++  if (close >= 0)
++    remove_handle(g.held);
++  return (int)finish_request(&g, dir ? "releasedir" : "release",
++                             sync < 0 ? sync : close);
++}
++static int native_release(const char *p, struct fuse_file_info *fi) {
++  return native_release_common(p, fi, 0);
++}
++static int native_releasedir(const char *p, struct fuse_file_info *fi) {
++  return native_release_common(p, fi, 1);
++}
++static void native_destroy(void *unused) {
++  if (!native_library_cleanup) {
++    __atomic_store_n(&native_protocol_destroy, 1, __ATOMIC_RELEASE);
++    fprintf(stderr, "NATIVE_PROTOCOL_DESTROY received=1\n");
++  }
++}
++static void *native_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
++  if (native_reassert_signals()) {
++    native_signal_setup_error = 1;
++    sticky_io_error = 1;
++  }
++  __atomic_store_n(&native_initialized, 1, __ATOMIC_RELEASE);
++  cfg->nullpath_ok = 1;
++  cfg->entry_timeout = 0;
++  cfg->attr_timeout = 0;
++  cfg->negative_timeout = 0;
++  cfg->use_ino = 1;
++  conn->want &= ~FUSE_CAP_WRITEBACK_CACHE;
++  if (conn->capable & FUSE_CAP_DONT_MASK)
++    conn->want |= FUSE_CAP_DONT_MASK;
++  return NULL;
++}
++static const struct fuse_operations native_ops = {
++    .init = native_init,
++    .destroy = native_destroy,
++    .getattr = native_getattr,
++    .readlink = native_readlink,
++    .mknod = native_mknod,
++    .mkdir = native_mkdir,
++    .unlink = native_unlink,
++    .rmdir = native_rmdir,
++    .symlink = native_symlink,
++    .rename = native_rename,
++    .link = native_link,
++    .chmod = native_chmod,
++    .chown = native_chown,
++    .truncate = native_truncate,
++    .utimens = native_utimens,
++    .read = native_read,
++    .write = native_write,
++    .fsync = native_fsync,
++    .statfs = native_statfs,
++    .setxattr = native_setxattr,
++    .getxattr = native_getxattr,
++    .listxattr = native_listxattr,
++    .removexattr = native_removexattr,
++    .access = native_access,
++    .readdir = native_readdir,
++    .fsyncdir = native_fsyncdir,
++    .fallocate = native_fallocate,
++    .lseek = native_lseek,
++    .copy_file_range = native_copy_file_range,
++    .open = native_open,
++    .create = native_create,
++    .opendir = native_opendir,
++    .flush = native_flush,
++    .release = native_release,
++    .releasedir = native_releasedir,
++};
++
++static struct lkl_disk backing;
++static unsigned long host_flush_calls;
++static int host_io_error;
++static int observed_capacity(struct lkl_disk disk, unsigned long long *size) {
++  return lkl_dev_blk_ops.get_capacity(disk, size);
++}
++static int observed_request(struct lkl_disk disk, struct lkl_blk_req *req) {
++  int rc = lkl_dev_blk_ops.request(disk, req);
++  if (rc != LKL_DEV_BLK_STATUS_OK) {
++    __atomic_store_n(&host_io_error, 1, __ATOMIC_RELEASE);
++    fprintf(stderr,
++            "HOST_IO_FAILED backing_fd=%d type=%u status=%d latched=1\n",
++            disk.fd, req->type, rc);
++  }
++  if (req->type == LKL_DEV_BLK_TYPE_FLUSH ||
++      req->type == LKL_DEV_BLK_TYPE_FLUSH_OUT) {
++    __atomic_add_fetch(&host_flush_calls, 1, __ATOMIC_RELAXED);
++    fprintf(stderr, "HOST_FLUSH backing_fd=%d status=%d\n", disk.fd, rc);
++  }
++  return rc;
++}
++static struct lkl_dev_blk_ops observed_ops = {.get_capacity = observed_capacity,
++                                              .request = observed_request};
++static int backing_disk_id = -1;
++static int backing_fd = -1, original_root = -1, mounted_root_fd = -1, fs_live,
++           disk_live, namespace_restored = 1, kernel_started;
++static char inner_mount[64], inner_device[64];
++static unsigned int inner_dev_number;
++static int normal_drain(void) {
++  if (credential_poison)
++    return -LKL_EIO;
++  if (handles)
++    return -LKL_EBUSY;
++  if (fs_live) {
++    long fd = mounted_root_fd >= 0
++                  ? mounted_root_fd
++                  : lkl_sys_open(namespace_restored ? inner_mount : "/",
++                                 LKL_O_RDONLY | LKL_O_DIRECTORY, 0);
++    if (fd < 0)
++      return (int)fd;
++    long sync = lkl_sys_syncfs(fd);
++    if (sync < 0) {
++      mounted_root_fd = (int)fd;
++      fprintf(stderr, "DRAIN_LKL_SYNCFS raw=%ld close=retained\n", sync);
++      return (int)sync;
++    }
++    long close = lkl_sys_close(fd);
++    mounted_root_fd = -1;
++    fprintf(stderr, "DRAIN_LKL_SYNCFS raw=%ld close=%ld\n", sync, close);
++    if (close < 0)
++      return (int)close;
++    if (!namespace_restored) {
++      long rc = lkl_sys_fchdir(original_root);
++      if (rc < 0)
++        return (int)rc;
++      rc = lkl_sys_chroot(".");
++      if (rc < 0)
++        return (int)rc;
++      rc = lkl_sys_chdir("/");
++      if (rc < 0)
++        return (int)rc;
++      namespace_restored = 1;
++    }
++    long rc = lkl_umount_dev(backing.dev ? backing_disk_id : -1, 0, 0, 2000);
++    fprintf(stderr, "DRAIN_LKL_UMOUNT raw=%ld\n", rc);
++    if (rc < 0)
++      return (int)rc;
++    fs_live = 0;
++  }
++  if (disk_live) {
++    if (inner_device[0]) {
++      long node =
++          lkl_sys_mknod(inner_device, LKL_S_IFBLK | 0600, inner_dev_number);
++      if (node < 0 && node != -LKL_EEXIST)
++        return (int)node;
++    }
++    int released = 0;
++    struct __lkl__kernel_timespec pause = {.tv_sec = 0, .tv_nsec = 1000000};
++    for (int i = 0; inner_device[0] && i < 2000; i++) {
++      long fd = lkl_sys_open(inner_device, LKL_O_RDONLY | LKL_O_EXCL, 0);
++      if (fd >= 0) {
++        lkl_sys_close(fd);
++        released = 1;
++        break;
++      }
++      if (fd != -LKL_EBUSY)
++        return (int)fd;
++      lkl_sys_nanosleep(&pause, NULL);
++    }
++    if (inner_device[0] && !released)
++      return -LKL_EBUSY;
++    if (fsync(backing_fd) < 0) {
++      fprintf(stderr, "DRAIN_HOST_FSYNC errno=%d\n", errno);
++      return -LKL_EIO;
++    }
++    fprintf(stderr, "DRAIN_HOST_FSYNC rc=0\n");
++    long rc = lkl_disk_remove(backing);
++    fprintf(stderr, "DRAIN_DISK_REMOVE raw=%ld\n", rc);
++    if (rc < 0)
++      return (int)rc;
++    disk_live = 0;
++  }
++  return 0;
++}
++static void retain_until_normal_drain(void) {
++  unsigned tries = 0;
++  for (;;) {
++    pthread_mutex_lock(&request_lock);
++    int raw = normal_drain();
++    pthread_mutex_unlock(&request_lock);
++    if (!raw) {
++      fprintf(
++          stderr,
++          "NORMAL_DRAIN completed; backing still open until checked cleanup\n");
++      return;
++    }
++    if (tries++ == 0 || tries % 30 == 0)
++      fprintf(stderr,
++              "DRAIN_FAILED raw=%d host=%d retained_pid=%d backing_fd=%d "
++              "handles=%s\n",
++              raw, host_errno(-raw), getpid(), backing_fd,
++              handles ? "yes" : "no");
++    sleep(1);
++  }
++}
++static int check_empty_mountpoint(const char *path) {
++  int fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
++  if (fd < 0)
++    return -1;
++  struct stat st;
++  if (fstat(fd, &st) || !S_ISDIR(st.st_mode) || st.st_uid != getuid() ||
++      (st.st_mode & 0022)) {
++    close(fd);
++    errno = EPERM;
++    return -1;
++  }
++  DIR *d = fdopendir(fd);
++  if (!d) {
++    close(fd);
++    return -1;
++  }
++  struct dirent *de;
++  while ((de = readdir(d)))
++    if (strcmp(de->d_name, ".") && strcmp(de->d_name, "..")) {
++      closedir(d);
++      errno = ENOTEMPTY;
++      return -1;
++    }
++  return closedir(d);
++}
++static int setup_mount(const char *type, int readonly) {
++  int rc = lkl_init(&lkl_host_ops);
++  if (rc < 0)
++    return rc;
++  rc = lkl_start_kernel("mem=128M");
++  if (rc < 0)
++    return rc;
++  kernel_started = 1;
++  struct timespec wall;
++  clock_gettime(CLOCK_REALTIME, &wall);
++  struct __lkl__kernel_timespec now = {wall.tv_sec, wall.tv_nsec};
++  lkl_sys_clock_settime(LKL_CLOCK_REALTIME, &now);
++  backing.fd = backing_fd;
++  backing.ops = &observed_ops;
++  backing_disk_id = lkl_disk_add_with_flush(&backing);
++  if (backing_disk_id < 0)
++    return backing_disk_id;
++  disk_live = 1;
++  const char *opts = readonly ? (!strcmp(type, "xfs")     ? "norecovery"
++                                 : !strcmp(type, "btrfs") ? "nologreplay"
++                                                          : "noload")
++                              : "";
++  rc = lkl_mount_dev(backing_disk_id, 0, type,
++                     LKL_MS_NOSUID | LKL_MS_NODEV |
++                         (readonly ? LKL_MS_RDONLY : 0),
++                     opts, inner_mount, sizeof inner_mount);
++  if (rc < 0)
++    return rc;
++  fs_live = 1;
++  unsigned int dev =
++      (unsigned int)strtoul(strrchr(inner_mount, '/') + 1, NULL, 16);
++  inner_dev_number = dev;
++  snprintf(inner_device, sizeof inner_device, "/dev/lurker_%08x", dev);
++  original_root = lkl_sys_open("/", LKL_O_RDONLY | LKL_O_DIRECTORY, 0);
++  if (original_root < 0)
++    return original_root;
++  mounted_root_fd =
++      lkl_sys_open(inner_mount, LKL_O_RDONLY | LKL_O_DIRECTORY, 0);
++  if (mounted_root_fd < 0)
++    return mounted_root_fd;
++  rc = lkl_sys_chdir(inner_mount);
++  if (rc < 0)
++    return rc;
++  rc = lkl_sys_chroot(".");
++  if (rc < 0)
++    return rc;
++  namespace_restored = 0;
++  rc = lkl_sys_chdir("/");
++  return rc;
++}
++
++/* Snapshot the native mount table without triggering filesystem requests. INIT
++ * must be served on the main thread before asynchronous mount completion. The
++ * observer makes no LKL calls and joins within one 10ms polling interval. */
++struct native_mount_watch {
++  const char *point;
++  char source[64];
++  struct stat underlay;
++  struct statfs captured;
++  int captured_ok, error, done;
++};
++static int native_mounts(struct statfs **out) {
++  int n = getfsstat(NULL, 0, MNT_NOWAIT);
++  if (n < 0)
++    return -errno;
++  if (n > 8192)
++    return -EOVERFLOW;
++  int cap = n + 16;
++  struct statfs *v = calloc((size_t)cap, sizeof *v);
++  if (!v)
++    return -ENOMEM;
++  n = getfsstat(v, cap * (int)sizeof *v, MNT_NOWAIT);
++  if (n < 0) {
++    int e = errno;
++    free(v);
++    return -e;
++  }
++  if (n >= cap) {
++    free(v);
++    return -EAGAIN;
++  }
++  *out = v;
++  return n;
++}
++static int native_capture(struct native_mount_watch *w) {
++  struct statfs *v = NULL;
++  int n = native_mounts(&v);
++  if (n < 0)
++    return n;
++  int rc = 0;
++  for (int i = 0; i < n; i++)
++    if (!strcmp(v[i].f_mntonname, w->point)) {
++      if (strcmp(v[i].f_fstypename, "macfuse") ||
++          strcmp(v[i].f_mntfromname, w->source)) {
++        rc = -ESTALE;
++        break;
++      }
++      if (!v[i].f_fsid.val[0] && !v[i].f_fsid.val[1]) {
++        rc = -ESTALE;
++        break;
++      }
++      w->captured = v[i];
++      w->captured_ok = 1;
++      fprintf(stderr, "NATIVE_MOUNT_ID fsid=%d:%d type=%s source=%s point=%s\n",
++              v[i].f_fsid.val[0], v[i].f_fsid.val[1], v[i].f_fstypename,
++              v[i].f_mntfromname, v[i].f_mntonname);
++      break;
++    }
++  free(v);
++  return rc;
++}
++static void *native_observer(void *arg) {
++  struct native_mount_watch *w = arg;
++  while (!__atomic_load_n(&w->done, __ATOMIC_ACQUIRE)) {
++    if (__atomic_load_n(&native_initialized, __ATOMIC_ACQUIRE)) {
++      int rc = native_capture(w);
++      if (rc) {
++        w->error = rc;
++        break;
++      }
++      if (w->captured_ok)
++        break;
++    }
++    usleep(10000);
++  }
++  return NULL;
++}
++static int native_mount_gone(const struct native_mount_watch *w) {
++  if (w->error || !w->captured_ok)
++    return w->error ? w->error : -ESTALE;
++  struct statfs *v = NULL;
++  int n = native_mounts(&v);
++  if (n < 0)
++    return n;
++  int rc = 0;
++  for (int i = 0; i < n; i++) {
++    if (!memcmp(&v[i].f_fsid, &w->captured.f_fsid, sizeof(fsid_t))) {
++      rc = -EBUSY;
++      break;
++    }
++    if (!strcmp(v[i].f_mntonname, w->point)) {
++      rc = -ESTALE;
++      break;
++    }
++  }
++  free(v);
++  if (rc)
++    return rc;
++  int fd = open(w->point, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
++  if (fd < 0)
++    return -errno;
++  struct stat st;
++  rc = fstat(fd, &st);
++  int e = errno;
++  close(fd);
++  if (rc)
++    return -e;
++  if (st.st_dev != w->underlay.st_dev || st.st_ino != w->underlay.st_ino ||
++      st.st_uid != w->underlay.st_uid || (st.st_mode & 0022))
++    return -ESTALE;
++  return 0;
++}
++static void native_signal_handler(int signal) { native_signal = signal; }
++static sigset_t original_signal_mask;
++static int original_signal_mask_ready;
++static int native_signals(struct sigaction saved[4], int install) {
++  int signals[] = {SIGINT, SIGTERM, SIGHUP, SIGPIPE};
++  struct sigaction action = {0};
++  action.sa_handler = native_signal_handler;
++  sigemptyset(&action.sa_mask);
++  action.sa_flags = SA_RESTART;
++  if (!install && original_signal_mask_ready &&
++      pthread_sigmask(SIG_SETMASK, &original_signal_mask, NULL))
++    return -1;
++  for (int i = 0; i < 4; i++)
++    if (sigaction(signals[i], install ? &action : &saved[i],
++                  install ? &saved[i] : NULL) < 0) {
++      if (install)
++        for (int j = 0; j < i; j++)
++          sigaction(signals[j], &saved[j], NULL);
++      return -1;
++    }
++  if (install) {
++    sigset_t set;
++    sigemptyset(&set);
++    for (int i = 0; i < 4; i++)
++      sigaddset(&set, signals[i]);
++    if (pthread_sigmask(SIG_UNBLOCK, &set, &original_signal_mask))
++      return -1;
++    original_signal_mask_ready = 1;
++  }
++  return 0;
++}
++/* MFMount installs dispatch signal sources while opening its channel. Rebind
++ * our async-safe disposition after INIT; keep serving until ordinary unmount.
++ */
++static int native_reassert_signals(void) {
++  int signals[] = {SIGINT, SIGTERM, SIGHUP, SIGPIPE};
++  struct sigaction action = {0};
++  action.sa_handler = native_signal_handler;
++  sigemptyset(&action.sa_mask);
++  action.sa_flags = SA_RESTART;
++  for (int i = 0; i < 4; i++)
++    if (sigaction(signals[i], &action, NULL) < 0)
++      return -1;
++  sigset_t set;
++  sigemptyset(&set);
++  for (int i = 0; i < 4; i++)
++    sigaddset(&set, signals[i]);
++  if (pthread_sigmask(SIG_UNBLOCK, &set, NULL))
++    return -1;
++  fprintf(stderr, "NATIVE_SIGNAL_HANDLERS own=1 after_channel_init=1\n");
++  return 0;
++}
++int main(int argc, char **argv) {
++  int readonly = 0, allow_other = 0;
++  int first = 1;
++  for (; first < argc && argv[first][0] == '-'; first++) {
++    if (!strcmp(argv[first], "--read-only"))
++      readonly = 1;
++    else if (!strcmp(argv[first], "--allow-other"))
++      allow_other = 1;
++    else if (!strcmp(argv[first], "--version")) {
++      printf("native-lkl-macfuse candidate API35 compatibility; libfuse=%s "
++             "uid=%u\n",
++             fuse_pkgversion(), getuid());
++      return 0;
++    } else {
++      fprintf(stderr, "usage: lklfuse-darwin [--read-only] [--allow-other] "
++                      "FILE MOUNTPOINT ext4|xfs|btrfs\n");
++      return 64;
++    }
++  }
++  if (argc - first != 3 ||
++      (strcmp(argv[first + 2], "ext4") && strcmp(argv[first + 2], "xfs") &&
++       strcmp(argv[first + 2], "btrfs")))
++    return 64;
++  if (!getuid() || geteuid() != getuid() || getegid() != getgid()) {
++    fprintf(stderr,
++            "login-user execution required; no privileged driver path\n");
++    return 77;
++  }
++  mount_identity.identity_source = 3;
++  mount_identity.uid = getuid();
++  mount_identity.gid = getgid();
++  mount_identity.pid = getpid();
++  mode_t mask = umask(0);
++  umask(mask);
++  mount_identity.mask = mask;
++  gid_t groups[GROUP_LIMIT];
++  int ng =
++      kernel_request_groups(getpid(), getuid(), getgid(), groups, GROUP_LIMIT);
++  if (ng < 0)
++    return 1;
++  mount_identity.ngroups = ng;
++  for (int i = 0; i < ng; i++)
++    mount_identity.groups[i] = groups[i];
++  const char *source = argv[first], *point = argv[first + 1],
++             *type = argv[first + 2];
++  struct stat before, after;
++  if (lstat(source, &before) || !S_ISREG(before.st_mode) ||
++      before.st_uid != getuid() || before.st_nlink != 1 ||
++      (before.st_mode & 0022)) {
++    fprintf(
++        stderr,
++        "refuse non-owned, linked, writable-shared or nonregular backing\n");
++    return 77;
++  }
++  backing_fd =
++      open(source, (readonly ? O_RDONLY : O_RDWR) | O_NOFOLLOW | O_CLOEXEC);
++  if (backing_fd < 0 || fstat(backing_fd, &after) ||
++      before.st_dev != after.st_dev || before.st_ino != after.st_ino) {
++    perror("backing identity");
++    return 1;
++  }
++  if (flock(backing_fd, LOCK_EX | LOCK_NB)) {
++    perror("exclusive backing claim");
++    close(backing_fd);
++    return 1;
++  }
++  char canonical_point[PATH_MAX];
++  if (!realpath(point, canonical_point)) {
++    perror("mountpoint path");
++    close(backing_fd);
++    return 1;
++  }
++  point = canonical_point;
++  if (check_empty_mountpoint(point)) {
++    perror("owned empty mountpoint");
++    close(backing_fd);
++    return 1;
++  }
++  struct native_mount_watch watch = {.point = point};
++  if (lstat(point, &watch.underlay)) {
++    close(backing_fd);
++    return 1;
++  } /* Explicit bounded source name; no formatting needed. */
++  memcpy(watch.source, "native-lkl-", 11);
++  memcpy(watch.source + 11, type, strlen(type) + 1);
++  int rc = setup_mount(type, readonly);
++  if (rc < 0) {
++    fprintf(stderr, "native LKL setup failed raw=%d host=%d\n", rc,
++            host_errno(-rc));
++    if (kernel_started) {
++      retain_until_normal_drain();
++      lkl_sys_halt();
++      lkl_cleanup();
++    }
++    close(backing_fd);
++    return 1;
++  }
++  char opts[512];
++  snprintf(opts, sizeof opts,
++           "fsname=native-lkl-%s,volname=LKL-%s,nobrowse,local,nodev,nosuid,"
++           "noexec%s%s",
++           type, type, readonly ? ",ro" : "",
++           allow_other ? ",allow_other" : "");
++  char *av[] = {"lklfuse-darwin", "-o", opts, NULL};
++  struct fuse_args fa = FUSE_ARGS_INIT(3, av);
++  struct fuse *f = fuse_new(&fa, &native_ops, sizeof native_ops, NULL);
++
++  int signal_ready = 0, mounted = 0, observer_ready = 0;
++  pthread_t observer;
++  struct sigaction saved_signals[4];
++  if (!f) {
++    fprintf(stderr, "fuse_new failed\n");
++    rc = -1;
++    goto finish;
++  }
++  signal_ready = native_signals(saved_signals, 1) == 0;
++  if (!signal_ready) {
++    fprintf(stderr, "native signal setup failed\n");
++    rc = -1;
++    goto finish;
++  }
++  /* Create the observer before the asynchronous mount; it waits for INIT and
++   * never blocks INIT or executes emulated syscalls. */
++  if (pthread_create(&observer, NULL, native_observer, &watch)) {
++    fprintf(stderr, "native mount observer failed\n");
++    rc = -1;
++    goto finish;
++  }
++  observer_ready = 1;
++  mounted = fuse_mount(f, point) == 0;
++  if (mounted) {
++    fprintf(stderr,
++            "NATIVE_MOUNT_START pid=%d uid=%u backing_dev=%llu "
++            "backing_inode=%llu filesystem=%s\n",
++            getpid(), getuid(), (unsigned long long)after.st_dev,
++            (unsigned long long)after.st_ino, type);
++    rc = fuse_loop(f);
++  } else {
++    fprintf(stderr, "native macFUSE mount failed\n");
++    rc = -1;
++  }
++finish:
++  if (observer_ready) {
++    __atomic_store_n(&watch.done, 1, __ATOMIC_RELEASE);
++    pthread_join(observer, NULL);
++  }
++  /* No fuse_unmount: this macFUSE library can force an exited session. Prove
++   * the exact observed native mount is gone and the original directory remains
++   * before channel-only library cleanup, inner drain or backing release. */
++  if (mounted) {
++    unsigned tries = 0;
++    for (;;) {
++      int e = native_mount_gone(&watch);
++      if (!e)
++        break;
++      if (tries++ == 0 || tries % 300 == 0)
++        fprintf(stderr,
++                "NATIVE_CLOSE_RETAIN raw=%d pid=%d captured=%d "
++                "protocol_destroy=%d\n",
++                e, getpid(), watch.captured_ok,
++                __atomic_load_n(&native_protocol_destroy, __ATOMIC_ACQUIRE));
++      usleep(10000);
++    }
++    fprintf(stderr,
++            "NATIVE_MOUNT_GONE checked_fsid=1 original_underlay=1 "
++            "protocol_destroy=%d signal=%d\n",
++            __atomic_load_n(&native_protocol_destroy, __ATOMIC_ACQUIRE),
++            native_signal);
++    if (!__atomic_load_n(&native_protocol_destroy, __ATOMIC_ACQUIRE))
++      rc = -1;
++  }
++  /* fuse_destroy may unlink libfuse hidden files through our callbacks, so it
++   * runs with the LKL filesystem alive, after the native mount identity gate.
++   * Its transitive session destruction closes only its retained MFChannel. */
++  if (f) {
++    native_library_cleanup = 1;
++    fuse_destroy(f);
++  }
++  fuse_opt_free_args(&fa);
++  retain_until_normal_drain();
++  if (original_root >= 0)
++    lkl_sys_close(original_root);
++  lkl_sys_halt();
++  lkl_cleanup();
++  int closed = close(backing_fd);
++  fprintf(stderr,
++          "BACKING_RELEASE checked_normal_drain=1 close=%d sticky_io_error=%d "
++          "host_flush_calls=%lu signal=%d host_io_error=%d\n",
++          closed, sticky_io_error,
++          __atomic_load_n(&host_flush_calls, __ATOMIC_RELAXED), native_signal,
++          __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE));
++  if (signal_ready)
++    native_signals(saved_signals, 0);
++  return rc < 0 || closed < 0 || sticky_io_error || native_signal ||
++                 __atomic_load_n(&host_io_error, __ATOMIC_ACQUIRE)
++             ? 1
++             : 0;
++}
