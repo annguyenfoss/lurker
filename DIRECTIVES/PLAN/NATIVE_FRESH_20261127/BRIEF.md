@@ -98,6 +98,13 @@ Ubuntu and Gentoo. Those three owners may now build and qualify matching
 write-enabled configurations under the established-code boundary, preserving
 the ordinary boot setup. This exception does not reopen cut kernel inventions
 or require rerunning the other nine completed filesystem routes.
+The user then authorized starting all retained deferred work when it now makes
+sense. Owners must reconcile current receipts and start eligible, ready jobs,
+queuing dependency-bound work behind each host's active job. The ordinary-first
+scheduling deferral is lifted for those jobs. Do not repeat completed gates,
+reopen cut work, bypass unresolved prerequisite eligibility or weaken the
+established-code boundary. Record the started job or the concrete dependency
+that prevents starting it; completed work is not a deferred task.
 Ordinary matching external driver modules are assessed separately, with the
 same established-solution requirement. Passing our tests alone does not qualify
 an experimental kernel change.
