@@ -6,6 +6,65 @@ No previous result is accepted as a fresh pass. The acceptance contract and host
 ownership are BRIEF.md and HOSTS.md. Private case receipts and checkpoints live
 under target/goal-validation/native-fresh-20261127/.
 
+## Latest reconciliation
+
+The chronological milestones below retain their original candidate and scope.
+The current completed host reports include all six Linux distributions, macOS,
+DragonFly and NetBSD; their stated driver and source-version limitations still
+apply. OpenBSD installed-package qualification and FreeBSD's controlled
+shutdown-service qualification remain active. Whole-round completion is unproven.
+
+Ubuntu's final report is `e68bb47`: both 130-cell source-kind ledgers contain
+54 passed, six stock-UFS1 unavailable and 70 platform-inapplicable cells. The
+owner reports ten ordinary reboots covering 54 file/backing fixtures and three
+physical partitions, all six installed `/usr/bin/lurker` user flows, helper and
+GUI gates, and a clean final package/resource audit. These remain owner results;
+the coordinator's earlier payload audit has a narrower scope.
+
+DragonFly's final report is `696c899`. Root inspected the six ordinary-reboot
+receipts: five container fixtures cover UFS1, ext4, exFAT, HAMMER2 and NTFS,
+and the physical sample is VeraCrypt/Twofish/keyfile/UFS1. All changed-boot
+payload hashes, actual UID/EUID 1300 reads and writes, unrelated-user denials
+through searchable ancestors, normal reopens and final closes match. The
+retained cleanup output has no crypto maps and all vnode devices idle. Exact
+recipe/provenance corroboration is being completed in
+`hosts/dragonflybsd/validation/root-six-reboot-audit.json`.
+
+Root independently checked NetBSD's four CGD and one CryFS reboot fixtures,
+the exact executed recipes and imported payload helper, retained arm/verify
+log hashes, changed boot identity, relocated physical partition UUID, payload
+hashes, installed binary identities and normal closes. The CGD payload worker
+drops groups/GID/UID before filesystem calls; the CryFS recipe asserts actual
+UID/EUID 1300. Package verification covers 861 payload files and final cleanup
+has no owned crypto processes or active CGD/vnd devices. The private audit is
+`hosts/netbsd/validation/root-five-reboot-audit8e.json`. User-mount authorization
+and `/dev/putter` permissions were reapplied manually after boot and restored;
+this does not prove automatic prerequisite availability or resolve ZFS import.
+
+FreeBSD's revised opt-in service is committed at `0bdbfb2`. Its native manual
+proof covers bounded immutable target-list snapshots, strict separators and
+duplicate aliases, twelve policy refusals, an atomic-list replacement race,
+the real user-folder branch, busy preservation and ordered normal closes.
+Root reviewed these inputs and authorized one fresh small-cohort VM reboot
+with explicit administrator activation. That test has no result yet; the
+failed stock shutdown and clone recovery remain separate evidence.
+
+OpenBSD's exact `123d177` workspace passed 154 native tests, with 22 ignored,
+and all three products built. Native staging and package construction passed;
+the first wrapper attempt exhausted space and is retained separately from the
+successful unchanged-byte retry. Package SHA-256 is
+`ac36aa9fe987805bad70fe5cd5880ae962df671f75808cecdf6efd5f21f01b7a`.
+Installation and frozen container/device/reboot validation continue.
+
+CryFS exFAT failures on OpenBSD and NetBSD are now matched to native hardlink
+`ENOSYS`, while ordinary file create/write/fsync/read/rename/unlink work. This
+is a bundled publication adaptation gap. The existing common patch is unchanged:
+a bare exclusive-create fallback can expose partial valid block names to
+unlocked readers and scans. Native locking semantics are under bounded
+investigation before any alternative is selected. FreeBSD NTFS/exFAT publication,
+its native Cryptomator ABI integration, and the separate LKL eligibility question
+also remain open. No new custom kernel/module experiment has begun.
+
 ## Verified initial milestones
 
 - Documentation/handoffs: commit `8adcdcf`; all eleven host owners dispatched.
@@ -443,7 +502,6 @@ operations (`8a401a3`); an automatic network-filesystem fallback is not used.
 The authorized Toshiba USB samples for APFS encryption and Cryptomator on exFAT
 passed and closed normally. Buran was not rebooted.
 
-No complete host matrix, final candidate validation, scratch-device qualification,
-whole-round cleanup or deferred customized-kernel assessment is claimed yet.
-The round remains active. Per-host reports and private receipts are authoritative
-for their explicitly recorded revisions and scopes.
+Whole-round final validation, cleanup and deferred customized-kernel assessment
+remain incomplete. The round remains active. Per-host reports and private
+receipts are authoritative for their explicitly recorded revisions and scopes.
