@@ -3,6 +3,8 @@
 //! Parsing a record does not authorize encrypted-provider teardown. The eventual
 //! consumer must also verify the persisted session/source/status inode, acquire
 //! the final status lock, and prove the captured native mount is globally absent.
+//! A live correlated completion result is additionally required: a visible
+//! record cannot prove that its producer's final sync/close and exit succeeded.
 use crate::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};

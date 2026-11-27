@@ -211,6 +211,27 @@ published-signal control keeps service available and later exits zero with
 `drained` after normal unmount; Darwin and DragonFly instead latch signal failure.
 These different observed outcomes are not relabeled as equivalent tests.
 
+Checked-halt corrections are now committed for FreeBSD (`b432db4`), Darwin
+(`121e1d9`) and DragonFly (`6aa2831`). Root checked Darwin's 67 new references,
+51 archive members, five targeted controls and unchanged pre-main production
+logic outside the halt helper/latch in
+`hosts/macos/validation/native-lkl-halt-v14/root-halt-delta-audit.json`. That v14
+binary remains private; the installed v13 and prior fifteen writable opens keep
+their original identity. FreeBSD status-lease preparation `b721dab` passed six
+focused tests and 158 workspace tests, with 13 ignored. Root verified 528 source
+files and five raw logs. The initial variadic-mode compile error and temporary
+directory permission test failures remain separately retained; production
+permissions were not relaxed.
+
+The next native admission contract must also distinguish successful completion
+from a valid-looking status file left by a failed producer. A final status
+sync/close failure can occur after the visible `drained` bytes were written.
+Mac and FreeBSD are preparing a shared bounded codec with native guardian
+bindings: actual owned-child exit status and a live correlated result authorize
+success; a file alone never does. Core session hooks and write admission remain
+pending. FreeBSD leased sessions will require a version fence so older helpers
+cannot ignore the lease and bypass its completion check.
+
 OpenBSD's exact `123d177` workspace passed 154 native tests, with 22 ignored,
 and all three products built. Native staging and package construction passed;
 the first wrapper attempt exhausted space and is retained separately from the
