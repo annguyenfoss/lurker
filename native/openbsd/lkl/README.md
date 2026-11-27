@@ -28,3 +28,12 @@ request credentials, Linux error translation, synchronous namespace publication,
 checked backing flush and normal teardown remain separate required gates.
 Compilation or RAM boot success never authorizes a filesystem mount. Existing
 installed providers, old scratch devices and failed fixtures remain untouched.
+
+The first unmodified source diagnostic on the base compiler/linker stopped in
+configuration: native LLVM ld does not implement `-print-output-format`, and
+upstream's Clang target table omits OpenBSD. `--gnu-tools` selects the separately
+installed native gcc/binutils/bison/GNU sed/coreutils prerequisites through
+private aliases. It compiles one native data object, records its exact GNU
+objdump format and all tool hashes, and supplies that observed format to make.
+It changes no upstream source or global executable alias. Keep this tools-only
+attempt in a new work directory so earlier generated diagnostics remain intact.

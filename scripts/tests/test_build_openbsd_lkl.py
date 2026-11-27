@@ -88,6 +88,25 @@ class SourceInputs(unittest.TestCase):
                 build.verify_source(archive, root)
 
 
+class NativeTools(unittest.TestCase):
+    def test_private_alias_does_not_replace_unexpected_input(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "gcc").symlink_to("/unexpected")
+            with self.assertRaisesRegex(RuntimeError, "Unexpected private"):
+                build.install_alias(root, "gcc", "/usr/local/bin/egcc")
+            self.assertEqual(os.readlink(root / "gcc"), "/unexpected")
+
+    def test_actual_gnu_object_format_and_tool_inventory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory, arguments, identity = build.gnu_toolchain(Path(temp))
+            self.assertIn(identity["format"], ("elf64-x86-64", "elf64-x86-64-openbsd"))
+            self.assertIn("LD_FMT=" + identity["format"], arguments)
+            self.assertEqual(os.readlink(directory / "gcc"), "/usr/local/bin/egcc")
+            self.assertEqual(identity["tool_sha256"]["gcc"], build.digest("/usr/local/bin/egcc"))
+            self.assertIn("GCC", identity["compiler_version"])
+
+
 class OwnedBuildProcess(unittest.TestCase):
     def test_success_preserves_exact_log_and_does_not_run_shell(self):
         with tempfile.TemporaryDirectory() as temp:
