@@ -107,6 +107,22 @@ class NativeTools(unittest.TestCase):
             self.assertIn("GCC", identity["compiler_version"])
 
 
+class NativeTimer(unittest.TestCase):
+    def test_monotonic_refcounted_timer_and_explicit_quiescence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            binary = Path(temp) / "timer-control"
+            source = ROOT / "native/openbsd/lkl/timer-control.c"
+            subprocess.run(["/usr/bin/cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            "-pthread", "-I" + str(source.parent), str(source), "-o", str(binary)],
+                           check=True, capture_output=True, timeout=30)
+            process = subprocess.run([str(binary)], check=True, capture_output=True,
+                                     text=True, timeout=10)
+            print(process.stdout, end="")
+            self.assertIn("callback self-free passed", process.stdout)
+            self.assertIn("nonblocking free and explicit callback quiescence passed", process.stdout)
+            self.assertIn("32 cancelled workers drained", process.stdout)
+
+
 class OwnedBuildProcess(unittest.TestCase):
     def test_success_preserves_exact_log_and_does_not_run_shell(self):
         with tempfile.TemporaryDirectory() as temp:

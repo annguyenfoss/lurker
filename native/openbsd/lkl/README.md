@@ -37,3 +37,12 @@ private aliases. It compiles one native data object, records its exact GNU
 objdump format and all tool hashes, and supplies that observed format to make.
 It changes no upstream source or global executable alias. Keep this tools-only
 attempt in a new work directory so earlier generated diagnostics remain intact.
+
+The pure native timer control uses the reviewed nonblocking cancellation and
+refcounted worker model from NetBSD 27341fd, with OpenBSD's monotonic pthread
+condition API. Free never joins a callback, including one blocked on LKL CPU/IRQ
+ownership. A separate quiescence drain is permitted only after CPU/thread/tick
+shutdown and before freeing emulated memory. Native tests cover self-rearm,
+self-free, a blocked callback with nonblocking free and delayed quiescence,
+replacement/cancellation, large deadlines and 32 drained workers. This component
+is not yet wired into an LKL build or a filesystem mount.
