@@ -1056,3 +1056,36 @@ and 41 spawn checks pass, adding executable metadata recheck and retained failur
 Actual-close/reported-EIO and changed-metadata controls both retain the owned
 child; real ENOENT publishes none. All three dummy children are reaped. Earlier
 v1/v2 receipts retain their old source/API scope; no storage test is repeated.
+
+
+### Cryptomator worker corrections and shared managed Java
+
+All following gates run as UID/EUID 1300 with one worker. They compile or use
+fake/memory resources only: no FUSE channel, mount, native unmount or destruction.
+Evidence paths below are relative to this host's private `build/` directory.
+
+| Run / purpose and frozen input | Command/log reference | Outcome and cleanup |
+| --- | --- | --- |
+| Provider2, direct-FSID worker candidate `c05ae6b8...` | `cryptomator-port-source/native-no-force-2/build-result.json`, raw compiler logs, archive `c845dda5...` | ABI/helper/API stages pass; FreeBSD Java compile fails at three String-to-permission-set calls. Later controls not run; process terminal, failed source retained. |
+| Provider3, only those three calls corrected, archive `838de927...` | `native-no-force-3/build-result.json`, 21 raw logs, archive `87023b7e...` | All 16 stages pass: 99 fields, 30 callbacks, 3 strings, 3 injected errno checks; 24 lifecycle, 21 worker, 8 adapter controls and 13 Python tests pass. Fake timeout child retention then test-only kill/reap is separate from normal close. Manifest `9b213272...`; jobs terminal. |
+| Shared Java attempt1, 14 frozen files `a7fd9e40...` | `cryptomator-managed-close/native-shared-1/`, offline Maven | Missing Surefire JUnit provider 3.5.4 prevents tests; package/runtime not reached. Failure retained, no JUnit pass claimed. |
+| Dependency warm1 | `cryptomator-managed-close/warm-1/`, dependency-plugin 3.8.1 `get` | Official Central only, provider 3.5.4/transitives fetched. Eleven new/changed files and 244 unique transfers recorded by coordinate/URL/SHA; checksums are not a security audit. No online tests. Mirror ID `official-central-only` differs from existing cached origins. |
+| Shared Java attempt2, replay-fixed 14-file input2 `0c2b29e7...` | `native-shared-2/`, offline Maven | Private mirror-ID mismatch makes cached Jackson BOM unavailable before compilation/tests. This orchestration setting error is retained; no source or cache tracking rewritten. |
+| Dependency warm2 | `warm-2/result.json`, exact provider 3.5.4 and selected launcher 1.12.2 | Correct official Central ID `central`; 13 transfer coordinates/URLs/hashes and origin tracking recorded. Dependency-only, no online tests/source/pin changes. |
+| Shared Java attempt3, same input2 bytes | `native-shared-3/result.json`, two Surefire XML files and six stage logs | BackendTest 9 + ManagedCloseTest 7 = 16 pass, zero failures/errors/skips, real native Unix peer credentials. Package/27 locked JARs/private jlink including jdk.net/version/capabilities pass. Helper `216831ca...`, archive `01241428...`; sources unchanged, JVM/test children terminal. |
+| Rust input2, five-file overlay `99513921...` | `cryptomator-managed-core/native-v2-failed/`, cargo workspace check/test | Check exits 0. Test compilation exits 101: supervisor's test-only Session initializer lacks two FreeBSD managed fields. No suites or Java interoperability execute. Source/log hashes retained; no automatic retry. |
+
+Provider3's optional collector summary used an incorrect adapter key and left a
+null field; the authoritative build result and raw adapter log record all eight
+passing controls. No test was repeated for collection. Debian independently
+verified provider3 provenance and committed `a4663c0`; OpenBSD independently
+verified shared attempt3's exact inputs, logs, tests, JARs and terminal inventory.
+The original provider image's helper remains distinct from the qualified shared
+helper: combining them requires a separately manifested derivation.
+
+Cryptomator remains disabled in core. Genuine upstream FileStore/ReadWriteAdapter
+factory, actual mounted lifecycle, direct native FSID close and normal busy retry
+remain unproven. `build/cryptomator-real-pilot-plan-1/plan.json` records a read-only
+proposal, including a reviewed real-engine controller prerequisite; no pilot has
+been executed. The corrected Rust input3 is a separate queued/running gate and
+is not included among these results.
