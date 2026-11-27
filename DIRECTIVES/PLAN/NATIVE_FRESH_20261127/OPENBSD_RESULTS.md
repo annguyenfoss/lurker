@@ -191,11 +191,22 @@ removed `/dev/srandom`; an OpenBSD-only build definition selects the real kernel
 CSPRNG `/dev/urandom` without creating substitute devices. That control mounted
 through the stock base FUSE kernel but its first regular-file write exposed
 upstream's unimplemented MKNOD callback. A narrowly scoped regular-file
-MKNOD-to-existing-create/release port is now being built and assessed.
-Failed source/runtime receipts and fixtures are preserved; no native CryFS
-payload lifecycle or product pass is claimed yet. The installed fuse_mount(3)
-manual requires root for mount/unmount, so a successful engine control would
-also require a trusted privileged product lifecycle before enabling this OS.
+MKNOD-to-existing-create/release port completed the full fresh native control:
+all three downloaded PDFs and text were written and verified, normal close
+reported engine exit 0, reopen verified hashes, text was appended and a new file
+created, and a final reopen verified all five hashes before normal close and
+engine exit 0. All three actual mounts were observed; none remained afterward.
+The reviewed OpenBSD-only patch SHA-256 is
+`1dcd9ad25296d0c7df4eeb2f44d710f7fbdc0c29d5f0bb07326712c94f3c794f`;
+the native control engine SHA-256 is
+`5d7c8479d29c4aa0a4cf10e24b37953d683bd18e111fbb85ade11c1d4f4de4f9`.
+Its exact diff was checked against pinned HEAD plus the common fsyncdir patch
+before compilation. Build/provider headers and the full control fixtures are
+retained in separate `logs/cryfs-*.tar.gz` archives. This proves a native engine
+route, not Lurker support. The installed fuse_mount(3) manual requires root for
+mount/unmount; trusted privileged integration, reproducible producer/staging
+and actual product cases remain required before enabling this OS. Failed
+source/runtime receipts and fixtures remain preserved separately.
 Other requested
 portable engines retain their explicit per-cell assessment in the ledger.
 

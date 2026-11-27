@@ -1,0 +1,146 @@
+--- a/src/cpp-utils/system/get_total_memory.cpp
++++ b/src/cpp-utils/system/get_total_memory.cpp
+@@ -21,7 +21,7 @@
+ 	}
+ }
+ 
+-#elif defined(__linux__) || defined(__FreeBSD__)
++#elif defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+ 
+ #include <unistd.h>
+ 
+--- a/src/cpp-utils/thread/debugging_nonwindows.cpp
++++ b/src/cpp-utils/thread/debugging_nonwindows.cpp
+@@ -4,8 +4,11 @@
+ #include <stdexcept>
+ #include <thread>
+ #include <pthread.h>
++#if defined(__OpenBSD__)
++#include <pthread_np.h>
++#endif
+ #include <cpp-utils/assert/assert.h>
+-#if !(defined(__GLIBC__) || defined(__APPLE__))
++#if !(defined(__GLIBC__) || defined(__APPLE__) || defined(__OpenBSD__))
+ // for pthread_getname_np_gcompat
+ #include <errno.h> // errno
+ #include <fcntl.h> // O_CLOEXEC, O_RDONLY
+@@ -25,6 +28,9 @@
+   if (name_.size() > MAX_NAME_LEN - 1) {
+     name_.resize(MAX_NAME_LEN - 1);
+   }
++#if defined(__OpenBSD__)
++  pthread_set_name_np(pthread_self(), name_.c_str());
++#else
+ #if defined(__APPLE__)
+   const int result = pthread_setname_np(name_.c_str());
+ #else
+@@ -33,10 +39,11 @@
+   if (0 != result) {
+     throw std::runtime_error("Error setting thread name with pthread_setname_np. Code: " + std::to_string(result));
+   }
++#endif
+ }
+ 
+ namespace {
+-#if !(defined(__GLIBC__) || defined(__APPLE__))
++#if !(defined(__GLIBC__) || defined(__APPLE__) || defined(__OpenBSD__))
+ 
+ struct OpenFileRAII final {
+     explicit OpenFileRAII(const char* filename) : fd(::open(filename, O_RDONLY | O_CLOEXEC)) {}
+@@ -72,6 +79,9 @@
+ 
+ std::string get_thread_name(pthread_t thread) {
+   std::array<char, MAX_NAME_LEN> name{};
++#if defined(__OpenBSD__)
++  pthread_get_name_np(thread, name.data(), MAX_NAME_LEN);
++#else
+ #if defined(__GLIBC__) || defined(__APPLE__)
+   const int result = pthread_getname_np(thread, name.data(), MAX_NAME_LEN);
+ #else
+@@ -80,6 +90,7 @@
+   if (0 != result) {
+     throw std::runtime_error("Error getting thread name with pthread_getname_np. Code: " + std::to_string(result));
+   }
++#endif
+   // pthread_getname_np returns a null terminated string with maximum 16 bytes.
+   // but just to be safe against a buggy implementation, let's set the last byte to zero.
+   name[MAX_NAME_LEN - 1] = '\0';
+@@ -92,7 +103,7 @@
+   return get_thread_name(pthread_self());
+ }
+ 
+-#if defined(__GLIBC__) || defined(__APPLE__)
++#if defined(__GLIBC__) || defined(__APPLE__) || defined(__OpenBSD__)
+ std::string get_thread_name(std::thread* thread) {
+   ASSERT(thread->joinable(), "Thread not running");
+   return get_thread_name(thread->native_handle());
+--- a/src/cpp-utils/thread/debugging.h
++++ b/src/cpp-utils/thread/debugging.h
+@@ -10,7 +10,7 @@
+ void set_thread_name(const char* name);
+ std::string get_thread_name();
+ 
+-#if defined(__GLIBC__) || defined(__APPLE__) || defined(_MSC_VER)
++#if defined(__GLIBC__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(_MSC_VER)
+ // this is not supported on musl systems, that's why we ifdef it for glibc only.
+ std::string get_thread_name(std::thread* thread);
+ #endif
+--- a/src/blockstore/utils/IdWrapper.h
++++ b/src/blockstore/utils/IdWrapper.h
+@@ -94,6 +94,15 @@
+   return !operator==(lhs, rhs);
+ }
+ 
++#if defined(__OpenBSD__)
++// libc++ transparent tree comparisons require the same byte ordering as the
++// existing std::less specialization below. This does not change stored IDs.
++template<class Tag>
++inline bool operator<(const IdWrapper<Tag>& lhs, const IdWrapper<Tag>& rhs) {
++  return 0 > std::memcmp(lhs.data().data(), rhs.data().data(), IdWrapper<Tag>::BINARY_LENGTH);
++}
++#endif
++
+ }
+ 
+ #define DEFINE_IDWRAPPER(IdWrapper)                                                                                    \
+--- a/vendor/cryptopp/CMakeLists.txt
++++ b/vendor/cryptopp/CMakeLists.txt
+@@ -21,4 +21,11 @@
+ set(CRYPTOPP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/vendor_cryptopp" CACHE STRING "")
+ add_subdirectory(vendor_cryptopp_cmake EXCLUDE_FROM_ALL)
+ 
++if (CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
++    # Modern OpenBSD exposes its kernel CSPRNG through this real device.
++    set_property(SOURCE "${CRYPTOPP_SOURCES}/osrng.cpp" TARGET_DIRECTORY cryptopp
++        APPEND PROPERTY COMPILE_DEFINITIONS
++        "CRYPTOPP_BLOCKING_RNG_FILENAME=\"/dev/urandom\"")
++endif()
++
+ target_link_libraries(cryfs_vendor_cryptopp INTERFACE cryptopp::cryptopp)
+--- a/src/fspp/fuse/Fuse.cpp
++++ b/src/fspp/fuse/Fuse.cpp
+@@ -630,12 +630,24 @@
+ }
+ 
+ int Fuse::mknod(const bf::path &path, ::mode_t mode, dev_t rdev) {
++#if defined(__OpenBSD__)
++  UNUSED(rdev);
++  // OpenBSD FUSE creates regular files through MKNOD followed by OPEN.
++  // Reuse the engine's normal create/close path and its caller UID/GID.
++  if (!S_ISREG(mode)) {
++    return -ENOSYS;
++  }
++  fuse_file_info fileinfo{};
++  const int status = create(path, mode, &fileinfo);
++  return status == 0 ? release(path, &fileinfo) : status;
++#else
+   UNUSED(rdev);
+   UNUSED(mode);
+   UNUSED(path);
+   const ThreadNameForDebugging _threadName("mknod");
+   LOG(WARN, "Called non-implemented mknod({}, {}, _)", path.string(), mode);
+   return ENOSYS;
++#endif
+ }
+ 
+ int Fuse::mkdir(const bf::path &path, ::mode_t mode) {
