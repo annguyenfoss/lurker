@@ -15,7 +15,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "4299530ca04c23eff6e740a3d97d29bca16c22fe"
 PATCH = ROOT / "native/netbsd/fuse-access.patch"
-PATCH_SHA256 = "af5c644c2b5ee197640da0ab2fc69f7d7c2026664f53dbf2da7e627ed2607a82"
+PATCH_SHA256 = "4a4a17aded6be53dfac0776546bb01478d55100c284136b1272dde464ff5e6c2"
 SOURCE_SHA256 = {
     "lib/libperfuse/Makefile": "cde968417fd9aee9c7baaf05fe955f7829e213c10743242b59a632fdc39f7cee",
     "lib/libperfuse/debug.c": "f5fc464350adaffab6b07e99ce7fee33f8fd6609c38bb3bbed98b7d70d5697a6",
@@ -112,11 +112,12 @@ PATCHED_SHA256 = {
     "lib/libperfuse/ops.c": "14c9420fdec410c1aa75708a7ed1da289afc71c4557b7d316edd804441dfa57d",
     "lib/libpuffs/dispatcher.c": "48258182f3afe0f02c5f95afc638bc62b4f981acb889088e7a020d35e5f890df",
     "lib/librefuse/fuse_internal.h": "ba68b2e4dc97cb666baf4b90289b2369dd259585d934d3e607d5ed6299ebfe44",
-    "lib/librefuse/refuse.c": "a763b5e10f7579996cc1da275191b5b7110f1c855a667ef87cc4b211520d5b5b"
+    "lib/librefuse/refuse.c": "4ed7de2a96895c9bcb26bccaa21d3a264257dee91ef84be2c61f2eda76fe04a1"
 }
 FEATURES = {"libpuffs.so.2": "puffs_access_abi_version",
             "libperfuse.so.0": "perfuse_access_cache_version",
             "librefuse.so.2": "refuse_access_policy_version"}
+VERSIONS = {"puffs_access_abi_version": 1, "perfuse_access_cache_version": 1, "refuse_access_policy_version": 2}
 LIBRARIES = [
     ("puffs", "libpuffs.so.2", "puffs.c callcontext.c creds.c dispatcher.c flush.c framebuf.c null.c opdump.c paths.c pnode.c requests.c subr.c suspend.c".split(), ["-lpthread", "-lutil"]),
     ("perfuse", "libperfuse.so.0", "perfuse.c ops.c subr.c debug.c".split(), ["-lpuffs"]),
@@ -215,8 +216,8 @@ def main():
             (published / name).chmod(0o755)
         # A separate native process ensures its dependencies load from this exact
         # build, independently of libraries already mapped by the builder.
-        probe = ("import ctypes,json; p=" + repr(str(published)) + "; names=" + repr(FEATURES)
-                 + "; r={}\nfor name,symbol in names.items():\n lib=ctypes.CDLL(p+'/'+name); fn=getattr(lib,symbol); fn.restype=ctypes.c_uint; fn.argtypes=[]; r[symbol]=fn(); assert r[symbol]==1\nprint(json.dumps(r))")
+        probe = ("import ctypes,json; p=" + repr(str(published)) + "; names=" + repr(FEATURES) + "; versions=" + repr(VERSIONS)
+                 + "; r={}\nfor name,symbol in names.items():\n lib=ctypes.CDLL(p+'/'+name); fn=getattr(lib,symbol); fn.restype=ctypes.c_uint; fn.argtypes=[]; r[symbol]=fn(); assert r[symbol]==versions[symbol]\nprint(json.dumps(r))")
         environment = os.environ.copy()
         environment["LD_LIBRARY_PATH"] = str(published)
         features = json.loads(subprocess.check_output([sys.executable, "-c", probe],

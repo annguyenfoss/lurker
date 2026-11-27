@@ -54,28 +54,43 @@
 +	REFUSE_OPT("allow_other", allow_other, 1),
 +	REFUSE_OPT("allow_root", allow_root, 1),
 +	REFUSE_OPT("default_permissions", default_permissions, 1),
-@@ -218 +224 @@
+@@ -90,0 +97,2 @@
++static int puffs_fuse_node_access(struct puffs_usermount *, void *, int,
++    const struct puffs_cred *);
+@@ -218 +226 @@
 -static void
 +static int
-@@ -221,0 +228 @@
+@@ -221,0 +230 @@
 +	struct fuse		*fuse;
-@@ -225,0 +233,5 @@
+@@ -225,0 +235,5 @@
 +	fuse = fusectx->fuse;
 +	if (fuse != NULL && !puffs_cred_iskernel(cred) && !puffs_cred_isfs(cred) &&
 +	    !puffs_cred_isuid(cred, fuse->mount_uid) && !fuse->allow_other &&
 +	    !(fuse->allow_root && puffs_cred_isuid(cred, 0)))
 +		return EACCES;
-@@ -231,0 +244 @@
+@@ -231,0 +246 @@
 +	return 0;
-@@ -439 +452,2 @@
+@@ -439 +454,14 @@
 -	set_fuse_context_uid_gid(pcn->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
 +		return EACCES;
-@@ -476 +490,2 @@
++
++	if (fuse->default_permissions) {
++		int mode = PUFFS_VEXEC;
++		if ((pcn->pcn_nameiop == NAMEI_CREATE ||
++		    pcn->pcn_nameiop == NAMEI_DELETE ||
++		    pcn->pcn_nameiop == NAMEI_RENAME) &&
++		    (pcn->pcn_flags & NAMEI_ISLASTCN))
++			mode |= PUFFS_VWRITE;
++		ret = puffs_fuse_node_access(pu, opc, mode, pcn->pcn_cred);
++		if (ret != 0)
++			return ret;
++	}
+@@ -476 +504,2 @@
 -	set_fuse_context_uid_gid(pcr);
 +	if (set_fuse_context_uid_gid(pcr) != 0)
 +		return EACCES;
-@@ -478,0 +494,35 @@
+@@ -478,0 +508,35 @@
 +}
 +
 +/* Check native caller access, including filesystems without access(). */
@@ -111,86 +126,86 @@
 +		return 0;
 +	return puffs_access(va.va_type, va.va_mode, va.va_uid, va.va_gid,
 +	    mode, cred);
-@@ -494 +544,2 @@
+@@ -494 +558,2 @@
 -	set_fuse_context_uid_gid(cred);
 +	if (set_fuse_context_uid_gid(cred) != 0)
 +		return EACCES;
-@@ -524 +575,2 @@
+@@ -524 +589,2 @@
 -	set_fuse_context_uid_gid(pcn->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
 +		return EACCES;
-@@ -551 +603,2 @@
+@@ -551 +617,2 @@
 -	set_fuse_context_uid_gid(pcn->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
 +		return EACCES;
-@@ -585 +638,2 @@
+@@ -585 +652,2 @@
 -	set_fuse_context_uid_gid(pcn->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
 +		return EACCES;
-@@ -638 +692,2 @@
+@@ -638 +706,2 @@
 -	set_fuse_context_uid_gid(pcn->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
 +		return EACCES;
-@@ -659 +714,2 @@
+@@ -659 +728,2 @@
 -	set_fuse_context_uid_gid(pcn->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
 +		return EACCES;
-@@ -680 +736,2 @@
+@@ -680 +750,2 @@
 -	set_fuse_context_uid_gid(pcn_src->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn_src->pcn_cred) != 0)
 +		return EACCES;
-@@ -706 +763,2 @@
+@@ -706 +777,2 @@
 -	set_fuse_context_uid_gid(pcn_targ->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn_targ->pcn_cred) != 0)
 +		return EACCES;
-@@ -725 +783,2 @@
+@@ -725 +797,2 @@
 -	set_fuse_context_uid_gid(pcn->pcn_cred);
 +	if (set_fuse_context_uid_gid(pcn->pcn_cred) != 0)
 +		return EACCES;
-@@ -749 +808,2 @@
+@@ -749 +822,2 @@
 -	set_fuse_context_uid_gid(pcr);
 +	if (set_fuse_context_uid_gid(pcr) != 0)
 +		return EACCES;
-@@ -781 +841,2 @@
+@@ -781 +855,2 @@
 -	set_fuse_context_uid_gid(cred);
 +	if (set_fuse_context_uid_gid(cred) != 0)
 +		return EACCES;
-@@ -822 +883,2 @@
+@@ -822 +897,2 @@
 -	set_fuse_context_uid_gid(pcr);
 +	if (set_fuse_context_uid_gid(pcr) != 0)
 +		return EACCES;
-@@ -853 +915,2 @@
+@@ -853 +929,2 @@
 -	set_fuse_context_uid_gid(pcr);
 +	if (set_fuse_context_uid_gid(pcr) != 0)
 +		return EACCES;
-@@ -889 +952,2 @@
+@@ -889 +966,2 @@
 -	set_fuse_context_uid_gid(pcr);
 +	if (set_fuse_context_uid_gid(pcr) != 0)
 +		return EACCES;
-@@ -927 +991,2 @@
+@@ -927 +1005,2 @@
 -	set_fuse_context_uid_gid(pcr);
 +	if (set_fuse_context_uid_gid(pcr) != 0)
 +		return EACCES;
-@@ -998 +1063,2 @@
+@@ -998 +1077,2 @@
 -	set_fuse_context_uid_gid(cr);
 +	if (set_fuse_context_uid_gid(cr) != 0)
 +		return EACCES;
-@@ -1202,0 +1269,5 @@
+@@ -1202,0 +1283,5 @@
 +	fuse->mount_uid = geteuid();
 +	fuse->allow_other = config.allow_other;
 +	fuse->allow_root = config.allow_root;
 +	fuse->default_permissions = config.default_permissions;
 +
-@@ -1232,0 +1304 @@
+@@ -1232,0 +1318 @@
 +        PUFFSOP_SET(pops, puffs_fuse, node, access);
-@@ -1399,0 +1472,8 @@
+@@ -1399,0 +1486,8 @@
 +
 +/* Version of the native userspace access compatibility contract. */
 +unsigned int refuse_access_policy_version(void);
 +unsigned int
 +refuse_access_policy_version(void)
 +{
-+	return 1;
++	return 2;
 +}
 --- a/lib/librefuse/fuse_internal.h
 +++ b/lib/librefuse/fuse_internal.h

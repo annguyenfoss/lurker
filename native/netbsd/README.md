@@ -15,6 +15,9 @@ kernel, cache flags, flush behavior or encryption profiles. It accepts native an
 legacy basic access bits, keeps libperfuse attributes current, and applies FUSE
 mounting-user admission across credential-bearing ReFUSE operations. Standard
 `allow_other`, `allow_root` and opt-in `default_permissions` are handled explicitly.
+The default-permission path checks parent search/write access during lookup,
+including creation, deletion and rename. The writable ext4 adapter requests this
+native option explicitly; filesystem access callbacks alone do not enforce it.
 The original upstream notices remain in the source and build output.
 
 Upstream source:
@@ -48,9 +51,9 @@ An administrator installs the libraries as a host prerequisite:
    verify its manifest and library hashes there. Install each matching library
    atomically at its native versioned target, preserving root ownership and the
    original read-only library permissions. Do not change unrelated libraries.
-4. In a fresh process verify each native capability function returns `1`:
-   `puffs_access_abi_version`, `perfuse_access_cache_version`, and
-   `refuse_access_policy_version`. Verify actual loaded native paths, rather than
+4. In a fresh process verify `puffs_access_abi_version` and
+   `perfuse_access_cache_version` return `1`, and
+   `refuse_access_policy_version` returns `2`. Verify actual loaded native paths, rather than
    only executable arguments or predicted dependency paths.
 5. Recheck caller access and unrelated-user denial using a traversable test
    parent: the caller must list/read/write, sync, append, close and reopen; an
