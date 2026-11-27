@@ -31,9 +31,12 @@ receipts: five container fixtures cover UFS1, ext4, exFAT, HAMMER2 and NTFS,
 and the physical sample is VeraCrypt/Twofish/keyfile/UFS1. All changed-boot
 payload hashes, actual UID/EUID 1300 reads and writes, unrelated-user denials
 through searchable ancestors, normal reopens and final closes match. The
-retained cleanup output has no crypto maps and all vnode devices idle. Exact
-recipe/provenance corroboration is being completed in
-`hosts/dragonflybsd/validation/root-six-reboot-audit.json`.
+retained cleanup output has no crypto maps and all vnode devices idle. Root
+also reviewed the native signature checks and corroborated the retained
+root-owned recipes, package/installed manifest equality and all three product
+hashes in `hosts/dragonflybsd/validation/root-six-reboot-audit.json`. The verifier
+has no separate contemporaneous self-hash receipt; the later collection retains
+that limit and the originally observed launch PID 931.
 
 Root independently checked NetBSD's four CGD and one CryFS reboot fixtures,
 the exact executed recipes and imported payload helper, retained arm/verify
