@@ -94,6 +94,39 @@ These controls expose storage only inside the native process. They are not a
 host-visible mount, encryption-product matrix pass, physical-device sample or
 FSKit extension acceptance. The frozen `025f558` package results remain unchanged.
 
+## Kernel and native host symbol boundary
+
+Apply `lkl-darwin-symbols.patch` as well as the flush patch before a new source
+build. The upstream Darwin recipe made only memcpy/memset/memmove private.
+Its combined kernel object also exported formatting and string functions,
+including snprintf/vsnprintf, which could capture native host calls. A native
+adapter review candidate crashed in that kernel formatting implementation before
+kernel initialization. Avoiding one call site is insufficient.
+
+The corrected partial link exports exactly 17 `_lkl_*` API/bridge names and four
+references required by the pinned `boot_glue.S`: `___vmalloc_noprof`,
+`_blake2s_compress_generic`, `_init_thread_info`, and `_jiffies_64`. All other
+kernel definitions remain local inside the combined object. Native POSIX host
+objects are added afterward, so their libc references resolve to Apple's
+libraries. This does not change the flush patch or any filesystem source.
+
+The initial native proof reused the exact compiled kernel and host objects from
+the flush-capable archive, repeating only the kernel partial link and archive
+assembly. It did not recompile filesystem sources. Both arm64 and x86_64 kernel
+export sets matched the 21-name boundary, and both control executables linked.
+The resulting universal archive SHA-256 is
+`1902814d17f275f72da97ff4c0fcbf75cc74fe7aebab6fb3f35f3a06ed5c02f0`.
+The earlier archives and their observations remain distinct.
+
+`tests/lkl-host-libc-control.c` checks direct host function addresses and
+variadic formatting before initialization, while LKL runs, and after cleanup.
+Native arm64 execution bound all 18 checked names to Apple system libraries and
+passed. The x86_64 executable was linked and its unresolved host symbols checked;
+no x86_64 runtime claim follows. The library's three-filesystem platform,
+capability, four-process payload and injected-flush-error controls all passed
+again against this exact archive. These remain library controls, independently
+of native formatter, installed-driver or encryption-product acceptance.
+
 ## Remaining mounted macFUSE adapter plan
 
 No replacement driver is installed by this recipe yet. Buran's xlinuxfs FSKit

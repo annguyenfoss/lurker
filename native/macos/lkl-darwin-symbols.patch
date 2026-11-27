@@ -1,0 +1,30 @@
+diff --git a/tools/lkl/darwin/build.py b/tools/lkl/darwin/build.py
+--- a/tools/lkl/darwin/build.py
++++ b/tools/lkl/darwin/build.py
+@@ -90,11 +90,23 @@
+         objects = [work / m["object"] for m in members]
+         filelist = work / "objects.txt"
+         filelist.write_text("\n".join(map(str, objects)) + "\n")
+-        hidden = work / "hidden.txt"
+-        hidden.write_text("_memcpy\n_memset\n_memmove\n")
++        # Keep kernel libc names private before native POSIX host objects are
++        # linked. A static kernel snprintf is not Darwin host libc, and may
++        # dereference uninitialized kernel state on a host error/version path.
++        # This is the complete pinned LKL API plus boot_glue.S dependencies.
++        exports = work / "kernel-exports.txt"
++        exports.write_text("\n".join((
++            "_lkl_cleanup", "_lkl_cpu_change_owner", "_lkl_cpu_get",
++            "_lkl_cpu_init", "_lkl_cpu_put", "_lkl_cpu_shutdown",
++            "_lkl_cpu_try_run_irq", "_lkl_cpu_wait_shutdown",
++            "_lkl_get_free_irq", "_lkl_init", "_lkl_is_running", "_lkl_ops",
++            "_lkl_put_irq", "_lkl_start_kernel", "_lkl_sys_halt",
++            "_lkl_syscall", "_lkl_trigger_irq", "___vmalloc_noprof",
++            "_blake2s_compress_generic", "_init_thread_info", "_jiffies_64",
++        )) + "\n")
+         kernel = work / "vmlinux_macho.o"
+         run(["xcrun", "ld", "-r", "-arch", arch, "-platform_version", "macos", "15.4",
+-             sdk_version, "-unexported_symbols_list", str(hidden), "-filelist", str(filelist),
++             sdk_version, "-exported_symbols_list", str(exports), "-filelist", str(filelist),
+              "-o", str(kernel)])
+         boot = work / "boot_glue.o"
+         run([compiler, *target, "-c", str(here / "boot_glue.S"), "-o", str(boot)])
