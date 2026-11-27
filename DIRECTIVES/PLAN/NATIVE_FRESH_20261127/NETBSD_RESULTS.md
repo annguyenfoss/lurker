@@ -112,6 +112,48 @@ modes. Three successfully verified closed reboot containers were hashed before
 removal; failed fixtures and all parameter/receipt evidence were preserved. The
 host has 1.9 GiB free and no owned crypto processes remain.
 
+## Retained ZFS source/configuration assessment
+
+The `ee22369` retained-work authorization started a further source/configuration
+assessment, without host, pool, policy or reboot mutation. Current NetBSD 11
+and trunk still have the unqualified `zone_get_hostid` macro. The bounded
+upstream lookup did not locate an established exact replacement patch. The
+already failed persisted-hostid reproduction is retained, not rerun.
+
+A private cache is not a solution: `zpool_find_import_cached` refreshes the pool
+configuration before the same `do_import` active-pool/missing-hostid check.
+The global cache loads the SPA namespace at module initialization; it does not
+itself open pools. No established credential-bound manual-CGD cache/order recipe
+was found, so global cache adoption is not a qualified alternative.
+
+An eligible **graceful-shutdown-only configuration candidate** is the documented
+NetBSD 11 `/etc/rc.shutdown.final` hook combined with normal `zpool export` of a
+specifically authenticated pool. Exported state skips the missing-hostid import
+gate. The stock zfs rc.d script has no shutdown keyword, and its stop handler only
+attempts module unloading. The final hook runs after ordered shutdown handlers.
+Direct `reboot(8)`/`halt(8)` bypass those handlers, and a crash does not run them.
+A hook failure is not a shutdown veto: `rc.shutdown` ultimately exits zero.
+
+This candidate has not been installed or tested. A bounded qualification would
+use a fresh fixture, root-controlled exact pool GUID/vdev/mount identities,
+normal export/reimport and busy/mismatched-identity negatives, then a separately
+authorized `shutdown(8)` reboot with export-status and post-boot payload receipts.
+It must preserve existing local hooks, avoid broad pool enumeration or force,
+and restore all temporary configuration. It cannot repair the preserved active
+failed fixture or establish crash recovery. No kernel invention is required for
+that limited configuration route; the earlier local kernel repair remains cut.
+
+The private source hashes, exact findings and unexecuted qualification batch are
+in `hosts/netbsd/build/zfs-retained-source-assessment/{inputs,assessment}.json`.
+Primary references:
+
+- https://man.netbsd.org/NetBSD-11.0/rc.8
+- https://man.netbsd.org/NetBSD-11.0/zpool.8
+- https://raw.githubusercontent.com/NetBSD/src/netbsd-11/etc/rc.shutdown
+- https://raw.githubusercontent.com/NetBSD/src/netbsd-11/etc/rc.d/zfs
+- https://raw.githubusercontent.com/NetBSD/src/netbsd-11/external/cddl/osnet/dist/cmd/zpool/zpool_main.c
+- https://raw.githubusercontent.com/NetBSD/src/netbsd-11/external/cddl/osnet/dist/lib/libzfs/common/libzfs_import.c
+
 ## Subsequent LKL investigation — terminal and cut
 
 A separate native LKL investigation followed ordinary qualification. It did not
