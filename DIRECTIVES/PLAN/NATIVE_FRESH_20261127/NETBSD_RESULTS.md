@@ -134,10 +134,20 @@ attempts module unloading. The final hook runs after ordered shutdown handlers.
 Direct `reboot(8)`/`halt(8)` bypass those handlers, and a crash does not run them.
 A hook failure is not a shutdown veto: `rc.shutdown` ultimately exits zero.
 
-This candidate has not been installed or tested. A bounded qualification would
-use a fresh fixture, root-controlled exact pool GUID/vdev/mount identities,
-normal export/reimport and busy/mismatched-identity negatives, then a separately
-authorized `shutdown(8)` reboot with export-status and post-boot payload receipts.
+The shutdown hook has not been installed or tested across a reboot. The first
+released native batch passed on one fresh 512 MiB regular-file vdev on the
+identified work FFS: pool GUID `606192775680998110`, actual UID/EUID 1300 common
+payload write/append/reopen/hash checks, normal non-forced export/import, busy
+export returning Device busy with the mount unchanged, and wrong pool GUID,
+vdev inode and mount FSID rejection before export. The owned busy child was
+terminated and reaped; the final pool is closed, all four labels are exported,
+and no other pool or encrypted mapping is active. The native fixture vdev is
+root-private; its separate caller-owned 0700 plaintext mountpoint is directly
+searchable through `/tmp`. No root-only traversal workaround supplied the
+ordinary-user proof. A separately reviewed `shutdown(8)` reboot remains pending.
+The initial empty-pool `zpool list -H` uninitialized-return failure, unsupported
+`status -P` option and mistaken busy-probe payload path were preserved; only the
+harness was corrected, and no second fixture or kernel fix was introduced.
 It must preserve existing local hooks, avoid broad pool enumeration or force,
 and restore all temporary configuration. It cannot repair the preserved active
 failed fixture or establish crash recovery. No kernel invention is required for
@@ -145,6 +155,10 @@ that limited configuration route; the earlier local kernel repair remains cut.
 
 The private source hashes, exact findings and unexecuted qualification batch are
 in `hosts/netbsd/build/zfs-retained-source-assessment/{inputs,assessment}.json`.
+The native batch, its frozen plan, all failed attempts, exact worker/hook bytes
+and terminal inventories are under `hosts/netbsd/build/zfs-shutdown-config-proof/`;
+the final phase-1–4 receipt has SHA-256
+`acad8988fc8abb399a62351b64f390453bb90f5d209fc6dbf1ec108842a219eb`.
 Primary references:
 
 - https://man.netbsd.org/NetBSD-11.0/rc.8
