@@ -1,4 +1,97 @@
-# OpenBSD fresh qualification — in progress
+# OpenBSD fresh qualification — partial, CryFS exFAT gap
+
+The final ordinary-route installed qualification has 15 passing combinations and
+one failing combination: CRYPTO, RAID1C and VeraCrypt over UFS1, UFS2, NTFS and
+exFAT, plus CryFS directory backing on UFS1, UFS2 and NTFS. CryFS over exFAT is a
+product publication adaptation gap: the required hardlink operation returns
+ENOSYS. The 130-cell ledger separately records 64 unavailable and 50
+not-applicable combinations. Container and new-device results have separate
+receipts; this is not a complete host pass. A further native OpenBSD LKL
+filesystem-prerequisite assessment is source-only and has no new capability or
+runtime credit.
+
+The final Rust source is `8c6f2b688cfc0eec6f06208daf8f991fbee56d64`.
+Its fresh native workspace check, all three product builds and workspace tests
+passed (156 passed, zero failed, 23 ignored). The exact 433-file source packet
+and complete build logs were collected before reboot. The native package
+SHA-256 is `6d4aa5f73eb22e286c911c3d2c8ec6674b66a06c5defe8487ac4a9188d8c98d5`;
+its 865 payload files plus the manifest make 866 installed entries. Both private
+engines retain their previously verified final bytes. The only later Rust
+correction changes CryFS metadata lookup to the stager's actual flat
+`share/lurker/provenance/cryfs.json` path; flat-package, adjacent-SDK and actual
+native installed-runtime regressions passed without weakening trust or loader
+checks. The first installed missing-metadata failures and same-version package
+replacement attempt remain preserved separately.
+
+The 12 installed block-container passes retain exact source `123d177` and
+package SHA-256
+`ac36aa9fe987805bad70fe5cd5880ae962df671f75808cecdf6efd5f21f01b7a`.
+They are not relabelled as the later CryFS-only correction. The 12 installed
+physical block passes and eight CryFS backing attempts (three passes and one
+exFAT failure in each container/physical batch) use the corrected `8c6f2b6`
+package. Passing cases use actual UID1300 downloaded-payload writes, normal
+close/reopen, append/new file, final five hashes, independent native filesystem
+identification, and actual unrelated-user list/read/write denial through
+traversable ancestors. CryFS additionally proves engine birth/UID/GID/locked
+unveil and caller ownership of later ciphertext blocks. The two original new
+512 MiB qcow2 members were reverified through live domain/QMP and guest identity
+before the physical batch. The failed physical exFAT whole-device image is
+536,870,912 bytes, SHA-256
+`6ed0ada081be4f84084b3e8aad4c789bcbc2056d8989168ce597c2879497dbbb`.
+It and both failed exFAT journals/images remain preserved; exact-fsid normal
+teardown succeeded without force.
+
+A private physical-harness variable shadowed the shared disk receipt with the
+previous filesystem probe in 11 of the 12 original result records. All original
+bytes remain intact. Separate metadata-only corrected copies restore just
+`physical_reverification`; payloads, actions, status and filesystem proofs are
+unchanged. The correction and its root audit are
+`device/physical-domain-proof-metadata-correction.json` and
+`validation/root-physical-metadata-correction-audit.json`. This does not claim
+per-case hardware polling or a repeated storage test.
+
+The installed desktop rendered an actual UID1300 X11/winit software window.
+All four actual Slint/helper callbacks passed (physical CRYPTO, RAID1C,
+VeraCrypt and CryFS directory), with normal close/reopen and user I/O. The exact
+original sudoers policy was restored. Installed cipher/keyfile/error
+conformance then passed nine suites and 113 assertions, including degraded
+RAID1C and invoking-user ownership; source, raw logs and receipts are in
+`logs/installed8c-conformance-full.tar.gz`. Earlier long-parent and non-`/tmp`
+RAID harness setup failures remain distinct from those successful suites.
+
+Four fresh caller-owned fixtures remained mounted through an ordinary reboot.
+Boot identity changed from 1795727358 to 1795750948. CRYPTO, RAID1C, VeraCrypt
+and CryFS each reopened directly through Auto, verified all five hashes as
+UID1300, and closed normally without repair or manual recovery. The revised
+pre-reboot guard matches all four plaintext source/target/fsid records and
+VeraCrypt's observed auxiliary FUSE mount to its exact vnd mapping and trusted
+engine source. An initial count-only harness guard had stopped before reboot;
+its complete four prepared fixtures and logs remain preserved after normal
+close. Actual reboot evidence is `validation/reboot8c-retry/` and
+`logs/installed8c-reboot-success-full.tar.gz`.
+
+Final native checks reverified all 865 installed payload hashes and root trust,
+CLI help and the real helper native inventory. Only the task-owned Lurker
+package was then removed, restoring the exact pre-install package inventory.
+Host updates and native prerequisites remain installed. Final kernel mount
+inventory contains only the system root; all four vnd units are idle, softraid
+has no active arrays, and no owned backend/supervisor remains. Original sudoers
+SHA-256 is still
+`28f3746d63428eb2326ceac0febc23082b10dccb7b1a3a452db902c89ba44f41`.
+Private packages, source/cache/evidence and failed fixtures remain. Cleanup is
+`validation/final8c-cleanup/result.json`; the final receipt index is
+`validation/final-ordinary-route-index.json`.
+
+Brief feature queries retain actual commands/output. FFS1/FFS2 dumpfs reports
+flags `none`; no active journaling or CoW result is claimed. NTFS's mounted raw
+query has bitmap warnings, and the exFAT feature dumper exits1, so unsupported
+feature conclusions remain unknown. Native ACL tools are absent. Actual mode,
+caller ownership and foreign access enforcement are independently established
+by the passing runtime cases. See
+`validation/native-filesystem-feature-summary.json`.
+
+The following paragraphs preserve the earlier observations and intermediate
+artifacts; their earlier pending states do not replace the final scope above.
 
 Fresh observations began against product commit
 `8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d`; previous results are not passes for
@@ -333,9 +426,9 @@ but a bare exclusive-create/write/fsync fallback would expose a partially
 written valid block name to unlocked loads and scans. No common patch was
 changed. The call inventory, cross-process/cleanup concerns and native
 race/fault test plan are `build/cryfs-exfat-publication-review.txt`.
-The final exact-commit workspace/package refresh, installed complete matrix
-and final reboot gates remain pending. Native mount inventory is back to the
-system root alone. No complete host qualification is claimed.
+At that intermediate checkpoint, final exact-commit workspace/package and
+reboot gates were pending; the later installed results are recorded above.
+No complete host qualification is claimed.
 
 Other requested
 portable engines retain their explicit per-cell assessment in the ledger.
