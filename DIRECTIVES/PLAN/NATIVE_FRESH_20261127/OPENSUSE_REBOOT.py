@@ -48,7 +48,9 @@ def main():
                     with os.fdopen(os.open(passfile,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600),'w') as f:f.write(password)
                 else:key=d/'key, Việt Nam.bin';key.write_bytes(b'\0\xff\n\r'+secrets.token_bytes(252));key.chmod(0o600)
                 row={'backend':backend,'filesystem':fs,'filesystem_role':'backing' if directory else 'inner','source_kind':'directory' if directory else 'file','source':str(source),'mountpoint':str(m),'keyfile':str(key) if key else None,'keyfile_sha256':digest(key) if key else None,'passphrase_file':str(passfile) if passfile else None,'passphrase_sha256':digest(passfile) if passfile else None,'operations':[],'status':'running'};result['cases'].append(row);save()
-                helper(row,dict(action='create',target=str(source),size_gb=None if directory else '0.25',force=False,source_kind=row['source_kind'],volume_type=backend,cipher=None if directory else 'aes',filesystem=None if directory else fs,**authentication(row)))
+                request=dict(action='create',target=str(source),size_gb=None if directory else '0.25',force=False,source_kind=row['source_kind'],volume_type=backend,cipher='aes',**authentication(row))
+                if not directory:request['filesystem']=fs
+                helper(row,request)
                 if not directory:assert source.stat().st_uid==1300 and source.stat().st_mode&0o777==0o600
                 expected=h.load_payload(a.payload)
                 for phase in ['write','append','verify']:
