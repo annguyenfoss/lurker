@@ -201,6 +201,19 @@ reuse. Source, check/test logs, counts and retention receipts are under
 `build/session-snapshot-c3dd43b/` in the private evidence root; the complete job
 also remains in the owned VM's retained-build directory.
 
+## OpenBSD integration compile regression
+
+The final exact archive of `123d1777505fef2c3aa0356af3db3896aa3a4a00` passed
+Linux `cargo check --workspace` and `cargo test --workspace --no-fail-fast`:
+**173 passed, zero failed, 15 ignored**, including the platform-neutral OpenBSD
+directory-form test. Run `20261127T014912Z-9f46f6a4` used the idle managed cache
+and one worker. Archive SHA-256 is
+`a8ded2542fa46ad3d27d75c626547a4a3b2b97a8d4a1b9342ffb129eb8ee4931`;
+worktree WIP was excluded. The installed qualified `67894f6` package and its
+three component hashes remain unchanged. This check/test-only follow-up is
+recorded in `validation/integration-123d177.json` and
+`build/integration-123d177/`; the full source/job is retained on the VM.
+
 ## Evidence and retained storage
 
 Private evidence root:
