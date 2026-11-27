@@ -24,15 +24,32 @@ integration, and macOS's documented linker export-list procedure as in scope.
 The Darwin vendor port's maturity and all remaining product lifecycle gates
 remain separate. No new storage pass or guard removal follows from that review.
 All six Linux e927 affected follow-ups have completed under their original
-identities; Fedora's ordinary RPM installation remains blocked by signature
-policy despite verified-prefix runtime passes.
+identities. The final-three semantic audit records the actual healthy actions,
+known-error close refusals and distinct crash/manual-recovery scopes without
+relabeling older results. Fedora subsequently completed normal RPM install,
+CLI/helper checks, actual GIO desktop launch and uninstall using a disposable
+qualification signature (`3489521`). Baseline packages, trust and policy were
+restored; this is not release signing or repository acceptance.
+
+The explicitly started configured-UFS1 jobs are complete on Arch (`121172a`)
+and Ubuntu (`87a33b7`, `f53eda2`): each passed six container and six physical
+cases, frontend/permission checks and ordinary reboot persistence. Stock-kernel
+failures remain historical; these routes require the documented matching
+write-enabled module. Gentoo's twelve cells and supported GUI lifecycle have
+passed; its six-fixture ordinary-reboot cohort is in progress. See the three
+UFS1 host reports for exact source, module, retained-failure and cleanup records.
 
 FreeBSD Cryptomator candidate `2424fb3` has native ABI/compiler/provider-only
-proofs, not a mounted vault pass. Pre-mount review found that its cleanup reaches
-libfuse3's force-unmount implementation; userspace lifecycle correction is required
-before mounted qualification. The earlier failed-FUSE cleanup and provider-stat
-waits remain nonterminal. Independent userspace guardian work and operational
-recovery planning continue. Whole-round completion is unproven.
+proofs, not a mounted vault pass. Its replacement must avoid libfuse3's forced
+unmount and retain the adapter/CryptoFS/JVM after partial or failed close.
+Managed caller, direct FSID-unmount worker and Rust-client controls are under
+native qualification; core admission remains disabled. The old blocked state
+is preserved in saved RAM and five original disks. Operational cold recovery
+on verified copies completed (`c2bd194`, `96088d8`); root verified 84 recovery
+references and the post-boot baseline (`04aced6`). This is not a product reboot
+pass. Independent guardian primitives continue: Mac's user-only service passed
+477 checks in ten synthetic cases (`5762904`), without LKL/FUSE/storage or
+product admission. Whole-round completion remains unproven.
 
 Nine host owners now provide private `completion-evidence-index.json` files
 mapping the acceptance requirements to exact receipts and limitations. Root's
