@@ -61,18 +61,9 @@ def prepare_platform(archive, destination, owned):
             output = destination / name.replace(OLD.replace('.', '/'), NEW.replace('.', '/'))
             output = output.with_name(output.name.replace('Linux', 'FreeBsd'))
             if output.name == 'FuseMountImpl.java':
-                # A deliberate single-threaded native first profile. No Linux
-                # versioned loop/config ABI or ignored multithreading promise.
-                text = f'''package {NEW};
-import org.cryptomator.jfuse.api.FuseMount;
-import {NEW}.extr.fuse3.fuse_h;
-import java.lang.foreign.MemorySegment;
-record FuseMountImpl(MemorySegment fuse, FuseArgs fuseArgs) implements FuseMount {{
- public int loop() {{ return fuse_h.fuse_loop(fuse); }}
- public void unmount() {{ fuse_h.fuse_exit(fuse); fuse_h.fuse_unmount(fuse); }}
- public void destroy() {{ fuse_h.fuse_destroy(fuse); }}
-}}
-'''
+                # Owned lease replaces this platform wrapper. In particular,
+                # never retain the upstream native forced-unmount close route.
+                continue
             elif output.name == 'FreeBsdFuseBuilder.java':
                 text = text.replace('OperatingSystem.LINUX', 'OperatingSystem.FREEBSD')
                 old = '''		if (libraryPath != null) {
@@ -87,10 +78,17 @@ record FuseMountImpl(MemorySegment fuse, FuseArgs fuseArgs) implements FuseMount
                 text = replace_once(text, 'return new TimeSpecImpl(stat.st_ctim(segment));\n\t}\n\n\t@Override\n\tpublic void setMode',
                     'return new TimeSpecImpl(stat.st_birthtim(segment));\n\t}\n\n\t@Override\n\tpublic void setMode')
             elif output.name == 'FuseImpl.java':
+                text = replace_once(text, 'final class FuseImpl extends Fuse {',
+                    'final class FuseImpl extends Fuse implements FreeBsdMountControl {')
+                start = text.index('\t@Override\n\tprotected FuseMount mount(List<String> args)')
+                end = text.index('\n\t@VisibleForTesting\n\tMemorySegment createFuseFS', start)
+                text = text[:start] + (owned / 'FuseImplLifecycle.java.inc').read_text() + text[end:]
                 text = text.replace('connInfo.want() | FuseConnInfo.FUSE_CAP_READDIRPLUS',
                                     'connInfo.want() | (connInfo.capable() & FuseConnInfo.FUSE_CAP_READDIRPLUS)')
                 text = replace_once(text, 'var config = new FuseConfigImpl(cfg);',
                     f'{NEW}.extr.fuse3.fuse_config.direct_io(cfg, 1);\n\t\tvar config = new FuseConfigImpl(cfg);')
+                text = replace_once(text, 'fuseOperations.init(connInfo, config);',
+                    'fuseOperations.init(connInfo, config);\n\t\tnativeInit.countDown();')
                 for method in ['chmod', 'create', 'mkdir']:
                     text = replace_once(text, f'private int {method}(MemorySegment path, int mode',
                                         f'private int {method}(MemorySegment path, short mode')
@@ -99,7 +97,9 @@ record FuseMountImpl(MemorySegment fuse, FuseArgs fuseArgs) implements FuseMount
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(text)
     root = destination / Path(*NEW.split('.'))
-    (root / 'FreeBsdNative.java').write_text((owned / 'FreeBsdNative.java').read_text())
+    for name in ['FreeBsdNative.java', 'FreeBsdMountControl.java', 'FreeBsdMounts.java',
+                 'FreeBsdMountLease.java', 'FreeBsdUnmount.java', 'FreeBsdUnmountWorker.java']:
+        (root / name).write_text((owned / name).read_text())
     (destination / 'module-info.java').write_text(f'''module {NEW} {{
  requires static org.jetbrains.annotations;
  requires org.cryptomator.jfuse.api;
@@ -119,3 +119,4 @@ def prepare_provider(archive, destination, owned):
     module.write_text(text)
     output = destination / 'org/cryptomator/frontend/fuse/mount/FreeBsdFuseMountProvider.java'
     output.write_text((owned / output.name).read_text())
+    output.with_name('FreeBsdDeferredAdapter.java').write_text((owned / 'FreeBsdDeferredAdapter.java').read_text())

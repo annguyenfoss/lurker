@@ -209,12 +209,54 @@ def main():
         compile_module('jfuse-freebsd-amd64', platform_source, path,
                        image / 'mods/jfuse-freebsd-amd64-0.7.3.jar')
         compile_module('fuse-nio-freebsd', provider, path, image / 'mods/fuse-nio-adapter-5.1.0.jar')
+        run('jlink-native-runtime', [java / 'bin/jlink', *shared.runtime_link_options(java),
+            '--add-modules', 'java.base,java.compiler,java.naming,java.xml,jdk.unsupported,jdk.net',
+            '--no-header-files', '--no-man-pages', '--strip-debug', '--compress', 'zip-6',
+            '--output', image / 'runtime'])
+        runtime_java = image / 'runtime/bin/java'
+        run('private-runtime-jdk-net', [runtime_java, '--describe-module', 'jdk.net'])
+        lifecycle = output / 'lifecycle-test-classes'
+        lifecycle.mkdir()
+        run('compile-lifecycle-controls', [java / 'bin/javac', '--release', '25',
+            '--module-path', os.pathsep.join(map(str, path)), '--patch-module',
+            'org.cryptomator.jfuse.freebsd.amd64=' + str(PORT),
+            '-d', lifecycle, PORT / 'LifecycleProbe.java', PORT / 'WorkerProtocolProbe.java'])
+        worker_evidence = output / 'lifecycle-worker-evidence'
+        worker_evidence.mkdir(mode=0o700)
+        lifecycle_log = run('native-lifecycle-controls', [runtime_java,
+            '-Djava.io.tmpdir=' + str(worker_evidence),
+            '--enable-native-access=org.cryptomator.jfuse.freebsd.amd64',
+            '--module-path', image / 'mods', '--patch-module',
+            'org.cryptomator.jfuse.freebsd.amd64=' + str(lifecycle),
+            '-m', 'org.cryptomator.jfuse.freebsd.amd64/org.cryptomator.jfuse.freebsd.amd64.LifecycleProbe',
+            runtime_java, image / 'mods', lifecycle, output / 'lifecycle-controls.stderr.log'])
+        report['lifecycle_controls'] = json.loads(lifecycle_log.read_text())
+        report['lifecycle_diagnostics'] = {'path': str(output / 'lifecycle-controls.stderr.log'),
+                                           'sha256': digest(output / 'lifecycle-controls.stderr.log')}
+        if (report['lifecycle_controls']['failures']
+                or report['lifecycle_controls']['native_mount_or_channel_operations']):
+            raise RuntimeError('Memory-only lifecycle controls failed')
+        adapter_tests = output / 'adapter-test-classes'
+        adapter_tests.mkdir()
+        run('compile-adapter-lifecycle-controls', [java / 'bin/javac', '--release', '25',
+            '--module-path', os.pathsep.join(map(str, path)), '--patch-module',
+            'org.cryptomator.frontend.fuse=' + str(PORT),
+            '-d', adapter_tests, PORT / 'AdapterLifecycleProbe.java'])
+        adapter_log = run('native-adapter-lifecycle-controls', [runtime_java,
+            '--enable-native-access=org.cryptomator.jfuse.freebsd.amd64',
+            '--module-path', image / 'mods', '--patch-module',
+            'org.cryptomator.frontend.fuse=' + str(adapter_tests),
+            '-m', 'org.cryptomator.frontend.fuse/org.cryptomator.frontend.fuse.mount.AdapterLifecycleProbe'])
+        report['adapter_lifecycle_controls'] = json.loads(adapter_log.read_text())
+        if (report['adapter_lifecycle_controls']['failures']
+                or report['adapter_lifecycle_controls']['native_mount_or_channel_operations']):
+            raise RuntimeError('Memory-only adapter lifecycle controls failed')
         tests = output / 'provider-test-classes'
         tests.mkdir()
         run('compile-provider-probe', [java / 'bin/javac', '--release', '25',
             '--module-path', image / 'mods', '--add-modules', 'ALL-MODULE-PATH',
             '-d', tests, PORT / 'ProviderProbe.java'])
-        log = run('native-provider-probe', [java / 'bin/java',
+        log = run('native-provider-probe', [runtime_java,
             '--enable-native-access=org.cryptomator.jfuse.freebsd.amd64',
             '--module-path', image / 'mods', '--add-modules', 'ALL-MODULE-PATH',
             '--add-exports', 'org.cryptomator.frontend.fuse/org.cryptomator.frontend.fuse=ALL-UNNAMED',
@@ -224,10 +266,6 @@ def main():
         report['provider'] = json.loads(log.read_text())
         if report['provider']['fsyncdir_registered']:
             raise RuntimeError('Unexpected upstream fsyncdir contract; reassess source')
-        run('jlink-native-runtime', [java / 'bin/jlink', *shared.runtime_link_options(java),
-            '--add-modules', 'java.base,java.compiler,java.naming,java.xml,jdk.unsupported',
-            '--no-header-files', '--no-man-pages', '--strip-debug', '--compress', 'zip-6',
-            '--output', image / 'runtime'])
         notices = image / 'licenses'
         notices.mkdir()
         shutil.copy2(SOURCE / 'LICENSE.txt', notices / 'LURKER-CRYPTOMATOR-AGPL-3.0.txt')
@@ -247,6 +285,9 @@ def main():
             'os': platform.system(), 'architecture': platform.machine(),
             'product_admission_changed': False, 'native_fs_fuse_bundled': False,
             'abi_tests': report['abi']['memory_tests'], 'provider': report['provider'],
+            'memory_only_lifecycle_controls': report['lifecycle_controls'],
+            'memory_only_adapter_controls': report['adapter_lifecycle_controls'],
+            'native_unmount_runtime_exercised': False,
             'source_files': source_manifest, 'port_inputs': configuration,
             'complete_build_source_kit': source_kit,
             'original_runtime_dependencies': report['locked_runtime_jars'],

@@ -39,8 +39,8 @@
   "admission": "source candidate only; native ABI/build gates precede any separately authorized mount; no product admission",
   "qualification_limits": {
     "mount_authorized": false,
-    "normal_close": "Unqualified: no-force-inputs-1 passed native build/ABI and 13 fake-backend lifecycle controls, but pathname unmount races and NOWAIT omission plus non-authoritative zero-loop completion remain source-review blockers. A reviewed direct-FSID normal-unmount receipt is still required. Preserved 2424fb3 candidate remains blocked by libfuse MNT_FORCE. No candidate vault mounted.",
-    "caller_retention": "Shared helper still explicitly closes CryptoFS after close/startup failure and relies on a process shutdown hook; separate coordinator-owned caller/protocol change required before mounted product admission.",
+    "normal_close": "Unqualified mounted behavior: no-force-inputs-3 passed 16 native build stages, native ABI/errno controls, 24 fake lifecycle, 21 worker-protocol, 8 deferred-adapter controls and 13 Python tests. The real direct-libc MNT_BYFSID call never ran. Code requires its bound successful receipt plus natural loop0 and identity checks; ENOENT is unconfirmed. No candidate vault mounted.",
+    "caller_retention": "Builder retains its attempt through AutoCloseable and terminal-busy BooleanSupplier. A FreeBSD decorator defers upstream DESTROY cleanup to proved close with sticky adapter-close uncertainty and real fsync delegation. Separate coordinator-owned managed caller/CryptoFS/process retention remains required; original shared-helper baseline is unchanged in this isolated gate.",
     "upstream_factory": "Original Files.getFileStore attempt stalled in a pre-existing global VFS wait and was preserved through VM recovery. The factory remains unproven; later memory-only registration fixtures are not factory or mount passes."
   },
   "native_dependencies": [

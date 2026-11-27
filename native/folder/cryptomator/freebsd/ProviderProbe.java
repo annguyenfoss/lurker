@@ -32,6 +32,12 @@ public final class ProviderProbe {
         // claim that that filesystem operation succeeded. A null FileStore is
         // deliberately never queried: any new dependency on it fails this gate.
         Path directory=Path.of(args[0]);
+        var attempt=service.forFileSystem(directory);
+        if (!(attempt instanceof AutoCloseable) || !(attempt instanceof java.util.function.BooleanSupplier))
+            throw new AssertionError("Native owned-attempt close/retry capability missing");
+        if (((java.util.function.BooleanSupplier)attempt).getAsBoolean()) throw new AssertionError("Unstarted builder cannot retry busy close");
+        ((AutoCloseable)attempt).close(); // never-started builder; no factory or native channel
+        if (((java.util.function.BooleanSupplier)attempt).getAsBoolean()) throw new AssertionError("Closed builder cannot retry");
         var factory=Class.forName("org.cryptomator.frontend.fuse.OpenFileFactory");
         var directories=Class.forName("org.cryptomator.frontend.fuse.ReadWriteDirectoryHandler");
         var files=Class.forName("org.cryptomator.frontend.fuse.ReadWriteFileHandler");
@@ -61,6 +67,6 @@ public final class ProviderProbe {
             +"\"jfuse_builder\":\""+builder.getClass().getName()+"\","
             +"\"mount_provider\":\""+service.getClass().getName()+"\","
             +"\"default_flags\":\""+flags+"\",\"native_fuse_version\":"+nativeVersion+",\"fsync_registered\":true,"
-            +"\"fsyncdir_registered\":false,\"upstream_filestore_factory_exercised\":false,\"mount_invoked\":false}");
+            +"\"fsyncdir_registered\":false,\"autocloseable_builder\":true,\"terminal_busy_supplier\":true,\"upstream_filestore_factory_exercised\":false,\"mount_invoked\":false}");
     }
 }

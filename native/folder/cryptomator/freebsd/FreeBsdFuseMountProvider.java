@@ -8,6 +8,7 @@ import org.cryptomator.integrations.mount.*;
 import org.cryptomator.jfuse.api.Fuse;
 import org.cryptomator.jfuse.api.FuseMountFailedException;
 import org.cryptomator.jfuse.freebsd.amd64.FreeBsdNative;
+import org.cryptomator.jfuse.freebsd.amd64.FreeBsdMountControl;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -53,13 +54,20 @@ public final class FreeBsdFuseMountProvider implements MountService {
     }
     @Override public MountBuilder forFileSystem(Path root) { return new Builder(root); }
 
-    private static final class Builder extends AbstractMountBuilder {
+    private static final class Builder extends AbstractMountBuilder implements AutoCloseable,java.util.function.BooleanSupplier {
+        private Fuse ownedFuse;
+        private FuseNioAdapter ownedAdapter;
+        private Mounted ownedMount;
+        private boolean buildStarted,adapterCloseAttempted,closed;
+        private Throwable adapterCloseFailure;
         Builder(Path root) { super(root); }
         @Override public MountBuilder setMountpoint(Path point) {
             if (!Files.isDirectory(point,LinkOption.NOFOLLOW_LINKS)) throw new IllegalArgumentException("Existing native directory required");
             return super.setMountpoint(point);
         }
-        @Override public Mount mount() throws MountFailedException {
+        @Override public synchronized Mount mount() throws MountFailedException {
+            if (buildStarted || closed) throw new IllegalStateException("Native builder attempt cannot be reused");
+            buildStarted = true;
             FreeBsdNative.requireLoginUser();
             Objects.requireNonNull(mountPoint); Objects.requireNonNull(mountFlags);
             if (mountFlags.stream().anyMatch(f -> f.contains("allow_other") || f.contains("allow_root")
@@ -69,37 +77,52 @@ public final class FreeBsdFuseMountProvider implements MountService {
             var builder = Fuse.builder();
             try { builder.setLibraryPath(library().toString()); }
             catch (IOException error) { throw new MountFailedException(error); }
-            var adapter = ReadWriteAdapter.create(builder.errno(),vfsRoot,
-                    FuseNioAdapter.DEFAULT_MAX_FILENAMELENGTH,FileNameTranscoder.transcoder(),true);
-            var fuse = builder.build(adapter);
+            ownedAdapter = new FreeBsdDeferredAdapter(ReadWriteAdapter.create(builder.errno(),vfsRoot,
+                    FuseNioAdapter.DEFAULT_MAX_FILENAMELENGTH,FileNameTranscoder.transcoder(),true));
+            ownedFuse = builder.build(ownedAdapter);
+            // Main keeps this standard AutoCloseable builder even if mount()
+            // throws after native publication. No global retained-map lookup.
+            ownedMount = new Mounted(this,ownedFuse,ownedAdapter,mountPoint);
             try {
-                fuse.mount("fuse-nio-adapter",mountPoint,mountFlags.toArray(String[]::new));
-                return new Mounted(fuse,adapter,mountPoint);
+                ownedFuse.mount("lurker-cryptomator-"+java.util.UUID.randomUUID().toString().replace("-",""),
+                    mountPoint,mountFlags.toArray(String[]::new));
+                return ownedMount;
             } catch (FuseMountFailedException error) { throw new MountFailedException(error); }
+        }
+        @Override public synchronized void close() throws UnmountFailedException,IOException {
+            if (closed) return;
+            if (ownedFuse!=null) {
+                try { ((FreeBsdMountControl)ownedFuse).closeNormally(); }
+                catch (TimeoutException error) { throw new UnmountFailedException(error); }
+            }
+            if (ownedAdapter!=null) {
+                if (adapterCloseAttempted) throw new IOException("Prior adapter close outcome uncertain; retaining caller resources",adapterCloseFailure);
+                adapterCloseAttempted=true;
+                try { ownedAdapter.close(); }
+                catch (Throwable error) {
+                    adapterCloseFailure=error;
+                    throw new IOException("Adapter close failed; retain caller and CryptoFS without retry",error);
+                }
+            }
+            closed=true;
+        }
+        /** Private managed-caller contract: only a verified terminal EBUSY can
+         * permit a new explicit close. This getter never launches a worker. */
+        @Override public synchronized boolean getAsBoolean() {
+            return !closed && !adapterCloseAttempted && ownedFuse instanceof java.util.function.BooleanSupplier safe
+                && safe.getAsBoolean();
         }
     }
 
     private static final class Mounted extends AbstractMount {
-        private boolean unmounted;
-        Mounted(Fuse fuse,FuseNioAdapter adapter,Path point) { super(fuse,adapter,point); }
-        @Override public void unmount() throws UnmountFailedException {
-            if (unmounted) return;
-            try {
-                // Native normal unmount only. A nonzero/busy result preserves
-                // the live resources; no forced/lazy/Linux helper fallback.
-                var child = new ProcessBuilder("/sbin/umount",mountpoint.toAbsolutePath().toString()).start();
-                ProcessHelper.waitForSuccess(child,10,"FreeBSD normal unmount");
-                fuse.close();
-                unmounted = true;
-            } catch (InterruptedException error) {
-                Thread.currentThread().interrupt(); throw new UnmountFailedException(error);
-            } catch (IOException | TimeoutException | ProcessHelper.CommandFailedException error) {
-                throw new UnmountFailedException(error);
-            }
+        private final Builder owner;
+        Mounted(Builder owner,Fuse fuse,FuseNioAdapter adapter,Path point) { super(fuse,adapter,point);this.owner=owner; }
+        @Override public synchronized void unmount() throws UnmountFailedException {
+            try { owner.close(); }
+            catch (IOException error) { throw new UnmountFailedException(error); }
         }
-        @Override public void close() throws UnmountFailedException,IOException {
-            if (!unmounted) unmount();
-            super.close();
+        @Override public synchronized void close() throws UnmountFailedException,IOException {
+            owner.close();
         }
     }
 }

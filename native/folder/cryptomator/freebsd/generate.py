@@ -334,8 +334,9 @@ public static void main(String[] args) throws Throwable {
 
 FUSE_FUNCTIONS = {
     'fuse_version': ('I', ''), 'fuse_mount': ('I', 'PP'),
-    'fuse_loop': ('I', 'P'), 'fuse_exit': ('V', 'P'),
-    'fuse_unmount': ('V', 'P'), 'fuse_destroy': ('V', 'P'),
+    # FreeBSD fuse_unmount uses MNT_FORCE. Never bind it or manufacture loop
+    # completion with fuse_exit. Disposal uses only the public non-unmount API.
+    'fuse_loop': ('I', 'P'), 'fuse_destroy': ('V', 'P'),
     'fuse_lib_help': ('V', 'P'),
 }
 

@@ -53,16 +53,47 @@ thirteen fake-backend lifecycle controls, unmounted registration and thirteen
 focused Python tests. The native `statfs`/array extension is committed separately
 as `2decc27`. No channel, mount or native disposal operation ran in these gates.
 
-The current lifecycle implementation still has two source-review blockers.
-Its pathname `/sbin/umount` selection can race replacement. Its combination of
-`getfsstat(MNT_NOWAIT)` absence and natural zero loop return is insufficient:
-NOWAIT can omit busy mounts, and dead/aborted channels can also return zero.
-Stock FreeBSD's direct public `unmount` with `MNT_BYFSID` can select the exact
-captured ID without a pathname fallback. The command-line `umount` FSID form
-itself retains an ENOENT pathname fallback, so it does not resolve this issue.
-A subsequent reviewed candidate must bind an authoritative native normal-close
-result to the captured identity and owned worker before disposal; current memory
-controls do not prove that authority. Mounted admission remains blocked.
+That frozen candidate's pathname unmount and NOWAIT/loop authority remained
+source-review blockers. NOWAIT can omit busy mounts, and dead/aborted channels
+can also return zero. The next source candidate therefore uses an owned private
+JRE worker calling only public libc `unmount("FSID:<signed0>:<signed1>",
+MNT_BYFSID)`. It has no pathname fallback, force or native library/wire changes.
+The parent captures PID and process birth before dispatching a nonce-bound stdin
+request containing exact FSID, source, target and uid. The worker repeats the
+identity check. Only its verified terminal zero reply can supply clean-close
+authority; `ENOENT` and missing NOWAIT rows are already-absent/unconfirmed.
+Natural zero loop completion and supporting global identity checks are still
+required before once-only public destruction and callback-arena disposal.
+
+Worker requests, replies and errors remain in private 0700 evidence directories.
+Timeout, malformed, unknown and nonzero outcomes retain the worker and session.
+Only a later explicit close may retry a conclusively terminal, identity-verified
+`EBUSY`; prior worker evidence remains retained. The per-session builder implements
+standard `AutoCloseable` and `BooleanSupplier`, retaining its exact Fuse, adapter
+and Mount before attempting publication. Its supplier means only that safe-busy
+retry condition, never general readiness. It can validate a late terminal reply
+without starting a process. Adapter-close uncertainty is sticky and cannot retry.
+The returned Mount delegates to that same builder-owned close state.
+The FreeBSD adapter decorator records native DESTROY notifications without
+calling upstream's error-swallowing `destroy()->close()`. Actual adapter disposal
+is deferred to the proved builder close, once, with errors propagated. It forwards
+all ordinary operations, including real file fsync and its errors, unchanged.
+
+The corrected `no-force-inputs-3` candidate (archive `838de927`) passed all sixteen
+native build stages: 99 field, 30 callback, three string and three errno controls;
+24 lifecycle, 21 owned-worker protocol and eight deferred-adapter controls; and
+thirteen focused Python tests. The first worker candidate stopped at three Java
+permission-attribute type errors; its source and logs remain preserved separately.
+The correction changed only those three calls. Test-only child fixtures never
+invoke native unmount, and test classes are absent from the private platform jar.
+All 275 image inventory hashes matched the collected artifact.
+
+This gate uses the previously frozen shared-helper base; the coordinator's moving
+managed-caller work is not included. The private runtime includes `jdk.net`, and
+lifecycle, adapter and provider memory controls ran with that runtime. The actual
+native unmount call, upstream factory, startup-publication ownership and mounted
+payload/close behavior remain separate unqualified gates. Mounted admission is
+still blocked pending caller integration, source review and native authorization.
 
 The shared helper caller is an additional admission blocker: it currently closes
 CryptoFS after mount-close failure and uses a process shutdown hook. Retaining
