@@ -5,6 +5,9 @@ import importlib.util
 import io
 import os
 from pathlib import Path
+import platform
+import re
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -17,6 +20,84 @@ SPEC.loader.exec_module(BUILDER)
 
 
 class BuildInputs(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "NetBSD", "native NetBSD mmap semantics")
+    def test_native_exact_mmap_preserves_collision_and_cleans_only_its_mapping(self):
+        patch = (BUILDER.ROOT / BUILDER.HOST_PATCH).read_text()
+        match = re.search(r"^\+/\* NETBSD_EXACT_MMAP_BEGIN.*?^\+/\* NETBSD_EXACT_MMAP_END \*/", patch, re.M | re.S)
+        self.assertIsNotNone(match)
+        function = "\n".join(line[1:] for line in match.group().splitlines())
+        source = r'''
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <string.h>
+#include <assert.h>
+static void *returned, *unmapped;
+static unsigned calls;
+static void *observed_mmap(void *a, size_t n, int p, int f, int fd, off_t o) {
+    calls++; return returned = mmap(a,n,p,f,fd,o);
+}
+static int observed_munmap(void *a, size_t n) {
+    unmapped=a; return munmap(a,n);
+}
+#define mmap observed_mmap
+#define munmap observed_munmap
+''' + function + r'''
+#undef mmap
+#undef munmap
+int main(void) {
+    size_t n=(size_t)sysconf(_SC_PAGESIZE);
+    unsigned char *occupied=mmap(NULL,n,PROT_READ|PROT_WRITE,MAP_ANON|MAP_PRIVATE,-1,0);
+    assert(occupied!=MAP_FAILED); memset(occupied,0xa5,n);
+    assert(netbsd_mmap_exact(occupied,n,PROT_READ|PROT_WRITE,MAP_ANON|MAP_PRIVATE,-1,0)==NULL);
+    assert(errno==EEXIST && returned!=MAP_FAILED && returned!=occupied && unmapped==returned);
+    for(size_t i=0;i<n;i++) assert(occupied[i]==0xa5);
+    unsigned before=calls;
+    assert(!netbsd_mmap_exact(occupied+1,n,PROT_READ,MAP_ANON|MAP_PRIVATE,-1,0));
+    assert(!netbsd_mmap_exact(occupied,SIZE_MAX,PROT_READ,MAP_ANON|MAP_PRIVATE,-1,0));
+    assert(!netbsd_mmap_exact(occupied,n,PROT_READ,MAP_ANON|MAP_PRIVATE|MAP_FIXED,-1,0));
+    assert(!netbsd_mmap_exact(occupied,n,PROT_READ,MAP_SHARED,1,1));
+    assert(calls==before); /* All rejected before the native mmap syscall. */
+    unmapped=NULL;
+    assert(!netbsd_mmap_exact(occupied,n,PROT_READ,MAP_SHARED,-2,0));
+    assert(returned==MAP_FAILED && !unmapped); /* Never unmap the requested hint. */
+    assert(!munmap(occupied,n));
+    void *exact=netbsd_mmap_exact(occupied,n,PROT_READ|PROT_WRITE,MAP_ANON|MAP_PRIVATE,-1,0);
+    if(exact!=occupied) fprintf(stderr,"anonymous hint=%p returned=%p errno=%d\n",occupied,returned,errno);
+    assert(exact==occupied); memset(exact,0x4b,n); assert(!munmap(exact,n));
+    char name[]="/tmp/lurker-lkl-mmap-XXXXXX";
+    int fd=mkstemp(name); assert(fd>=0); assert(!unlink(name)); assert(!ftruncate(fd,n));
+    void *shared_hint=(void *)(uintptr_t)0x50000000;
+    unmapped=NULL;
+    exact=netbsd_mmap_exact(shared_hint,n,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);
+    if (exact) {
+        assert(exact==shared_hint); memset(exact,0x6c,n); assert(!msync(exact,n,MS_SYNC)); assert(!fsync(fd));
+        unsigned char byte; assert(pread(fd,&byte,1,0)==1 && byte==0x6c);
+        assert(!munmap(exact,n));
+        puts("shared fixed-base hint accepted exactly (MMU remains disabled)");
+    } else {
+        assert((returned==MAP_FAILED && !unmapped) ||
+               (returned!=MAP_FAILED && returned!=shared_hint && unmapped==returned));
+        puts("shared fixed-base hint safely rejected; no MMU availability claim");
+    }
+    assert(!close(fd));
+    printf("native exact mmap collision/failure/alignment/anonymous/shared passed uid=%u\n",(unsigned)getuid());
+    return 0;
+}
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            (work / "probe.c").write_text(source)
+            subprocess.run(["/usr/bin/gcc", "-std=gnu11", "-Wall", "-Wextra", "-Werror", "-o", str(work / "probe"), str(work / "probe.c")], check=True, timeout=30)
+            result = subprocess.run([str(work / "probe")], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            print(result.stdout, end="")
+
     def test_cached_archive_is_rehashed(self):
         with tempfile.TemporaryDirectory() as tmp:
             archive = Path(tmp) / "cached.tar.gz"
@@ -104,6 +185,38 @@ class BuildInputs(unittest.TestCase):
             import time
             time.sleep(2.1)
             self.assertFalse(marker.exists())
+
+    def test_reviewed_patch_rejects_changed_context_and_unapproved_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            archive = work / "input.tar"
+            name = "tools/lkl/lklfuse.c"
+            with tarfile.open(archive, "w") as tar:
+                item = tarfile.TarInfo(f"linux-{BUILDER.REVISION}/{name}")
+                item.size = 9
+                tar.addfile(item, io.BytesIO(b"original\n"))
+            patch = work / "host.patch"
+            contents = f"--- a/{name}\n+++ b/{name}\n@@ -1 +1 @@\n-original\n+adapted\n"
+            patch.write_text(contents)
+            result = BUILDER.patched_inputs(archive, [(patch, BUILDER.digest(patch))])
+            self.assertEqual(result[name], b"adapted\n")
+            patch.write_text(contents.replace("-original", "-different"))
+            with self.assertRaisesRegex(RuntimeError, "context is not unique"):
+                BUILDER.patched_inputs(archive, [(patch, BUILDER.digest(patch))])
+            patch.write_text(contents.replace(name, "../escape"))
+            with self.assertRaisesRegex(RuntimeError, "Unapproved host patch target"):
+                BUILDER.patched_inputs(archive, [(patch, BUILDER.digest(patch))])
+
+    def test_reviewed_patch_digest_is_mandatory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            archive = work / "input.tar"
+            with tarfile.open(archive, "w"):
+                pass
+            patch = work / "host.patch"
+            patch.write_text("unreviewed")
+            with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+                BUILDER.patched_inputs(archive, [(patch, "0" * 64)])
 
 
 if __name__ == "__main__":

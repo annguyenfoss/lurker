@@ -1,0 +1,194 @@
+--- a/tools/lkl/Makefile.autoconf
++++ b/tools/lkl/Makefile.autoconf
+@@ -70,14 +70,18 @@
+ 
+ define posix_host
+   $(call set_autoconf_var,POSIX,y)
+-  $(call set_autoconf_var,VIRTIO_NET,y)
+-  $(call set_autoconf_var,VIRTIO_NET_FD,y)
++  $(if $(call is_defined,__NetBSD__),,$(call set_autoconf_var,VIRTIO_NET,y))
++  $(if $(call is_defined,__NetBSD__),,$(call set_autoconf_var,VIRTIO_NET_FD,y))
+   $(if $(strip $(call find_include,linux/vfio.h)),$(call set_autoconf_var,VFIO_PCI,y))
+   LDFLAGS += -pie -z noexecstack
+   CFLAGS += -fPIC -pthread
+   SOSUF := .so
+   $(if $(call is_defined,__ANDROID__),$(call android_host),LDLIBS += -lrt -lpthread)
+   $(if $(filter $(1),elf64-x86-64-freebsd),$(call bsd_host))
++  $(if $(call is_defined,__NetBSD__),$(call bsd_host))
++  $(if $(call is_defined,__NetBSD__),$(call set_autoconf_var,NETBSD,y))
++  $(if $(call is_defined,__NetBSD__),$(call set_kernel_config,MMU,n))
++  $(if $(call is_defined,__NetBSD__),$(call set_kernel_config,KASAN,n))
+   $(if $(filter $(1),elf32-littlearm),$(call arm_host))
+   $(if $(filter $(1),elf64-littleaarch64),$(call aarch64_host))
+   $(if $(filter $(1),elf64-littleriscv),$(call riscv64_host))
+--- a/tools/lkl/Makefile
++++ b/tools/lkl/Makefile
+@@ -59,7 +59,10 @@
+ 
+ # this workaround is for FreeBSD
+ bin/stat:
+-ifeq ($(LKL_HOST_CONFIG_BSD),y)
++ifeq ($(LKL_HOST_CONFIG_NETBSD),y)
++	$(Q)ln -sf /usr/pkg/bin/gstat bin/stat
++	$(Q)ln -sf /usr/pkg/bin/gsed bin/sed
++else ifeq ($(LKL_HOST_CONFIG_BSD),y)
+ 	$(Q)ln -sf `which gnustat` bin/stat
+ 	$(Q)ln -sf `which gsed` bin/sed
+ else
+--- a/tools/lkl/Targets
++++ b/tools/lkl/Targets
+@@ -16,7 +16,11 @@
+ LDLIBS_lib/hijack/liblkl-zpoline-$(LKL_HOST_CONFIG_POSIX) += -ldl -lc
+ 
+ progs-$(LKL_HOST_CONFIG_FUSE) += lklfuse
++ifeq ($(LKL_HOST_CONFIG_NETBSD),y)
++LDLIBS_lklfuse-y := -lrefuse
++else
+ LDLIBS_lklfuse-y := -lfuse3
++endif
+ 
+ progs-$(LKL_HOST_CONFIG_ARCHIVE) += fs2tar
+ LDLIBS_fs2tar-y := -larchive
+--- a/tools/lkl/lib/posix-host.c
++++ b/tools/lkl/lib/posix-host.c
+@@ -484,7 +484,9 @@
+ }
+ 
+ 
+-#if defined(__FreeBSD__)
++#if defined(__NetBSD__)
++#define MAP_FIXED_NOREPLACE 0 /* Safe exact-address hint, never MAP_FIXED. */
++#elif defined(__FreeBSD__)
+ #define MAP_FIXED_NOREPLACE (MAP_FIXED | MAP_EXCL)
+ #ifndef MAP_NORESERVE
+ #define MAP_NORESERVE 0
+@@ -495,11 +497,49 @@
+ #endif
+ #endif
+ 
++#if defined(__NetBSD__)
++/* NETBSD_EXACT_MMAP_BEGIN: compiled by the focused native primitive test. */
++static void *netbsd_mmap_exact(void *addr, size_t size, int prot, int flags,
++                              int fd, off_t offset)
++{
++	long page = sysconf(_SC_PAGESIZE);
++	size_t rounded;
++	void *ret;
++
++	if (page <= 0 || !addr || !size || (uintptr_t)addr % (size_t)page ||
++	    offset < 0 || (uint64_t)offset % (size_t)page ||
++	    size > SIZE_MAX - ((size_t)page - 1)) {
++		errno = EINVAL;
++		return NULL;
++	}
++	rounded = (size + (size_t)page - 1) / (size_t)page * (size_t)page;
++	if ((uintptr_t)addr > UINTPTR_MAX - rounded || (flags & MAP_FIXED)) {
++		errno = EINVAL;
++		return NULL;
++	}
++	ret = mmap(addr, size, prot, flags, fd, offset);
++	if (ret == MAP_FAILED)
++		return NULL;
++	if (ret != addr) {
++		/* Release only our returned mapping; never the occupied hint. */
++		if (munmap(ret, size) != 0)
++			abort();
++		errno = EEXIST;
++		return NULL;
++	}
++	return ret;
++}
++/* NETBSD_EXACT_MMAP_END */
++#endif
++
+ static void *lkl_mmap(void *addr, unsigned long size, enum lkl_prot prot)
+ {
+ 	void *ret;
+ 	int fl = MAP_ANON | MAP_PRIVATE | MAP_FIXED_NOREPLACE | MAP_NORESERVE;
+ 
++#if defined(__NetBSD__)
++	return netbsd_mmap_exact(addr, size, get_prot(prot), fl, -1, 0);
++#else
+ 	ret = mmap(addr, size, get_prot(prot), fl, -1, 0);
+ 	if (ret != addr) {
+ 		if (ret != NULL)
+@@ -508,6 +548,7 @@
+ 	}
+ 
+ 	return ret;
++#endif
+ }
+ 
+ static int lkl_munmap(void *addr, unsigned long size)
+@@ -540,11 +581,15 @@
+ {
+ 	int prot = get_prot(mem_prot_flags);
+ 	int flags = MAP_SHARED | MAP_FIXED_NOREPLACE;
++#if defined(__NetBSD__)
++	return netbsd_mmap_exact(addr, size, prot, flags, shared_mem_fd, pg_off);
++#else
+ 	void *ret = mmap(addr, size, prot, flags, shared_mem_fd, pg_off);
+ 
+ 	if (ret == MAP_FAILED)
+ 		return NULL;
+ 	return ret;
++#endif
+ }
+ #endif // LKL_HOST_CONFIG_MMU
+ 
+--- a/tools/lkl/lklfuse.c
++++ b/tools/lkl/lklfuse.c
+@@ -11,7 +11,11 @@
+ #include <string.h>
+ #include <errno.h>
+ #include <unistd.h>
++#ifdef __NetBSD__
++#define FUSE_USE_VERSION 38
++#else
+ #define FUSE_USE_VERSION 35
++#endif
+ #include <fuse3/fuse.h>
+ #include <fuse3/fuse_opt.h>
+ #include <fuse3/fuse_lowlevel.h>
+@@ -249,10 +253,13 @@
+ 	return ret;
+ }
+ 
+-#ifdef __FreeBSD__
++#if defined(__FreeBSD__) || defined(__NetBSD__)
+ #define O_LARGEFILE 0
+ #define O_NOATIME 0
+ #define O_TMPFILE 0
++#endif
++#ifdef __NetBSD__
++#define O_PATH 0
+ #endif
+ 
+ static int lklfuse_open3(const char *path, bool create, mode_t mode,
+@@ -830,6 +837,12 @@
+ 
+ 	if (fuse_parse_cmdline(&args, &cli_opts))
+ 		return 1;
++#ifdef __NetBSD__
++	if (!cli_opts.singlethread || !cli_opts.foreground) {
++		fprintf(stderr, "NetBSD diagnostic requires foreground single-thread mode (-f -s)\n");
++		return 1;
++	}
++#endif
+ 
+ 	ret = stat(cli_opts.mountpoint, &st);
+ 	if (ret) {
+@@ -844,6 +857,13 @@
+ 	}
+ 
+ 	lklfuse.disk.fd = ret;
++#ifdef __NetBSD__
++	if (fstat(ret, &st) != 0 || !S_ISREG(st.st_mode)) {
++		fprintf(stderr, "NetBSD diagnostic accepts only regular-file images\n");
++		close(ret);
++		return 1;
++	}
++#endif
+ 
+ 	ret = lkl_init(&lkl_host_ops);
+ 	if (ret < 0) {
