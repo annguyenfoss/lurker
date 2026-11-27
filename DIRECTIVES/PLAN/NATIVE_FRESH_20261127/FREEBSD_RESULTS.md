@@ -604,3 +604,81 @@ Shutdown source inputs and native ABI/provider assessments:
 - https://raw.githubusercontent.com/veracrypt/VeraCrypt/VeraCrypt_1.26.31/src/Core/Unix/FreeBSD/CoreFreeBSD.cpp
 - https://github.com/cryptomator/jfuse
 - https://github.com/libfuse/libfuse/blob/fuse-3.18.3/example/passthrough.c
+
+## External LKL driver qualification checkpoint
+
+Commit `c045e7b` centralizes the fixed GELI create profile and passes the
+selected filesystem through the file and physical adapters. Its frozen native
+four-file snapshot passed workspace check and **150 tests, zero failures,
+13 ignored**, including 77 core tests and 43 desktop tests. This is preparation
+only: existing Btrfs/XFS create/write guards remain in place. The exact receipt
+is `validation/geli-profile-refactor/result.json` under this host's round
+evidence. The future feature documentation remains a separate uncommitted
+coordinator change.
+
+The external host-tool recipe and patch are being qualified against the
+official `filesystems/lkl` source revision
+`86dd3afb590eccc1903611bdaa8bac87757eb80d`, source archive SHA-256
+`d63cccf64ab8938389b0054e3e68ee467100bfc98475b1864ab7dac542d51317`,
+and all seven FreeBSD port patches from
+`46cf3d9696491c61d91ecd22db11c7f7c1e62c24`. This remains an external native
+FreeBSD filesystem prerequisite, with host-installed FUSE; it is not a private
+Lurker engine or a VM/network workaround. No new product support is credited
+from the following diagnostic controls.
+
+Diagnostic v6-NX, SHA-256
+`d95f9572f3df2eef16213667f0f3bf4082fff9f2dcd7e8eda0c461cb1f9c1094`,
+passes complete native XFS and Btrfs write/append/final-reopen payload cycles
+both on regular images and through GELI AES-XTS-256, PBKDF2/600000 and 512-byte
+decrypted providers. Every payload actor is actual UID/EUID 1300. New inode
+UID/GID, mode changes, native primary and supplementary group access, and
+unrelated-user list/read/write/create denials through searchable ancestors
+pass. Native errno checks include Linux/native ENOTEMPTY 39/66, ENOSYS 38/78,
+EOPNOTSUPP 95/45, EAGAIN 11/35 and missing-xattr ENODATA 61/ENOATTR 87.
+Kernel-held release/dir-release are cleanup only; genuine I/O and metadata
+requests with a dead or PID-zero caller remain unsupported and fail closed.
+
+The twelve native syscall traces prove source-fd regular-file `fsync` or GEOM
+`DIOCGFLUSH`, source close before the final status record, and **no unmount
+syscall or force flag** in the corrected driver. Each route has strict
+identity-bound ready/drained records, busy preservation, and active/final
+status reuse rejection. Native ELF checks show separate RX/RW loads and a
+non-executable GNU stack. The source remains under review to strengthen the
+INIT-reply/monitor ordering and bounded cancellation before a final linked
+host-tool freeze; diagnostic and factory identities are kept distinct.
+
+The actual UID/EUID-1300 injected native source-fsync test also passes: unarmed
+write/fsync succeeds; armed application `fsync` receives EIO; normal host
+unmount succeeds; the driver exits nonzero and publishes the matching final
+**error**, never drained. The loader override is confined to this unprivileged
+diagnostic; it is not a production/root execution option. A preceding
+unprivileged `allow_other` attempt was rejected by native mount policy, then
+normally signal-aborted without publishing a host mount or writing payload.
+Both results are retained separately. Receipts are in
+`validation/lkl-driver-v6-nx/`, including its `geli512/` trace audit.
+
+An earlier v5 diagnostic remains a real failed startup. FreeBSD libfuse starts
+`mount_fusefs` asynchronously; eagerly checking mount identity before serving
+INIT rejected a not-yet-published mount and closed its channel. The helper
+subsequently published an uninitialized native FUSE mount. No LKL filesystem
+mount or payload write occurred on this 512-MiB image. Its SHA-256 before and
+after the recovery attempt is unchanged:
+`9701aef9565098770f499932fcc0f4066c49a6cacaccae40847260f9b630ec6b`.
+The image remains at
+`/srv/lurker-fresh-20261127/fixtures/lkl-native-request-lklfuse-host-io-diagnostic-v5-1795749524/xfs/image.raw`.
+
+Normal unmount blocked. After preserving native mount/process/descriptor
+snapshots and proving no remaining `/dev/fuse` descriptor, the coordinator
+authorized an explicit recovery-only forced unmount of this exact reverified
+FSID `[-318701815,237]`, source and target. That recovery syscall is **still
+blocked**, not completed or passed. No reboot, reset, repair, other mount
+mutation or encrypted-mapping detach was performed. The exact retained
+process/birth identities are recipe `34031/1795749524.464375`, read-only find
+`36854/1795749607.176385`, normal unmount `39624/1795749746.348368`, and scoped
+forced-recovery helper `42884/1795749945.800178`. Exact birth-checked SIGTERM
+attempts for the find and normal-unmount processes remain pending in their
+kernel waits. The mount's absence from a later cached mount-table snapshot
+does not establish completed recovery while these operations remain blocked.
+The recovery evidence is `/srv/lurker-fresh-20261127/lkl-v5-failure-recovery/`.
+No additional recovery action is being taken; later bounded controls use
+fresh, distinct paths and do not traverse the failed target.
