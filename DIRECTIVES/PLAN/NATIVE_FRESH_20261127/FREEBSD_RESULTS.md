@@ -971,3 +971,28 @@ failed and corrected reader attempts. At this milestone the domain is still
 shut off: no XML redefine, cold start or saved-RAM restore has occurred. A cold
 recovery requires the coordinator's separate copied-identity/XML review and
 must remain distinct from ordinary shutdown and product qualification.
+
+
+### Operational cold recovery, phases 5–6
+
+- Purpose/input: recover the dedicated VM from the preserved v5 VFS failure;
+  use the five verified copies and root-approved XML `d24f494f...` only.
+  Command/log: `coldboot-approved.py`, `coldboot-result.json` and
+  `executed-preservation-evidence/` in the recovery-plan bucket above.
+- Verified exactly five regular copy files, atomically moved their directory to
+  `/srv/build/lurker-native-fresh-20261127/freebsd/v5-coldboot-20261127T062744Z`,
+  then set that directory0755 only. Copies remained0600; originals, RAM and its
+  private0700 parent stayed unchanged. Native define/start both exited zero.
+- Outcome: new boot `1795761640.321351`, unchanged FreeBSD15.1-p7 GENERIC;
+  all five disk bindings match. Automatic fusefs/usermount/devfs prerequisites
+  are present; both ZFS pools report ONLINE with no known data errors. Seven
+  pinned product/driver/candidate manifest hashes match and all six old process
+  identities are absent. `recovery-result.json` binds the post-boot inventory.
+- Exceptions retained: native `geom eli status` exits1 because this boot has no
+  loaded ELI class; that command is not credited as absence proof. The complete
+  native GEOM graph has no ELI providers and mdconfig is empty. Captured serial
+  covers late network startup through login, including duplicate loopback-route
+  notices; early kernel serial output was not captured.
+- Scope/cleanup: operational recovery only, never an ordinary shutdown/product
+  pass. No manual repair, force import, RAM restore or custom kernel change;
+  original artifacts remain preserved. No old job was restarted.
