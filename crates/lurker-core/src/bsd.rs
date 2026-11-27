@@ -35,6 +35,8 @@ use freebsd as native;
 #[cfg(target_os = "netbsd")]
 mod netbsd;
 #[cfg(target_os = "netbsd")]
+pub(crate) mod netbsd_access;
+#[cfg(target_os = "netbsd")]
 use netbsd as native;
 #[cfg(target_os = "openbsd")]
 mod openbsd;

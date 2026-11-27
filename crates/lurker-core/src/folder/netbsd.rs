@@ -3,6 +3,7 @@ use crate::{AppError, AppResult};
 use std::os::unix::fs::FileTypeExt;
 
 pub(super) fn require_fuse_access() -> AppResult<()> {
+    crate::bsd::netbsd_access::require_refuse()?;
     let mut enabled: libc::c_int = 0;
     let mut length = std::mem::size_of_val(&enabled);
     let result = unsafe {

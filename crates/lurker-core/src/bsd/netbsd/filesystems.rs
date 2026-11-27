@@ -16,11 +16,15 @@ pub(in super::super) fn validate_filesystem(
         return Err(AppError::new("NetBSD filesystem selection requires CGD."));
     }
     match fs.unwrap_or(CreateFilesystem::Ufs2) {
-        CreateFilesystem::Ntfs => ensure_ntfs_socket_limit(),
+        CreateFilesystem::Ntfs => {
+            ensure_ntfs_socket_limit()?;
+            super::super::netbsd_access::require_perfuse()
+        }
+        CreateFilesystem::Ext4 | CreateFilesystem::Exfat => {
+            super::super::netbsd_access::require_refuse()
+        }
         CreateFilesystem::Ufs1
         | CreateFilesystem::Ufs2
-        | CreateFilesystem::Ext4
-        | CreateFilesystem::Exfat
         | CreateFilesystem::Fat32
         | CreateFilesystem::Hammer2
         | CreateFilesystem::Zfs => Ok(()),
@@ -297,6 +301,11 @@ pub(in super::super) fn mount_filesystem(
     readonly: bool,
 ) -> AppResult<()> {
     let (device, kind) = probe(mapped)?;
+    match kind.as_str() {
+        "ntfs" => super::super::netbsd_access::require_perfuse()?,
+        "ext2fs" | "exfat" => super::super::netbsd_access::require_refuse()?,
+        _ => {}
+    }
     let owner = crate::new_filesystem::invoking_owner()?;
     let mode = if readonly { "ro" } else { "rw" };
     let options = format!("{mode},uid={},gid={},umask=077", owner.uid, owner.gid);
@@ -316,7 +325,14 @@ pub(in super::super) fn mount_filesystem(
             "/usr/pkg/bin/ntfs-3g"
         }
         "ext2fs" => {
-            argv = args(&["-o", if readonly { "ro" } else { "rw+" }]);
+            argv = args(&[
+                "-o",
+                if readonly {
+                    "ro,default_permissions"
+                } else {
+                    "rw+,default_permissions"
+                },
+            ]);
             "/usr/pkg/bin/fuse-ext2"
         }
         "msdosfs" => {
