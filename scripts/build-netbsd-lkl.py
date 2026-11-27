@@ -29,8 +29,8 @@ HOST_PATCH_SHA256 = "8fd825c96c6fb0c16db834d3e406a367fcf5eaf1610696d1d39d8b392b3
 TIMER_HEADER = "native/netbsd/lkl/netbsd-timer.h"
 TIMER_HEADER_SHA256 = "8b302afe51ba85e2a83b9fd22df81257358b5731e725ace276a137a127355197"
 REFUSE_PATCH = "native/netbsd/lkl/refuse-bridge.patch"
-REFUSE_PATCH_SHA256 = "a41d4d06add1f3be118702e402ae1cdf00e7702145a34881cc3272a7cb445c41"
-REFUSE_SOURCE_SHA256 = "2b42f71579ad9473b8eada3cc921dccad694b648b97fc7150d09cf819b34438a"
+REFUSE_PATCH_SHA256 = "8ec94145ba752171460d9159b7c4bd7d2ce5c38fb290b3ad68d65916355bdedd"
+REFUSE_SOURCE_SHA256 = "2689a4647e2079b24bc0aacf6fa658b27e4d00e247a6d2fe72ef22fe0518ee07"
 PUFFS_PROVIDER_SHA256 = "8705ccd3ff268666b0973905b44648ef014efcca10051355677f02b0f5a64099"
 FLUSH_PATCH = "native/macos/lkl-darwin-flush.patch"
 FLUSH_PATCH_SHA256 = "0dd2c89942ede5a2c373191601054dcd9b2e4e17c4e1b1c568d02a2bfc8fcf8b"
@@ -311,7 +311,7 @@ def build_refuse_bridge(cache, output, timeout):
          *compiled, "-lpuffs", "-lpthread", "-lutil"])
     (output / "librefuse-lkl.so").symlink_to(library.name)
     probe = ("import ctypes;lib=ctypes.CDLL(" + repr(str(library)) + ");"
-             "fn=lib.refuse_lkl_bridge_version;fn.restype=ctypes.c_uint;assert fn()==1")
+             "fn=lib.refuse_lkl_bridge_version;fn.restype=ctypes.c_uint;assert fn()==2")
     run([sys.executable, "-c", probe])
     manifest = {"kind": "uninstalled-netbsd-lkl-refuse-diagnostic", "uid": os.getuid(),
                 "base_revision": base.REVISION, "base_patch_sha256": base.PATCH_SHA256,

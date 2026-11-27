@@ -126,12 +126,28 @@ builder and requires the qualified installed puffs provider. The resulting
 source, ELF dependencies, build commands and hashes are retained. Set
 `LURKER_NETBSD_REFUSE_SOURCE` to `refuse-isolated/source/lib/librefuse` to run
 the native actual-source forwarding control along with the builder tests.
-That control substitutes only the puffs caller seam; it does not mount. It
+That control substitutes the puffs caller and failed-mount seams; it does not mount. It
 checks registration, file/directory/data-only sync, native error propagation,
 the NULL-handle barrier, PID changes/query failure and foreign-user admission.
 The driver must pin and load this exact isolated library rather than the
 installed system SONAME. The diagnostic client remains unsuitable for mounting
 until its remaining credential, disk-I/O and no-force lifecycle gates pass.
+
+Diagnostic bridge ABI 2 calls the backend for every native open, passing a
+registered per-vnode capability on subsequent opens. The backend must preserve
+separate read/write descriptors and their verified opener credentials. First
+open clears the already-released dummy-create handle; noncreating open strips
+create/exclusive/truncate flags. Native VFS performs its existing-file truncate
+through setattr before open. Backend release runs only for the last native
+close, with native error propagation and retained state on failure. A mount
+failure returns to the driver rather than exiting with live LKL/source state.
+The bridge also exposes a mandatory owner-only/default-permission profile check;
+root, allow-other and allow-root profiles are outside this diagnostic contract.
+Its actual-source control checks repeated opens, failed-open atomicity, last
+close, release-error retention and append versus explicit offsets. The native
+PUFFS write callback already converts its append flag to the inode's current
+size. These are isolated library controls; the frontend still needs real
+overlap, append, permission and pathname-replacement tests before admission.
 
 `netbsd-disk.h` is the file-only native block-transport component. It admits a
 held caller-owned, private, single-link regular file with a sector-aligned size;

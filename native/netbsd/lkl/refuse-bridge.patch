@@ -12,10 +12,74 @@
  }
  
  /***************** end of pthread context routines ************************/
-@@ -910,6 +913,30 @@
- 	return ret;
+@@ -855,11 +858,15 @@
+ 	if (set_fuse_context_uid_gid(cred) != 0)
+ 		return EACCES;
+ 
+-	/* if open, don't open again, lest risk nuking file private info */
+-	if (rn->flags & RN_OPEN) {
+-		rn->opencount++;
+-		return 0;
+-	}
++	/* Private diagnostic ABI: the backend authenticates each open and
++	 * preserves/extends its registered per-vnode capability.  A first open
++	 * must not reuse the already-released dummy create handle. */
++	struct fuse_file_info next;
++	if (rn->flags & RN_OPEN)
++		next = *fi;
++	else
++		memset(&next, 0, sizeof(next));
++	fi = &next;
+ 
+ 	/* OFLAGS(), need to convert FREAD/FWRITE to O_RD/WR */
+ 	fi->flags = (mode & ~(O_CREAT | O_EXCL | O_TRUNC)) - 1;
+@@ -871,11 +878,12 @@
+ 	}
+ 
+ 	if (ret == 0) {
++		rn->file_info = next;
+ 		rn->flags |= RN_OPEN;
+ 		rn->opencount++;
+ 	}
+ 
+-	return -ret;
++	return ret > 0 ? EIO : -ret;
  }
  
+ /* ARGSUSED2 */
+@@ -897,17 +905,46 @@
+ 	if (set_fuse_context_uid_gid(pcr) != 0)
+ 		return EACCES;
+ 
+-	if (rn->flags & RN_OPEN) {
+-		if (pn->pn_va.va_type == VDIR) {
+-			ret = fuse_fs_releasedir(fuse->fs, path, fi);
+-		} else {
+-			ret = fuse_fs_release(fuse->fs, path, fi);
+-		}
+-	}
+-	rn->flags &= ~RN_OPEN;
+-	rn->opencount--;
+-
+-	return ret;
++	if (!(rn->flags & RN_OPEN) || rn->opencount <= 0)
++		return EBADF;
++	if (rn->opencount > 1) {
++		rn->opencount--;
++		return 0;
++	}
++	if (pn->pn_va.va_type == VDIR)
++		ret = fuse_fs_releasedir(fuse->fs, path, fi);
++	else
++		ret = fuse_fs_release(fuse->fs, path, fi);
++	if (ret == 0) {
++		rn->flags &= ~RN_OPEN;
++		rn->opencount = 0;
++		memset(fi, 0, sizeof(*fi));
++	}
++	return ret > 0 ? EIO : -ret;
++}
++
 +/* Diagnostic LKL bridge: forward the actual native fsync request. */
 +static int
 +puffs_fuse_node_fsync(struct puffs_usermount *pu, void *opc,
@@ -38,12 +102,10 @@
 +		    !!(flags & PUFFS_FSYNC_DATAONLY), fi);
 +	/* PUFFS expects a positive native errno; FUSE returns its negative. */
 +	return ret > 0 ? EIO : -ret;
-+}
-+
+ }
+ 
  /* read some more from the file */
- /* ARGSUSED5 */
- static int
-@@ -1074,9 +1101,14 @@
+@@ -1074,9 +1111,14 @@
  puffs_fuse_fs_sync(struct puffs_usermount *pu, int flags,
              const struct puffs_cred *cr)
  {
@@ -59,7 +121,16 @@
  }
  
  /* ARGSUSED2 */
-@@ -1332,6 +1364,7 @@
+@@ -1236,7 +1278,7 @@
+ 
+ 	puffs_zerostatvfs(&svfsb);
+ 	if (puffs_mount(fuse->pu, mountpoint, MNT_NODEV | MNT_NOSUID, pn_root) == -1) {
+-		err(EXIT_FAILURE, "puffs_mount: directory \"%s\"", mountpoint);
++		return -1; /* Retain source/channel state on startup failure. */
+ 	}
+ 
+ 	return 0;
+@@ -1332,6 +1374,7 @@
          PUFFSOP_SET(pops, puffs_fuse, node, close);
          PUFFSOP_SET(pops, puffs_fuse, node, read);
          PUFFSOP_SET(pops, puffs_fuse, node, write);
@@ -67,10 +138,18 @@
          PUFFSOP_SET(pops, puffs_fuse, node, reclaim);
  
  	puffs_flags = PUFFS_FLAG_BUILDPATH
-@@ -1491,3 +1524,6 @@
+@@ -1491,3 +1534,14 @@
  {
  	return 2;
  }
 +
 +/* This library is scoped to the diagnostic driver, never the system SONAME. */
-+unsigned int refuse_lkl_bridge_version(void) { return 1; }
++unsigned int refuse_lkl_bridge_version(void) { return 2; }
++
++/* Mandatory diagnostic profile, checked before publishing any native mount. */
++int refuse_lkl_owner_only(struct fuse *fuse)
++{
++	return fuse != NULL && geteuid() != 0 && fuse->mount_uid == geteuid() &&
++	    !fuse->allow_other && !fuse->allow_root && fuse->default_permissions
++	    ? 0 : EACCES;
++}
