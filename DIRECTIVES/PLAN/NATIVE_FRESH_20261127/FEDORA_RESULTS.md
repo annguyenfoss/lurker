@@ -1,22 +1,31 @@
-# Fedora fresh qualification — in progress
+# Fedora fresh qualification — completed with recorded host prerequisites
 
-Current checkpoint: exact follow-up source
+Qualified follow-up source:
 `67894f68525c55d5cbb48c743e1a98a308bd970f` passed workspace check, tests and build;
 all 408 archived source files retain their hashes. The corrected native RPM is
 verified in its administrator-controlled test prefix, and its changed-runtime
-and prerequisite gates pass. Post-reboot payload verification is running. The earlier
+and prerequisite gates pass. Ordinary reboot persistence is reconciled for 66
+file/directory cases plus the physical helper sample; final package/resource
+audit passes. The earlier
 `576505d` package completed 60 container cells, 75 physical cases, six direct
 helper samples and 204 conformance subcases. Those results retain their original
 artifact identity; the older private-FUSE closure does not satisfy the final
-packaging gate. Reboot persistence and the new installed-artifact gates remain
-pending. Historical sections below describe observations at their named stage.
+packaging gate. The corrected package has no private FUSE runtime or filesystem
+driver. Historical sections below describe observations at their named stage.
+
+The applicability ledger reconciles 60 qualified Linux combinations and 70
+explicitly not-applicable combinations. Qualification uses the recorded native
+host prerequisites: stock Fedora does not enable UFS writes, while the existing
+configured matching module passes; APFS and FUSE-UFS upstream writing remains
+experimental. No new customized kernel build was started. Quick filesystem
+properties remain unknown where untested; this is not a full filesystem audit.
 
 Host owner: `fedora`, exclusive `adjutant@fedora-core-01`. This report concerns
 fresh execution only. Previous installed artifacts supply inspected backend and
 host-tool inputs, never pass receipts. Windows and nested compatibility systems
 are outside the round.
 
-## Frozen inputs and host
+## Initial frozen inputs and host
 
 - Product source: `8adcdcf6c7d7719b4e1df2098e1807e390fbbe0d`.
 - Exact Git archive SHA256: `9dcfa043e7ebc527abfb31c211b2bc49a24247243cae02fd20b8ff090de4709d`.
@@ -176,7 +185,7 @@ payload cycle pass. Cryptomator/UFS2 now completes its ordinary payload cycle.
 The additional host-only `FEDORA_FUSE_UFS_BARRIER.patch` (SHA256
 `292718aec4842afc10668c293dc5d3137abaad77bae49fed8e539be5325932a7`)
 forwards file and directory fsync through the driver cache to the scoped
-backing-file `File::sync_all`. Errors propagate to callers. The final driver
+backing-file `File::sync_all`. Errors propagate to callers. The two-patch driver
 SHA256 is `e7c2e1686387c66c3b13310486cbd8120972d9be0d8a64f37d48e5a1dc45dd27`;
 28 rufs unit tests pass. Native strace observations confirm a new backing-file
 fsync for both client operations; injected EIO reaches the client and a retry
@@ -463,6 +472,64 @@ An ordinary `systemctl reboot` changed boot ID
 `857a23c4-7a9f-4315-bea1-f1ce6424375e`. SSH returned within fifteen seconds.
 The persistent fixture UUID mount and ordered private bind restored automatically;
 there were no owned vault mounts before reopening, no custom shutdown hook, and
-no repair or manual reconciliation. Kernel, installed components, corrected FUSE
-driver and configured UFS module hashes are unchanged. Full post-boot
-verify/append/new-file/close/reopen/verify/close is still running.
+no manual action was needed for that initial mount restoration. Kernel, installed
+components, corrected FUSE driver and configured UFS module hashes were unchanged.
+The subsequent ZFS close checks exposed the fixture propagation issue below.
+
+## Reconciled reboot result and cleanup
+
+The first boot's 66-case run produced 63 passing payload/lifecycle cases and three
+ZFS-inner close refusals. Its ZFS backing pool also reported a native export
+cleanup error. Native mountinfo showed the cause: the persistent bind restored
+as shared, so nested mounts appeared both at the round path and its backing-store
+alias. Lurker correctly refused the additional ZFS root mounts. These failures
+remain failed receipts; the guard was never relaxed.
+
+An owned disposable fstab control verifies `bind,rprivate`, private target
+propagation and absence of nested source aliases. The persistent recipe fix is
+`eb6425f`. Scoped reconciliation recorded the exact aliases, removed only those
+aliases normally, and used normal product close/reopen/close. Three closed
+failed encrypted images and the closed backing image were copied and hash-checked
+before re-baselining. First-attempt generated reboot files remain preserved by
+rename, allowing the repeat to create another new file. The 60 unaffected
+non-ZFS receipts were retained without repetition.
+
+Six affected ZFS routes and the pending physical helper sample then prepared
+eight private mounts. A second ordinary `systemctl reboot` changed boot ID
+`857a23c4-7a9f-4315-bea1-f1ce6424375e` to
+`cc9d2572-2a9c-424c-bd23-36cd2811e325`. The UUID fixture mount and private bind
+restored automatically, with no source aliases, repair or reconciliation on that
+boot. All six ZFS routes and the strict-JSON physical helper sample pass complete
+verify/append/new-file/close/reopen/verify/normal-close cycles, including normal
+backing-pool export. No product or crypto-profile change was needed.
+
+Canonical reboot coverage is **66 unique file/directory cases plus one physical
+helper sample**: 60 unaffected first-boot cases and six affected second-boot ZFS
+cases. Their creation identities remain 54 `576505d` and twelve `67894f6`; the
+runtime is always the qualified `67894f6` package. Private evidence
+`logs/final-reboot-678-reconciled.json` records each case's boot and artifact
+identities. Original failures and supersession evidence remain intact.
+
+The final audit re-extracts the manifest directly from the SHA-verified actual
+RPM and compares it with the installed prefix, then verifies all 1083 file/link
+entries and administrator ownership. It confirms zero private FUSE or driver
+files, zero owned vault mounts, mappers, loop devices, pools or processes, the
+unchanged host-driver/provider/configured-UFS hashes, private fixture propagation
+and SELinux Enforcing. The last verified one-GiB scratch disk was detached from
+both live and persistent libvirt configuration after exact serial/size/parent,
+holder, mount and descriptor checks. Its qcow2 remains preserved at
+`/srv/build/lurker-native-fresh-20261127/fedora/scratch.qcow2`, SHA256
+`14b0db1442d593aed88380cd9758527d46bdb6b5d08702e792b9fab947b3ee22`.
+
+The separate persistent fixture disk and ordered private bind remain attached
+by their recorded UUID to retain evidence and failed storage. Final measured
+free space is approximately 22 GiB on root and 9.5 GiB on the fixture filesystem.
+No unrelated installation or storage was replaced. Prepared-host qualification
+uses the actual RPM's verified payload installed in its private administrator
+prefix; it does not claim a replacement of the system RPM installation.
+
+Final private artifacts are `final-summary.json`, the 130-cell
+`applicability.json`, `validation/67894f6-installed-gates-evidence.tar.gz`,
+`validation/67894f6-final-reboot-and-audit.tar.gz`, and
+`build/lurker-0.1.0.native20261127.678.x86_64.rpm` beneath the local Fedora evidence
+root. Source, engine, prerequisite and harness identities remain separate.
