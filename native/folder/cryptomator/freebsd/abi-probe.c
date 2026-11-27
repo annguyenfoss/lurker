@@ -12,6 +12,7 @@
 #include <sys/mount.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -23,6 +24,11 @@
 typedef int (*native_getfsstat)(struct statfs *, long, int);
 _Static_assert(__builtin_types_compatible_p(native_getfsstat,
                __typeof__(&getfsstat)), "getfsstat signature");
+typedef int (*native_unmount)(const char *, int);
+_Static_assert(__builtin_types_compatible_p(native_unmount,
+               __typeof__(&unmount)), "unmount signature");
+_Static_assert(MNT_BYFSID <= INT_MAX && (MNT_BYFSID & MNT_FORCE) == 0,
+               "normal FSID-only unmount flag");
 
 /* jFUSE calls the missing-extended-attribute error enodata(). FreeBSD uses
  * ENOATTR for this condition. This is a semantic native errno mapping. */

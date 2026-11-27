@@ -59,10 +59,10 @@ CALLBACKS = {
 CONSTANTS = {
     'fcntl_h': ['O_RDONLY', 'O_WRONLY', 'O_RDWR', 'O_APPEND', 'O_CREAT',
                 'O_TRUNC', 'O_EXCL', 'O_SYNC', 'O_DSYNC'],
-    'errno_h': ['E2BIG', 'EACCES', 'EBADF', 'EEXIST', 'EINVAL', 'EIO',
+    'errno_h': ['E2BIG', 'EACCES', 'EBADF', 'EBUSY', 'EPERM', 'EEXIST', 'EINVAL', 'EIO',
                 'EISDIR', 'ENAMETOOLONG', 'ENODATA', 'ENOENT', 'ENOLCK',
                 'ENOMEM', 'ENOSYS', 'ENOTDIR', 'ENOTEMPTY', 'ENOTSUP',
                 'ERANGE', 'EROFS'],
     'stat_h': ['UTIME_NOW', 'UTIME_OMIT'],
-    'mount_h': ['MNT_NOWAIT', 'MNT_RDONLY'],
+    'mount_h': ['MNT_NOWAIT', 'MNT_RDONLY', 'MNT_BYFSID'],
 }

@@ -116,6 +116,7 @@ def write_c_include(path: Path) -> None:
         elif ret == 'P': out += [f'if ({call} != (void *)(uintptr_t)0x7000) return {i + 1};']
         else: out += [f'if ({call} != {i + 1}) return {i + 1};']
     out += ['return 0;', '}',
+            'int jfuse_errno_result(int result, int error) { errno = error; return result; }',
             'const char *jfuse_native_string(void) { return "genuine FreeBSD native string"; }',
             'int jfuse_string_callback(int (*callback)(const char *)) { return callback(jfuse_native_string()); }']
     path.write_text('\n'.join(out) + '\n')
@@ -256,7 +257,15 @@ public static void main(String[] args) throws Throwable {
  var offset = Linker.nativeLinker().downcallHandle(lookup.find("jfuse_offset").orElseThrow(),FunctionDescriptor.of(ValueLayout.JAVA_LONG,ValueLayout.JAVA_INT));
  var dimension = Linker.nativeLinker().downcallHandle(lookup.find("jfuse_dimension").orElseThrow(),FunctionDescriptor.of(ValueLayout.JAVA_LONG,ValueLayout.JAVA_INT,ValueLayout.JAVA_INT));
  var constant = Linker.nativeLinker().downcallHandle(lookup.find("jfuse_constant").orElseThrow(),FunctionDescriptor.of(ValueLayout.JAVA_LONG,ValueLayout.JAVA_INT));
+ var errnoCall = Linker.nativeLinker().downcallHandle(lookup.find("jfuse_errno_result").orElseThrow(),FunctionDescriptor.of(ValueLayout.JAVA_INT,ValueLayout.JAVA_INT,ValueLayout.JAVA_INT),Linker.Option.captureCallState("errno"));
+ var errnoLayout = Linker.Option.captureStateLayout();
+ long errnoOffset = errnoLayout.byteOffset(MemoryLayout.PathElement.groupElement("errno"));
  try (var arena = Arena.ofConfined()) {
+ var errnoState=arena.allocate(errnoLayout);
+ for (int error:new int[]{org.cryptomator.jfuse.freebsd.amd64.extr.errno.errno_h.ENOENT(),org.cryptomator.jfuse.freebsd.amd64.extr.errno.errno_h.EBUSY(),org.cryptomator.jfuse.freebsd.amd64.extr.errno.errno_h.EIO()}) {
+  check((int)errnoCall.invokeExact(errnoState,-1,error)==-1);
+  check(errnoState.get(ValueLayout.JAVA_INT,errnoOffset)==error);
+ }
 '''
     field_id = 0
     for structure_id, (name, record) in enumerate(profile['structs'].items()):
@@ -313,7 +322,7 @@ public static void main(String[] args) throws Throwable {
  var callback=fuse_operations.unlink.allocate(p->{{check(p.getString(0).equals("genuine FreeBSD native string"));return 420;}},arena);
  check((int)stringCallback.invokeExact(callback)==420);
  }}
- System.out.println("{{\\\"fields\\\":"+fields+",\\\"callbacks\\\":"+callbacks+",\\\"native_strings\\\":3,\\\"failures\\\":"+failures+"}}");
+ System.out.println("{{\\\"fields\\\":"+fields+",\\\"callbacks\\\":"+callbacks+",\\\"native_strings\\\":3,\\\"native_errno_cases\\\":3,\\\"failures\\\":"+failures+"}}");
  if (failures!=0) throw new AssertionError("native ABI round trip failed");
 }}
 }}
