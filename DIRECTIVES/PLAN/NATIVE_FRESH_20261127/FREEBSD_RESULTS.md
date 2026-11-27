@@ -737,3 +737,40 @@ results. Lurker write guards are unchanged, and product source/backing/device
 and final package qualification remain outstanding. The earlier v5 failed
 startup and blocked recovery above remain failures, with no further recovery
 or reboot action.
+
+
+### Checked-halt final12 candidate
+
+Source review found that final11 ignored `lkl_sys_halt()`'s return value. In
+pinned `arch/lkl/kernel/setup.c:119`, a negative return precedes the CPU shutdown
+wait, syscall/thread cleanup, memory release and kernel-thread join; it does
+not prove quiescence. Every client halt site now checks the result. A negative
+return preserves the source descriptor, owned channel and status lock, reports
+an error, and retries at 250-ms intervals. Only confirmed halt success permits
+closure. The halt failure remains sticky after a later successful retry.
+The native compiled-client fault test verifies negative-to-success behavior,
+real descriptor and exclusive-lock retention, unchanged error status and the
+sticky failure. This is a mocked halt failure, not an injected kernel failure.
+
+The new actual native final12 executable is
+`0535ad961bbbb06997586465288fdd47fc782b7a34f326b8e31116caecce93df`,
+with host patch
+`4fd6e10bbd70b132c0c0742acd574eec458d2f16725406c65a4f738e32ec10f6`.
+Its twelve producer/native unit checks pass. Fresh constructor, invalid-FS and
+pending-signal controls pass. Both regular-file and both GELI-512 filesystems
+again pass all twelve actual UID/EUID-1300 payload phases plus ownership,
+groups, foreign denial, native errno, busy and lease-reuse controls. Twelve
+fresh traces again show native fsync/DIOCGFLUSH, source close before final
+status, and no driver unmount/force call. The one-shot/disarmed barrier-error
+control again yields application EIO, later successful native fsync, normal
+OS unmount, driver exit 1 and matching final error.
+
+Published SIGTERM has a precise separate result: it retains ready status and
+service until the later normal administrator unmount, after which the driver
+exits zero and reports drained. The signal itself is not a sticky I/O failure.
+Final11's `a645...` receipts retain their original identity. Final12 raw/decoded
+traces, source/build/binary/recipe/helper identities and receipts are retained
+in `validation/lkl-driver-final12/`, bound by archive
+`db3d520a847fa137c5e76555645dbe8c285ebe8127979fbb32dc448d233050ca`
+(191 files). Product write guards and the previous v5 failed startup/recovery
+state remain unchanged. No Lurker product or final-package pass is claimed.

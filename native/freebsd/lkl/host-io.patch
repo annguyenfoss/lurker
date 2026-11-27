@@ -600,7 +600,7 @@
 +}
 -
 +
-@@ -424,112 +476,1119 @@
+@@ -424,231 +476,1445 @@
 -}
 +}
 -
@@ -1764,6 +1764,31 @@
 +	return NULL;
 +}
 +
++/* Pinned lkl_sys_halt returns a negative error BEFORE CPU shutdown wait,
++ * syscall/thread cleanup and kernel-thread join. Only zero proves quiescence. */
++static int halt_error, kernel_halted;
++static int attempt_owned_halt(void)
++{
++    long result = lkl_sys_halt();
++    if (result < 0) {
++        halt_error = 1;
++        report_status("error");
++        fprintf(stderr, "LKL halt failed (%ld); retaining source, channel and status lock\n", result);
++        return -LKL_EIO;
++    }
++    kernel_halted = 1;
++    return 0;
++}
++
++static void await_owned_halt(void)
++{
++    /* No mounted native identity remains at normal drain; pre-publication
++     * failures have not launched a native helper. A failed halt cannot release
++     * this process's source/channel/status ownership. Retry without busy-spin. */
++    while (!kernel_halted && attempt_owned_halt() < 0)
++        usleep(250000);
++}
++
 +static int original_root = -1;
 +static char inner_mountpoint[32];
 -
@@ -1832,13 +1857,18 @@
 +
 -	return 0;
 +	return 0;
-@@ -539,116 +1598,298 @@
+-
++
+-out_umount:
++out_umount:
+-	lkl_umount_dev(lklfuse.disk_id, lklfuse.part, 0, 1000);
++	lkl_umount_dev(lklfuse.disk_id, lklfuse.part, 0, 1000);
 -
 +
 -out_halt:
 +out_halt:
 -	lkl_sys_halt();
-+	lkl_sys_halt();
++	await_owned_halt();
 -
 +
 -out:
@@ -1873,6 +1903,7 @@
 -	if (ret)
 -		fprintf(stderr, "failed to umount disk: %d: %s\n",
 -			lklfuse.disk_id, lkl_strerror(ret));
+-	lkl_sys_halt();
 +	if (ret < 0)
 +		goto out;
 +	lkl_sys_close(original_root);
@@ -1888,13 +1919,12 @@
 +	if (!lklfuse.ro && lkl_host_disk_flush(lklfuse.disk) < 0)
 +		ret = -LKL_EIO;
 +out:
-+	if (credential_poison || lkl_disk_io_failed(&lklfuse.disk))
++	if (halt_error || credential_poison || lkl_disk_io_failed(&lklfuse.disk))
 +		ret = -LKL_EIO;
 +	if (ret < 0)
 +		fprintf(stderr, "failed to drain filesystem: %s\n", lkl_strerror(ret));
--	lkl_sys_halt();
-+	lkl_sys_halt();
-+	if (credential_poison || lkl_disk_io_failed(&lklfuse.disk))
++	await_owned_halt();
++	if (halt_error || credential_poison || lkl_disk_io_failed(&lklfuse.disk))
 +		ret = -LKL_EIO;
 +	/* A successful acknowledgement means no LKL worker or source FD remains. */
 +	if (close(lklfuse.disk.fd) < 0 && ret >= 0)

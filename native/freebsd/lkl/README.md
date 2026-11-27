@@ -60,6 +60,11 @@ The port changes provide these host I/O contracts:
   read-only remount fence, normally unmounts the inner filesystem, flushes the
   host backing provider, halts LKL and closes its source descriptor. A failure
   is reported, rather than being converted to successful teardown.
+  The pinned halt function returns a negative error before worker shutdown and
+  joining. Every client halt path checks that result: a failure retains the
+  source, owned channel and status lock, reports an error, and retries at bounded
+  intervals. Only halt success permits source closure, and the failure stays
+  sticky even when a later retry succeeds.
 
 The client creates a native unmounted FUSE channel and completes `fuse_new`
 and LKL filesystem startup before publishing a native mount through the fixed
@@ -75,6 +80,9 @@ closing its owned channel or source, it requires the captured FSID and source
 to be absent from the complete native mount table and rejects a replacement at
 the original target. A moved or ambiguous mount remains retained. Monitor
 cancellation/join failure also retains service resources and forces an error.
+The qualified published-SIGTERM control retains ready status and service, then
+exits zero with drained after the later normal administrator unmount; the
+signal itself is not a sticky I/O or shutdown failure.
 Normal administrator unmount is the separate native action; force is never a
 driver fallback. The executable is PIE with a non-executable stack.
 

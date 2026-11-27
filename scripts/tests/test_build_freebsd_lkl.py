@@ -290,7 +290,8 @@ int main(void)
 #include LKL_HOST_CLIENT
 #undef main
 #include <assert.h>
-static int calls, fail_at;
+static int calls, fail_at, halt_calls;
+long lkl_sys_halt(void) { return ++halt_calls == 1 ? -LKL_EIO : 0; }
 long lkl_syscall(long number, long *arguments)
 {
     calls++;
@@ -324,7 +325,29 @@ int main(void)
         assert(calls == previous + 12 && credential_poison == 1);
         assert(host_error(0, 0) == -EIO); /* Later restoration cannot erase failure. */
     }
-    puts("PASS restore failures attempt all fields, stay alive, poison every later request");
+    char status_path[] = "/tmp/lkl-halt-unit-XXXXXX";
+    drain_fd = mkstemp(status_path);
+    assert(drain_fd >= 0 && flock(drain_fd, LOCK_EX | LOCK_NB) == 0);
+    lklfuse.disk.fd = open("/dev/null", O_RDONLY);
+    assert(lklfuse.disk.fd >= 0);
+    drain_prefix_len = snprintf(drain_prefix, sizeof(drain_prefix),
+        "freebsd-lkl-host-io-1\n%064d\n", 0);
+    assert(capture_drain_identity() == 0);
+    assert(attempt_owned_halt() == -LKL_EIO);
+    assert(halt_calls == 1 && halt_error && !kernel_halted);
+    assert(fcntl(lklfuse.disk.fd, F_GETFD) >= 0 && fcntl(drain_fd, F_GETFD) >= 0);
+    int other = open(status_path, O_RDWR);
+    assert(other >= 0 && flock(other, LOCK_EX | LOCK_NB) < 0);
+    char first[256] = {0}, later[256] = {0};
+    ssize_t length = pread(drain_fd, first, sizeof(first) - 1, 0);
+    assert(length > 0 && strstr(first, "\nerror ") && !strstr(first, "drained"));
+    assert(attempt_owned_halt() == 0);
+    assert(halt_calls == 2 && halt_error && kernel_halted);
+    assert(fcntl(lklfuse.disk.fd, F_GETFD) >= 0 && fcntl(drain_fd, F_GETFD) >= 0);
+    assert(pread(drain_fd, later, sizeof(later) - 1, 0) == length);
+    assert(!memcmp(first, later, length));
+    close(other); close(lklfuse.disk.fd); close(drain_fd); unlink(status_path);
+    puts("PASS restore failures attempt all fields, stay alive, poison every later request; halt failure retains source/status lock and sticky error");
     return 0;
 }
 '''

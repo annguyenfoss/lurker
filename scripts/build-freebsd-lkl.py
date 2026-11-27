@@ -32,7 +32,7 @@ PORT_PATCHES = {
     "files/patch-tools_lkl_Targets": "b70063fd07507813ea54984d7fc709f3fd7bb80445d3c85a083145e282d2222e",
 }
 # Filled only from the reviewed native patch, never from downloaded metadata.
-HOST_PATCH_SHA256 = "54598d98f4eb5170fa3478448e87130be0737cac1db7deb54a19cc21f7081781"
+HOST_PATCH_SHA256 = "4fd6e10bbd70b132c0c0742acd574eec458d2f16725406c65a4f738e32ec10f6"
 HOST_PATCH = "native/freebsd/lkl/host-io.patch"
 
 
