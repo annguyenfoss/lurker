@@ -3,8 +3,8 @@
 Current checkpoint: exact follow-up source
 `67894f68525c55d5cbb48c743e1a98a308bd970f` passed workspace check, tests and build;
 all 408 archived source files retain their hashes. The corrected native RPM is
-verified in its administrator-controlled test prefix; installed-artifact gates
-are running. The earlier
+verified in its administrator-controlled test prefix, and its changed-runtime
+and prerequisite gates pass. Post-reboot payload verification is running. The earlier
 `576505d` package completed 60 container cells, 75 physical cases, six direct
 helper samples and 204 conformance subcases. Those results retain their original
 artifact identity; the older private-FUSE closure does not satisfy the final
@@ -424,4 +424,45 @@ cycle. CLI/helper password frontend checks and a real native desktop window pass
 Visual inspection of the captured 1280×860 Create view at 100% confirms visible
 default controls and the reachable bottom action. Native default-filesystem
 desktop storage callbacks, twelve UFS2 reruns, helper device samples and reboot
-persistence remain in progress.
+persistence were still pending at that frontend checkpoint.
+
+All six native desktop storage callback flows subsequently pass, with default
+filesystems, the actual packaged helper and no Rust fixture overlay. All three
+strict-JSON helper device/keyfile samples pass. The new workspace run has
+168 passed tests, zero failures and 15 ignored tests; the ignored native desktop
+callback test was then explicitly exercised for all six methods.
+
+The corrected three-patch UFS2 prerequisite passes all twelve affected slots on
+the `67894f6` package: three disk methods and three directory engines for each of
+containers and physical storage. Every payload cycle has independent UFS2 and
+actual FUSE-route evidence; the driver hash is unchanged throughout. Container
+phases additionally record the driver and superblock at each phase. An initial
+physical-folder harness import error stopped before creating its directory or
+partition; only that unadmitted gate was retried using the proper common module.
+Both receipts remain retained. `logs/ufs2-all12-678-summary.json` reconciles the
+twelve unique role/source-kind/backend combinations and payload hashes.
+
+The scoped loop observer records 2649 process samples and 487 lease/sudo
+relationships: every relationship has the caller's session, a separate process
+group and a background group; no owned task stopped. A historical stopped sudo
+supervisor from the interrupted `8714ef5` harness had only a defunct child and no
+device descriptors. After preserving its identity, an exact-pidfd SIGCONT let it
+reap that terminal child and exit normally.
+
+## Ordinary reboot admission
+
+The new runtime prepared 66 retained file/directory cases plus the last new
+helper/physical-partition sample, with all payload hashes verified before boot.
+The cohort preserves 54 `576505d` creation identities and twelve `67894f6`
+identities (six corrected-UFS2 and six normal-user credential cases); every reopen
+uses the new `67894f6` CLI. Exactly 77 native mounts were observed. No compiler job
+or stopped owned task remained, and package/driver hashes matched.
+
+An ordinary `systemctl reboot` changed boot ID
+`22554395-9739-4c4c-b0ab-a3e43be6180c` to
+`857a23c4-7a9f-4315-bea1-f1ce6424375e`. SSH returned within fifteen seconds.
+The persistent fixture UUID mount and ordered private bind restored automatically;
+there were no owned vault mounts before reopening, no custom shutdown hook, and
+no repair or manual reconciliation. Kernel, installed components, corrected FUSE
+driver and configured UFS module hashes are unchanged. Full post-boot
+verify/append/new-file/close/reopen/verify/close is still running.
